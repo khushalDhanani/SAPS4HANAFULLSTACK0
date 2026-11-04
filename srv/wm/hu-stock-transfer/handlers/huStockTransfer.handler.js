@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 const cds = require('@sap/cds');
 const LOG = cds.log('hu-stock-transfer-handler');
 const HuStockTransferAdapter = require('../../../integration/s4hana/wm/HuStockTransferAdapter');
@@ -131,6 +132,7 @@ const HuStockTransferHandler = {
         LOG.error('HU transfer posting attempt could not be recorded; SAP write blocked:', attemptErr.message || attemptErr);
         const err = new Error(`HU stock transfer was NOT sent to SAP: production transaction logging is unavailable (${attemptErr.message || 'database unavailable'}). Check the document list before retrying.`);
         err.status = attemptErr.status || 503;
+        err.$sanitize = false; // see srv/common/visibleError.js
         throw err;
       }
 
@@ -165,6 +167,7 @@ const HuStockTransferHandler = {
       try {
         return await postOne(req, req.data || {});
       } catch (err) {
+        throwIfTextMustShow(err);
         return req.error(err.status || 500, err.message);
       }
     });

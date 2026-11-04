@@ -713,7 +713,9 @@ class HandlingUnitAdapter {
     const content = text(input.content, 'Content', 40);
     if (content) header.CONTENT = content;
     const r = await this._bapi('Create handling unit', (call) => call('BAPI_HU_CREATE', { HEADERPROPOSAL: header }));
-    if (r.Deleted) throw httpError(502, 'Create handling unit: SAP committed but the handling unit could not be read back');
+    if (r.Deleted) {
+      throw Object.assign(httpError(502, `Create handling unit: SAP committed handling unit ${r.HandlingUnitExternalID}, but it could not be read back, so it is NOT confirmed. Check it in SAP before creating it again.`), { $sanitize: false }); // see srv/common/visibleError.js
+    }
     this.kpiCache.clear();
     return r;
   }

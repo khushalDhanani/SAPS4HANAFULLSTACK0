@@ -36,7 +36,7 @@ function isPlantAllowed(plant, allowedPlants) {
 async function assertPlantsInScope(user, readPlants, what) {
   const allowedPlants = plantScope(user);
   if (allowedPlants === null) return;
-  const refuse = (status, message) => Object.assign(new Error(message), { status, statusCode: status });
+  const refuse = (status, message) => Object.assign(new Error(message), { status, statusCode: status, $sanitize: false }); // see srv/common/visibleError.js
   let plants;
   try {
     plants = await readPlants();

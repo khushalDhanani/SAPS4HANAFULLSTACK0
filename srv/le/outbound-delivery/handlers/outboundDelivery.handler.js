@@ -3,6 +3,7 @@ const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound
 const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
 const { applyPaging, extractFilterParam, extractIfMatch } = require('../../../common/filterUtils');
 const { plantScope, isPlantAllowed, assertPlantsInScope } = require('../../../wm/readScope');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 
 /** SAP posts by delivery number, so the plants on the delivery decide. */
 const assertDeliveryInScope = (req) => assertPlantsInScope(
@@ -56,6 +57,7 @@ function registerOutboundDeliveryHandlers(srv) {
       return applyPaging(filtered, req);
     } catch (err) {
       LOG.error(`Failed to read due orders: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 500, err.message);
     }
   });
@@ -101,6 +103,7 @@ function registerOutboundDeliveryHandlers(srv) {
       return result.OutboundDelivery || '';
     } catch (err) {
       LOG.error(`Error in createOutboundDelivery (${err.status || 500}): ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 500, err.message);
     }
   });
@@ -134,6 +137,7 @@ function registerOutboundDeliveryHandlers(srv) {
         : await outboundDeliveryAdapter.postGoodsIssue(req.data?.DeliveryDocument);
     } catch (err) {
       LOG.error(`postGoodsIssue failed: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 502, err.message);
     }
   });
@@ -158,6 +162,7 @@ function registerOutboundDeliveryHandlers(srv) {
         : await outboundDeliveryAdapter.createBillingDocument(payload);
     } catch (err) {
       LOG.error(`createBillingDocument failed: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 502, err.message);
     }
   });
@@ -205,6 +210,7 @@ function registerOutboundDeliveryHandlers(srv) {
       };
     } catch (err) {
       LOG.error(`Failed to compute orders-due metrics: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 502, err.message);
     }
   });

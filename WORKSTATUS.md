@@ -15,7 +15,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Unconfirmed invoice cancel and customer return (2026-11-04 17:12 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** When SAP accepts the write but no read-back confirms it, these now answer 502 with the document number and "NOT confirmed. Check it in SAP", instead of reporting success. The text is kept in production. **Finding, not fixed:** every other 5xx text in the app is replaced by a generic message in production, including the sales inquiry partial-creation error that names a document number (see the entry below).
+- **"Nothing was posted" refusals stay visible in production (2026-11-04 17:32 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** Plant scope refusals, shipping point read failures, posting-log failures, goods receipt read failures and HU stock transfer checks now keep their text in production. Still hidden there: the handling unit read failure right after a commit (no number, duplicate risk), the lock and unlock SAP reason, and other 5xx text.
+
+- **Errors naming work that may already be in SAP stay visible in production (2026-11-04 17:26 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** Sales inquiry partial creation, a failed commit after a sales inquiry or return was created, goods receipt and HU stock transfer with an unknown outcome, and a handling unit committed but not read back now keep their text in production, instead of a generic "Bad Gateway". The "nothing was posted" refusals are in the entry above.
+
+- **Unconfirmed invoice cancel and customer return (2026-11-04 17:12 IST) — PARTIAL, committed locally as `5b9621e6`, not pushed, not deployed, not run against SAP:** When SAP accepts the write but no read-back confirms it, these now answer 502 with the document number and "NOT confirmed. Check it in SAP", instead of reporting success. The text is kept in production. **Finding:** CAP replaces other 5xx text with a generic message in production (see the entry below).
 
 - **Lock and unlock check the SAP commit (2026-11-04 17:01 IST) — PARTIAL, committed locally as `5726250d`, not pushed, not deployed, not run against SAP:** `lockUser` and `unlockUser` now answer 502 and roll back when `BAPI_TRANSACTION_COMMIT` returns an E or A message. Before, they reported success. Neither action reads the lock state back from SAP.
 
@@ -178,7 +182,62 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-04 17:32 IST — "Nothing was posted" refusals stay visible in production: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+**Why:** in production these showed only "Service Unavailable", so a user couldn't tell that nothing had reached SAP. The user chose to keep them visible. All 10 new HTTP tests first failed with "Service Unavailable", which reproduced the problem.
+
+**Changed:**
+- Errors marked `$sanitize: false`: `assertPlantsInScope` in `srv/wm/readScope.js`; `_shippingPointsInScope` in `OutboundDeliveryAdapter.js`; the two 503 read failures in `GoodsReceiptAdapter.js`; the attempt-log failures in `goodsReceipt.handler.js` and `huStockTransfer.handler.js`; five "Nothing was posted" errors (501 and 503) in `HuStockTransferAdapter.js`, through a small `nothingPosted`.
+- Handlers wired with `throwIfTextMustShow`: Orders Due read and metrics, `createOutboundDelivery`, `postGoodsIssue`, `createBillingDocument`, and the plant refusal in both goods receipt posts.
+
+**TEST DECISION:** TEST ADDED: `test/integration/nothingPostedVisible.test.js` (10 tests: real CAP HTTP, roles and handlers in production mode, with SAP and the attempt log doubled) and 1 test in `huStockTransferAdapter.test.js`. TEST UPDATED: `goodsReceiptAttempt.test.js`, `huStockTransferAdapter.test.js` and `readScope.test.js` now check the flag.
+
+**Executed validation (final tree):** Jest 183 suites, 2,894 passed, 0 failed. `test.failing` entries: 10. Mutations 19 of 19 caught. `npm run lint`, `npm run test:coverage`, `npm run scan:secrets`, `git diff --check`: exit 0. Per-function coverage: 578 compared, 0 lower. `npm run test:e2e:sap-free`: 3 of 3.
+
+**NOT RUN / NOT VERIFIED:**
+- No SAP call and no live write.
+- The screens' display of these texts was not checked in a browser.
+- That the deployed app runs with `NODE_ENV=production` is INFERRED.
+- The goods receipt and HU adapter marks are checked at adapter level, not through HTTP in production mode.
+
+**Left out on purpose, not changed:**
+- `PackingInstructionAdapter.js:178` says "nothing was created" when SAP accepted the POST but returned no id. That claim is not proven, so it was not made more visible. It should be reviewed.
+- `QuarantineLabelAdapter.js:160` "Nothing was printed": printing, not posting.
+- The handling unit `_readBack` failure right after a commit, the lock and unlock SAP reason, and other 5xx text.
+
+**Next:** fix the handling unit read failure right after a commit, the remaining case with duplicate risk.
+
+### 2026-11-04 17:26 IST — Errors naming work that may already be in SAP stay visible in production: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+**Why:** in production CAP replaces 5xx text with a generic message unless the error sets `$sanitize: false`. A user who saw only "Bad Gateway" after SAP had already created or posted something could repeat the action and create a duplicate. The user chose to fix these first.
+
+**Changed:**
+- New `srv/common/visibleError.js`: `throwIfTextMustShow`, used by the handlers, because `req.error` and `req.reject` would drop the flag. It replaces the inline rethrow in the invoice and return handlers.
+- Errors marked `$sanitize: false`: `PartialSalesInquiryError` and the inquiry read-back in `SalesInquiryAdapter.js`; the failed commit in `salesDocBapi.js`, used by inquiry and return; `_unconfirmedError` in `HuStockTransferAdapter.js`; the handling unit create read-back in `HandlingUnitAdapter.js`; the unknown outcome in `goodsReceipt.handler.js`.
+- Handlers wired: sales inquiry, both goods receipt posts, HU stock transfer single post, handling unit `run`. The multi-HU selection already returns its text in a 200 answer.
+- Message text: the inquiry read-back, the failed commit and the handling unit read-back now also tell the user to check in SAP before creating again. The handling unit message now names the number.
+
+**Correction:** during this work the agent told the user that rethrowing `PartialSalesInquiryError` would send SAP's raw response to the browser. That was wrong. A run showed CAP's OData error body holds only `message`, `code` and severity. The clean copy built for it was removed and the helper is a plain rethrow.
+
+**TEST DECISION:** TEST ADDED: 6 cases in `test/integration/unconfirmedSapResult.test.js`. Sales inquiry partial, goods receipt, HU transfer and handling unit go through real CAP HTTP in production mode; the inquiry read-back and failed commit check the error itself. TEST UPDATED: `test/unit/wm/goodsReceiptAttempt.test.js` now expects the thrown error for an unknown outcome.
+
+**Executed validation (final tree):** Jest 182 suites, 2,883 passed, 0 failed. `test.failing` entries: 10. `npm run lint`, `npm run test:coverage`, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3. Helper mutations on the final code: 2 of 2 caught. The 13 mutations on the marks and handler calls were caught on the earlier helper and not repeated after the simplification. Per-function coverage: 575 kept, 2 lower by one statement, because the inline rethrow lines in the invoice and return handlers moved into the helper.
+
+**NOT RUN / NOT VERIFIED:**
+- No SAP call and no live write.
+- The screens' display of these texts was not checked in a browser.
+- That the deployed app runs with `NODE_ENV=production` is INFERRED.
+- The SAP answers in the tests are hand-written, and the HU tests double the adapter write.
+
+**Known limits, not changed:**
+- A read failure in the handling unit `_readBack` right after a commit answers a generic 502 with no number, in `HandlingUnitAdapter._bapi`.
+- Other 5xx text stays hidden in production, including "NOT posted", "nothing was posted", and the lock and unlock SAP reason.
+
+**Next:** decide whether the "nothing was posted" messages should also stay visible.
+
 ### 2026-11-04 17:12 IST — Invoice cancel and customer return no longer claim an unconfirmed result: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+> Update: committed by the user as `5b9621e6`; still not pushed or deployed.
 
 **Why:** `cancelBillingDocument` reported success when every read-back showed the invoice as not cancelled, and claimed it was cancelled when no read-back succeeded. `createCustomerReturn` said "created and verified" after every read-back failed. The user chose an error saying the result is not confirmed. Three `test.failing` defects.
 

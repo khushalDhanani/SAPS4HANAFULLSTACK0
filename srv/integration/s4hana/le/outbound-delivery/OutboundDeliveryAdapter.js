@@ -154,6 +154,7 @@ class OutboundDeliveryAdapter {
     if (points.length === 0) {
       const err = new Error(`The shipping points of plant ${plants.join(', ')} could not be read from SAP, so nothing was read or posted. Try again.`);
       err.status = 503;
+      err.$sanitize = false; // see srv/common/visibleError.js
       err.statusCode = 503;
       err.isScopeRefusal = true;
       throw err;

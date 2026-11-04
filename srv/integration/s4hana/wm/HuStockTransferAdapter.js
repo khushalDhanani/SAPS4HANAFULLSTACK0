@@ -38,6 +38,9 @@ function httpError(status, message) {
   return err;
 }
 
+/** See srv/common/visibleError.js. */
+const nothingPosted = (status, message) => Object.assign(httpError(status, message), { $sanitize: false });
+
 /** RFC_READ_TABLE OPTIONS are raw Open SQL text; a quote in a caller value would change the query. */
 function assertSapOptionValue(name, value) {
   if (/['\\]/.test(String(value ?? ''))) throw httpError(400, `${name} contains an unsupported character.`);
@@ -1486,12 +1489,12 @@ class HuStockTransferAdapter {
         2
       );
     } catch (_e) {
-      throw httpError(503, 'Could not verify the source storage location HU-management flag from SAP. Nothing was posted. Retry after the read is available.');
+      throw nothingPosted(503, 'Could not verify the source storage location HU-management flag from SAP. Nothing was posted. Retry after the read is available.');
     }
     // A blank flag is a verified non-HUM location only when SAP returned exactly one row.
     // Missing, ambiguous or malformed metadata must never select a posting path.
     if (!Array.isArray(t001lRows) || t001lRows.length !== 1 || !['', 'X'].includes(t001lRows[0]?.XHUPF)) {
-      throw httpError(503, 'SAP did not return one source storage location with a recognized HU-management flag. Nothing was posted.');
+      throw nothingPosted(503, 'SAP did not return one source storage location with a recognized HU-management flag. Nothing was posted.');
     }
     const isHuManaged = t001lRows[0].XHUPF === 'X';
 
@@ -1540,7 +1543,7 @@ class HuStockTransferAdapter {
         // FU_NOT_FOUND: SAP could not invoke the function, so nothing was posted (fail closed, not unconfirmed).
         // Any other RFC failure after IF_COMMIT = 'X' may already have posted: report it as unconfirmed.
         if (/FU_NOT_FOUND/i.test(`${humErr.key || ''} ${humErr.message || ''}`)) {
-          throw httpError(501, `HU_CREATE_GOODS_MOVEMENT is not callable via RFC on this system (FU_NOT_FOUND); the HU-managed storage location ${sourceSLoc} cannot be posted by this service. Nothing was posted. Run tools/check-hu-fm-rfc.js (READ-ONLY) to record the function's RFC status.`);
+          throw nothingPosted(501, `HU_CREATE_GOODS_MOVEMENT is not callable via RFC on this system (FU_NOT_FOUND); the HU-managed storage location ${sourceSLoc} cannot be posted by this service. Nothing was posted. Run tools/check-hu-fm-rfc.js (READ-ONLY) to record the function's RFC status.`);
         }
         throw this._unconfirmedError(`HU_CREATE_GOODS_MOVEMENT failed after the call was sent: ${humErr.message}`);
       }
@@ -1654,13 +1657,13 @@ class HuStockTransferAdapter {
       try {
         rows = await this.rfc.readTable('TFDIR', ['FUNCNAME', 'FMODE'], [`FUNCNAME = '${functionName}'`], 1);
       } catch (e) {
-        throw httpError(503, `Cannot verify in SAP (TFDIR) whether ${functionName} is RFC-enabled: ${e.message}. Nothing was posted.`);
+        throw nothingPosted(503, `Cannot verify in SAP (TFDIR) whether ${functionName} is RFC-enabled: ${e.message}. Nothing was posted.`);
       }
       this._rfcEnabled.set(functionName, rows.length ? String(rows[0].FMODE || '').trim() : null);
     }
     const fmode = this._rfcEnabled.get(functionName);
     if (fmode !== 'R') {
-      throw httpError(501, `${functionName} is ${fmode === null ? 'not found' : `not RFC-enabled (TFDIR FMODE '${fmode}')`} on this system; the HU-managed storage location ${sourceSLoc} cannot be posted by this service. Nothing was posted. See tools/check-hu-fm-rfc.js (READ-ONLY).`);
+      throw nothingPosted(501, `${functionName} is ${fmode === null ? 'not found' : `not RFC-enabled (TFDIR FMODE '${fmode}')`} on this system; the HU-managed storage location ${sourceSLoc} cannot be posted by this service. Nothing was posted. See tools/check-hu-fm-rfc.js (READ-ONLY).`);
     }
   }
 
@@ -1668,6 +1671,7 @@ class HuStockTransferAdapter {
   _unconfirmedError(detail, matDoc = '', matDocYear = '') {
     const err = httpError(502, `Stock transfer outcome is unconfirmed in SAP (${detail}). Do not post again; check the material document list first.`);
     err.sapWriteAttempted = true;
+    err.$sanitize = false; // see srv/common/visibleError.js
     if (matDoc) {
       err.materialDocument = matDoc;
       err.materialDocYear = matDocYear;

@@ -684,7 +684,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
         if (table === 'TFDIR') { if (tfdir instanceof Error) throw tfdir; return tfdir; }
         return [{ XHUPF: 'X' }];
       });
-      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status, message });
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status, message, $sanitize: false });
       expect(mockRfc.call).not.toHaveBeenCalled();
       expect(mockRfc.session).not.toHaveBeenCalled();
       expect(adapter._attemptCache.size).toBe(0);
@@ -731,6 +731,11 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       expect(adapter._attemptCache.size).toBe(0);
     });
 
+    it('keeps the not-callable text visible in production', async () => {
+      mockRfc.call.mockRejectedValue(Object.assign(new Error('missing'), { key: 'FU_NOT_FOUND' }));
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 501, $sanitize: false });
+    });
+
     it('rejects a storage unit on an HU-managed location before any posting call', async () => {
       adapter.validateUnit.mockResolvedValue({ Valid: true, UnitType: 'Storage Unit (SU)', AvailableQuantity: 5 });
       await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 422, message: expect.stringContaining('only a handling unit') });
@@ -747,7 +752,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     ])('blocks posting on %s without invoking either write path', async (_label, response) => {
       if (response instanceof Error) mockRfc.readTable.mockRejectedValue(response);
       else mockRfc.readTable.mockResolvedValue(response);
-      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 503, message: expect.stringContaining('Nothing was posted') });
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 503, $sanitize: false, message: expect.stringContaining('Nothing was posted') });
       expect(mockRfc.call).not.toHaveBeenCalled();
       expect(mockRfc.session).not.toHaveBeenCalled();
       expect(adapter._attemptCache.size).toBe(0);

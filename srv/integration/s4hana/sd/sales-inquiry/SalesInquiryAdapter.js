@@ -30,6 +30,7 @@ class PartialSalesInquiryError extends Error {
     this.SalesInquiry = String(inquiryId || '').trim();
     this.documentNumber = this.SalesInquiry;
     this.isPartialCreation = true;
+    this.$sanitize = false; // see srv/common/visibleError.js
     this.status = details.status || 502;
     this.step = details.step || 'UNKNOWN';
     this.itemNumber = details.itemNumber || '';
@@ -1962,8 +1963,8 @@ class SalesInquiryAdapter {
     if (result.testRun) return result;
     const stored = await creator.readBack(result.SalesInquiry);
     if (!stored) {
-      throw Object.assign(new Error(`SAP committed inquiry ${result.SalesInquiry}, but it could not be read back from SAP`),
-        { status: 502, SalesInquiry: result.SalesInquiry, name: 'PartialSalesInquiryError' });
+      throw Object.assign(new Error(`SAP committed inquiry ${result.SalesInquiry}, but it could not be read back from SAP, so it is NOT confirmed. Check it in SAP before creating it again.`),
+        { status: 502, SalesInquiry: result.SalesInquiry, name: 'PartialSalesInquiryError', $sanitize: false });
     }
     return result;
   }

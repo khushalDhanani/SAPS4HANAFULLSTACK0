@@ -1403,7 +1403,7 @@ class GoodsReceiptAdapter {
     if (huHeaders.length === 0) {
       const facts = await this._readDeliveryItemFacts(targetDeliv, sItem);
       if (!facts) {
-        throw Object.assign(new Error(`Delivery item ${targetDeliv}/${sItem} could not be read. The Goods Receipt was NOT posted.`), { statusCode: 503, status: 503 });
+        throw Object.assign(new Error(`Delivery item ${targetDeliv}/${sItem} could not be read. The Goods Receipt was NOT posted.`), { statusCode: 503, status: 503, $sanitize: false });
       }
       // shortcut: only a full receipt in a 1:1 unit is proven; CHG_DELQTY is not sent here, so SAP would confirm the whole item. Prove partial receipts live before allowing them.
       const refuse = (msg) => Object.assign(new Error(`${msg} The Goods Receipt was NOT posted.`), { statusCode: 422, status: 422 });
@@ -1430,7 +1430,7 @@ class GoodsReceiptAdapter {
       try {
         knownDocs = new Set((await this._read101Docs(targetDeliv, sItem)).map(docKey));
       } catch (e) {
-        throw Object.assign(new Error(`Existing material documents of Inbound Delivery '${targetDeliv}' could not be read (${e.message}). The Goods Receipt was NOT posted.`), { statusCode: 503, status: 503 });
+        throw Object.assign(new Error(`Existing material documents of Inbound Delivery '${targetDeliv}' could not be read (${e.message}). The Goods Receipt was NOT posted.`), { statusCode: 503, status: 503, $sanitize: false });
       }
     }
 

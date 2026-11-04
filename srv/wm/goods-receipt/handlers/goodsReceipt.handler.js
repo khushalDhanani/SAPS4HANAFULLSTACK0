@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 const crypto = require('crypto');
 const LOG = require('../../../common/logger')('goods-receipt');
 const GoodsReceiptAdapter = require('../../../integration/s4hana/wm/GoodsReceiptAdapter');
@@ -61,7 +62,7 @@ async function postWithAttempt(req, post) {
         }, { reclaimableStatuses: ['posted', 'rejected', 'not_posted'] });
     } catch (claimErr) {
         LOG.error('Goods receipt attempt log failed:', claimErr.message);
-        throw Object.assign(new Error('The goods receipt posting-attempt log is unavailable; the goods receipt was NOT posted. Check the document list before retrying.'), { status: 503, statusCode: 503 });
+        throw Object.assign(new Error('The goods receipt posting-attempt log is unavailable; the goods receipt was NOT posted. Check the document list before retrying.'), { status: 503, statusCode: 503, $sanitize: false });
     }
     if (!claim.created) {
         throw Object.assign(new Error(`A goods receipt for delivery ${delivery} item ${item} is already in progress or its outcome is not confirmed yet. Refresh and check the document list before retrying.`), { status: 409, statusCode: 409 });
@@ -78,7 +79,7 @@ async function postWithAttempt(req, post) {
     } catch (err) {
         await record(err.outcomeUnknown ? 'unconfirmed' : 'rejected', { LastError: err.message || 'Posting failed' });
         if (!err.outcomeUnknown) throw err;
-        throw Object.assign(new Error(`Posting outcome unconfirmed in SAP S/4HANA (${err.message}). The goods receipt may have been posted in SAP. Please do not post again.`), { status: 504, statusCode: 504 });
+        throw Object.assign(new Error(`Posting outcome unconfirmed in SAP S/4HANA (${err.message}). The goods receipt may have been posted in SAP. Please do not post again.`), { status: 504, statusCode: 504, $sanitize: false });
     }
 }
 
@@ -209,6 +210,7 @@ const init = (srv) => {
         }
         const plantErr = await deliveryPlantFailure(req);
         if (plantErr) {
+            throwIfTextMustShow(plantErr);
             return req.reject(plantErr.status, plantErr.message);
         }
 
@@ -236,6 +238,7 @@ const init = (srv) => {
                 : GoodsReceiptAdapter.postGoodsReceipt(payload)));
         } catch (err) {
             LOG.error('postGoodsReceipt failed:', err.message);
+            throwIfTextMustShow(err);
             req.reject(err.status || err.statusCode || 500, err.message);
         }
     });
@@ -294,6 +297,7 @@ const init = (srv) => {
         }
         const plantErr = await deliveryPlantFailure(req);
         if (plantErr) {
+            throwIfTextMustShow(plantErr);
             return req.reject(plantErr.status, plantErr.message);
         }
 
@@ -316,6 +320,7 @@ const init = (srv) => {
             }));
         } catch (err) {
             LOG.error('postGoodsReceiptWithStorageUnit failed:', err.message);
+            throwIfTextMustShow(err);
             req.reject(err.statusCode || err.status || 500, err.message);
         }
     });

@@ -1,4 +1,5 @@
 const LOG = require('../../../common/logger')('customer-return');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 const customerReturnAdapter = require('../../../integration/s4hana/sd/customer-return/CustomerReturnAdapter');
 const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
 
@@ -238,7 +239,7 @@ function registerCustomerReturnHandlers(srv) {
       return result;
     } catch (err) {
       LOG.error('Failed to execute createCustomerReturn:', err.message);
-      if (err.$sanitize === false) throw err; // req.reject would drop the flag that keeps this text in production
+      throwIfTextMustShow(err);
       const httpCode = (typeof err.status === 'number' && err.status >= 400 && err.status < 600)
         ? err.status
         : (typeof err.code === 'number' && err.code >= 400 && err.code < 600)

@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 const LOG = require('../../../common/logger')('sales-inquiry');
 const salesInquiryAdapter = require('../../../integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
 const { validateCreateSalesInquiryPayload } = require('../validation/salesInquiry.validation');
@@ -75,6 +76,7 @@ function registerSalesInquiryHandlers(srv) {
             return String(inquiryId).trim();
         } catch (error) {
             LOG.error('Error creating Sales Inquiry:', error.message);
+            throwIfTextMustShow(error);
             if (error.SalesInquiry || error.documentNumber || error.name === 'PartialSalesInquiryError') {
                 req.error(error.status || 502, error.message);
                 return;

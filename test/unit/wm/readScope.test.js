@@ -63,6 +63,7 @@ describe('WM plant read scope', () => {
     test('a failed SAP read refuses with 503 and says nothing was posted', async () => {
       await expect(assertPlantsInScope(clerk1120, async () => { throw sapError(500); }, 'delivery 1')).rejects.toMatchObject({
         status: 503,
+        $sanitize: false,
         message: 'The plant of delivery 1 could not be read from SAP; nothing was posted (NOT posted). Try again.'
       });
     });

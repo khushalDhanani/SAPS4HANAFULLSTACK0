@@ -70,7 +70,7 @@ async function runCreateBapi(rfc, bapi, input, { testRun = false, labels, log } 
         const commitErrors = errorsOf(messages([].concat((commit && commit.RETURN) || [])));
         if (commitErrors.length) {
             await call('BAPI_TRANSACTION_ROLLBACK', {});
-            throw failure(`SAP created ${labels.noun} ${docNo} but the commit failed: ${commitErrors[0].text}`, 502, { [labels.keyProp]: docNo, name: labels.partialName });
+            throw failure(`SAP created ${labels.noun} ${docNo} but the commit failed: ${commitErrors[0].text}. Check it in SAP before creating it again.`, 502, { $sanitize: false, [labels.keyProp]: docNo, name: labels.partialName });
         }
         if (log) log.info(`${labels.noun} ${docNo} committed via ${bapi}`);
         return { documentNumber: docNo, testRun: false, messages: msgs };

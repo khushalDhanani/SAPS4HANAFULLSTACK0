@@ -48,11 +48,10 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
       it('warns on an unknown outcome and blocks the retry, even with another quantity', async () => {
         const spy = jest.spyOn(singleton, action).mockRejectedValueOnce(unknownErr()).mockResolvedValue(DOC);
 
-        const first = await post(DATA, action);
+        await expect(post(DATA, action)).rejects.toMatchObject({ status: 504, $sanitize: false, message: expect.stringContaining('do not post again') });
         const second = await post({ ...DATA, Quantity: 2 }, action);
 
         expect(attempts()[0].Status).toBe('unconfirmed');
-        expect(first.req.reject).toHaveBeenCalledWith(504, expect.stringContaining('do not post again'));
         expect(second.req.reject).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
         expect(spy).toHaveBeenCalledTimes(1);
       });
@@ -84,9 +83,7 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
         const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
         jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('db down'));
 
-        const { req } = await post(DATA, action);
-
-        expect(req.reject).toHaveBeenCalledWith(503, expect.stringContaining('NOT posted'));
+        await expect(post(DATA, action)).rejects.toMatchObject({ status: 503, $sanitize: false, message: expect.stringContaining('NOT posted') });
         expect(spy).not.toHaveBeenCalled();
       });
     });
@@ -94,7 +91,7 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
     it('treats the same delivery with leading zeros as the same item', async () => {
       jest.spyOn(singleton, 'postGoodsReceiptWithStorageUnit').mockRejectedValue(unknownErr());
 
-      await post();
+      await expect(post()).rejects.toMatchObject({ status: 504 });
       const second = await post({ ...DATA, DeliveryDocument: '0180000003', DeliveryDocumentItem: '000010' });
 
       expect(second.req.reject).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
@@ -163,7 +160,7 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
       const { adapter, rfcCall } = make({ lips: null });
 
       await expect(adapter.postGoodsReceiptWithStorageUnit(PAYLOAD)).rejects.toMatchObject({
-        statusCode: 503, message: expect.stringContaining('NOT posted')
+        statusCode: 503, $sanitize: false, message: expect.stringContaining('NOT posted')
       });
       expect(rfcCall).not.toHaveBeenCalled();
     });
@@ -210,7 +207,7 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
       });
 
       await expect(adapter.postGoodsReceiptWithStorageUnit(PAYLOAD)).rejects.toMatchObject({
-        statusCode: 503, message: expect.stringContaining('Existing material documents')
+        statusCode: 503, $sanitize: false, message: expect.stringContaining('Existing material documents')
       });
       expect(rfcCall).not.toHaveBeenCalled();
     });
