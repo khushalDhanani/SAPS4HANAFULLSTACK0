@@ -15,7 +15,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Plant scope on PGI, billing and delivery from order (2026-11-04 16:55 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** A plant-limited user can no longer post goods issue or billing on a delivery with an item in another plant (403), or create a delivery from a shipping point outside their plants (403). If the plant or shipping points can't be read, the answer is 503 and nothing is sent to SAP. Admins are unchanged. Proven with SAP doubled and by the SAP-free E2E; that LIPS-WERKS holds the plant of an outbound delivery is NOT verified. **Before deploying, every non-Admin who uses these actions needs a Plant attribute, including sales roles, or they are refused.**
+- **Lock and unlock check the SAP commit (2026-11-04 17:01 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** `lockUser` and `unlockUser` now answer 502 and roll back when `BAPI_TRANSACTION_COMMIT` returns an E or A message. Before, they reported success. Neither action reads the lock state back from SAP.
+
+- **Caller headers at the S/4 client (2026-11-04 16:58 IST) — PARTIAL, committed locally as `a8de04e2`, not pushed, not deployed, not run against SAP:** A caller's Authorization header no longer reaches SAP in any casing, on POST or GET. A caller's CSRF token and Cookie, in any casing, can't overwrite the session's own on POST.
+
+- **Plant scope on PGI, billing and delivery from order (2026-11-04 16:55 IST) — PARTIAL, committed locally as `f8c9ccf1`, not pushed, not deployed, not run against SAP:** A plant-limited user can no longer post goods issue or billing on a delivery with an item in another plant (403), or create a delivery from a shipping point outside their plants (403). If the plant or shipping points can't be read, the answer is 503 and nothing is sent to SAP. Admins are unchanged. Proven with SAP doubled and by the SAP-free E2E; that LIPS-WERKS holds the plant of an outbound delivery is NOT verified. **Before deploying, every non-Admin who uses these actions needs a Plant attribute, including sales roles, or they are refused.**
 
 - **Orders Due plant scope fixed (2026-11-04 17:20 IST) — PARTIAL, committed locally as `3f915640`, not pushed, not deployed, confirmed READ-ONLY against SAP:** A plant-limited user can no longer read other plants' due orders. A failed shipping-point lookup now answers 503, and another plant's shipping point answers 403. The user chose refusal over an empty list. Admins are unaffected. Jest 180 suites, 2,826 passed, 0 failed. 15 known defects remain marked `test.failing`. See the entry below.
 
@@ -124,7 +128,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Group 2 (2026-11-04): kept by the user's choice. `getVisualRack`, `checkATP`, `askAI`, `MaterialStorageLocations`, `MaterialBatches`, `DeliveryWithoutRefTypes` and `DeliveryWithoutRefShipToParties` have no screen; remove them only after access logs or owners rule out outside callers. `chat` is used by the Purchase Orders AI assistant and stays.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, check the deployed access logs for callers of the two removed paths. `npm run validate:mta` and the read-only `npm run test:e2e` are done.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
-- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 15 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
+- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 13 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
@@ -172,7 +176,37 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-04 17:01 IST — Lock and unlock check the SAP commit result: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+**Why:** both actions ignored what `BAPI_TRANSACTION_COMMIT` returned, so a rejected commit was reported as "locked successfully" or "unlocked successfully". An administrator could believe a user was locked when they were not. `srv/integration/s4hana/sd/salesDocBapi.js:69-74` already checks this result. Recorded as a `test.failing` defect for lock only; unlock had the same gap with no test.
+
+**Changed:** `srv/integration/s4hana/admin/UserManagementAdapter.js`: one `commitOrFail`, used by lock and unlock. On an E or A message it rolls back and answers 502 with SAP's text. A failed rollback is logged and does not hide that text.
+
+**TEST DECISION:** TEST UPDATED: the `it.failing` marker removed from `test/integration/userManagement.test.js`. TEST ADDED: 12 new tests there, 6 for each action (type E, type A, a list of messages, failed rollback, empty row, warning). Real CAP HTTP with the RFC calls doubled.
+
+**Executed validation:** Jest 181 suites, 2,861 passed, 0 failed. `test.failing` entries: 13. Mutations 9 of 9 caught. `npm run lint`, `npm run test:coverage`, `npm run scan:secrets`, `git diff --check`: exit 0. Per-function coverage: 575 compared, 0 lower. `npm run test:e2e:sap-free`: 3 of 3.
+
+**NOT RUN / NOT VERIFIED:** no SAP call and no live lock or unlock, which would be a live write needing a written go per call. The shape of the real commit RETURN on this system is NOT verified; the code accepts one row or a list. The rollback follows `salesDocBapi.js`; its effect on a failed user lock is NOT verified.
+
+**Known limits:** `lockUser` and `unlockUser` still don't read `ISLOCKED` back from `BAPI_USER_GET_DETAIL`, so success rests on SAP's answers. Not changed: outside this defect.
+
+### 2026-11-04 16:58 IST — Caller headers stripped at the S/4 client in any casing: PARTIAL (committed as `a8de04e2`, not deployed, not run against SAP)
+
+**Why:** `S4HttpClient.post` removed only two casings of each protected header, and `get` removed none, so `AUTHORIZATION` from a caller would reach SAP. HTTP header names ignore case. Recorded as a `test.failing` defect.
+
+**Changed:** `srv/integration/s4hana/S4HttpClient.js`: one case-insensitive `withoutHeaders`. POST drops Authorization, Cookie and CSRF token; GET drops Authorization only, because no evidence covers a caller Cookie on a read.
+
+**TEST DECISION:** TEST UPDATED: the `test.failing` marker removed in `test/unit/wm/auditTraceability.test.js`. TEST ADDED: 2 tests in that file (POST keeps its own session values; GET strips the credential and keeps other headers).
+
+**Executed validation:** Jest 181 suites, 2,850 passed, 0 failed. `test.failing` entries: 14. Mutations 6 of 6 caught. `npm run lint`, `npm run test:coverage`, `npm run scan:secrets`, `git diff --check`: exit 0. Per-function coverage: 575 compared, 0 lower. `npm run test:e2e:sap-free`: 3 of 3. This ran before the commit, on the same files.
+
+**NOT RUN / NOT VERIFIED:** no SAP call. No caller found in `srv` passes these headers to this client today (INFERRED from a search, not a full trace), so this closes a gap rather than a known leak.
+
+**Known limits:** `SalesInquiryAdapter` and `PurchaseOrderAdapter` call the SDK executor directly and spread `options.headers`, bypassing this client. Not changed: outside this defect.
+
 ### 2026-11-04 16:55 IST — Enforced plant scope on PGI, billing and delivery from order: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+> Update: committed by the user as `f8c9ccf1`; still not pushed or deployed.
 
 **Why:** `postGoodsIssue`, `createBillingDocument` and `createOutboundDelivery` checked the role only, so a clerk of one plant could post another plant's delivery by number. The user chose to enforce all three.
 

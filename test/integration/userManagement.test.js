@@ -153,12 +153,54 @@ describe('Integration: SU01 user management', () => {
             expect(res.status).toBe(502);
             expect(res.data.error.message).toBe('commit failed');
         });
+    });
 
-        // Known defect: srv/integration/s4hana/admin/UserManagementAdapter.js:191 ignores the commit RETURN, which srv/integration/s4hana/sd/salesDocBapi.js:70 checks, so a rejected commit is reported as locked
-        it.failing('answers 502, not success, when the commit returns an error message', async () => {
-            stubRfc({ BAPI_USER_LOCK: { RETURN: [] }, BAPI_TRANSACTION_COMMIT: { RETURN: { TYPE: 'E', MESSAGE: 'Update terminated' } } });
-            const res = await axios.post(`${BASE}/lockUser`, { username: 'ALICE' }, ADMIN);
+    describe.each([
+        ['lockUser', 'BAPI_USER_LOCK', 'lock', 'locked', 'ALICE'],
+        ['unlockUser', 'BAPI_USER_UNLOCK', 'unlock', 'unlocked', 'BOB']
+    ])('%s: the commit result', (action, bapi, verb, done, username) => {
+        const run = (commit, rollback) => {
+            const calls = stubRfc({ [bapi]: { RETURN: [] }, BAPI_TRANSACTION_COMMIT: commit, BAPI_TRANSACTION_ROLLBACK: rollback });
+            return { calls, sent: axios.post(`${BASE}/${action}`, { username }, ADMIN) };
+        };
+        const names = (calls) => calls.map((c) => c.fm);
+
+        it.each(['E', 'A'])('answers 502 and rolls back when the commit returns a type %s message', async (TYPE) => {
+            const { calls, sent } = run({ RETURN: { TYPE, MESSAGE: 'Update terminated' } });
+
+            const res = await sent;
+
             expect(res.status).toBe(502);
+            expect(res.data.error.message).toBe(`SAP did not commit the ${verb} of user '${username}': Update terminated`);
+            expect(names(calls)).toEqual([bapi, 'BAPI_TRANSACTION_COMMIT', 'BAPI_TRANSACTION_ROLLBACK']);
+        });
+
+        it('finds the error when the commit returns a list of messages', async () => {
+            const { sent } = run({ RETURN: [{ TYPE: 'S', MESSAGE: 'Saved' }, { TYPE: 'E', MESSAGE: 'Update terminated' }] });
+
+            expect((await sent).status).toBe(502);
+        });
+
+        it('still reports the commit error when the rollback also fails', async () => {
+            const { sent } = run({ RETURN: { TYPE: 'E', MESSAGE: 'Update terminated' } }, down);
+
+            const res = await sent;
+
+            expect(res.status).toBe(502);
+            expect(res.data.error.message).toBe(`SAP did not commit the ${verb} of user '${username}': Update terminated`);
+        });
+
+        it.each([
+            ['an empty result row', { RETURN: { TYPE: '', MESSAGE: '' } }],
+            ['a warning', { RETURN: { TYPE: 'W', MESSAGE: 'Note' } }]
+        ])('reports success with no rollback when the commit returns %s', async (_name, commit) => {
+            const { calls, sent } = run(commit);
+
+            const res = await sent;
+
+            expect(res.status).toBe(200);
+            expect(res.data.message).toBe(`User '${username}' ${done} successfully in SAP`);
+            expect(names(calls)).toEqual([bapi, 'BAPI_TRANSACTION_COMMIT']);
         });
     });
 
