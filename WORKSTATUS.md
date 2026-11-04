@@ -15,7 +15,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Lock and unlock check the SAP commit (2026-11-04 17:01 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** `lockUser` and `unlockUser` now answer 502 and roll back when `BAPI_TRANSACTION_COMMIT` returns an E or A message. Before, they reported success. Neither action reads the lock state back from SAP.
+- **Unconfirmed invoice cancel and customer return (2026-11-04 17:12 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** When SAP accepts the write but no read-back confirms it, these now answer 502 with the document number and "NOT confirmed. Check it in SAP", instead of reporting success. The text is kept in production. **Finding, not fixed:** every other 5xx text in the app is replaced by a generic message in production, including the sales inquiry partial-creation error that names a document number (see the entry below).
+
+- **Lock and unlock check the SAP commit (2026-11-04 17:01 IST) — PARTIAL, committed locally as `5726250d`, not pushed, not deployed, not run against SAP:** `lockUser` and `unlockUser` now answer 502 and roll back when `BAPI_TRANSACTION_COMMIT` returns an E or A message. Before, they reported success. Neither action reads the lock state back from SAP.
 
 - **Caller headers at the S/4 client (2026-11-04 16:58 IST) — PARTIAL, committed locally as `a8de04e2`, not pushed, not deployed, not run against SAP:** A caller's Authorization header no longer reaches SAP in any casing, on POST or GET. A caller's CSRF token and Cookie, in any casing, can't overwrite the session's own on POST.
 
@@ -128,7 +130,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Group 2 (2026-11-04): kept by the user's choice. `getVisualRack`, `checkATP`, `askAI`, `MaterialStorageLocations`, `MaterialBatches`, `DeliveryWithoutRefTypes` and `DeliveryWithoutRefShipToParties` have no screen; remove them only after access logs or owners rule out outside callers. `chat` is used by the Purchase Orders AI assistant and stays.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, check the deployed access logs for callers of the two removed paths. `npm run validate:mta` and the read-only `npm run test:e2e` are done.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
-- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 13 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
+- Test replacement (2026-11-04): the user answers the open decision: read-only `$metadata` checks for the assumed SAP shapes. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 10 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
@@ -176,7 +178,40 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-04 17:12 IST — Invoice cancel and customer return no longer claim an unconfirmed result: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+**Why:** `cancelBillingDocument` reported success when every read-back showed the invoice as not cancelled, and claimed it was cancelled when no read-back succeeded. `createCustomerReturn` said "created and verified" after every read-back failed. The user chose an error saying the result is not confirmed. Three `test.failing` defects.
+
+**Changed:**
+- `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js`: a cancel counts only when a read-back shows it cancelled or at accounting status E, which the handler and release already treat as cancelled. Otherwise 502 with the text.
+- `srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter.js`: a create counts only when a read-back returns the same number, ignoring leading zeros. Otherwise 502 naming the number. The RFC route shares the same error and now also tells the user to check before creating again.
+- `customerInvoice.handler.js` and `customerReturn.handler.js`: rethrow these errors, because `req.error` and `req.reject` would drop `$sanitize`.
+
+**Found while doing this (CONFIRMED in `node_modules/@sap/cds/lib/srv/protocols/http.js:169-175`, @sap/cds 10.1.1):** when `NODE_ENV` is `production` or `CDS_ENV` is `prod`, CAP replaces the text of any 5xx error with a generic message unless the error sets `$sanitize: false`. Nothing else in `srv` sets it. So these errors set it, or the user would see only "Bad Gateway" and might create a duplicate.
+
+**TEST DECISION:** TEST ADDED: `test/integration/unconfirmedSapResult.test.js` (8 tests: real CAP HTTP in production mode, direct and through `$batch` as the screens send it, with SAP doubled, including a control that an ordinary 5xx text is hidden). TEST UPDATED: 3 `test.failing` markers removed; `customerInvoiceAdapter.test.js` and `customerReturnAdapter.test.js` extended; `customerReturnRfcCreator.test.js` now checks the RFC route keeps its warning.
+
+**Executed validation:**
+- Jest: 182 suites, 2,877 passed, 0 failed. `test.failing` entries: 10.
+- Mutations: 12 of 12 caught. One first survived (the RFC route could lose its warning); the assertions added for it then caught it.
+- `npm run lint`, `git diff --check`: exit 0 on the final tree.
+- Run before the last test-only change, not repeated: `npm run test:coverage` and `npm run scan:secrets` exit 0; `npm run test:e2e:sap-free` 3 of 3; per-function coverage 576 compared, 0 lower.
+
+**NOT RUN / NOT VERIFIED:**
+- No SAP call and no live cancel or create. Both are live writes needing a written go per call.
+- SAP's answers in the tests are hand-written.
+- That the deployed app runs with `NODE_ENV=production` is INFERRED: the repo doesn't set it.
+- The screens' display of this text was not checked in a browser. The unit-level controller code reads the backend message.
+
+**Known limits:**
+- The return screen shows "Failed to create customer return in SAP S/4HANA: SAP created customer return 4500099, but...". The prefix contradicts the body, and the form stays open with Create enabled, so only the text guards against a duplicate.
+- A retry of a cancel is guarded by the handler's already-cancelled check only once SAP shows it as cancelled.
+
+**Next:** decide whether to keep the text of the other 5xx errors in production, starting with those that name a document already in SAP.
+
 ### 2026-11-04 17:01 IST — Lock and unlock check the SAP commit result: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+> Update: committed by the user as `5726250d`; still not pushed or deployed.
 
 **Why:** both actions ignored what `BAPI_TRANSACTION_COMMIT` returned, so a rejected commit was reported as "locked successfully" or "unlocked successfully". An administrator could believe a user was locked when they were not. `srv/integration/s4hana/sd/salesDocBapi.js:69-74` already checks this result. Recorded as a `test.failing` defect for lock only; unlock had the same gap with no test.
 

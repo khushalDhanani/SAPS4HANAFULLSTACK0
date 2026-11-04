@@ -179,6 +179,7 @@ function registerCustomerInvoiceHandlers(srv) {
       return await customerInvoiceAdapter.cancelBillingDocument({ billingDocument: doc }, req);
     } catch (err) {
       LOG.error(`cancelBillingDocument failed for ${doc}: ${err.message}`);
+      if (err.$sanitize === false) throw err; // req.error would drop the flag that keeps this text in production
       return req.error(err.status || 500, err.message);
     }
   });

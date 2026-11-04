@@ -143,6 +143,16 @@ function _formatReturnItemRow(row) {
   };
 }
 
+/**
+ * SAP holds the return but the result is unproven. CAP hides 5xx text in production unless $sanitize is false,
+ * and this text carries the number and the warning that stop the user creating a duplicate.
+ */
+function _unconfirmedReturn(message, customerReturn) {
+  return Object.assign(new Error(message), { status: 502, code: 502, CustomerReturn: customerReturn, name: 'PartialCustomerReturnError', $sanitize: false });
+}
+
+const _sameNumber = (a, b) => String(a || '').trim().replace(/^0+/, '') === String(b || '').trim().replace(/^0+/, '');
+
 class CustomerReturnAdapter {
   constructor(client) {
     this.client = client?.client || client || new S4HttpClient();
@@ -558,13 +568,17 @@ class CustomerReturnAdapter {
 
         try {
           verifiedDoc = await this.getCustomerReturn(returnNumber, cleanOpts);
-          if (verifiedDoc && verifiedDoc.CustomerReturn === returnNumber) {
+          if (verifiedDoc && _sameNumber(verifiedDoc.CustomerReturn, returnNumber)) {
             LOG.info(`Customer Return ${returnNumber} verified in S/4HANA database (attempt ${attempt + 1})`);
             break;
           }
         } catch (readErr) {
           LOG.warn(`Readback attempt ${attempt + 1} failed for ${returnNumber}: ${readErr.message}`);
         }
+      }
+
+      if (!verifiedDoc || !_sameNumber(verifiedDoc.CustomerReturn, returnNumber)) {
+        throw _unconfirmedReturn(`SAP created customer return ${returnNumber}, but it could not be read back from SAP, so it is NOT confirmed. Check it in SAP before creating it again.`, returnNumber);
       }
 
       const totalNet = verifiedDoc?.TotalNetAmount ?? (createdHeader?.TotalAmount ? Number(createdHeader.TotalAmount) : (createdHeader?.NetAmount ? Number(createdHeader.NetAmount) : null));
@@ -623,8 +637,8 @@ class CustomerReturnAdapter {
     if (created.testRun) return created;
 
     const stored = await creator.readBack(created.CustomerReturn);
-    const partial = (message) => Object.assign(new Error(message), { status: 502, code: 502, CustomerReturn: created.CustomerReturn, name: 'PartialCustomerReturnError' });
-    if (!stored) throw partial(`SAP committed customer return ${created.CustomerReturn}, but it could not be read back from SAP`);
+    const partial = (message) => _unconfirmedReturn(message, created.CustomerReturn);
+    if (!stored) throw partial(`SAP committed customer return ${created.CustomerReturn}, but it could not be read back from SAP, so it is NOT confirmed. Check it in SAP before creating it again.`);
 
     // Persistence check: everything the user entered that the BAPI route is meant to carry must be in SAP
     const missing = [];

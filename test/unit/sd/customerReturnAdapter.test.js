@@ -544,23 +544,63 @@ describe('Unit: CustomerReturnAdapter', () => {
       expect(res.Message).toContain('4500099 successfully created and verified');
     });
 
-    // Known defect: srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter.js:573-581 returns "created and verified" after
-    // every read-back failed; the adapter comment at :553 calls this a mandatory check of real persistence.
-    test.failing('does not claim the return was verified when every read-back failed', async () => {
-      mockHttpClient.post.mockResolvedValueOnce({ data: { d: { SalesOrderID: '4500099', DocumentCurrency: 'INR' } } });
-      mockHttpClient.get.mockRejectedValue(new Error('read-back unavailable'));
-
-      const outcome = await adapter.createCustomerReturn({
+    describe('read-back of the created return', () => {
+      const payload = {
         SoldToParty: '10082',
         ReturnsOrderReason: '101',
         SalesOrganization: '1000',
         DistributionChannel: '10',
         OrganizationDivision: '52',
         Items: [{ Material: '4000000001', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }]
-      }).catch((err) => ({ rejectedWith: err.message }));
+      };
+      const notConfirmed = {
+        status: 502,
+        code: 502,
+        CustomerReturn: '4500099',
+        name: 'PartialCustomerReturnError',
+        $sanitize: false,
+        message: 'SAP created customer return 4500099, but it could not be read back from SAP, so it is NOT confirmed. Check it in SAP before creating it again.'
+      };
+      const readBack = (CustomerReturn) => ({ data: { d: { CustomerReturn, TransactionCurrency: 'INR' } } });
 
-      expect(mockHttpClient.get).toHaveBeenCalledTimes(3);
-      expect(outcome.Message || '').not.toContain('created and verified');
+      beforeEach(() => {
+        mockHttpClient.post.mockResolvedValueOnce({ data: { d: { SalesOrderID: '4500099', DocumentCurrency: 'INR' } } });
+      });
+
+      test('answers not confirmed, naming the number, when every read-back failed, and posts once', async () => {
+        mockHttpClient.get.mockRejectedValue(new Error('read-back unavailable'));
+
+        await expect(adapter.createCustomerReturn(payload)).rejects.toMatchObject(notConfirmed);
+        expect(mockHttpClient.get).toHaveBeenCalledTimes(3);
+        expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+      });
+
+      test('answers not confirmed when SAP does not find the return', async () => {
+        mockHttpClient.get.mockRejectedValue(Object.assign(new Error('not found'), { response: { status: 404 } }));
+
+        await expect(adapter.createCustomerReturn(payload)).rejects.toMatchObject(notConfirmed);
+      });
+
+      test('answers not confirmed when the read-back is a different return', async () => {
+        mockHttpClient.get.mockResolvedValue(readBack('4500100'));
+
+        await expect(adapter.createCustomerReturn(payload)).rejects.toMatchObject(notConfirmed);
+      });
+
+      test('accepts the same number with leading zeros', async () => {
+        mockHttpClient.get.mockResolvedValue(readBack('0004500099'));
+
+        const res = await adapter.createCustomerReturn(payload);
+
+        expect(res).toMatchObject({ CustomerReturn: '4500099', Success: true });
+        expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
+      });
+
+      test('accepts a read-back on a later attempt', async () => {
+        mockHttpClient.get.mockRejectedValueOnce(new Error('not yet')).mockResolvedValueOnce(readBack('4500099'));
+
+        await expect(adapter.createCustomerReturn(payload)).resolves.toMatchObject({ Success: true });
+      });
     });
 
     test('rejects when no items with material are provided', async () => {

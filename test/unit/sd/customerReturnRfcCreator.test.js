@@ -156,12 +156,17 @@ describe('CustomerReturnAdapter.createCustomerReturnViaRfc', () => {
         ['the storage location', { item: { LGORT: '' } }, /storage location FG01/]
     ])('fails with the document number when SAP did not store %s', async (_l, over, msg) => {
         const creator = { create: jest.fn().mockResolvedValue({ CustomerReturn: '0004500190', testRun: false }), readBack: jest.fn().mockResolvedValue(stored(over)) };
-        await expect(run(creator)).rejects.toMatchObject({ CustomerReturn: '0004500190', name: 'PartialCustomerReturnError', message: expect.stringMatching(msg) });
+        await expect(run(creator)).rejects.toMatchObject({ CustomerReturn: '0004500190', name: 'PartialCustomerReturnError', $sanitize: false, message: expect.stringMatching(msg) });
     });
 
     it('fails with the document number when the committed return cannot be read back', async () => {
         const creator = { create: jest.fn().mockResolvedValue({ CustomerReturn: '0004500190', testRun: false }), readBack: jest.fn().mockResolvedValue(null) };
-        await expect(run(creator)).rejects.toMatchObject({ CustomerReturn: '0004500190', name: 'PartialCustomerReturnError' });
+        await expect(run(creator)).rejects.toMatchObject({
+            CustomerReturn: '0004500190',
+            name: 'PartialCustomerReturnError',
+            $sanitize: false,
+            message: 'SAP committed customer return 0004500190, but it could not be read back from SAP, so it is NOT confirmed. Check it in SAP before creating it again.'
+        });
     });
 
     it('refuses an unknown plant before calling the BAPI', async () => {

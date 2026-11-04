@@ -382,28 +382,55 @@ describe('Unit: CustomerInvoiceAdapter', () => {
     // SAP response shapes below are hand-written, as in the test above; only OUR reaction to them is checked.
     const acceptedCancel = { data: { d: { results: [{ BillingDocument: '90000053', MessageType: 'S', Message: 'Document 90000053 has been saved.' }] } } };
 
-    // Known defect: srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js:359-372 reports Success: true after all
-    // read-backs still show the invoice as not cancelled; the method's doc says it "confirms cancellation via readback".
-    test.failing('does not report success when every read-back still shows the invoice as not cancelled', async () => {
+    const invoiceRead = (over) => ({ data: { d: { BillingDocument: '31000112', BillingDocumentIsCancelled: false, AccountingTransferStatus: 'C', ...over } } });
+    const notConfirmed = "SAP accepted the cancellation of billing document 31000112 (reversal document 90000053), but reading it back did not show it as cancelled, so it is NOT confirmed. Check it in SAP before trying again.";
+
+    test('refuses to report success when every read-back still shows the invoice as not cancelled', async () => {
       mockHttpClient.post.mockResolvedValue(acceptedCancel);
-      mockHttpClient.get.mockResolvedValue({
-        data: { d: { BillingDocument: '31000112', BillingDocumentIsCancelled: false, AccountingTransferStatus: 'C' } }
-      });
+      mockHttpClient.get.mockResolvedValue(invoiceRead());
 
-      const outcome = await adapter.cancelBillingDocument({ billingDocument: '31000112' }).catch((err) => ({ rejectedWith: err.message }));
-
-      expect(outcome.Success).not.toBe(true);
+      await expect(adapter.cancelBillingDocument({ billingDocument: '31000112' })).rejects.toMatchObject({ status: 502, message: notConfirmed, $sanitize: false });
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(3);
     });
 
-    // Known defect: srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js:359 defaults BillingDocumentIsCancelled to
-    // true when no read-back succeeded, so an unconfirmed cancellation is reported as confirmed.
-    test.failing('does not claim the invoice is cancelled when no read-back succeeded', async () => {
+    test('refuses to report success when no read-back succeeded', async () => {
       mockHttpClient.post.mockResolvedValue(acceptedCancel);
       mockHttpClient.get.mockRejectedValue(new Error('read-back unavailable'));
 
-      const outcome = await adapter.cancelBillingDocument({ billingDocument: '31000112' }).catch((err) => ({ rejectedWith: err.message }));
+      await expect(adapter.cancelBillingDocument({ billingDocument: '31000112' })).rejects.toMatchObject({ status: 502, message: notConfirmed });
+    });
 
-      expect(outcome.BillingDocumentIsCancelled).not.toBe(true);
+    test('a later failed read does not turn into a confirmation', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockResolvedValueOnce(invoiceRead()).mockRejectedValue(new Error('read-back unavailable'));
+
+      await expect(adapter.cancelBillingDocument({ billingDocument: '31000112' })).rejects.toMatchObject({ status: 502 });
+    });
+
+    test('leaves the reversal document out of the warning when SAP named none', async () => {
+      mockHttpClient.post.mockResolvedValue({ data: { d: { results: [{ MessageType: 'S', Message: 'Saved' }] } } });
+      mockHttpClient.get.mockResolvedValue(invoiceRead());
+
+      await expect(adapter.cancelBillingDocument({ billingDocument: '31000112' })).rejects.toThrow(/^SAP accepted the cancellation of billing document 31000112, but/);
+    });
+
+    test('accepts a read-back on a later attempt', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockRejectedValueOnce(new Error('not yet')).mockResolvedValueOnce(invoiceRead({ BillingDocumentIsCancelled: true }));
+
+      const res = await adapter.cancelBillingDocument({ billingDocument: '31000112' });
+
+      expect(res.Success).toBe(true);
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(2);
+    });
+
+    test('treats accounting status E as cancelled and says so, as the cancel and release checks do', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockResolvedValue(invoiceRead({ AccountingTransferStatus: 'E' }));
+
+      const res = await adapter.cancelBillingDocument({ billingDocument: '31000112' });
+
+      expect(res).toMatchObject({ BillingDocumentIsCancelled: true, AccountingTransferStatus: 'E', Success: true });
     });
   });
 });
