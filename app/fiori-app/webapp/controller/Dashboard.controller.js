@@ -4,14 +4,16 @@ sap.ui.define([
     "saps4hana/fiori/service/ODataClient",
     "sap/m/MessageToast",
     "saps4hana/fiori/service/AuthService",
-    "sap/ui/core/Fragment"
+    "sap/ui/core/Fragment",
+    "sap/m/MessageBox"
 ], function (
     BaseController,
     JSONModel,
     ODataClient,
     MessageToast,
     AuthService,
-    Fragment
+    Fragment,
+    MessageBox
 ) {
     "use strict";
 
@@ -461,6 +463,89 @@ sap.ui.define([
                     oDialog.close();
                 });
             }
+        },
+
+        onLockUser: function () {
+            var oAdminModel = this.getView().getModel("adminView");
+            var oUser = oAdminModel ? oAdminModel.getProperty("/selectedUser") : null;
+            var sUsername = oUser ? oUser.username : null;
+            if (!sUsername) {
+                return;
+            }
+
+            var that = this;
+            var sMsg = this._text("adminConfirmLockMsg", "Are you sure you want to lock SAP user {0}?", [sUsername]);
+            var sTitle = this._text("adminConfirmLockTitle", "Lock SAP User");
+
+            MessageBox.confirm(sMsg, {
+                title: sTitle,
+                actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+                emphasizedAction: MessageBox.Action.OK,
+                onClose: function (sAction) {
+                    if (sAction === MessageBox.Action.OK) {
+                        that._executeUserAction("/odata/v4/user-management/lockUser", sUsername);
+                    }
+                }
+            });
+        },
+
+        onUnlockUser: function () {
+            var oAdminModel = this.getView().getModel("adminView");
+            var oUser = oAdminModel ? oAdminModel.getProperty("/selectedUser") : null;
+            var sUsername = oUser ? oUser.username : null;
+            if (!sUsername) {
+                return;
+            }
+
+            var that = this;
+            var sMsg = this._text("adminConfirmUnlockMsg", "Are you sure you want to unlock SAP user {0}?", [sUsername]);
+            var sTitle = this._text("adminConfirmUnlockTitle", "Unlock SAP User");
+
+            MessageBox.confirm(sMsg, {
+                title: sTitle,
+                actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+                emphasizedAction: MessageBox.Action.OK,
+                onClose: function (sAction) {
+                    if (sAction === MessageBox.Action.OK) {
+                        that._executeUserAction("/odata/v4/user-management/unlockUser", sUsername);
+                    }
+                }
+            });
+        },
+
+        _executeUserAction: function (sUrl, sUsername) {
+            var that = this;
+            var oAdminModel = this.getView().getModel("adminView");
+
+            if (this._pUserDetailDialog) {
+                this._pUserDetailDialog.then(function (oDialog) {
+                    oDialog.setBusy(true);
+                });
+            }
+
+            return ODataClient.post(sUrl, { username: sUsername })
+                .then(function (res) {
+                    var sSuccess = (res && res.message) || that._text("adminActionSuccess", "Action completed successfully in SAP.");
+                    MessageToast.show(sSuccess);
+                    var sDetailUrl = "/odata/v4/user-management/getUserDetail(username='" + encodeURIComponent(sUsername) + "')";
+                    return ODataClient.get(sDetailUrl)
+                        .then(function (detailRes) {
+                            var oDetail = detailRes && detailRes.value ? detailRes.value : detailRes;
+                            oAdminModel.setProperty("/selectedUser", oDetail);
+                            that.onRefreshUsers();
+                        });
+                })
+                .catch(function (err) {
+                    var sError = (err && err.message) || that._text("adminActionFailed", "SAP user action failed.");
+                    MessageBox.error(sError);
+                })
+                .finally(function () {
+                    if (that._pUserDetailDialog) {
+                        that._pUserDetailDialog.then(function (oDialog) {
+                            oDialog.setBusy(false);
+                        });
+                    }
+                });
         },
 
         onExit: function () {

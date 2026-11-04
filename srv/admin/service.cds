@@ -49,5 +49,24 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         lastChanged  : String;   // LASTMODIFIED.MODDATE
         lastChangedBy: String;   // LASTMODIFIED.MODUSER
     };
+
+    type ActionResult {
+        success : Boolean;
+        message : String;
+        username: String;
+    };
+
+    /**
+     * Lock an SAP user account.
+     * Backed by BAPI_USER_LOCK + BAPI_TRANSACTION_COMMIT in a single session.
+     * Rejects attempts to lock the active RFC connection user (fail-closed).
+     */
+    action lockUser(username: String) returns ActionResult;
+
+    /**
+     * Unlock an SAP user account.
+     * Backed by BAPI_USER_UNLOCK + BAPI_TRANSACTION_COMMIT in a single session.
+     */
+    action unlockUser(username: String) returns ActionResult;
 }
 

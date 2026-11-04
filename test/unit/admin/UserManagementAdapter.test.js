@@ -37,9 +37,12 @@ const DETAIL_RESULT = {
 
 function makeAdapter(rfcCallResult) {
   const mockCall = makeRfcCallMock(rfcCallResult);
-  const rfcClient = { call: mockCall };
+  const rfcClient = {
+    call: mockCall,
+    session: jest.fn().mockImplementation((fn) => fn(mockCall))
+  };
   const adapter = new UserManagementAdapter({ rfcClient });
-  return { adapter, mockCall };
+  return { adapter, mockCall, rfcClient };
 }
 
 // ── listUsers ────────────────────────────────────────────────────────────────
@@ -173,5 +176,110 @@ describe('UserManagementAdapter.getUserDetail', () => {
       },
     });
     await expect(adapter.getUserDetail('ALICE')).rejects.toMatchObject({ status: 502 });
+  });
+});
+
+// ── lockUser ──────────────────────────────────────────────────────────────────
+
+describe('UserManagementAdapter.lockUser', () => {
+  const origEnv = process.env.S4_USERNAME;
+  beforeEach(() => {
+    process.env.S4_USERNAME = 'CONNECTED_ADMIN';
+  });
+  afterAll(() => {
+    process.env.S4_USERNAME = origEnv;
+  });
+
+  test('calls BAPI_USER_LOCK and BAPI_TRANSACTION_COMMIT in a single session', async () => {
+    const { adapter, mockCall, rfcClient } = makeAdapter({
+      BAPI_USER_LOCK: { RETURN: [] },
+      BAPI_TRANSACTION_COMMIT: {},
+    });
+    const result = await adapter.lockUser('alice');
+    expect(rfcClient.session).toHaveBeenCalled();
+    expect(mockCall).toHaveBeenCalledWith('BAPI_USER_LOCK', { USERNAME: 'ALICE' });
+    expect(mockCall).toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+    expect(result).toEqual({
+      success: true,
+      message: "User 'ALICE' locked successfully in SAP",
+      username: 'ALICE',
+    });
+  });
+
+  test('throws 400 when username is empty', async () => {
+    const { adapter } = makeAdapter({});
+    await expect(adapter.lockUser('')).rejects.toMatchObject({ status: 400 });
+  });
+
+  test('refuses to lock the active RFC connection user (fail-closed self-lock guard)', async () => {
+    const { adapter, mockCall } = makeAdapter({});
+    await expect(adapter.lockUser('CONNECTED_ADMIN')).rejects.toMatchObject({
+      status: 403,
+      message: expect.stringContaining('active RFC connection user'),
+    });
+    expect(mockCall).not.toHaveBeenCalled();
+  });
+
+  test('throws 502 when BAPI_USER_LOCK returns error in RETURN', async () => {
+    const { adapter } = makeAdapter({
+      BAPI_USER_LOCK: {
+        RETURN: [{ TYPE: 'E', ID: 'SU', NUMBER: '001', MESSAGE: 'Not authorized to lock users' }],
+      },
+    });
+    await expect(adapter.lockUser('ALICE')).rejects.toMatchObject({
+      status: 502,
+      message: 'SAP error: Not authorized to lock users',
+    });
+  });
+
+  test('throws 502 when RFC call fails', async () => {
+    const mockCall = jest.fn().mockRejectedValue(new Error('RFC connection dropped'));
+    const rfcClient = { session: jest.fn().mockImplementation((fn) => fn(mockCall)) };
+    const adapter = new UserManagementAdapter({ rfcClient });
+    await expect(adapter.lockUser('ALICE')).rejects.toMatchObject({ status: 502 });
+  });
+});
+
+// ── unlockUser ────────────────────────────────────────────────────────────────
+
+describe('UserManagementAdapter.unlockUser', () => {
+  test('calls BAPI_USER_UNLOCK and BAPI_TRANSACTION_COMMIT in a single session', async () => {
+    const { adapter, mockCall, rfcClient } = makeAdapter({
+      BAPI_USER_UNLOCK: { RETURN: [] },
+      BAPI_TRANSACTION_COMMIT: {},
+    });
+    const result = await adapter.unlockUser('bob');
+    expect(rfcClient.session).toHaveBeenCalled();
+    expect(mockCall).toHaveBeenCalledWith('BAPI_USER_UNLOCK', { USERNAME: 'BOB' });
+    expect(mockCall).toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+    expect(result).toEqual({
+      success: true,
+      message: "User 'BOB' unlocked successfully in SAP",
+      username: 'BOB',
+    });
+  });
+
+  test('throws 400 when username is empty', async () => {
+    const { adapter } = makeAdapter({});
+    await expect(adapter.unlockUser('')).rejects.toMatchObject({ status: 400 });
+  });
+
+  test('throws 502 when BAPI_USER_UNLOCK returns error in RETURN', async () => {
+    const { adapter } = makeAdapter({
+      BAPI_USER_UNLOCK: {
+        RETURN: [{ TYPE: 'E', ID: 'SU', NUMBER: '002', MESSAGE: 'User is not locked' }],
+      },
+    });
+    await expect(adapter.unlockUser('BOB')).rejects.toMatchObject({
+      status: 502,
+      message: 'SAP error: User is not locked',
+    });
+  });
+
+  test('throws 502 when RFC call fails', async () => {
+    const mockCall = jest.fn().mockRejectedValue(new Error('RFC connection dropped'));
+    const rfcClient = { session: jest.fn().mockImplementation((fn) => fn(mockCall)) };
+    const adapter = new UserManagementAdapter({ rfcClient });
+    await expect(adapter.unlockUser('BOB')).rejects.toMatchObject({ status: 502 });
   });
 });

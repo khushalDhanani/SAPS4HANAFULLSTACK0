@@ -149,6 +149,92 @@ class UserManagementAdapter {
 
     return mapDetail(bname, res);
   }
+
+  /**
+   * Lock an SAP user account via BAPI_USER_LOCK + BAPI_TRANSACTION_COMMIT.
+   * Runs in a single RFC session LUW.
+   * Enforces self-lock protection against the active RFC connection user.
+   *
+   * @param {string} username
+   * @returns {Promise<{success: boolean, message: string, username: string}>}
+   */
+  async lockUser(username) {
+    if (!username || typeof username !== 'string' || !username.trim()) {
+      throw Object.assign(new Error('username is required'), { status: 400 });
+    }
+    const bname = username.trim().toUpperCase();
+    const connUser = String(process.env.S4_USERNAME || '').trim().toUpperCase();
+    if (connUser && bname === connUser) {
+      throw Object.assign(
+        new Error(`Cannot lock user '${bname}': operation refused because it is the active RFC connection user`),
+        { status: 403 }
+      );
+    }
+    LOG.info('lockUser', { username: bname });
+
+    return this._rfc.session(async (call) => {
+      let res;
+      try {
+        res = await call('BAPI_USER_LOCK', { USERNAME: bname });
+      } catch (e) {
+        LOG.error('BAPI_USER_LOCK failed:', e.message);
+        throw Object.assign(new Error(`Failed to lock user in SAP: ${e.message}`), { status: 502, cause: e });
+      }
+
+      const returnMsgs = res.RETURN || [];
+      const errorMsg = returnMsgs.find(m => m.TYPE === 'E' || m.TYPE === 'A');
+      if (errorMsg) {
+        LOG.error('BAPI_USER_LOCK RETURN error:', errorMsg.TYPE, errorMsg.ID, errorMsg.NUMBER, errorMsg.MESSAGE);
+        throw Object.assign(new Error(`SAP error: ${errorMsg.MESSAGE}`), { status: 502 });
+      }
+
+      await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+      return {
+        success: true,
+        message: `User '${bname}' locked successfully in SAP`,
+        username: bname
+      };
+    });
+  }
+
+  /**
+   * Unlock an SAP user account via BAPI_USER_UNLOCK + BAPI_TRANSACTION_COMMIT.
+   * Runs in a single RFC session LUW.
+   *
+   * @param {string} username
+   * @returns {Promise<{success: boolean, message: string, username: string}>}
+   */
+  async unlockUser(username) {
+    if (!username || typeof username !== 'string' || !username.trim()) {
+      throw Object.assign(new Error('username is required'), { status: 400 });
+    }
+    const bname = username.trim().toUpperCase();
+    LOG.info('unlockUser', { username: bname });
+
+    return this._rfc.session(async (call) => {
+      let res;
+      try {
+        res = await call('BAPI_USER_UNLOCK', { USERNAME: bname });
+      } catch (e) {
+        LOG.error('BAPI_USER_UNLOCK failed:', e.message);
+        throw Object.assign(new Error(`Failed to unlock user in SAP: ${e.message}`), { status: 502, cause: e });
+      }
+
+      const returnMsgs = res.RETURN || [];
+      const errorMsg = returnMsgs.find(m => m.TYPE === 'E' || m.TYPE === 'A');
+      if (errorMsg) {
+        LOG.error('BAPI_USER_UNLOCK RETURN error:', errorMsg.TYPE, errorMsg.ID, errorMsg.NUMBER, errorMsg.MESSAGE);
+        throw Object.assign(new Error(`SAP error: ${errorMsg.MESSAGE}`), { status: 502 });
+      }
+
+      await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+      return {
+        success: true,
+        message: `User '${bname}' unlocked successfully in SAP`,
+        username: bname
+      };
+    });
+  }
 }
 
 module.exports = { UserManagementAdapter };

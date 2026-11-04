@@ -15,7 +15,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **SU01 User Management Phase 1 Complete (Fiori UI, CAP, and RFC Integration) (2026-11-03 18:12 IST) — PASS (READ-ONLY tested, uncommitted):** Full read-only stack complete. Fiori UI (`#/dashboard/admin`) displays SAP users table with search, refresh, and detail dialog inspection (`UserDetailDialog.fragment.xml`). Backed by CAP `UserManagementService` (`srv/admin/service.cds`, `srv/admin/service.js`) and `UserManagementAdapter` (`srv/integration/s4hana/admin/UserManagementAdapter.js`). Cross-user read confirmed on DS4/220. 24 admin unit tests passing; full Jest test suite (226 passed, 4,129 passed) 100% clean; UI5 linter 0 findings; UI5 build succeeded; ESLint clean. See entry below.
+- **SU01 User Management Phase 2 (User Lock & Unlock) (2026-11-03 18:22 IST) — PASS (mock-tested, uncommitted; live SAP write gated):** `lockUser` and `unlockUser` actions added to `UserManagementService` (`srv/admin/service.cds`, `srv/admin/service.js`) and `UserManagementAdapter` (`srv/integration/s4hana/admin/UserManagementAdapter.js`). Implements fail-closed self-lock guard protecting the active RFC connection user (`process.env.S4_USERNAME`), atomic single-session LUW with `BAPI_TRANSACTION_COMMIT`, and UI buttons in `UserDetailDialog.fragment.xml` with confirmation dialogs (`MessageBox.confirm`). 42 admin unit tests pass (18 new). Full Jest test suite (226 passed, 4,147 tests) 100% clean. Playwright browser E2E 30/30 passed. Live write remains strictly gated. See entry below.
+
+- **SU01 User Management Phase 1 Complete (2026-11-03 18:14 IST) — PASS, committed (`fc51176`):** Full read-only stack committed to `feature01`. Fiori UI (`#/dashboard/admin`), CAP service, and RFC integration verified. See entry below.
 
 - **SU01 BAPI contract verification (2026-11-03 17:44 IST) — PASS (READ-ONLY), Phase 1 unblocked with one caveat:** All 6 verification steps passed (6/6). `BAPI_USER_GETLIST` and `BAPI_USER_GET_DETAIL` contracts confirmed. All write BAPIs exist and RFC-enabled. Phase 1 (read-only list + detail) is unblocked for implementation. One remaining READ-ONLY test needed: `BAPI_USER_GET_DETAIL` on a non-connected user to confirm cross-user read authority. Phase 2 writes are BLOCKED — RFC user lacks `S_USR_ADM` (needs Basis role assignment). See the entry below.
 
@@ -144,6 +146,33 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 18:22 IST — SU01 User Management Phase 2 (User Lock & Unlock): PASS (mock-tested, live write gated)
+
+- **Request:** Implement Phase 2 Lock & Unlock User functionality for SU01.
+- **CHANGED:**
+  - `srv/admin/service.cds`: Added `action lockUser(username: String) returns ActionResult` and `action unlockUser(username: String) returns ActionResult` under `@requires: 'Admin'`.
+  - `srv/admin/service.js`: Added `_handleLockUser` and `_handleUnlockUser` with input validation, username regex check, and error mapping to CAP HTTP status codes.
+  - `srv/integration/s4hana/admin/UserManagementAdapter.js`: Added `lockUser` and `unlockUser` calling `BAPI_USER_LOCK` / `BAPI_USER_UNLOCK` + `BAPI_TRANSACTION_COMMIT` inside a single `_rfc.session()` LUW. Implemented fail-closed self-lock guard preventing locking the active RFC connection user (`process.env.S4_USERNAME`).
+  - `app/fiori-app/webapp/fragment/UserDetailDialog.fragment.xml`: Added **Lock User** (`btnLockUser`, type Negative) and **Unlock User** (`btnUnlockUser`, type Emphasized) buttons with dynamic visibility based on current `isLocked` state.
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`: Added `onLockUser`, `onUnlockUser`, and `_executeUserAction` with confirmation popups (`MessageBox.confirm`), busy indicators, error surfacing, and automatic user detail + table refresh.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`: Added lock/unlock button labels, confirmation message templates, and result notification strings.
+  - `test/unit/admin/UserManagementAdapter.test.js`: Added 9 new unit tests covering lockUser & unlockUser success, self-lock refusal (403), empty username (400), SAP error handling (502), and RFC connection failures.
+  - `test/unit/admin/UserManagementService.test.js`: Added 9 new unit tests covering service action dispatch, validation, 403 self-lock propagation, and 502 error mapping.
+- **TEST DECISION:** TEST ADDED (18 new unit tests; admin test suite now 42 tests).
+- **SAP:** READ-ONLY / MOCK. Unit tests mock node-rfc session. Live SAP writes remain strictly gated per AGENTS.md (no live write sent).
+- **TESTED & VALIDATED:**
+  - `npx jest test/unit/admin/ --runInBand --silent`: 2 suites passed, 42 of 42 tests passed.
+  - `npx jest test/unit/dashboard/ test/unit/controller/ --runInBand --silent`: 8 suites passed, 106 of 106 tests passed.
+  - `npx jest --runInBand --silent`: 226 suites passed, 1 skipped; 4,147 tests passed, 56 skipped.
+  - `TARGET_URL=http://localhost:4004 node test/e2e/shell/verifyShellScreens.e2e.js`: 30/30 passed.
+  - `npx eslint app/fiori-app/webapp/controller/Dashboard.controller.js srv/admin/ srv/integration/s4hana/admin/ test/unit/admin/ tools/verify-su01-bapi-contracts.js`: 0 errors, 0 warnings.
+  - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `npm --prefix app/fiori-app run build`: build succeeded in 1.16s.
+  - `git diff --check`: clean.
+- **ASSUMPTIONS:** none.
+- **Next action:** User confirmation / review before committing Phase 2 changes. Live SAP lock/unlock requires Basis `S_USR_ADM` role assignment and explicit written "go" naming target user.
+- **FINAL STATUS:** PASS for Phase 2 Lock & Unlock implementation. Uncommitted.
 
 ### 2026-11-03 18:12 IST — SU01 User Management Phase 1 Complete (Fiori UI, CAP, and RFC Integration): PASS
 

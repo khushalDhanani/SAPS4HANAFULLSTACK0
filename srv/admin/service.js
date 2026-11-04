@@ -20,6 +20,8 @@ module.exports = class UserManagementService extends cds.ApplicationService {
 
     this.on('listUsers',    this._handleListUsers.bind(this));
     this.on('getUserDetail', this._handleGetUserDetail.bind(this));
+    this.on('lockUser',     this._handleLockUser.bind(this));
+    this.on('unlockUser',   this._handleUnlockUser.bind(this));
 
     await super.init();
   }
@@ -70,6 +72,48 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     } catch (e) {
       LOG.error('getUserDetail error:', e.message);
       return req.reject(e.status || 502, e.message || 'Failed to get user detail from SAP');
+    }
+  }
+
+  /**
+   * lockUser(username) — lock SAP user account.
+   */
+  async _handleLockUser(req) {
+    const username = (req.data.username || '').trim();
+    if (!username) return req.reject(400, 'username is required');
+
+    if (!/^[A-Z0-9@._-]{1,40}$/i.test(username)) {
+      return req.reject(400, 'username contains invalid characters');
+    }
+
+    try {
+      const res = await this._getAdapter().lockUser(username);
+      LOG.info('lockUser succeeded for:', username);
+      return res;
+    } catch (e) {
+      LOG.error('lockUser error:', e.message);
+      return req.reject(e.status || 502, e.message || 'Failed to lock user in SAP');
+    }
+  }
+
+  /**
+   * unlockUser(username) — unlock SAP user account.
+   */
+  async _handleUnlockUser(req) {
+    const username = (req.data.username || '').trim();
+    if (!username) return req.reject(400, 'username is required');
+
+    if (!/^[A-Z0-9@._-]{1,40}$/i.test(username)) {
+      return req.reject(400, 'username contains invalid characters');
+    }
+
+    try {
+      const res = await this._getAdapter().unlockUser(username);
+      LOG.info('unlockUser succeeded for:', username);
+      return res;
+    } catch (e) {
+      LOG.error('unlockUser error:', e.message);
+      return req.reject(e.status || 502, e.message || 'Failed to unlock user in SAP');
     }
   }
 };

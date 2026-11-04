@@ -61,11 +61,25 @@
                 </HBox>
             </VBox>
         </content>
-        <beginButton>
+        <buttons>
+            <Button
+                id="btnLockUser"
+                text="{i18n>adminBtnLockUser}"
+                type="Negative"
+                icon="sap-icon://locked"
+                visible="{= !${adminView>/selectedUser/isLocked} }"
+                press=".onLockUser" />
+            <Button
+                id="btnUnlockUser"
+                text="{i18n>adminBtnUnlockUser}"
+                type="Emphasized"
+                icon="sap-icon://unlocked"
+                visible="{= ${adminView>/selectedUser/isLocked} === true }"
+                press=".onUnlockUser" />
             <Button
                 id="btnCloseUserDetail"
                 text="{i18n>adminDialogClose}"
                 press=".onCloseUserDetailDialog" />
-        </beginButton>
+        </buttons>
     </Dialog>
 </core:FragmentDefinition>
