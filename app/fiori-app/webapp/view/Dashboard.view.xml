@@ -371,12 +371,6 @@
                                             <Text text="{i18n>adminColUserType}" />
                                         </Column>
                                         <Column minScreenWidth="Desktop" demandPopin="true" width="9rem">
-                                            <Text text="{i18n>adminDetailValidFrom}" />
-                                        </Column>
-                                        <Column minScreenWidth="Tablet" demandPopin="true" width="9rem">
-                                            <Text text="{i18n>adminDetailValidTo}" />
-                                        </Column>
-                                        <Column minScreenWidth="Desktop" demandPopin="true" width="9rem">
                                             <Text text="{i18n>adminColLastChanged}" />
                                         </Column>
                                         <Column minScreenWidth="Desktop" demandPopin="true" width="9rem">
@@ -399,8 +393,6 @@
                                                     state="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? 'Error' : 'Success') : 'Warning' }"
                                                     icon="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? 'sap-icon://locked' : 'sap-icon://unlocked') : 'sap-icon://alert' }" />
                                                 <Text text="{= ${adminView>userType} || '-' }" />
-                                                <Text text="{path: 'adminView>validFrom', formatter: '.formatAdminDate'}" />
-                                                <Text text="{path: 'adminView>validTo', formatter: '.formatAdminDate'}" />
                                                 <Text text="{path: 'adminView>lastChanged', formatter: '.formatAdminDate'}" />
                                                 <Text text="{= ${adminView>lastChangedBy} || '-' }" />
                                                 <HBox wrap="Wrap" justifyContent="End">

@@ -75,7 +75,7 @@ describe('Integration: SU01 user management', () => {
             const calls = stubRfc({
                 BAPI_USER_GETLIST: {
                     USERLIST: [
-                        { USERNAME: 'ALICE', FIRSTNAME: 'Alice', LASTNAME: 'Smith', FULLNAME: 'Alice Smith' },
+                        { USERNAME: 'ALICE', FIRSTNAME: '', LASTNAME: '', FULLNAME: '' },
                         { USERNAME: 'BOB', FIRSTNAME: 'Bob', LASTNAME: 'Jones', FULLNAME: 'Bob Jones' }
                     ],
                     RETURN: []
@@ -98,8 +98,8 @@ describe('Integration: SU01 user management', () => {
             expect(res.status).toBe(200);
             expect(res.data.value).toEqual([{
                 username: 'ALICE',
-                firstName: 'Alice',
-                lastName: 'Smith',
+                firstName: '',
+                lastName: '',
                 fullName: 'Alice Smith',
                 detailsAvailable: true,
                 isLocked: false,

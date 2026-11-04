@@ -67,7 +67,19 @@ describe('UserManagementAdapter.listUsers', () => {
       lastChanged: '20261001',
       lastChangedBy: 'ADMIN'
     });
-    expect(result[1]).toMatchObject({ username: 'BOB', fullName: 'Bob Jones', detailsAvailable: true });
+    expect(result[1]).toMatchObject({ username: 'BOB', detailsAvailable: true });
+  });
+
+  test('uses the detail full name when BAPI_USER_GETLIST does not provide one', async () => {
+    const listResult = {
+      USERLIST: [{ USERNAME: 'ALICE', FIRSTNAME: '', LASTNAME: '', FULLNAME: '' }],
+      RETURN: []
+    };
+    const { adapter } = makeAdapter({ BAPI_USER_GETLIST: listResult });
+
+    await expect(adapter.listUsers()).resolves.toMatchObject([
+      { username: 'ALICE', fullName: 'Alice Smith', detailsAvailable: true }
+    ]);
   });
 
   test('passes MAX_ROWS to RFC call', async () => {

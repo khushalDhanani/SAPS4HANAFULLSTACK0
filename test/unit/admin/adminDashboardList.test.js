@@ -76,16 +76,20 @@ describe('Admin dashboard user list', () => {
             'utf8'
         );
         [
+            'adminColFullName',
             'adminColLockStatus',
             'adminColUserType',
-            'adminDetailValidFrom',
-            'adminDetailValidTo',
             'adminColLastChanged',
             'adminDetailLastChangedBy',
             'adminDetailsUnavailable',
             'press=".onLockUser"',
             'press=".onUnlockUser"'
         ].forEach((sBinding) => expect(sView).toContain(sBinding));
+        expect(sView).toContain('text="{adminView>fullName}"');
+        expect(sView).not.toContain('text="{i18n>adminDetailValidFrom}"');
+        expect(sView).not.toContain('text="{i18n>adminDetailValidTo}"');
+        expect(sView).not.toContain('adminView>validFrom');
+        expect(sView).not.toContain('adminView>validTo');
         expect(sView).toContain('detailsAvailable} &amp;&amp; !${adminView>isLocked}');
         expect(sView).toContain('detailsAvailable} &amp;&amp; ${adminView>isLocked} === true');
     });

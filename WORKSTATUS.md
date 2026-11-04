@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Admin dashboard user list (2026-11-04 18:07 IST) — PARTIAL, uncommitted, not deployed:** `#/dashboard/admin` shows lock status, user type, validity dates, last-changed date/by, and confirmed Lock/Unlock row actions. Fixed Changed By: SAP returns `LASTMODIFIED.MODIFIER`; the adapter had incorrectly read `MODUSER`. A read-only call confirmed `MODIFIER` is populated for the configured RFC user. No lock/unlock write was run. See the Changes Log for validation and limits.
+- **Admin dashboard user list (2026-11-04 18:12 IST) — PASS for requested display update; uncommitted, not deployed:** Removed Valid From/Valid To columns and fixed blank Full Name by falling back to `BAPI_USER_GET_DETAIL` data; the read-only browser flow passed. The earlier Lock/Unlock row actions remain untested as live SAP writes and need explicit authorization. See the Changes Log.
 - **Handling unit result after a commit (2026-11-04 17:40 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** If anything fails once the commit was sent, create, pack, unpack and delete now answer 502 with the handling unit number and "NOT confirmed. Check it in SAP before trying again", and the text stays visible in production. **Open finding:** `npm run test:coverage` crashed once with exit 139 (SIGSEGV) and passed on two reruns; cause UNKNOWN.
 
 - **"Nothing was posted" refusals stay visible in production (2026-11-04 17:32 IST) — PARTIAL, committed locally as `8d4f87dd`, not pushed, not deployed, not run against SAP:** Plant scope refusals, shipping point read failures, posting-log failures, goods receipt read failures and HU stock transfer checks now keep their text in production. Still hidden there: the lock and unlock SAP reason, and other 5xx text.
@@ -140,7 +140,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Test replacement (2026-11-04): the user answers the open decision: read-only `$metadata` checks for the assumed SAP shapes. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 10 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
-- Admin dashboard user list (2026-11-04): Changed By mapping fixed and verified against the read-only SAP response. SAP Lock/Unlock Tier C proof remains pending; do not run it without the user's written go for a specific test user/data scope. A refresh can issue up to 200 sequential `BAPI_USER_GET_DETAIL` reads; latency has not been separately measured.
+- Admin dashboard user list (2026-11-04): Removed the validity columns from the list only; validity data remains available in the user-detail dialog. Full Name now uses the detail response when the list response omits it. The shell browser E2E passed. SAP Lock/Unlock Tier C proof remains pending; do not run it without the user's written go for a specific test user/data scope. A refresh can issue up to 200 sequential `BAPI_USER_GET_DETAIL` reads; latency has not been separately measured.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
 - Creatable services (2026-11-03): the classification is pushed in `43e96d2b`. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
 - HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
@@ -185,6 +185,27 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 18:12 IST — Remove validity columns and show Full Name in Admin list: PASS for requested display update
+
+- **Request:** Remove Valid From/Valid To from the Admin list and fix Full Name, which was not showing.
+- **Root cause evidence:** READ-ONLY `BAPI_USER_GETLIST` returned no populated FULLNAME fields for 10 sampled users; subsequent `BAPI_USER_GET_DETAIL` returned `ADDRESS.FULLNAME` for 9 of those 10. The adapter previously kept only the list response's `FULLNAME`.
+- **Changed:** `srv/integration/s4hana/admin/UserManagementAdapter.js` now prefers the detail response's full name, then the list full name, then available first/last names. `app/fiori-app/webapp/view/Dashboard.view.xml` no longer includes Valid From/Valid To columns or cells; the existing detail dialog still retains those fields. Updated adapter/CAP integration fixtures, Admin view assertions and shell browser checks.
+- **TEST DECISION:** TEST UPDATED — adapter fallback and CAP output are covered by unit/integration tests; the existing Admin shell E2E now verifies the table headers and Full Name cell binding.
+- **Executed validation:**
+  - First targeted Jest run: **FAIL**, 2 stale fixture expectations (the shared detail mock returned Alice's full name for Bob, and integration expected first/last names from the empty list fixture). Fixtures/assertions were corrected; no implementation defect remained.
+  - `npx jest --runInBand test/unit/admin/UserManagementAdapter.test.js test/unit/admin/adminDashboardList.test.js test/integration/userManagement.test.js` — 3 suites, 68 tests passed.
+  - `npm --prefix app/fiori-app run lint` — passed.
+  - `npm --prefix app/fiori-app run build` — succeeded; existing warning: missing `jspdf.umd.min.js.map`.
+  - `npm run lint` — passed.
+  - `npx cds compile srv/` — passed.
+  - `TARGET_URL=http://localhost:4104 npm run test:e2e -- --only=shell --workers=1` — 1 shell suite passed, including Admin table, Full Name binding and safe-action checks; write guard reported no blocked writes. Temporary server was stopped afterward.
+  - `git diff --check` — passed on the final tree.
+- **SAP:** READ-ONLY BAPI list/detail check only; no writes. Full Name field values and usernames were not printed.
+- **Warnings/blockers:** UI5 project guidelines were retrieved, but API-reference lookup failed because the configured SDK CDN did not provide its version resource; the Fiori list/table reference file was not present at the expected skill path. Local UI5 lint/build and browser E2E passed. Existing CAP action/function naming warnings appeared at server startup.
+- **NOT RUN:** No deployment. No SAP Lock/Unlock action; those remain live writes requiring explicit user go for a specific test user/data scope.
+- **FINAL STATUS:** PASS for the requested list display update (validity columns removed and Full Name displayed from available SAP detail data); previous live-write validation remains pending.
+- **Next:** Refresh `#/dashboard/admin` to see the revised list. Keep any Lock/Unlock live test blocked until explicit written authorization is provided for that specific call.
 
 ### 2026-11-04 18:07 IST — Fixed Admin list "Changed By" mapping: PARTIAL
 

@@ -91,10 +91,13 @@ async function verifySidebar(baseUrl) {
                     if (!table) return null;
                     const row = table.getItems().find((item) => item.getBindingContext('adminView'));
                     const cells = row ? row.getCells() : [];
-                    const actions = cells[8] && cells[8].getItems ? cells[8].getItems() : [];
+                    const context = row && row.getBindingContext('adminView');
+                    const actions = cells[6] && cells[6].getItems ? cells[6].getItems() : [];
                     return {
                         headers: table.getColumns().map((column) => column.getHeader().getText()),
-                        detailsAvailable: row ? row.getBindingContext('adminView').getProperty('detailsAvailable') : null,
+                        detailsAvailable: context ? context.getProperty('detailsAvailable') : null,
+                        fullName: context ? context.getProperty('fullName') : '',
+                        displayedFullName: cells[1] && cells[1].getText ? cells[1].getText() : '',
                         status: cells[2] && cells[2].getText ? cells[2].getText() : '',
                         visibleActions: actions
                             .filter((control) => control.isA('sap.m.Button') && control.getVisible())
@@ -102,13 +105,19 @@ async function verifySidebar(baseUrl) {
                     };
                 });
                 const problems = [];
-                const requiredHeaders = ['Username', 'Full Name', 'Lock Status', 'User Type', 'Valid From', 'Valid To', 'Last Changed', 'Changed By', 'Actions'];
+                const requiredHeaders = ['Username', 'Full Name', 'Lock Status', 'User Type', 'Last Changed', 'Changed By', 'Actions'];
                 if (!adminList) {
                     problems.push('Admin user table was not found');
                 } else {
                     requiredHeaders.forEach((header) => {
                         if (!adminList.headers.includes(header)) problems.push(`missing ${header} column`);
                     });
+                    if (adminList.headers.includes('Valid From') || adminList.headers.includes('Valid To')) {
+                        problems.push('validity date columns should not be shown in the Admin list');
+                    }
+                    if (adminList.fullName && adminList.displayedFullName !== adminList.fullName) {
+                        problems.push('Full Name cell does not display its bound value');
+                    }
                     if (!adminList.status) problems.push('first row has no visible lock/detail status');
                     if (!adminList.visibleActions.includes('View Detail')) problems.push('first row has no View Detail action');
                     if (adminList.detailsAvailable === true

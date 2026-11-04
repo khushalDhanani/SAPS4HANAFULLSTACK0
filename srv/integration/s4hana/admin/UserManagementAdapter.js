@@ -153,8 +153,12 @@ class UserManagementAdapter {
 
           try {
             const detail = await readUserDetail(call, username.toUpperCase());
+            const fullName = detail.fullName
+              || listedUser.fullName
+              || [detail.firstName || listedUser.firstName, detail.lastName || listedUser.lastName].filter(Boolean).join(' ');
             enriched.push({
               ...listedUser,
+              fullName,
               detailsAvailable: true,
               isLocked: detail.isLocked,
               userType: detail.userType,
