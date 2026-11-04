@@ -146,8 +146,7 @@ describe('Phase 3: Observability, Correlation Tracking & Security Gating', () =>
       expect(s4Err.message).not.toContain('s4app01.internal');
     });
 
-    // Known defect: srv/integration/s4hana/S4HttpClient.js:338 deletes only 'authorization' and 'Authorization', so any other casing of the caller's credential header reaches S/4.
-    test.failing('S4HttpClient.post strips the caller credential header whatever its casing', async () => {
+    test('S4HttpClient.post strips the caller credential header whatever its casing', async () => {
       const sent = [];
       const client = new S4HttpClient({
         destinationName: 'MOCK_DEST',
@@ -162,6 +161,44 @@ describe('Phase 3: Observability, Correlation Tracking & Security Gating', () =>
 
       const postConfig = sent.find((config) => config.method === 'post');
       expect(postConfig.headers.AUTHORIZATION).toBeUndefined();
+    });
+
+    test('S4HttpClient.post keeps its own CSRF token and session cookie whatever the casing of a caller header', async () => {
+      const sent = [];
+      const client = new S4HttpClient({
+        destinationName: 'MOCK_DEST',
+        getDestination: async () => ({ url: 'https://mock.s4.local', headers: {} }),
+        executeHttpRequest: async (_dest, config) => {
+          sent.push(config);
+          return { status: 200, data: {}, headers: { 'x-csrf-token': 'SAP-TOKEN', 'set-cookie': ['SAP_SESSION=real'] } };
+        }
+      });
+
+      await client.post('/sap/opu/odata/sap/MOCK_SRV/ItemSet', { data: {}, headers: { 'X-CSRF-TOKEN': 'caller', COOKIE: 'caller', 'If-Match': '*' } });
+
+      const { headers } = sent.find((config) => config.method === 'post');
+      expect(headers['X-CSRF-TOKEN']).toBeUndefined();
+      expect(headers.COOKIE).toBeUndefined();
+      expect(headers['x-csrf-token']).toBe('SAP-TOKEN');
+      expect(headers.Cookie).toBe('SAP_SESSION=real');
+      expect(headers['If-Match']).toBe('*');
+    });
+
+    test('S4HttpClient.get strips the caller credential header and keeps the others', async () => {
+      const sent = [];
+      const client = new S4HttpClient({
+        destinationName: 'MOCK_DEST',
+        getDestination: async () => ({ url: 'https://mock.s4.local', headers: {} }),
+        executeHttpRequest: async (_dest, config) => {
+          sent.push(config);
+          return { status: 200, data: {}, headers: {} };
+        }
+      });
+
+      await client.get('/sap/opu/odata/sap/MOCK_SRV/ItemSet', { headers: { aUtHoRiZaTiOn: 'Bearer caller-token', 'If-None-Match': 'W/"1"' } });
+
+      expect(sent[0].headers.aUtHoRiZaTiOn).toBeUndefined();
+      expect(sent[0].headers['If-None-Match']).toBe('W/"1"');
     });
   });
 

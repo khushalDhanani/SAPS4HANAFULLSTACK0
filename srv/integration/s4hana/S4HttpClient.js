@@ -109,6 +109,11 @@ function sapMessageOf(body) {
     return { message, code: error.code || '' };
 }
 
+/** Removes caller headers this client or the destination must own. HTTP header names ignore case. */
+const withoutHeaders = (headers, names) => Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !names.includes(name.toLowerCase()))
+);
+
 class S4HttpClient {
     /**
      * @param {Object} [deps]
@@ -253,7 +258,7 @@ class S4HttpClient {
             method: 'get',
             url: joinQuery(path, query),
             timeout: S4HttpClient.requestTimeoutMs(),
-            headers: { Accept: accept, ...S4HttpClient.sapClientHeader(destination), ...headers },
+            headers: { Accept: accept, ...S4HttpClient.sapClientHeader(destination), ...withoutHeaders(headers, ['authorization']) },
             ...(responseType ? { responseType } : {})
         };
         return this._send(destination, requestConfig, 'GET', path, options);
@@ -330,13 +335,7 @@ class S4HttpClient {
         const { data = {}, headers = {}, csrfPath } = options;
         const destination = await this._requireDestination(options);
         const session = await this.fetchCsrfSession(csrfPath || serviceRootOf(path), destination, options);
-        const cleanHeaders = { ...headers };
-        delete cleanHeaders['x-csrf-token'];
-        delete cleanHeaders['X-CSRF-Token'];
-        delete cleanHeaders['cookie'];
-        delete cleanHeaders['Cookie'];
-        delete cleanHeaders['authorization'];
-        delete cleanHeaders['Authorization'];
+        const cleanHeaders = withoutHeaders(headers, ['x-csrf-token', 'cookie', 'authorization']);
 
         const resolvedIfMatch = options.ifMatch || options.etag || cleanHeaders['if-match'] || cleanHeaders['If-Match'];
         if (resolvedIfMatch) {
