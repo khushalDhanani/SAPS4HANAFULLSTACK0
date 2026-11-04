@@ -27,16 +27,6 @@ describe('Attempt store with a database: the database is the only source', () =>
     expect(a._memoryStore.size).toBe(0);
   });
 
-  it('shows an attempt as pending only until any instance resolves it', async () => {
-    await a.create(ATTEMPT);
-    expect(await a.hasOpenAttemptForReservation('528779', '1')).toBe(true);
-    expect(await b.hasOpenAttemptForReservation('528779', '1')).toBe(true);
-
-    await b.setStatus(ATTEMPT.ReferenceDocument, 'posted', { MaterialDocument: '4900000001' });
-
-    expect(await a.hasOpenAttemptForReservation('528779', '1')).toBe(false);
-  });
-
   it('reads the status another instance wrote', async () => {
     await a.create(ATTEMPT);
     await b.setStatus(ATTEMPT.ReferenceDocument, 'unconfirmed');
@@ -57,25 +47,11 @@ describe('Attempt store with a database: the database is the only source', () =>
   });
 });
 
-describe('Attempt store when the database cannot be read', () => {
-  // Rule from the comment at srv/wm/goods-issue/GoodsIssueAttemptStore.js:284: a failed read is not "no open attempt".
-  const unreadable = new GoodsIssueAttemptStore({ db: { tx: async () => { throw new Error('db down'); } } });
-
-  it('refuses the open-attempt check with 503 instead of answering false', async () => {
-    await expect(unreadable.hasOpenAttemptForReservation('528779', '1')).rejects.toMatchObject({
-      status: 503,
-      message: 'Open posting attempts for reservation 528779 could not be read (db down). Goods Issue was NOT posted.'
-    });
-  });
-});
-
 describe('Attempt store with no database: memory is the fallback', () => {
   it('still records and resolves attempts', async () => {
     const store = new GoodsIssueAttemptStore({ db: null });
     await store.create(ATTEMPT);
-    expect(await store.hasOpenAttemptForReservation('528779', '1')).toBe(true);
     await store.setStatus(ATTEMPT.ReferenceDocument, 'posted');
-    expect(await store.hasOpenAttemptForReservation('528779', '1')).toBe(false);
     expect(await store.getByReference(ATTEMPT.ReferenceDocument)).toMatchObject({ Status: 'posted' });
   });
 });

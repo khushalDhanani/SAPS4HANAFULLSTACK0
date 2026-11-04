@@ -117,7 +117,7 @@ class GoodsIssueAttemptStore {
 
   /**
    * All attempts sharing a RequestHash (one identity, across re-claim generations), oldest first.
-   * The 261 re-claim path groups generations by this stable identity hash (ReferenceDocument carries
+   * The re-claim path groups generations by this stable identity hash (ReferenceDocument carries
    * a generation suffix; RequestHash does not).
    */
   async _attemptsByRequestHash(requestHash) {
@@ -137,8 +137,8 @@ class GoodsIssueAttemptStore {
    * claimed the same idempotency key.
    *
    * @param {Object} data - carries ReferenceDocument (the base key) and RequestHash (the identity)
-   * @param {{reclaimableStatuses: string[], isReclaimable?: function(Object): boolean}} [reclaim] - OPT-IN re-claim policy (261 post/reverse only;
-   *   the 201 flow passes nothing and keeps the plain idempotent-replay behaviour below). When set, a
+   * @param {{reclaimableStatuses: string[], isReclaimable?: function(Object): boolean}} [reclaim] - OPT-IN re-claim policy (a caller
+   *   that passes nothing keeps the plain idempotent-replay behaviour below). When set, a
    *   new claim is allowed only if the latest attempt for this identity is in a status that proves
    *   nothing is posted (e.g. 'rejected', or 'not_posted' for posts); any other status (sending /
    *   unconfirmed / posted / delivery_created / needs-attention) still returns {created:false} (409).
@@ -233,59 +233,6 @@ class GoodsIssueAttemptStore {
     const mem = this._memoryStore.get(ref);
     if (mem) {
       Object.assign(mem, updates);
-    }
-  }
-
-  /**
-   * Checks whether there is an active (sending or unconfirmed) attempt for a reservation item.
-   *
-   * @param {string} reservationNo
-   * @param {string} [reservationItem]
-   * @returns {Promise<boolean>}
-   */
-  async hasOpenAttemptForReservation(reservationNo, reservationItem) {
-    const sRes = String(reservationNo || '').trim();
-    if (!sRes) return false;
-    const cleanRes = sRes.replace(/^0+/, '');
-    const cleanItem = reservationItem !== undefined && reservationItem !== null ? String(reservationItem).trim().replace(/^0+/, '') : '';
-
-    if (!this.isAvailable()) return false;
-
-    // With a database, memory can be stale: another instance may have resolved the attempt.
-    if (!this.db) {
-      for (const attempt of this._memoryStore.values()) {
-        if (OPEN_STATUSES.includes(attempt.Status)) {
-          const aRes = String(attempt.ReservationNo || '').trim().replace(/^0+/, '');
-          if (cleanItem) {
-            const aItem = String(attempt.ReservationItem || '').trim().replace(/^0+/, '');
-            if (aRes === cleanRes && aItem === cleanItem) return true;
-          } else if (aRes === cleanRes) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-
-    try {
-      const rows = await this._run(
-        SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES } })
-      );
-      if (!Array.isArray(rows) || rows.length === 0) return false;
-      return rows.some((attempt) => {
-        const aRes = String(attempt.ReservationNo || '').trim().replace(/^0+/, '');
-        if (cleanItem) {
-          const aItem = String(attempt.ReservationItem || '').trim().replace(/^0+/, '');
-          return aRes === cleanRes && aItem === cleanItem;
-        }
-        return aRes === cleanRes;
-      });
-    } catch (err) {
-      // A failed read is not "no open attempt": block the post instead of failing open.
-      LOG.warn('Query failed for open attempts by reservation:', err.message || err);
-      const e = new Error(`Open posting attempts for reservation ${sRes} could not be read (${err.message || 'database error'}). Goods Issue was NOT posted.`);
-      e.status = 503;
-      throw e;
     }
   }
 

@@ -9,7 +9,6 @@
  *     - Rejects blank, whitespace, or placeholder/mock document numbers.
  *     - Rejects HTTP 2xx that lack a material document (504 GI_POSTING_OUTCOME_UNKNOWN).
  *     - Multi-tier read-back in GoodsIssuePostingClient (MATDOC -> MKPF -> OData -> unconfirmed pending).
- *     - Read-back verification in Mvt261Adapter.
  *  2. Safe Retries and Idempotency:
  *     - GoodsIssueAttemptStore: Idempotent replay of identical requests without duplicate SAP posting.
  *     - GoodsIssueAttemptStore: Reference collision detection throws HTTP 409 Conflict.
@@ -28,7 +27,6 @@ cds.test(__dirname + '/../../../');
 
 const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient');
 const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
-const Mvt261Adapter = require('../../../srv/integration/s4hana/wm/Mvt261Adapter');
 const HuStockTransferAdapter = require('../../../srv/integration/s4hana/wm/HuStockTransferAdapter');
 
 const { DELETE } = cds.ql;
@@ -54,41 +52,6 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
   // =========================================================================
   // 1. Genuine Document Number & Placeholder Rejection
   // =========================================================================
-  describe('1. Genuine Document Number Enforcement & Placeholder Rejection', () => {
-
-    test('GoodsIssuePostingClient throws 504 GI_POSTING_OUTCOME_UNKNOWN on HTTP 2xx without a material document', async () => {
-      const mockS4Client = {
-        post: jest.fn().mockResolvedValue({
-          data: { d: {} } // 200 OK body without MaterialDocument
-        })
-      };
-
-      const postingClient = new GoodsIssuePostingClient({
-        client: mockS4Client,
-        rfc: null
-      });
-
-      await expect(
-        postingClient._submitMaterialDocument(
-          {
-            to_MaterialDocumentItem: {
-              results: [{ GoodsMovementType: '201', Material: '8000000023', Plant: '1120', StorageLocation: 'HS01', EntryUnit: 'KG' }]
-            }
-          },
-          {
-            mvt: '201',
-            reservationNo: '520001',
-            reservationItem: '0001',
-            data: { MovementType: '201', ValidatedMovementType: '201', Material: '8000000023', Plant: '1120', StorageLocation: 'HS01', IssueQty: 5 }
-          }
-        )
-      ).rejects.toMatchObject({
-        status: 504,
-        code: 'GI_POSTING_OUTCOME_UNKNOWN'
-      });
-    });
-
-  });
 
   // =========================================================================
   // 2. SAP Document Persistence Verification (MATDOC, MSEG, LTAK, MKPF)
@@ -172,25 +135,6 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
       });
     });
 
-    test('Mvt261Adapter.readBackDocument: confirms persistence in MATDOC via RFC', async () => {
-      const mockRfc = {
-        readTable: jest.fn().mockResolvedValue([{
-          MBLNR: '5000000261',
-          MJAHR: '2026',
-          BUDAT: '20261024'
-        }])
-      };
-
-      const adapter = new Mvt261Adapter({ rfc: mockRfc });
-      const doc = await adapter.readBackDocument('5000000261', '2026');
-
-      expect(doc).toMatchObject({
-        MaterialDocument: '5000000261',
-        MaterialDocYear: '2026',
-        Confirmed: true,
-        Status: 'confirmed'
-      });
-    });
   });
 
   // =========================================================================

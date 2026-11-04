@@ -264,16 +264,6 @@
 
         },
         {
-          "name": "wmCycle261",
-          "pattern": "wm/mvt261/open/{reservation}/{item}/cycle",
-          "target": "TargetCycle261"
-        },
-        {
-          "name": "wmScan261",
-          "pattern": "wm/mvt261/open/{reservation}/{item}",
-          "target": "TargetScan261"
-        },
-        {
           "name": "wmHandlingUnitDetail",
           "pattern": "wm/handling-unit/{hu}:?query:",
           "target": "TargetHandlingUnitDetail"
@@ -394,16 +384,6 @@
           "name": "CreateCustomerReturn",
           "path": "saps4hana.fiori.modules.sd.customer-return.view"
 
-        },
-        "TargetScan261": {
-          "id": "scan261",
-          "name": "Scan261",
-          "path": "saps4hana.fiori.modules.wm.mvt261.view"
-        },
-        "TargetCycle261": {
-          "id": "cycle261",
-          "name": "Cycle261",
-          "path": "saps4hana.fiori.modules.wm.mvt261.view"
         },
         "TargetHandlingUnits": {
           "id": "handlingUnits",

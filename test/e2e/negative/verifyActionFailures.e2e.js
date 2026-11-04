@@ -20,7 +20,6 @@ const ordersDue = require('../le/roundTripOrdersDue.e2e');
 const goodsReceipt = require('../wm/roundTripGoodsReceipt.e2e');
 const packing = require('../wm/roundTripPackingInstruction.e2e');
 const huRt = require('../wm/roundTripHandlingUnit.e2e');
-const mvt261 = require('../wm/roundTripMvt261.e2e');
 const kit = require('../wm/wmRoundTripKit');
 
 const JSON_TYPE = 'application/json;odata.metadata=minimal';
@@ -143,14 +142,13 @@ const wmFlows = [
 ];
 
 /**
- * Round-trip suites that stub their own actions through wmRoundTripKit.stubAction (handling unit, movement 261):
+ * Round-trip suites that stub their own actions through wmRoundTripKit.stubAction (handling unit):
  * with kit.setFailure() their stubs answer the failure, and their SUBCASES drive the UI unchanged. Candidates come from
  * READ-ONLY reads, read once per run. A sub-case without a candidate in the current SAP data is SKIPPED, not failed.
  */
 const once = (fn) => { let p; return (...a) => { p = p || fn(...a); return p; }; };
 const skip = (why) => Object.assign(new Error(why), { skip: true });
 const huData = once(async (baseUrl) => huRt.dryInputs(await huRt.pickDryRunData(baseUrl)));
-const mvtData = once((baseUrl) => mvt261.pickDryRunData(baseUrl));
 
 const kitFlows = [
     ...Object.keys(huRt.SUBCASES).map((name) => ({
@@ -160,17 +158,6 @@ const kitFlows = [
             if (typeof d === 'string') throw skip(d);
             await kit.stubAction(session, huRt.PATH[name], () => ({})); // the round-trip dryRun() installs this stub; with kit.setFailure it answers the failure
             return huRt.SUBCASES[name](session, d);
-        }
-    })),
-    ...Object.keys(mvt261.SUBCASES).map((name) => ({
-        label: `Movement 261: ${name}`, ...split(mvt261.PATH[name]), hash: 'wm/mvt261', stale: /already in progress/i,
-        run: async (session, baseUrl) => {
-            const d = (await mvtData(baseUrl))[name];
-            if (!d) throw skip('no candidate from READ-ONLY openItems()/scanContext()/cycle()');
-            await kit.stubAction(session, mvt261.PATH[name], () => ({}));
-            const ui = await mvt261.SUBCASES[name](session, d);
-            if (!ui.posted) throw skip(`UI does not allow posting: ${ui.message || ui.state}`);
-            return ui;
         }
     }))
 ].map((f) => ({ ...f, kit: true, observe: async (session) => visibleMessage(session.page) }));
@@ -205,8 +192,7 @@ async function failureCase(baseUrl, flow, f) {
         if (real.length !== 1) errors.push(`action called ${real.length} times, expected 1`);
         if (box.type === 'success') errors.push(`success shown despite failure: ${box.text}`);
         else if (box.type !== 'error') errors.push(`expected an error box, got ${box.type || 'none'}: ${box.text}`);
-        // the movement 261 screens answer a 409 with their own "already in progress, refresh" dialog (flow.stale)
-        const expect = f.fail && f.fail.status === 409 && flow.stale ? flow.stale : f.expect;
+        const expect = f.expect;
         if (!expect.test(box.text)) errors.push(`error box does not match ${expect}: ${box.text.slice(0, 200)}`);
         const screen = await session.page.evaluate(() => window.location.hash);
         if (!screen.includes(flow.hash)) errors.push(`navigated away to ${screen}`);
@@ -402,7 +388,7 @@ if (require.main === module) {
 // Kit flows share the kit's module-level failure mode, so they stay together and serial; the others run in their own shard
 const SHARDS = [
     { name: 'Action failures: invoice, orders due, goods receipt, packing, quarantine (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Quarantine labels)' },
-    { name: 'Action failures: handling unit, 261 (mocked)', only: '^(Handling unit|Movement 261)' }
+    { name: 'Action failures: handling unit (mocked)', only: '^Handling unit' }
 ];
 
 module.exports = { verifyActionFailures, FLOWS, SHARDS };

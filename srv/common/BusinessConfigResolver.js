@@ -22,7 +22,6 @@
  *   salesOrg / salesOrganization, distChannel / distributionChannel, division, currency,
  *   orderType, inquiryType, conditionType,
  *   shippingPoints (string[]), materialTypes / salesMaterialTypes (string[]),
- *   mvt261NotReadyBins ({ storageType, bin, reason }[]),
  *   differenceStorageType
  */
 
@@ -42,29 +41,6 @@ class BusinessConfigError extends Error {
 function parseCsv(csv) {
   if (!csv || !String(csv).trim()) return [];
   return String(csv).split(',').map(v => v.trim()).filter(Boolean);
-}
-
-/**
- * Parses a JSON string into an array.
- * Returns [] if input is null/undefined/blank.
- * Throws BusinessConfigError if invalid.
- */
-function parseJsonArray(json, fieldName) {
-  if (!json || !String(json).trim()) return [];
-  let parsed;
-  try {
-    parsed = typeof json === 'string' ? JSON.parse(json) : json;
-  } catch (e) {
-    throw new BusinessConfigError(
-      `${fieldName} contains invalid JSON: ${e.message}`
-    );
-  }
-  if (!Array.isArray(parsed)) {
-    throw new BusinessConfigError(
-      `${fieldName} must be a JSON array, got: ${typeof parsed}`
-    );
-  }
-  return parsed;
 }
 
 function validateHuStorageTypeLists(values = {}) {
@@ -101,15 +77,12 @@ function validateHuStorageTypeLists(values = {}) {
  * Flow-specific required fields mappings.
  * Each flow specifies only the business config fields it actually needs:
  * - delivery-no-ref: salesOrganization, distributionChannel, division
- * - 261 (mvt261):   mvt261NotReadyBins
  * - scan-to:        warehouseNumber, plant
  * - sd:             salesOrganization, distributionChannel, division, currency, orderType, inquiryType, conditionType, shippingPoints, salesMaterialTypes
  */
 const FLOW_REQUIRED_FIELDS = Object.freeze({
   'delivery-no-ref': Object.freeze(['salesOrganization', 'distributionChannel', 'division']),
   'delivery':        Object.freeze(['salesOrganization', 'distributionChannel', 'division']),
-  '261':             Object.freeze(['mvt261NotReadyBins']),
-  'mvt261':          Object.freeze(['mvt261NotReadyBins']),
   'scan-to':         Object.freeze(['warehouseNumber', 'plant']),
   'hu-stock-transfer': Object.freeze(['pickableStorageTypes', 'holdStorageTypes', 'interimStorageTypes']),
   'sd':              Object.freeze([
@@ -365,7 +338,6 @@ class BusinessConfigResolver {
         'shippingPoints',
         'salesMaterialTypes', 'materialTypes',
         'differenceStorageType',
-        'mvt261NotReadyBins',
         'pickableStorageTypes',
         'holdStorageTypes',
         'interimStorageTypes'
@@ -394,8 +366,6 @@ class BusinessConfigResolver {
           result[k] = parseCsv(v);
         } else if (k === 'salesMaterialTypes' && typeof v === 'string') {
           result[k] = parseCsv(v);
-        } else if (k === 'mvt261NotReadyBins' && typeof v === 'string') {
-          result[k] = parseJsonArray(v, 'mvt261NotReadyBins');
         } else if ((k === 'pickableStorageTypes' || k === 'holdStorageTypes' || k === 'interimStorageTypes') && typeof v === 'string') {
           result[k] = parseCsv(v);
         } else if ((k === 'pickableStorageTypes' || k === 'holdStorageTypes' || k === 'interimStorageTypes') && Array.isArray(v)) {
@@ -410,7 +380,6 @@ class BusinessConfigResolver {
 
     // If completely satisfied by trusted overrides, return immediately (no cache pollution)
     if (missing.length === 0) {
-      if (result.mvt261NotReadyBins === undefined) result.mvt261NotReadyBins = [];
       result.salesOrg = result.salesOrganization;
       result.distChannel = result.distributionChannel;
       result.materialTypes = result.salesMaterialTypes;
@@ -460,11 +429,6 @@ class BusinessConfigResolver {
         if (sapData.materialTypes && result.salesMaterialTypes === undefined) {
           result.salesMaterialTypes = typeof sapData.materialTypes === 'string' ? parseCsv(sapData.materialTypes) : sapData.materialTypes;
         }
-        if (sapData.mvt261NotReadyBins && result.mvt261NotReadyBins === undefined) {
-          result.mvt261NotReadyBins = typeof sapData.mvt261NotReadyBins === 'string'
-            ? parseJsonArray(sapData.mvt261NotReadyBins, 'mvt261NotReadyBins')
-            : sapData.mvt261NotReadyBins;
-        }
         if (sapData.differenceStorageType && result.differenceStorageType === undefined) {
           result.differenceStorageType = sapData.differenceStorageType;
         }
@@ -499,11 +463,6 @@ class BusinessConfigResolver {
         `Maintain the values in SAP customizing.` +
         (sapReadErrors.length ? ` SAP reads failed: ${sapReadErrors.join('; ')}.` : '')
       );
-    }
-
-    // Default optional mvt261NotReadyBins to empty array if not defined
-    if (result.mvt261NotReadyBins === undefined) {
-      result.mvt261NotReadyBins = [];
     }
 
     // Map convenient aliases
@@ -607,7 +566,6 @@ instance.BusinessConfigResolver = BusinessConfigResolver;
 instance.BusinessConfigError = BusinessConfigError;
 instance.parseCsv = parseCsv;
 instance.validateHuStorageTypeLists = validateHuStorageTypeLists;
-instance.parseJsonArray = parseJsonArray;
 instance.registerWarehouseStorageTypes = BusinessConfigResolver.registerWarehouseStorageTypes;
 instance.unregisterWarehouseStorageTypes = BusinessConfigResolver.unregisterWarehouseStorageTypes;
 

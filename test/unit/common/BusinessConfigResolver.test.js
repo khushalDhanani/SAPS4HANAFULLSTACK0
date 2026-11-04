@@ -19,10 +19,7 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
     conditionType: 'ZPR1',
     shippingPoints: '1112, WAVG',
     salesMaterialTypes: 'ZFRT, FERT',
-    differenceStorageType: '999',
-    mvt261NotReadyBins: JSON.stringify([
-      { storageType: 'OH1', bin: 'ONHOLD', reason: 'onHold' }
-    ])
+    differenceStorageType: '999'
   };
 
   const customizingW02 = {
@@ -314,10 +311,10 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       const sap = jest.fn().mockResolvedValue(customizingW01);
       const resolver = new BusinessConfigResolver({ sapCustomizing: sap, ttlMs: 60000 });
       await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: 'delivery-no-ref' });
-      await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: '261' });
+      await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: 'delivery' });
       expect(resolver.getCacheSize()).toBe(2);
-      expect(resolver.getCacheEntry('1120', 'W01', resolver.FLOW_REQUIRED_FIELDS['261'], '261')).toBeTruthy();
-      await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: '261' }); // served from cache
+      expect(resolver.getCacheEntry('1120', 'W01', resolver.FLOW_REQUIRED_FIELDS['delivery'], 'delivery')).toBeTruthy();
+      await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: 'delivery' }); // served from cache
       expect(sap).toHaveBeenCalledTimes(2);
     });
   });
@@ -365,24 +362,11 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       }
     });
 
-    test('throws when mvt261NotReadyBins is invalid JSON', async () => {
-      const resolver = new BusinessConfigResolver({ sapCustomizing: async () => ({ ...customizingW01, mvt261NotReadyBins: 'invalid-json{' }) });
-
-      await expect(resolver.resolve({ plant: '1120', warehouse: 'W01' }))
-        .rejects.toThrow(/contains invalid JSON/);
-    });
-
-    test('throws when mvt261NotReadyBins is not an array', async () => {
-      const resolver = new BusinessConfigResolver({ sapCustomizing: async () => ({ ...customizingW01, mvt261NotReadyBins: '{"storageType":"OH1"}' }) });
-
-      await expect(resolver.resolve({ plant: '1120', warehouse: 'W01' }))
-        .rejects.toThrow(/must be a JSON array/);
-    });
   });
 
   // ─── Flow-Specific Required Fields ─────────────────────────────────────────
 
-  describe('Flow-specific required fields (delivery-no-ref, 261, scan-to)', () => {
+  describe('Flow-specific required fields (delivery-no-ref, scan-to)', () => {
     test('delivery-no-ref flow requires only salesOrganization, distributionChannel, division', async () => {
       const resolver = new BusinessConfigResolver({
         sapCustomizing: async () => ({ salesOrganization: '1000', distributionChannel: '14', division: '00' })
@@ -393,17 +377,6 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       expect(res.salesOrganization).toBe('1000');
       expect(res.distributionChannel).toBe('14');
       expect(res.division).toBe('00');
-    });
-
-    test('261 flow requires only mvt261NotReadyBins, and without a source it fails closed for the caller to handle', async () => {
-      const resolver = new BusinessConfigResolver();
-      await expect(resolver.resolve({ plant: '1120', warehouse: 'W01', flow: '261' })).rejects.toThrow(/mvt261NotReadyBins/);
-
-      const withBins = new BusinessConfigResolver({
-        sapCustomizing: async () => ({ mvt261NotReadyBins: [{ storageType: 'QA1', bin: 'INSP', reason: 'qualityInspection' }] })
-      });
-      const res = await withBins.resolve({ plant: '1120', warehouse: 'W01', flow: '261' });
-      expect(res.mvt261NotReadyBins).toEqual([{ storageType: 'QA1', bin: 'INSP', reason: 'qualityInspection' }]);
     });
 
     test('scan-to flow requires only warehouseNumber and plant', async () => {

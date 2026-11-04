@@ -1,24 +1,24 @@
 'use strict';
 
 /**
- * The background re-check of unconfirmed posting attempts (261, HU stock transfer) runs from Mvt261Service,
+ * The background re-check of unconfirmed posting attempts runs from HuStockTransferService,
  * so an attempt whose outcome SAP did not confirm still gets resolved. SAP is never reached: recheck is stubbed.
  */
 
 const cds = require('@sap/cds');
-const Mvt261Service = require('../../../srv/wm/mvt261/service');
+const HuStockTransferService = require('../../../srv/wm/hu-stock-transfer/service');
 const attempts = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 
 const startService = async () => {
-  const srv = Object.create(Mvt261Service.prototype);
+  const srv = Object.create(HuStockTransferService.prototype);
   srv.on = jest.fn();
   srv.before = jest.fn();
   srv.after = jest.fn();
   await srv.init();
 };
 
-describe('Mvt261Service posting-attempt re-check timer', () => {
+describe('HuStockTransferService posting-attempt re-check timer', () => {
   const env = { NODE_ENV: process.env.NODE_ENV, interval: process.env.GI_ATTEMPT_RECHECK_INTERVAL_MS };
   let timer;
   let setIntervalSpy;

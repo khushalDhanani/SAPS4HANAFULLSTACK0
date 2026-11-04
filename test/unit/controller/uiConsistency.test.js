@@ -62,7 +62,7 @@ test('UI texts come from i18n, and every referenced key exists in both bundles',
     const missing = [...new Set([...xml.matchAll(/i18n>([\w.]+)/g)].map((m) => m[1]))].filter((key) => !k.has(key) || !kEn.has(key));
     expect(`${name}: ${missing.join(',')}`).toBe(`${name}: `);
   });
-  // Literal keys only: a key built at runtime ("cycle261Step_" + code) is followed by "+" and does not match.
+  // Literal keys only: a key built at runtime (prefix + code) is followed by "+" and does not match.
   const scripts = walk(WEBAPP).filter((f) => f.endsWith('.js') && !f.includes('thirdparty'));
   const missing = scripts.flatMap((f) => [...fs.readFileSync(f, 'utf8').matchAll(/\b_?(?:getText|text)\(\s*["']([\w.]+)["']\s*[,)]/g)]
     .map((m) => m[1]).filter((key) => !k.has(key) || !kEn.has(key)).map((key) => `${path.relative(WEBAPP, f)}: ${key}`));

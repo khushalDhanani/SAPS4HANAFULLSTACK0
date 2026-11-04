@@ -8,7 +8,7 @@
  *
  * Business-data (salesOrganization, distributionChannel, division, currency,
  * inquiryType, orderType, conditionType, shippingPoints, salesMaterialTypes,
- * mvt261NotReadyBins, plant, storageLocation) are NOT here.
+ * plant, storageLocation) are NOT here.
  * Use BusinessConfigResolver to resolve them per request context.
  *
  * Resolution order:

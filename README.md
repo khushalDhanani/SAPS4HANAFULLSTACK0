@@ -18,7 +18,7 @@ MM, WM, LE, SD, FI, and AI service areas, automated tests, and SAP BTP deploymen
 ## Business areas
 
 - **Materials Management:** Purchase order worklist, value helps, draft creation, and activation.
-- **Warehouse Management:** Goods issue and receipt, reservations, TR/TO flows, movement 261,
+- **Warehouse Management:** Goods receipt,
   handling units, packing instructions, and reservation tracking.
 - **Logistics Execution:** Outbound delivery workflows.
 - **Sales and Distribution:** Sales inquiries, sales orders, customer invoices, and returns.

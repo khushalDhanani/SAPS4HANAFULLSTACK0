@@ -17,29 +17,9 @@ const STEPS = [
     { name: 'HU stock transfer rack demo', hash: 'wm/hu-stock-transfer/demo-rack', route: 'wmHuStockTransferRackDemo' }
 ];
 
-/** Scan 261 has no list entry point; take the first open 261 item from the read-only openItems() function. */
-async function mvt261Steps(baseUrl) {
-    let item = null;
-    try {
-        const res = await fetch(`${baseUrl}/odata/v4/mvt261/openItems()`, {
-            headers: { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') }
-        });
-        // Blocked items (order not released, no unrestricted stock, ...) legitimately show an error strip, so only scannable ones qualify.
-        item = res.ok ? ((await res.json()).Items || []).find((i) => i.ScanPossible === true) : null;
-    } catch (_) {
-        item = null;
-    }
-    const skip = item ? undefined : 'no scannable (ScanPossible) open 261 reservation item returned by openItems()';
-    const hash = item ? `wm/mvt261/open/${item.Reservation}/${item.ReservationItem}` : '';
-    return [
-        { name: 'Movement 261 scan (first open item)', hash, route: 'wmScan261', skip },
-        { name: 'Movement 261 cycle (same item)', hash: hash && `${hash}/cycle`, route: 'wmCycle261', skip }
-    ];
-}
-
 async function verifyWmScreens(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
-    return runScreens({ baseUrl, title: 'WM screens', steps: STEPS.concat(await mvt261Steps(baseUrl)) });
+    return runScreens({ baseUrl, title: 'WM screens', steps: STEPS });
 }
 
 if (require.main === module) {

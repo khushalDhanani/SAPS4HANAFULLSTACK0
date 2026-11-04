@@ -60,8 +60,6 @@ sap.ui.define([
                 this._updateShell("salesInquiryDetail", { SalesInquiry: sInqId });
             } else if (sHash.indexOf("sd/sales-inquiries") === 0) {
                 this._updateShell("salesInquiries");
-            } else if (sHash.indexOf("wm/mvt261/open/") === 0) {
-                this._updateShell(/\/cycle$/.test(sHash) ? "wmCycle261" : "wmScan261");
             } else if (sHash.indexOf("wm/handling-unit/") === 0) {
                 this._updateShell("wmHandlingUnitDetail");
             } else if (sHash.indexOf("wm/handling-unit") === 0) {
@@ -223,14 +221,6 @@ sap.ui.define([
                     bShowNav = true;
                     break;
 
-                case "wmScan261":
-                    sTitle = oBundle ? oBundle.getText("scan261Title") : "Scan for Goods Issue 261";
-                    bShowNav = true;
-                    break;
-                case "wmCycle261":
-                    sTitle = oBundle ? oBundle.getText("cycle261Title") : "261 Cycle";
-                    bShowNav = true;
-                    break;
                 case "wmHandlingUnits":
                     sTitle = oBundle ? oBundle.getText("huTitle") : "Handling Unit Cockpit";
                     bShowNav = true;

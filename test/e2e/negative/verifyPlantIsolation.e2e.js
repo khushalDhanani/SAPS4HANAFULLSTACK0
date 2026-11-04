@@ -1,20 +1,17 @@
 'use strict';
-/* global document, window */
+/* global window */
 
 /**
  * Authorization / plant-isolation E2E (READ-ONLY, write guard on), as CAP mock user `test-viewer-1120` (Viewer, Plant 1120):
  * - the HU stock transfer list shows only rows of the plant the screen asked for. The screen's default filter is 1120
  *   (HuStockTransferList.controller.js:17), so this proves the filter, not authorization; the server's refusal of another
  *   plant is checked in verifyWriteAuthorization.e2e.js;
- * - deep links to another plant's documents (ids looked up read-only as `khushal`, Admin) show no foreign data and are
- *   refused by the server (403/404), never a 5xx;
  * - choosing a plant outside the user's scope on Orders Due is refused and loads no rows.
  */
 
-const { openSession, openHash, inspectScreen } = require('../support/screenCheck');
+const { openSession, openHash } = require('../support/screenCheck');
 
 const OWN_PLANT = '1120';
-const ADMIN = { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') };
 
 const open = openHash;
 
@@ -33,12 +30,6 @@ function rowPlants(page) {
     });
 }
 
-/** Visible text without refusal messages, which may name the refused plant without disclosing its data. */
-function visibleText(page) {
-    return page.evaluate(() => document.body.innerText.split('\n')
-        .filter((l) => !/not authori[sz]ed|denied|outside|not found|not one of your plants/i.test(l)).join('\n'));
-}
-
 /** Server errors (5xx) and guard blocks since `from` are failures; 403/404 are the expected refusals. */
 function serverProblems(session, from) {
     return session.networkErrors.slice(from.network).filter((e) => e.status >= 500).map((e) => `HTTP ${e.status} ${e.url}`)
@@ -47,7 +38,6 @@ function serverProblems(session, from) {
 }
 
 const mark = (s) => ({ network: s.networkErrors.length, blocked: s.blocked.length, console: s.consoleErrors.length });
-const refusals = (s, from) => s.networkErrors.slice(from.network).filter((e) => e.status === 403 || e.status === 404);
 
 async function scopedList(session, hash) {
     await open(session, hash);
@@ -56,35 +46,12 @@ async function scopedList(session, hash) {
     return lists.filter((l) => l.plants.some((p) => p !== OWN_PLANT)).map((l) => `${l.id} shows foreign plant(s) ${l.plants.join(', ')}`);
 }
 
-async function foreignDeepLink(session, hash, foreignPlant, label) {
-    const from = mark(session);
-    await open(session, hash);
-    const errors = serverProblems(session, from);
-    if (refusals(session, from).length === 0) errors.push(`no 403/404 refusal for ${label}`);
-    const screen = await inspectScreen(session.page);
-    const text = await visibleText(session.page);
-    if (new RegExp(`\\b${foreignPlant}\\b`).test(text)) errors.push(`foreign plant ${foreignPlant} visible on screen (route ${screen.route})`);
-    return errors;
-}
-
-async function adminRead(baseUrl, path) {
-    const res = await fetch(`${baseUrl}${path}`, { headers: ADMIN });
-    return res.ok ? res.json() : null;
-}
-
 async function verifyPlantIsolation(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     console.log(`\n=== Plant isolation as test-viewer-1120 (Viewer, Plant ${OWN_PLANT}) — READ-ONLY, write guard on ===`);
 
-    const open261 = await adminRead(baseUrl, '/odata/v4/mvt261/openItems()');
-    const foreign261 = open261 && (open261.Items || []).find((i) => i.Plant && i.Plant !== OWN_PLANT);
-
     const cases = [
         { name: 'HU stock transfer list shows only the plant of its default filter (1120)', run: (s) => scopedList(s, 'wm/hu-stock-transfer') },
-        foreign261
-            ? { name: `Foreign 261 item ${foreign261.Reservation}/${foreign261.ReservationItem} (plant ${foreign261.Plant}) is refused`,
-                run: (s) => foreignDeepLink(s, `wm/mvt261/open/${foreign261.Reservation}/${foreign261.ReservationItem}`, foreign261.Plant, 'foreign 261 item') }
-            : { name: 'Foreign 261 item deep link', skip: 'no open 261 item outside plant 1120 found' },
         {
             // The server refuses 1110 with 403 (outboundDeliveryAdapter tests, READ-ONLY curl); the UI refuses it first.
             name: 'Orders due: plant outside scope (1110) is refused, no request, own plant kept',

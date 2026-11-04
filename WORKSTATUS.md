@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Movement 261 removed (2026-11-04 16:15 IST) — PARTIAL, committed locally, not pushed, not deployed:** The user chose to remove it because its screens had no link in the app. `/odata/v4/mvt261`, its screens, adapter and tools are gone, and this app no longer posts goods issues. Jest 180 suites, 2,823 passed, 0 failed, 0 skipped. The posting-attempt recheck now runs from the HU stock transfer service. No SAP call was made, and browser suites that can reach SAP did not run. See the entry below. The Group 1 work listed next was committed as `18812aa1` and is not pushed.
+
 - **Group 1 of the unused check removed (2026-11-04 16:30 IST) — PARTIAL, uncommitted, not deployed:** Jest 193 suites, 3,091 passed, 0 failed, 0 skipped. No SAP call was made, and browser suites that can reach SAP did not run. Group 2 (public APIs with no screen), movement 261 and the demo rack route were not touched and need the user's decision. See the entry below.
 
 - **Unused tests and the code only they used removed (2026-11-04 12:30 IST) — PARTIAL, committed locally, not pushed, not deployed:** 233 fewer tests: Jest 193 suites, 3,094 passed, 0 failed, 0 skipped. No test is skipped any more. None of the 706 functions still present lost coverage. No SAP call was made, and browser suites that can reach SAP did not run. See the entry below.
@@ -108,7 +110,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Unused check (2026-11-04): the user decides on the commit, then on movement 261 (its screens have no link in the app: add a link or remove it), Group 2 (only if nothing outside the app calls those APIs), and the demo rack route.
+- Movement 261 removal (2026-11-04): before deploying, run a read-only `npm run test:e2e`, and check that no open 261 posting attempts are waiting in the attempt table. Then decide on Group 2 (only if nothing outside the app calls those APIs) and the demo rack route.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, run `mbt validate` and a read-only `npm run test:e2e`, and check the deployed access logs for callers of the two removed paths.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
 - Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 18 remaining `test.failing` defects as separate changes; each fix must remove its marker. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
@@ -158,6 +160,38 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 16:15 IST — Removed movement 261: PARTIAL (committed locally, not pushed, not deployed, no SAP proof)
+
+**Why:** the 261 list, route and tile were deleted on purpose on 2026-10-22, leaving the scan and cycle screens reachable only by typing a URL. The user was told of the 2026-11-02 fixes and the live pass, and chose "Remove 261".
+
+**Removed (33 files deleted, 30 edited, 1 new; net about 9,600 lines):**
+- Backend: `srv/wm/mvt261/`, `Mvt261Adapter.js`, `GoodsIssue261Mapper.js`, `GoodsIssue261CapabilityPreflight.js`, `classifyPostingError.js`, `srv/common/movementConfig.js`. In `GoodsIssuePostingClient.js`: `post261` and 15 helpers, 832 lines down to 352, so it now only reads. Also `hasOpenAttemptForReservation`, `isPostingPeriodClosed`, and `mvt261NotReadyBins` with `parseJsonArray` in `BusinessConfigResolver.js`.
+- UI: `modules/wm/mvt261/` (5 files), 2 routes, 2 targets, the shell mappings, and 134 i18n keys in both files.
+- Tools: `check-261-scan.js`, `find-first-261.js`, `list-open-261.js`, `post-261-once.js`, `reconcile-open-261.js`, `test-261-post-cycle.js`.
+- E2E: `roundTripMvt261.e2e.js`, and its steps in `verifyWmScreens`, `verifyPlantIsolation` and `verifyActionFailures`. The matrix rows and totals were updated.
+- Jest: 14 test files deleted; 261 parts removed from 5 shared test files.
+
+**Moved:** the recheck timer, from the mvt261 service to `srv/wm/hu-stock-transfer/service.js`, same interval and rules, because HU attempts still need it. `tools/smoke-test-deployment.js` now checks HU stock transfer metadata.
+
+**Kept:** the attempt store and its table (goods receipt and HU transfer); `GoodsIssueAdapter` and the read side of the posting client (recheck); `validation/common.js` (goods receipt); `s4common.js` (`tools/test-hu-bapi-cycle.js`).
+
+**Test decision:** TEST UPDATED. `mvt261RecheckTimer.test.js` became `huStockTransferRecheckTimer.test.js`; the cache test in `BusinessConfigResolver.test.js` now compares `delivery-no-ref` with `delivery`.
+
+**Validation (all run 2026-11-04, after all edits):**
+- `npm test`: 180 suites passed; 2,823 passed, 0 failed, 0 skipped. Before: 193 suites; 3,091 passed.
+- `npm run test:coverage` with thresholds, `npm run lint`, `git diff --check`, `cds compile srv`, `ui5lint`, `ui5 build --all`, `npm run validate:mta`, `npm run scan:secrets`: exit 0. No dangling requires in `srv`, `tools`, `test`, `server.js`.
+- `npm run test:e2e:sap-free`: 3 of 3 passed; the write-authorization suite now covers 25 write actions.
+- Recheck test: 5 of 5 mutations caught in a throwaway copy.
+- Per-function coverage against the commit before this work: 689 functions kept or better, 3 lower, all in `s4common.js`, which only a live tool uses now. Whole-repo line coverage 63.22% to 62.19%, branch 47.45% to 45.86%.
+- First Jest and lint runs FAILED on errors made in this work and fixed: a leftover `parseJsonArray` export, a literal `$1` in `verifyPlantIsolation.e2e.js`, and a cache test that no longer compared two different flows.
+- NOT RUN: browser suites that can reach SAP, including `verifyWmScreens` and `verifyPlantIsolation`, whose edits have not run; any SAP call.
+
+**Not checked:** open 261 attempts in a deployed attempt table. The recheck still looks them up in SAP by reference, but no 261 path remains to retry them. Deployed access logs for `/odata/v4/mvt261` were not checked either.
+
+**Leftovers, not removed:** `BaseGoodsIssueClient._post` and `_deriveCsrfPath` (nothing posts through it now); `tools/sandbox-discovery.js` reads the removed `mvt261NotReadyBins` key and gets an empty list; `goods-issue` in file names now only means the attempt store and recheck. Older docs still name 261 as history, including `docs/audits/AUDIT_261.md`.
+
+**Next action:** see Next Steps.
 
 ### 2026-11-04 16:30 IST — Removed Group 1 of the unused check: PARTIAL (uncommitted, not deployed, no SAP proof)
 

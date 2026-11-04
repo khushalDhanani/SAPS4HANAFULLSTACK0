@@ -115,10 +115,6 @@ function _extractErrorCode(error) {
 /** SAP rejects a posting whose date lies outside the open periods (materials or FI period). */
 const POSTING_PERIOD_CLOSED_REGEX = /Posting only possible in periods?\s+(.+?)\s+in company code\s+(\w+)/i;
 
-function isPostingPeriodClosed(message) {
-    return POSTING_PERIOD_CLOSED_REGEX.test(String(message || ''));
-}
-
 /**
  * Maps an S/4HANA or Cloud SDK error into a semantic SAP error object:
  * - 400: Invalid user/business input format
@@ -305,6 +301,5 @@ function mapS4Error(error) {
 
 module.exports = {
     extractS4ErrorMessage,
-    mapS4Error,
-    isPostingPeriodClosed
+    mapS4Error
 };

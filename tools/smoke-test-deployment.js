@@ -11,7 +11,7 @@
  * Checks:
  * 1. Health & readiness probe (/health) -> 200 OK, { status: 'UP' }, Cache-Control: no-store
  * 2. Unauthenticated endpoint protection -> 401 Unauthorized (proves auth guards are active)
- * 3. Authenticated OData core metadata ($metadata for purchase-order, mvt261, auth) -> 200 OK
+ * 3. Authenticated OData core metadata ($metadata for purchase-order, hu-stock-transfer, auth) -> 200 OK
  * 4. User info and scope resolution (/odata/v4/auth/getUserInfo()) -> 200 OK
  * 5. UI5 Layered Repository & preload endpoints (/sap/bc/lrep/flex/settings, Component-preload.js) -> 200 OK
  * 6. AI assistant streaming route presence (/ai/chat/stream) -> Not 404
@@ -131,8 +131,8 @@ async function executeSmokeTests(options = {}) {
       }
     },
     {
-      name: 'OData V4 Movement 261 Metadata',
-      url: `${baseUrl}/odata/v4/mvt261/$metadata`,
+      name: 'OData V4 HU Stock Transfer Metadata',
+      url: `${baseUrl}/odata/v4/hu-stock-transfer/$metadata`,
       method: 'GET',
       headers: { ...authHeader },
       validate: (res, body) => {

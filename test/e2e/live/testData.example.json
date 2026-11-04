@@ -101,20 +101,6 @@
       "uom": "NOT PROVIDED"
     }
   },
-  "mvt261": {
-    "scan": {
-      "reservation": "NOT PROVIDED",
-      "item": "NOT PROVIDED",
-      "storageUnits": "NOT PROVIDED"
-    },
-    "reverse": {
-      "reservation": "NOT PROVIDED",
-      "item": "NOT PROVIDED",
-      "materialDocument": "NOT PROVIDED",
-      "materialDocumentYear": "NOT PROVIDED",
-      "materialDocumentItem": "NOT PROVIDED"
-    }
-  },
   "handlingUnit": {
     "create": {
       "packagingMaterial": "NOT PROVIDED",
