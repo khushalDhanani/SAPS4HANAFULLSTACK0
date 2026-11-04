@@ -18,6 +18,7 @@ const inquiryAdapter = require('../../srv/integration/s4hana/sd/sales-inquiry/Sa
 const HuStockTransferAdapter = require('../../srv/integration/s4hana/wm/HuStockTransferAdapter');
 const HandlingUnitAdapter = require('../../srv/integration/s4hana/wm/HandlingUnitAdapter');
 const { runCreateBapi } = require('../../srv/integration/s4hana/sd/salesDocBapi');
+const { RfcClient } = require('../../srv/integration/s4hana/RfcClient');
 
 const INVOICE = { path: '/odata/v4/customer-invoice', action: 'cancelBillingDocument', body: { BillingDocument: '31000112' } };
 const RETURN = {
@@ -203,6 +204,16 @@ describe('Integration: a SAP write that reading it back does not confirm (produc
 
             expect(res.status).toBe(502);
             expect(res.data.error.message).toBe('Stock transfer outcome is unconfirmed in SAP (timeout). Do not post again; check the material document list first.');
+        });
+
+        it('handling unit whose read-back fails after the commit: shows the number and the warning', async () => {
+            jest.spyOn(RfcClient.prototype, 'session').mockImplementation((fn) => fn(async (fm) => (fm === 'BAPI_HU_CREATE' ? { HUKEY: '00000000002000020166', RETURN: [] } : {})));
+            jest.spyOn(RfcClient.prototype, 'readTable').mockRejectedValue(new Error('RFC down'));
+
+            const res = await direct({ path: '/odata/v4/handling-unit', action: 'create', body: { packagingMaterial: 'PK01', plant: '1120', storageLocation: 'HS01' } });
+
+            expect(res.status).toBe(502);
+            expect(res.data.error.message).toBe('Create handling unit: SAP may have saved this change to handling unit 2000020166, but it could not be read back, so it is NOT confirmed. Check it in SAP before trying again.');
         });
 
         it('handling unit committed but not read back: shows the number and the warning', async () => {

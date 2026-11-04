@@ -464,6 +464,72 @@ describe('HandlingUnitAdapter writes (BAPI_HU_* + commit on one RFC session)', (
     await expect(new HandlingUnitAdapter({ rfc: r }).remove({ handlingUnitExternalID: '2000020166' })).rejects.toMatchObject({ status: 502, message: /RFC_COMMUNICATION_FAILURE/ });
   });
 
+  describe('after the commit was sent', () => {
+    const INPUT = { packagingMaterial: '2000000043', plant: '1120', storageLocation: 'HU01' };
+    const notConfirmed = (context) => ({
+      status: 502,
+      $sanitize: false,
+      message: `${context}: SAP may have saved this change to handling unit 2000020166, but it could not be read back, so it is NOT confirmed. Check it in SAP before trying again.`
+    });
+    const readBackDown = (r, err = new Error('RFC_COMMUNICATION_FAILURE')) => { r.readTable.mockImplementation(async () => { throw err; }); return r; };
+
+    it.each([
+      ['create', 'Create handling unit', INPUT],
+      ['remove', 'Delete handling unit', { handlingUnitExternalID: '2000020166' }]
+    ])('%s: a failed read-back names the handling unit and warns', async (method, context, input) => {
+      const r = readBackDown(rfc());
+      await expect(new HandlingUnitAdapter({ rfc: r })[method](input)).rejects.toMatchObject(notConfirmed(context));
+      expect(fms(r)).toHaveLength(2);
+    });
+
+    it('a read-back error that has its own status still warns, and SAP\'s text stays out', async () => {
+      const r = readBackDown(rfc(), Object.assign(new Error('internal RFC detail'), { status: 503 }));
+      const err = await new HandlingUnitAdapter({ rfc: r }).create(INPUT).catch((e) => e);
+      expect(err).toMatchObject(notConfirmed('Create handling unit'));
+      expect(err.message).not.toContain('internal RFC detail');
+    });
+
+    it('a commit call that drops warns, because SAP may have saved it', async () => {
+      const r = rfc();
+      const send = r.call.getMockImplementation();
+      r.call.mockImplementation(async (fm, params) => {
+        if (fm === 'BAPI_TRANSACTION_COMMIT') throw new Error('connection lost');
+        return send(fm, params);
+      });
+      await expect(new HandlingUnitAdapter({ rfc: r }).create(INPUT)).rejects.toMatchObject(notConfirmed('Create handling unit'));
+    });
+
+    it('a connection that fails to close after the commit warns', async () => {
+      const r = rfc();
+      const session = r.session;
+      r.session = async (fn) => { await session(fn); throw new Error('close failed'); };
+      await expect(new HandlingUnitAdapter({ rfc: r }).create(INPUT)).rejects.toMatchObject(notConfirmed('Create handling unit'));
+    });
+
+    it('leaves the number out when SAP named none', async () => {
+      const r = readBackDown(rfc());
+      r.call.mockImplementation(async () => ({ RETURN: [] })); // no HUKEY
+      await expect(new HandlingUnitAdapter({ rfc: r }).create(INPUT)).rejects.toThrow(/^Create handling unit: SAP may have saved this change, but it could not/);
+    });
+
+    it('a commit SAP refused stays a plain failure', async () => {
+      const r = rfc();
+      const send = r.call.getMockImplementation();
+      r.call.mockImplementation(async (fm, params) => (fm === 'BAPI_TRANSACTION_COMMIT' ? { RETURN: { TYPE: 'E', MESSAGE: 'Update terminated' } } : send(fm, params)));
+      const err = await new HandlingUnitAdapter({ rfc: r }).create(INPUT).catch((e) => e);
+      expect(err).toMatchObject({ status: 502, message: 'Create handling unit: commit failed: Update terminated' });
+      expect(err.$sanitize).toBeUndefined();
+    });
+
+    it('a failure before the commit stays a plain failure', async () => {
+      const r = rfc({ fail: new Error('RFC_COMMUNICATION_FAILURE') });
+      const err = await new HandlingUnitAdapter({ rfc: r }).create(INPUT).catch((e) => e);
+      expect(err).toMatchObject({ status: 502 });
+      expect(err.$sanitize).toBeUndefined();
+      expect(fms(r)).not.toContain('BAPI_TRANSACTION_COMMIT');
+    });
+  });
+
   // Plant authorization on writes (VEKP.WERKS of the test HU is '1120'); role guards are unchanged.
   it('pack: 403 when the HU plant is outside the user scope (before any BAPI)', async () => {
     const r = rfc(); // VEKP.WERKS = '1120'

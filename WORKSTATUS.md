@@ -15,7 +15,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **"Nothing was posted" refusals stay visible in production (2026-11-04 17:32 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** Plant scope refusals, shipping point read failures, posting-log failures, goods receipt read failures and HU stock transfer checks now keep their text in production. Still hidden there: the handling unit read failure right after a commit (no number, duplicate risk), the lock and unlock SAP reason, and other 5xx text.
+- **Handling unit result after a commit (2026-11-04 17:40 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** If anything fails once the commit was sent, create, pack, unpack and delete now answer 502 with the handling unit number and "NOT confirmed. Check it in SAP before trying again", and the text stays visible in production. **Open finding:** `npm run test:coverage` crashed once with exit 139 (SIGSEGV) and passed on two reruns; cause UNKNOWN.
+
+- **"Nothing was posted" refusals stay visible in production (2026-11-04 17:32 IST) — PARTIAL, committed locally as `8d4f87dd`, not pushed, not deployed, not run against SAP:** Plant scope refusals, shipping point read failures, posting-log failures, goods receipt read failures and HU stock transfer checks now keep their text in production. Still hidden there: the lock and unlock SAP reason, and other 5xx text.
 
 - **Errors naming work that may already be in SAP stay visible in production (2026-11-04 17:26 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** Sales inquiry partial creation, a failed commit after a sales inquiry or return was created, goods receipt and HU stock transfer with an unknown outcome, and a handling unit committed but not read back now keep their text in production, instead of a generic "Bad Gateway". The "nothing was posted" refusals are in the entry above.
 
@@ -182,7 +184,42 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-04 17:45 IST — Review of the packing instruction create errors: findings only, no code changed
+
+- `PackingInstructionAdapter.js:178` says "nothing was created" after SAP accepted the POST but returned no id. The claim is not proven (INFERRED: SAP may hold it). Its test is titled "502 when SAP persists nothing" but only checks the status.
+- `create` line 180: if the read-back fails after a POST that returned an id, the user gets a plain error with no number, hidden in production, and the dialog stays open. Duplicate risk; no test covers it.
+- Correction: earlier reports called the handling unit case the last duplicate gap. This is another, and a timeout on any HTTP POST (7 adapters use `client.post`) may be one too; that was not traced.
+- Live evidence: one create proven on 2026-10-29 (packing instruction 55). No SAP call was made for this review.
+- Next: with the user's go, change both errors to the not-confirmed form with tests.
+
+### 2026-11-04 17:40 IST — Handling unit result after a commit is reported as not confirmed: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+**Why:** in `HandlingUnitAdapter._bapi`, a read failure right after the commit gave a generic 502 with no number, so a user could repeat a create that SAP had saved. A commit call that dropped, or a connection that failed to close after the commit, had the same risk, and was found while fixing this. The agent had told the user the read failure was the one remaining gap with this risk; these two were also in that gap.
+
+**Changed:** `srv/integration/s4hana/wm/HandlingUnitAdapter.js`: `_bapi` tracks when the commit was sent. Any failure from then on answers 502 with the number and the warning, kept visible in production. SAP's raw text goes to the log only. A commit SAP refused, and a failure before the commit, stay plain failures.
+
+**TEST DECISION:** TEST ADDED: 8 tests in `test/unit/wm/handlingUnitAdapter.test.js` and 1 in `test/integration/unconfirmedSapResult.test.js` (real CAP HTTP in production mode, with RFC doubled).
+
+**Executed validation (final tree):**
+- Jest: 183 suites, 2,903 passed, 0 failed. `test.failing` entries: 10.
+- Mutations: 9 of 9 caught.
+- `npm run lint`, `npm run scan:secrets`, `git diff --check`: exit 0. Per-function coverage: 578 compared, 0 lower. `npm run test:e2e:sap-free`: 3 of 3.
+- `npm run test:coverage`: **FAIL once, exit 139 (SIGSEGV), output not kept**, then 2 of 2 reruns exit 0 (2,903 passed) on the same code.
+
+**The crash:** the macOS report `node-2026-11-04-173954.ips` shows only npm passing on the signal from its child process, so the crashing frames are not known. A report from 2026-11-03 (`node-2026-11-03-102716.ips`, `npm exec jest --silent --runInBand`) has the same stack, before this work, so it looks intermittent and older than this change (INFERRED). Cause UNKNOWN. Not investigated further.
+
+**NOT RUN / NOT VERIFIED:**
+- No SAP call and no live write.
+- The screen's display of this text was not checked in a browser.
+- That the deployed app runs with `NODE_ENV=production` is INFERRED.
+
+**Known limits, not changed:** a pack, unpack or delete repeated after this warning is not blocked by the code; only the text guards against it. `PackingInstructionAdapter.js:178` still needs its review.
+
+**Next:** review the packing instruction message, or take the crash or the remaining `test.failing` defects, as the user decides.
+
 ### 2026-11-04 17:32 IST — "Nothing was posted" refusals stay visible in production: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+> Update: committed by the user as `8d4f87dd`, with the 17:26 change; still not pushed or deployed.
 
 **Why:** in production these showed only "Service Unavailable", so a user couldn't tell that nothing had reached SAP. The user chose to keep them visible. All 10 new HTTP tests first failed with "Service Unavailable", which reproduced the problem.
 
@@ -205,7 +242,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - `QuarantineLabelAdapter.js:160` "Nothing was printed": printing, not posting.
 - The handling unit `_readBack` failure right after a commit, the lock and unlock SAP reason, and other 5xx text.
 
-**Next:** fix the handling unit read failure right after a commit, the remaining case with duplicate risk.
+**Next:** fix the handling unit read failure right after a commit (done in the 17:40 entry).
 
 ### 2026-11-04 17:26 IST — Errors naming work that may already be in SAP stay visible in production: PARTIAL (uncommitted, not deployed, not run against SAP)
 

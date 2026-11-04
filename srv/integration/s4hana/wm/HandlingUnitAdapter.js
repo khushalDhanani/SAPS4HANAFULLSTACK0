@@ -630,18 +630,28 @@ class HandlingUnitAdapter {
   /** One BAPI + BAPI_TRANSACTION_COMMIT on one connection; on RETURN E/A nothing is committed (422). */
   async _bapi(context, fn, keyAfter) {
     let key;
+    let commitSent = false; // from here on SAP may hold the change, so a failure must not read as "nothing happened"
     try {
       await this.rfc.session(async (call) => {
         const res = await fn(call);
         const err = bapiError(res.RETURN);
         if (err) throw httpError(422, `${context}: ${err.MESSAGE || `${err.ID} ${err.NUMBER}`}`);
         key = (typeof res.HUKEY === 'string' && res.HUKEY) || keyAfter;
+        commitSent = true;
         const commit = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
         const cerr = bapiError(commit.RETURN);
-        if (cerr) throw httpError(502, `${context}: commit failed: ${cerr.MESSAGE}`);
+        if (cerr) {
+          commitSent = false; // SAP refused it
+          throw httpError(502, `${context}: commit failed: ${cerr.MESSAGE}`);
+        }
       });
       return await this._readBack(key);
     } catch (e) {
+      if (commitSent) {
+        LOG.error(`${context}: outcome not confirmed: ${e.message}`);
+        const hu = key ? ` to handling unit ${strip(key)}` : '';
+        throw Object.assign(httpError(502, `${context}: SAP may have saved this change${hu}, but it could not be read back, so it is NOT confirmed. Check it in SAP before trying again.`), { $sanitize: false }); // see srv/common/visibleError.js
+      }
       if (e.status) throw e;
       LOG.error(`${context}: ${e.message}`);
       throw httpError(502, `${context}: ${e.message}`);
