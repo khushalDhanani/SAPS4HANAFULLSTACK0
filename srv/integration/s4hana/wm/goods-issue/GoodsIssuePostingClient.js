@@ -3,20 +3,13 @@ const s4Config = require('../../s4Config');
 const S4ErrorMapper = require('../../S4ErrorMapper');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 const { RfcClient } = require('../../RfcClient');
-const GoodsIssueMapper = require('./GoodsIssueMapper');
-const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
 const GoodsIssue261Mapper = require('./GoodsIssue261Mapper');
-const GoodsIssue301Mapper = require('./GoodsIssue301Mapper');
-const GoodsIssue311Mapper = require('./GoodsIssue311Mapper');
 const { assert261CapabilityReady } = require('./GoodsIssue261CapabilityPreflight');
 
 /**
  * Domain client for SAP S/4HANA Goods Issue Posting and Batch Submission.
  * Enforces AGENTS.md rules: no mock persistence, transparent failure when SAP posting service is unavailable.
  */
-// Movement types this screen may post against a reservation (trust boundary for the posting action).
-const POSTABLE_MOVEMENT_TYPES = ['201', '261', '301', '311'];
-
 class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   /**
    * Waits (ms) before each idempotency-reference lookup after an unknown posting outcome
@@ -202,42 +195,6 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       throw err;
     }
   }
-
-  /**
-   * @deprecated Legacy positional signature retained only for the internal queue-replay path and
-   * back-compat callers/tests. Contains NO movement-type business logic - it normalizes the
-   * positional arguments into a domain object and delegates to the isolated per-type dispatcher
-   * (`postByMovementType`), which routes to post201/261/301/311. New code calls the per-type
-   * methods (or `postByMovementType`) directly.
-   */
-  async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options = {}) {
-    const data = {
-      MovementType: options.movementType === undefined ? '' : String(options.movementType).trim(),
-      ValidatedMovementType: options.validatedMovementType === undefined && options.ValidatedMovementType === undefined
-        ? '' : String(options.validatedMovementType ?? options.ValidatedMovementType).trim(),
-      ReservationNo: reservationNo || '',
-      ReservationItem: reservationItem || '',
-      Material: material || '',
-      IssueQty: issueQty,
-      Unit: unit || '',
-      Batch: batch || '',
-      Plant: plant || '',
-      StorageLocation: storageLocation || '',
-      CostCenter: options.costCenter || '',
-      GLAccount: options.glAccount || options.GLAccount || '',
-      ReceivingPlant: options.receivingPlant || '',
-      ReceivingStorageLocation: options.receivingStorageLocation || '',
-      OrderNo: options.orderNo || options.OrderNo || options.orderId || options.OrderID || '',
-      OrderType: options.orderType || options.OrderType || '',
-      PostingDate: options.postingDate || options.PostingDate,
-      DocumentDate: options.documentDate || options.DocumentDate,
-      SerialNumbers: Array.isArray(options.serialNumbers) && options.serialNumbers.length > 0
-        ? options.serialNumbers
-        : (options.serialNumber ? [options.serialNumber] : [])
-    };
-    return this.postByMovementType(data);
-  }
-
 
   // ==========================================================================
   // ISOLATED per-movement-type posting (Phase 1). Each public method owns its
@@ -685,49 +642,6 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     };
   }
 
-  /** Movement 201 (Goods Issue to Cost Center) - standard API only. */
-  async post201(data) {
-    this._assertMovementType(data, '201');
-    this._assertPostable(data);
-    if (!String(data.CostCenter || '').trim()) {
-      const err = new Error('Property CostCenter is mandatory for GoodsMovementType 201');
-      err.status = 400;
-      throw err;
-    }
-    await this._preflightPosting(data);
-    const payload = GoodsIssue201Mapper.mapToMaterialDocumentPayload(data);
-    try {
-      return await this._submitMaterialDocument(payload, {
-        mvt: '201', label: 'Goods Issue to Cost Center',
-        data,
-        reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
-      });
-    } catch (v2Err) {
-      const err = this._reclassifyPostingError(new Error('movement 201 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 201');
-      if (err.code !== 'GI_POSTING_OUTCOME_UNKNOWN' || !data.ReferenceDocument) throw err;
-
-      // Unknown outcome: ask SAP whether the document exists. The lookup can run before SAP has
-      // committed (observed live: no hit immediately after a successful POST, a hit about a minute
-      // later), so empty lookups prove nothing and the outcome stays unconfirmed.
-      const delays = GoodsIssuePostingClient.referenceLookupDelaysMs();
-      for (const delayMs of delays) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        let doc;
-        try {
-          doc = await this.findPostedByReference(data.ReferenceDocument, '201', data.PostingDate);
-        } catch (lookupErr) {
-          LOG.warn(`Reference lookup ${data.ReferenceDocument} failed: ${lookupErr.message}`);
-          throw err; // cannot verify: keep the manual-check message
-        }
-        if (doc) return GoodsIssuePostingClient._resultFromReference(doc, data, '201', 'Goods Issue to Cost Center');
-      }
-      const unconfirmed = new Error(`SAP S/4HANA did not confirm the single-item movement 201, and no material document with reference ${data.ReferenceDocument} is visible yet after ${delays.length} check(s). The posting may still appear in SAP. Outcome is unconfirmed (reference ${data.ReferenceDocument}); do not post again.`);
-      unconfirmed.status = 504;
-      unconfirmed.code = 'GI_POSTING_UNCONFIRMED';
-      throw unconfirmed;
-    }
-  }
-
   /** Movement 261 (Goods Issue to Order) - standard API only. */
   async post261(data) {
     this._assertMovementType(data, '261');
@@ -765,64 +679,6 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         if (doc) return GoodsIssuePostingClient._resultFromReference(doc, data, '261', 'Goods Issue to Order');
       }
       throw err;
-    }
-  }
-
-  /** Movement 301 (Plant-to-Plant Transfer) - standard API only. */
-  async post301(data) {
-    this._assertMovementType(data, '301');
-    this._assertPostable(data);
-    await this._preflightPosting(data);
-    const payload = GoodsIssue301Mapper.mapToMaterialDocumentPayload(data);
-    try {
-      return await this._submitMaterialDocument(payload, {
-        mvt: '301', label: 'Transfer posting',
-        data,
-        reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
-      });
-    } catch (v2Err) {
-      throw this._reclassifyPostingError(new Error('movement 301 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 301');
-    }
-  }
-
-  /** Movement 311 (Storage Location Transfer) - standard API only. */
-  async post311(data) {
-    this._assertMovementType(data, '311');
-    this._assertPostable(data);
-    await this._preflightPosting(data);
-    const payload = GoodsIssue311Mapper.mapToMaterialDocumentPayload(data);
-    try {
-      return await this._submitMaterialDocument(payload, {
-        mvt: '311', label: 'Transfer posting',
-        data,
-        reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
-      });
-    } catch (v2Err) {
-      throw this._reclassifyPostingError(new Error('movement 311 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 311');
-    }
-  }
-
-  /**
-   * Router that reads a MovementType off a payload and dispatches it to the matching isolated method above.
-   * This is routing, not movement-type business logic.
-   */
-  async postByMovementType(data) {
-    const mvt = String(data?.MovementType ?? '').trim();
-    switch (mvt) {
-      case '201': {
-        // Never post if reference already exists in SAP.
-        const prior = data.ReferenceDocument ? await this.findPostedByReference(data.ReferenceDocument, '201', data.PostingDate) : null;
-        if (prior) return GoodsIssuePostingClient._resultFromReference(prior, data, '201', 'Goods Issue to Cost Center');
-        return this.post201(data);
-      }
-      case '261': return this.post261(data);
-      case '301': return this.post301(data);
-      case '311': return this.post311(data);
-      default: {
-        const err = new Error(`Movement type ${mvt} cannot be posted here (allowed: ${POSTABLE_MOVEMENT_TYPES.join(', ')})`);
-        err.status = 400;
-        throw err;
-      }
     }
   }
 
@@ -968,73 +824,6 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   }
 
 
-  /**
-   * Reverse an existing Material Document in SAP S/4HANA via CancelHeader FunctionImport.
-   *
-   * @param {string} materialDocument - 10-digit SAP material document
-   * @param {string} [materialDocYear] - 4-digit fiscal year (looked up in SAP if omitted)
-   * @param {string} [postingDate] - Optional posting date (YYYY-MM-DD)
-   * @param {string} [documentDate] - Optional document date (YYYY-MM-DD)
-   * @param {string} [reversalReason] - Optional reason code
-   * @returns {Promise<{ OriginalMaterialDocument: string, OriginalMaterialDocYear: string, ReversalMaterialDocument: string, ReversalMaterialDocYear: string, PostingDate: string, Success: boolean, Message: string }>}
-   */
-  async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, _documentDate, _reversalReason) {
-    const sDoc = String(materialDocument || '').trim();
-    let sYear = String(materialDocYear || '').trim();
-    if (!sDoc) {
-      const err = new Error('MaterialDocument is required for reversal');
-      err.status = 400;
-      throw err;
-    }
-    if (!sYear) {
-      let verified;
-      try {
-        verified = await this.readBackDocument(sDoc);
-      } catch (readErr) {
-        LOG.warn(`Reversal year lookup failed for ${sDoc}: ${readErr.message}`);
-      }
-      if (verified && verified.MaterialDocYear && verified.Confirmed) {
-        sYear = verified.MaterialDocYear;
-      } else {
-        const err = new Error(`Material document ${sDoc} was not found in SAP; unable to determine document year for reversal.`);
-        err.status = 400;
-        throw err;
-      }
-    }
-
-    const dest = await this._getDestination();
-    if (!dest) {
-      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
-      err.status = 502;
-      throw err;
-    }
-
-    const cancelUrl = GoodsIssueMapper.mapToCancelHeaderUrl(sDoc, sYear, postingDate);
-    try {
-      const response = await this._post(cancelUrl, {});
-      // Honor a sap-message severity=error on a 2xx (mirrors _submitMaterialDocument), and require a
-      // genuine reversal document. Never fall back to the original document number or claim success
-      // without proof — a reversal that SAP did not persist is not a success (AGENTS.md rule 6).
-      GoodsIssuePostingClient._throwIfSapBusinessError(response);
-      const revMatDoc = response.MaterialDocument || response.d?.MaterialDocument || response.Cancel?.MaterialDocument || response.CancelHeader?.MaterialDocument;
-      const revMatYear = response.MaterialDocumentYear || response.d?.MaterialDocumentYear || sYear;
-      if (!revMatDoc) {
-        throw new Error(`SAP S/4HANA did not return a reversal material document for the cancellation of ${sDoc}/${sYear}, and no sap-message error was present in the response. The reversal was NOT confirmed.`);
-      }
-
-      return {
-        OriginalMaterialDocument: sDoc,
-        OriginalMaterialDocYear: sYear,
-        ReversalMaterialDocument: revMatDoc,
-        ReversalMaterialDocYear: revMatYear,
-        PostingDate: postingDate || new Date().toISOString().split('T')[0],
-        Success: true,
-        Message: `Material Document ${sDoc}/${sYear} reversed successfully in S/4HANA via Cancel. Reversal Document: ${revMatDoc}/${revMatYear}.`
-      };
-    } catch (err) {
-      throw S4ErrorMapper.mapS4Error(err, 'reverseGoodsIssue');
-    }
-  }
 }
 
 module.exports = GoodsIssuePostingClient;

@@ -65,7 +65,6 @@ const MockMessageToast = {
 const MockCustomerInvoiceService = {
     setModel: jest.fn(),
     getModel: jest.fn(),
-    getInvoices: jest.fn().mockResolvedValue([]),
     getMetrics: jest.fn().mockResolvedValue({
         totalInvoices: 10,
         pendingAccountingCount: 3,

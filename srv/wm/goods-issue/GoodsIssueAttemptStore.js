@@ -290,42 +290,6 @@ class GoodsIssueAttemptStore {
   }
 
   /**
-   * Returns a Set of cleaned reservation numbers that currently have open (sending or unconfirmed) attempts.
-   *
-   * @returns {Promise<Set<string>>}
-   */
-  async getOpenAttemptReservations() {
-    const resvSet = new Set();
-    if (!this.isAvailable()) return resvSet;
-
-    if (!this.db) {
-      for (const attempt of this._memoryStore.values()) {
-        if (OPEN_STATUSES.includes(attempt.Status) && attempt.ReservationNo) {
-          resvSet.add(String(attempt.ReservationNo).trim().replace(/^0+/, ''));
-        }
-      }
-      return resvSet;
-    }
-
-    try {
-      const rows = await this._run(
-        SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES } })
-      );
-      if (Array.isArray(rows)) {
-        for (const r of rows) {
-          if (r.ReservationNo) {
-            resvSet.add(String(r.ReservationNo).trim().replace(/^0+/, ''));
-          }
-        }
-      }
-    } catch (err) {
-      LOG.warn('Query failed for open attempt reservations:', err.message || err);
-    }
-    return resvSet;
-  }
-
-
-  /**
    * Background re-check: resolves attempts left in `sending` (process died mid-call) or
    * `unconfirmed` (SAP did not answer) by looking their reference up in S/4HANA.
    * This is the only place that sets `not_posted`.

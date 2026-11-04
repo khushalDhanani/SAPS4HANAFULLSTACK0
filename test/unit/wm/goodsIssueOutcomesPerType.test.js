@@ -29,19 +29,21 @@ describe('post261 reference lookup after an unknown outcome', () => {
 });
 
 // SAP is stubbed at the adapter transport (_post/_get); the error objects are hand-written, so the SAP side is not proven.
-describe('Posting outcome classification through post201, post301 and post311', () => {
+describe('Posting outcome classification through post261', () => {
   const POSTS = [
-    ['201', 'post201', { CostCenter: '1011201301' }],
-    ['301', 'post301', { ReceivingPlant: '1110', ReceivingStorageLocation: 'CS01' }],
-    ['311', 'post311', { ReceivingStorageLocation: 'CS01' }]
+    ['261', 'post261', { OrderNo: '1002707', OrderType: 'ZP01' }]
   ];
   const payload = (type, extra) => ({
     MovementType: type, ValidatedMovementType: type, ReservationNo: '520001', ReservationItem: '1', Material: '8000000023',
     Plant: '1120', StorageLocation: 'HS01', IssueQty: 5, Unit: 'KG', PostingDate: '2026-10-24', ...extra
   });
-  const clientRejecting = (err, get = async () => []) => new GoodsIssuePostingClient({
-    adapter: { _getDestination: async () => ({ name: 'S4HANA' }), _post: async () => { throw err; }, _get: get }
-  });
+  const clientRejecting = (err, get = async () => []) => {
+    const client = new GoodsIssuePostingClient({
+      adapter: { _getDestination: async () => ({ name: 'S4HANA' }), _post: async () => { throw err; }, _get: get }
+    });
+    client._assert261CapabilityReady = async () => ({ ready: true, movementType: '261' });
+    return client;
+  };
 
   describe.each(POSTS)('Movement %s', (type, method, extra) => {
     it('a 422 SAP rejection reaches the caller unchanged', async () => {
@@ -74,21 +76,4 @@ describe('Posting outcome classification through post201, post301 and post311', 
     });
   });
 
-  describe('Movement 201 reference lookup after a timeout', () => {
-    const saved = process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
-    beforeEach(() => { process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = '0'; });
-    afterEach(() => {
-      if (saved === undefined) delete process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
-      else process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = saved;
-    });
-    const timeout = () => Object.assign(new Error('timeout'), { status: 502, code: 'ECONNABORTED' });
-
-    it('with no document visible it reports GI_POSTING_UNCONFIRMED naming the reference', async () => {
-      const client = clientRejecting(timeout());
-      const rejected = await client.post201(payload('201', { CostCenter: '1011201301', ReferenceDocument: 'GIREF01' })).catch((e) => e);
-      expect(rejected.status).toBe(504);
-      expect(rejected.code).toBe('GI_POSTING_UNCONFIRMED');
-      expect(rejected.message).toContain('no material document with reference GIREF01 is visible yet after 1 check(s)');
-    });
-  });
 });

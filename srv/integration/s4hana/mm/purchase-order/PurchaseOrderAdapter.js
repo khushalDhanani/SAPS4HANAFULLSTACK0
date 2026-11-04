@@ -231,35 +231,6 @@ class PurchaseOrderAdapter {
   }
 
   /**
-   * Reads the real Business Partner count directly from SAP ZAPI_GETBUPA_SRV.
-   *
-   * @param {Object} [options]
-   * @returns {Promise<number|null>} null when SAP did not return a count
-   */
-  async getBusinessPartnerCount(options = {}) {
-    const dest = options.destination || await this._getDestination(options);
-    const executeFn = options.executeHttpRequest || this.client._execute;
-    const rootUrl = (dest.url || '').replace(/\/sap\/opu\/odata\/.*$/, '');
-
-    try {
-      const res = await executeFn(dest, {
-        method: 'get',
-        url: `${rootUrl}/sap/opu/odata/sap/ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count`,
-        headers: {
-          'Accept': 'text/plain',
-          ...(dest.headers || {}),
-          ...(options.headers || {})
-        }
-      });
-      const n = Number(String(res.data ?? '').trim());
-      return String(res.data ?? '').trim() !== '' && Number.isInteger(n) && n >= 0 ? n : null;
-    } catch (e) {
-      LOG.warn('Warning fetching BP count from ZAPI_GETBUPA_SRV:', e.message);
-      return null;
-    }
-  }
-
-  /**
    * Dashboard counts, each read live from its SAP S/4HANA OData service in parallel.
    *
    * A count is a number only when SAP returned it. When a service call fails, or the response carries

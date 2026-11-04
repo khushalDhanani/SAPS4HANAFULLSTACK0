@@ -497,7 +497,7 @@ describe('Unit: Dashboard view binds only live figures', () => {
     });
 });
 
-describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCount', () => {
+describe('Unit: PurchaseOrderAdapter getDashboardMetrics', () => {
     const poAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 
     const COUNTS = {
@@ -547,21 +547,6 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
 
     afterEach(() => {
         jest.restoreAllMocks();
-    });
-
-    test('getBusinessPartnerCount queries ZAPI_GETBUPA_SRV/$count', async () => {
-        const mockExecute = jest.fn().mockResolvedValue({ data: '6677' });
-        const count = await poAdapter.getBusinessPartnerCount({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
-        expect(count).toBe(6677);
-        expect(mockExecute.mock.calls[0][1].url).toContain('ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count');
-    });
-
-    test('getBusinessPartnerCount returns null, not 0, when SAP cannot be read', async () => {
-        const count = await poAdapter.getBusinessPartnerCount({
-            destination: { url: 'https://mock.s4hana' },
-            executeHttpRequest: jest.fn().mockRejectedValue(new Error('403'))
-        });
-        expect(count).toBeNull();
     });
 
     test('getDashboardMetrics reads all 12 counts live from SAP and reports none unavailable', async () => {

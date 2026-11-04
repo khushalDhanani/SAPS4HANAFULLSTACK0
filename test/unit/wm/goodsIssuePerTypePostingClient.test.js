@@ -24,39 +24,6 @@ function makeClient() {
 
 const base = { IssueQty: 1, Unit: 'KG', Plant: '1130', StorageLocation: 'CS02', PostingDate: '2026-09-29', DocumentDate: '2026-09-29', OrderType: 'ZP01' };
 
-test('post201 → standard API with CostCenter, movement 201', async () => {
-  const { client, calls } = makeClient();
-  // Feed other types' exclusive fields too, to prove they never leak into a 201 payload.
-  const res = await client.post201({ ...base, MovementType: '201', ValidatedMovementType: '201', CostCenter: '1011202902', Material: '1000000980', GLAccount: '400000', ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02' });
-  expect(res.Success).toBe(true);
-  expect(res.MaterialDocument).toBe('4900099999');
-  expect(calls[0].path).toContain('API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader');
-  const item = calls[0].body.to_MaterialDocumentItem.results[0];
-  expect(item.GoodsMovementType).toBe('201');
-  expect(item.CostCenter).toBe('1011202902');
-  // No cross-type leakage: 201 never forwards GLAccount or receiving plant/sloc.
-  expect(item.GLAccount).toBeUndefined();
-  expect(item.IssuingOrReceivingPlant).toBeUndefined();
-  expect(item.IssuingOrReceivingStorageLoc).toBeUndefined();
-});
-
-
-
-test.each([['301', '04'], ['311', '04']])('post%s → standard API with receiving, movement %s', async (type, gm) => {
-  const { client, calls } = makeClient();
-  // Feed 201/261 exclusive fields too, to prove they never leak into a transfer payload.
-  const res = await client[`post${type}`]({ ...base, MovementType: type, ValidatedMovementType: type, Material: 'M1', ReservationNo: '519944', ReservationItem: '0001', ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02', CostCenter: 'CC1', GLAccount: '400000' });
-  expect(res.Success).toBe(true);
-  expect(calls[0].path).toContain('A_MaterialDocumentHeader');
-  const item = calls[0].body.to_MaterialDocumentItem.results[0];
-  expect(calls[0].body.GoodsMovementCode).toBe(gm);
-  expect(item.GoodsMovementType).toBe(type);
-  expect(item.IssuingOrReceivingPlant).toBe('1600');
-  // No cross-type leakage: transfers never forward CostCenter or GLAccount.
-  expect(item.CostCenter).toBeUndefined();
-  expect(item.GLAccount).toBeUndefined();
-});
-
 test('post261 maps and submits exactly the requested movement type and Order', async () => {
   const { client, calls } = makeClient();
   const result = await client.post261({
@@ -69,12 +36,6 @@ test('post261 maps and submits exactly the requested movement type and Order', a
   expect(sapItem).toMatchObject({ GoodsMovementType: '261', ManufacturingOrder: '000001002707', Reservation: '512851', ReservationItem: '0003' });
   expect(sapItem.CostCenter).toBeUndefined();
   expect(sapItem.IssuingOrReceivingPlant).toBeUndefined();
-});
-
-test.each([undefined, '', '241', '999'])('rejects absent or unsupported movement type %s before POST', async (movementType) => {
-  const { client, calls } = makeClient();
-  await expect(client.postByMovementType({ ...base, MovementType: movementType })).rejects.toMatchObject({ status: 400 });
-  expect(calls).toHaveLength(0);
 });
 
 test('rejects a missing upstream validated movement type before POST', async () => {
@@ -110,10 +71,9 @@ test('post261 fails closed when SAP read-back reports BWART 201', async () => {
   expect(calls[0].body.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('261');
 });
 
-test.each([
-  ['201', '261', () => ({ MovementType: '261', Material: 'M1', CostCenter: 'CC1' })],
-  ['261', '201', () => ({ MovementType: '261', Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123' })]
-])('aborts before POST if mapper changes requested movement %s to %s', async (requested, mutated, payloadFactory) => {
+test('aborts before POST if the mapper changes requested movement 261 to 201', async () => {
+  const mutated = '201';
+  const payloadFactory = () => ({ MovementType: '261', Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123' });
   const { client, calls } = makeClient();
   const originalSubmit = client._submitMaterialDocument.bind(client);
   client._submitMaterialDocument = (payload, meta) => {
@@ -122,67 +82,10 @@ test.each([
   };
   const data = { ...base, ...payloadFactory() };
   data.ValidatedMovementType = data.MovementType;
-  await expect(requested === '201' ? client.post201(data) : client.post261(data))
+  await expect(client.post261(data))
     .rejects.toMatchObject({ status: 400 });
   expect(calls).toHaveLength(0);
 });
-
-test('postByMovementType posts a 301 request as movement 301 over HTTP', async () => {
-  // Only the HTTP and RFC boundaries are doubled. SAP read-back row shape follows the MATDOC field list at GoodsIssuePostingClient.js:515; not proven against SAP.
-  const posted = [];
-  const http = {
-    post: async (path, { data }) => {
-      posted.push({ path, data });
-      return { data: { d: { MaterialDocument: '4900099999', MaterialDocumentYear: '2026' } }, headers: {} };
-    },
-    resolveDestination: async () => ({ name: 'DEST' })
-  };
-  const rfc = { readTable: async () => [{ MBLNR: '4900099999', MJAHR: '2026', BWART: '301' }] };
-  const client = new GoodsIssuePostingClient({ client: http, rfc });
-
-  const res = await client.postByMovementType({
-    ...base, MovementType: '301', ValidatedMovementType: '301', Material: 'M1',
-    ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02'
-  });
-
-  expect(posted).toHaveLength(1);
-  expect(posted[0].path).toBe('/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader');
-  expect(posted[0].data.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('301');
-  expect(res.MaterialDocument).toBe('4900099999');
-});
-
-test('postByMovementType routes 261 to post261 and preserves the requested Order', async () => {
-  const { client } = makeClient();
-  client.post261 = jest.fn().mockResolvedValue({ Success: true, mvt: '261' });
-  const payload = { ...base, MovementType: '261', OrderNo: '1002707' };
-  const res = await client.postByMovementType(payload);
-  expect(client.post261).toHaveBeenCalledWith(payload);
-  expect(res.mvt).toBe('261');
-});
-
-test('legacy queue replay requires explicit validated type and preserves 261 Order fields', async () => {
-  const { client, calls } = makeClient();
-  const result = await client.postGoodsIssue(
-    '512851', '3', '1000001001', 1, 'KG', '', 0, '', '', false, '1130', 'CS02',
-    { movementType: '261', validatedMovementType: '261', orderNo: '1002707', orderType: 'ZP01' }
-  );
-  const item = calls[0].body.to_MaterialDocumentItem.results[0];
-  expect(result.Success).toBe(true);
-  expect(item).toMatchObject({ GoodsMovementType: '261', ManufacturingOrder: '000001002707' });
-  expect(item.CostCenter).toBeUndefined();
-  expect(client.readBackDocument).toHaveBeenCalledWith('4900099999', '2026', { expectedMovementType: '261' });
-});
-
-test('postByMovementType routes 311 to post311 (not 301)', async () => {
-  const { client } = makeClient();
-  client.post311 = jest.fn().mockResolvedValue({ Success: true, mvt: '311' });
-  client.post301 = jest.fn();
-  const res = await client.postByMovementType({ ...base, MovementType: '311' });
-  expect(client.post311).toHaveBeenCalled();
-  expect(client.post301).not.toHaveBeenCalled();
-  expect(res.mvt).toBe('311');
-});
-
 
 describe('readBackDocument & commit-lag handling', () => {
   test('does not report a posting confirmed when read-back cannot prove its requested movement type', async () => {
@@ -197,7 +100,8 @@ describe('readBackDocument & commit-lag handling', () => {
       Status: 'posted, confirmation pending'
     });
 
-    await expect(client.post201({ ...base, MovementType: '201', ValidatedMovementType: '201', CostCenter: '1011202902', Material: '1000000980' }))
+    client._assert261CapabilityReady = jest.fn().mockResolvedValue({ ready: true, movementType: '261' });
+    await expect(client.post261({ ...base, MovementType: '261', ValidatedMovementType: '261', Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123', OrderType: 'ZP01' }))
       .rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
   });
 
@@ -348,72 +252,5 @@ describe('readBackDocument & commit-lag handling', () => {
     expect(results).toHaveLength(5);
     expect(maxObservedConcurrent).toBeLessThanOrEqual(2);
     results.forEach((r) => expect(r.Confirmed).toBe(true));
-  });
-});
-
-describe('reverseGoodsIssue confirmation', () => {
-  // Only HTTP is doubled. The sap-message header shape follows GoodsIssuePostingClient.js:187; it is not proven against SAP here.
-  const clientAnswering = (response) => new GoodsIssuePostingClient({
-    client: { post: async () => response, resolveDestination: async () => ({ name: 'DEST' }) },
-    rfc: { readTable: async () => [] }
-  });
-
-  test('refuses a reversal when SAP answers 2xx without a reversal document', async () => {
-    const client = clientAnswering({ data: { d: {} }, headers: {} });
-
-    await expect(client.reverseGoodsIssue('4900012345', '2026')).rejects.toMatchObject({
-      message: expect.stringContaining('did not return a reversal material document for the cancellation of 4900012345/2026')
-    });
-  });
-
-  test('refuses a reversal with status 422 and the SAP text when a 2xx carries a sap-message error', async () => {
-    const sapMessage = JSON.stringify({ code: 'M7/001', message: 'Document already reversed', severity: 'error' });
-    const client = clientAnswering({ data: { d: {} }, headers: { 'sap-message': sapMessage } });
-
-    await expect(client.reverseGoodsIssue('4900012345', '2026')).rejects.toMatchObject({ status: 422, message: 'Document already reversed' });
-  });
-
-  test('returns the reversal document SAP created', async () => {
-    const client = clientAnswering({ data: { d: { MaterialDocument: '4900099999', MaterialDocumentYear: '2026' } }, headers: {} });
-
-    await expect(client.reverseGoodsIssue('4900012345', '2026')).resolves.toMatchObject({
-      Success: true, OriginalMaterialDocument: '4900012345', ReversalMaterialDocument: '4900099999', ReversalMaterialDocYear: '2026'
-    });
-  });
-});
-
-describe('reverseGoodsIssue with empty year', () => {
-  test('looks up year from SAP by document number and completes reversal', async () => {
-    const client = new GoodsIssuePostingClient({});
-    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
-    client.readBackDocument = jest.fn().mockResolvedValue({
-      MaterialDocument: '4900012345',
-      MaterialDocYear: '2026',
-      Confirmed: true
-    });
-    client._post = jest.fn().mockResolvedValue({
-      MaterialDocument: '4900099999',
-      MaterialDocumentYear: '2026'
-    });
-
-    const res = await client.reverseGoodsIssue('4900012345', '');
-    expect(client.readBackDocument).toHaveBeenCalledWith('4900012345');
-    expect(res.Success).toBe(true);
-    expect(res.OriginalMaterialDocument).toBe('4900012345');
-    expect(res.OriginalMaterialDocYear).toBe('2026');
-    expect(res.ReversalMaterialDocument).toBe('4900099999');
-  });
-
-  test('blocks with clear message when document is not found in SAP for empty year', async () => {
-    const client = new GoodsIssuePostingClient({});
-    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
-    client.readBackDocument = jest.fn().mockResolvedValue({
-      MaterialDocument: '4900099999',
-      MaterialDocYear: '',
-      Confirmed: false
-    });
-
-    await expect(client.reverseGoodsIssue('4900099999', ''))
-      .rejects.toThrow('Material document 4900099999 was not found in SAP; unable to determine document year for reversal.');
   });
 });

@@ -29,12 +29,11 @@ describe('Attempt store with a database: the database is the only source', () =>
 
   it('shows an attempt as pending only until any instance resolves it', async () => {
     await a.create(ATTEMPT);
-    expect(await a.getOpenAttemptReservations()).toEqual(new Set(['528779']));
-    expect(await b.getOpenAttemptReservations()).toEqual(new Set(['528779']));
+    expect(await a.hasOpenAttemptForReservation('528779', '1')).toBe(true);
+    expect(await b.hasOpenAttemptForReservation('528779', '1')).toBe(true);
 
     await b.setStatus(ATTEMPT.ReferenceDocument, 'posted', { MaterialDocument: '4900000001' });
 
-    expect(await a.getOpenAttemptReservations()).toEqual(new Set());
     expect(await a.hasOpenAttemptForReservation('528779', '1')).toBe(false);
   });
 
@@ -74,9 +73,9 @@ describe('Attempt store with no database: memory is the fallback', () => {
   it('still records and resolves attempts', async () => {
     const store = new GoodsIssueAttemptStore({ db: null });
     await store.create(ATTEMPT);
-    expect(await store.getOpenAttemptReservations()).toEqual(new Set(['528779']));
+    expect(await store.hasOpenAttemptForReservation('528779', '1')).toBe(true);
     await store.setStatus(ATTEMPT.ReferenceDocument, 'posted');
-    expect(await store.getOpenAttemptReservations()).toEqual(new Set());
+    expect(await store.hasOpenAttemptForReservation('528779', '1')).toBe(false);
     expect(await store.getByReference(ATTEMPT.ReferenceDocument)).toMatchObject({ Status: 'posted' });
   });
 });

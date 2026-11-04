@@ -157,26 +157,6 @@ sap.ui.define([
         },
 
         /**
-         * Queries Sales Inquiries list from CAP OData service.
-         *
-         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrQuery]
-         * @param {string} [sQuery] Optional OData query string (e.g. "?$top=10")
-         * @returns {Promise<Array<Object>>}
-         */
-        getSalesInquiries: function (oModelOrQuery, sQuery) {
-            var oModel = _isModel(oModelOrQuery) ? oModelOrQuery : _oModel;
-            var sQueryVal = _isModel(oModelOrQuery) ? sQuery : oModelOrQuery;
-            if (oModel) {
-                return _readEntitySet(oModel, "/SalesInquiries");
-            }
-            var sUrl = SERVICE_BASE + "/SalesInquiries" + (sQueryVal || "");
-            return ODataClient.get(sUrl).then(function (result) {
-                if (!result) return [];
-                return result.value || (result.d && result.d.results) || [];
-            });
-        },
-
-        /**
          * Fetches full Sales Inquiry details (header + line items via to_Items expand).
          *
          * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrInquiry]

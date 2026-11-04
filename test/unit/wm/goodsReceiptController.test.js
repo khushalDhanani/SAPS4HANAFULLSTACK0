@@ -47,8 +47,6 @@ class MockJSONModel {
 const mockGoodsReceiptService = {
     fetchOpenInboundDeliveries: jest.fn().mockResolvedValue([]),
     resolveStorageUnit: jest.fn(),
-    fetchMaterialStorageLocations: jest.fn(),
-    fetchMaterialBatches: jest.fn(),
     postGoodsReceipt: jest.fn()
 };
 

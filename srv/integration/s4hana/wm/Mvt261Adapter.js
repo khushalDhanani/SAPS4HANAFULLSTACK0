@@ -10,24 +10,8 @@ const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient')
 const { calculateMovement261StockEligibility, validateMovement261Payload } = require('../../../common/movementConfig');
 const { sapKey } = require('../sapKey');
 
-/**
- * Read-only finder for the FIRST goods movement of movement type 261 (GET only, no ABAP change).
- *  - MMIM_MATDOC_OV_SRV/F_Mmim_Findmatdoc (SAP "Material Documents Overview"): MATDOC items with
- *    posting date, entry timestamp, order, XAUTO and the cancelled flag; SAP filters, sorts and counts.
- *    Live: every item is returned once per StockChangeType/Context, so the query pins
- *    StockChangeType '05' (9,940 rows = A_MaterialDocumentItem count for 261; 71 cancelled = 71 x 262).
- *  - API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentItem: the reversing 262 (SMBLN/SJAHR/SMBLP) of the
- *    rows shown, as evidence only.
- * Authorization: the OData reads above enforce the end user's plant / movement-type authorizations
- * only when the S/4 destination uses principal propagation. The RFC_READ_TABLE path used by the
- * cycle / scan / open-list reads runs under the fixed technical user (S4_USERNAME in RfcClient), so
- * it does NOT apply per-end-user plant authorization - the app role (service.cds @requires) is the
- * gate there. See docs/audits/AUDIT_261.md F10.
- */
-const FIND_PATH = '/sap/opu/odata/sap/MMIM_MATDOC_OV_SRV/F_Mmim_Findmatdoc';
 const ITEM_PATH = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentItem';
 const MATDOC_API = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV';
-const TOP = 5;
 
 /**
  * Open 261 reservation items = RESB with XLOEK and KZEAR blank. Live: RESB 467 rows = this entity 467
@@ -42,19 +26,6 @@ const RESV_SELECT = [
 const PAGE = 1000;
 const MAX_OPEN_ITEMS = 5000;
 
-const KEY = 'MaterialDocument asc,MaterialDocumentYear asc,MaterialDocumentItem asc';
-/** $orderby per definition of "first", with the SAP table fields it stands for. */
-const DEFINITIONS = {
-  A: { orderby: `PostingDate asc,CreationDateTime asc,${KEY}`, sortKey: 'BUDAT, CPUDT, CPUTM, MBLNR, MJAHR, ZEILE' },
-  B: { orderby: `CreationDateTime asc,${KEY}`, sortKey: 'CPUDT, CPUTM, MBLNR, MJAHR, ZEILE' },
-  C: { orderby: 'MaterialDocumentYear asc,MaterialDocument asc,MaterialDocumentItem asc', sortKey: 'MJAHR, MBLNR, ZEILE' }
-};
-
-const SELECT = [
-  'MaterialDocument', 'MaterialDocumentYear', 'MaterialDocumentItem', 'PostingDate', 'CreationDateTime',
-  'Material', 'MaterialName', 'Plant', 'StorageLocation', 'OrderID', 'QuantityInEntryUnit', 'EntryUnit',
-  'IsAutomaticallyCreated', 'IsCancelled', 'CreatedByUser'
-].join(',');
 
 const RE = {
   plant: /^[A-Z0-9]{1,4}$/,
@@ -111,11 +82,6 @@ function clean(value, label, re, mandatory) {
   if (!re.test(s)) throw httpError(400, `${label} is missing or invalid`);
   return s;
 }
-
-const isoInstant = (v) => {
-  const m = /\/Date\((-?\d+)/.exec(v || '');
-  return m ? new Date(Number(m[1])).toISOString() : null;
-};
 
 class Mvt261Adapter {
   /**
@@ -1141,58 +1107,6 @@ class Mvt261Adapter {
     const rev = body.CancelItem || body;
     if (!rev.MaterialDocument) throw httpError(502, `SAP did not return a reversal document. sap-message: ${sapMessage || '(none)'}`);
     return { MaterialDocument: rev.MaterialDocument, MaterialDocumentYear: rev.MaterialDocumentYear, SapMessage: sapMessage };
-  }
-
-  async findFirst(input = {}) {
-    const plant = clean(input.plant, 'Plant', RE.plant, true);
-    const material = clean(input.material, 'Material', RE.material);
-    const order = clean(input.productionOrder, 'Production Order', RE.order);
-    const from = clean(input.dateFrom, 'Posting date from', RE.date);
-    const to = clean(input.dateTo, 'Posting date to', RE.date);
-    const definition = clean(input.definition || 'A', 'Definition', /^[ABC]$/, true);
-    if ((from || to) && (!from || !to || from > to)) throw httpError(400, 'Posting date range needs a valid from and to date');
-    this._scopeGuard(plant, input.allowedPlants);
-
-    const filter = ["GoodsMovementType eq '261'", "StockChangeType eq '05'", `Plant eq '${plant}'`];
-    if (material) filter.push(`Material eq '${material}'`);
-    if (order) filter.push(`OrderID eq '${order}'`);
-    if (from) filter.push(`PostingDate ge datetime'${from}T00:00:00'`, `PostingDate le datetime'${to}T00:00:00'`);
-    if (input.excludeReversed) filter.push('IsCancelled eq false');
-    if (input.manualOnly) filter.push("IsAutomaticallyCreated eq ''");
-
-    const { orderby, sortKey } = DEFINITIONS[definition];
-    const d = await this._results(FIND_PATH, {
-      $filter: filter.join(' and '),
-      $orderby: orderby,
-      $top: TOP,
-      $inlinecount: 'allpages',
-      $select: SELECT,
-      $format: 'json'
-    }, 'Read movement type 261 documents');
-
-    const rows = d.results || [];
-    const reversedBy = await this._reversedBy(rows);
-    const Top = rows.map((r, i) => ({
-      Rank: i + 1,
-      MaterialDocument: r.MaterialDocument,
-      MaterialDocumentYear: r.MaterialDocumentYear,
-      MaterialDocumentItem: r.MaterialDocumentItem,
-      PostingDate: formatDateToYMD(r.PostingDate),
-      EntryTimestamp: isoInstant(r.CreationDateTime),
-      Material: r.Material,
-      MaterialName: r.MaterialName || '',
-      Plant: r.Plant,
-      StorageLocation: r.StorageLocation || '',
-      ProductionOrder: r.OrderID || '',
-      Quantity: Number(r.QuantityInEntryUnit),
-      Unit: r.EntryUnit || '',
-      IsAutomaticallyCreated: !!r.IsAutomaticallyCreated,
-      IsReversed: !!r.IsCancelled,
-      ReversedBy: reversedBy[`${r.MaterialDocument}/${r.MaterialDocumentYear}/${Number(r.MaterialDocumentItem)}`] || '',
-      CreatedByUser: r.CreatedByUser || ''
-    }));
-
-    return { Definition: definition, SortKey: sortKey, TotalCount: Number(d.__count || 0), Top };
   }
 
   /**

@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Unused tests and the code only they used removed (2026-11-04 12:30 IST) — PARTIAL, committed locally, not pushed, not deployed:** 233 fewer tests: Jest 193 suites, 3,094 passed, 0 failed, 0 skipped. No test is skipped any more. None of the 706 functions still present lost coverage. No SAP call was made, and browser suites that can reach SAP did not run. See the entry below.
+
 - **`tr-to` and `goods-issue` services removed (2026-11-04 11:20 IST) — PARTIAL, committed locally, not pushed, not deployed:** Movements 201, 241, 301 and 311 had no screen, and the user confirmed that nothing outside the app calls these services. `/odata/v4/tr-to` and `/odata/v4/goods-issue` are gone, along with 41,413 net lines of code and tests. Movement 261, HU transfer and goods receipt keep what they need from goods-issue, and the posting-attempt recheck now runs from the mvt261 service. Jest 3,311 passed, 0 failed, 16 skipped. Not run against SAP. See the entry below. The test replacement listed next was committed as `3869e864` and is not pushed.
 
 - **Targeted test replacement (2026-11-04 10:30 IST) — PARTIAL, uncommitted, only `test/` and this file changed:** 187 false or redundant tests removed, 314 rewritten, 175 added; 75 rewrite verdicts left unchanged (57 browser checks and 16 Jest tests need SAP, 2 await the partial-pick decision). Jest 4,313 passed, 0 failed, 16 skipped; 24 of the passes are `test.failing` entries recording known defects. No production code changed, nothing was run against SAP, and owner decisions are open. Backup tag `test-audit-backup-2026-11-04`. See the entry below. The phase 2 lock and unlock work listed next was committed as `04c19f73` and is not pushed.
@@ -104,7 +106,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- `tr-to` and `goods-issue` removal (2026-11-04): before deploying, run `mbt validate` and a read-only `npm run test:e2e`, and check the deployed access logs for callers of the two removed paths. Remove the unused code listed in the entry below as a separate change.
+- `tr-to` and `goods-issue` removal (2026-11-04): before deploying, run `mbt validate` and a read-only `npm run test:e2e`, and check the deployed access logs for callers of the two removed paths.
+- Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
 - Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 18 remaining `test.failing` defects as separate changes; each fix must remove its marker. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
@@ -152,6 +155,38 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 12:30 IST — Removed unused tests and the code only they used: PARTIAL (committed locally, not pushed, not deployed, no SAP proof)
+
+**Why:** the user asked to check all remaining tests and remove unused ones. A test of code that nothing in production calls gives no protection, so the test and that code were removed together.
+
+**How "unused" was decided:** a module graph from `server.js`, every CAP service implementation, `Component.js` and the manifest routes; call graphs inside the kept files; and a search of `srv`, `app`, `tools`, XML views and tests for each name. No dynamic method access was found in the UI code by a pattern search.
+
+**Removed (33 files changed, 3,731 lines removed, 8 files deleted):**
+- Tests that could never run: `test/unit/wm/goodsIssueSapRfcContract.test.js` (6) and the 10 live tests in `goodsReceiptService.test.js`. The gate is always false under Jest, no configured path ran them, and those 10 fell back to hand-written rows on an SAP error.
+- `srv/common/sapErrorText.js` and its test: no caller anywhere.
+- `movementConfig.js`: 11 functions and the 201, 241, 301 and 311 config, 1,510 lines down to about 385. `reservationValidationMatrix.test.js` deleted.
+- `GoodsIssuePostingClient.js`: `postGoodsIssue`, `post201`, `post301`, `post311`, `postByMovementType`, `reverseGoodsIssue`, and the 201, 301, 311 and cancel mappers. `post261` and the read-backs are unchanged.
+- `validation/common.js`: 7 functions; the 4 checks goods receipt calls stay.
+- Single functions with no caller: `Mvt261Adapter.findFirst`, `PurchaseOrderAdapter.getBusinessPartnerCount`, `getOpenAttemptReservations`, `getPurchaseOrders`, `getSalesInquiries`, `getInvoices`, `fetchMaterialStorageLocations`, `fetchMaterialBatches`, and the 3 `completeness*` formatters.
+
+**Kept on purpose:** `test/liveSapGate.js` and its test (`read-hu-stock-evidence.js` and `check-hu-fm-rfc.js` use it as their gate; it was deleted in this work, found by the second inventory pass and restored); `warehouseResolver.js` and its test (used by `tools/sandbox-discovery.js`); `test/e2e/performance/profileLists.js` and `test/e2e/live/testData.example.json` (a diagnostic script and a documented example); test hooks `clearMemoryStore`, `clearTvstzCache`, `getTvstzCacheEntry`, `clearMetricsCache`, `invalidate`, `getCacheSize`, `getCacheEntry`, `isHardwareScannerAttached`.
+
+**Test decision:** TEST ADDED (`test/unit/wm/goodsReceiptFormatChecks.test.js`; `checkMaterial` is live in goods receipt and had lost a covered line). TEST UPDATED (tests of shared code moved from removed movements to `post261` and the 261 mapper, and two `mvt261Adapter` proof cases keep their `openItems` assertions).
+
+**Validation (all run 2026-11-04):**
+- `npm test`: 193 suites passed; 3,094 passed, 0 failed, 0 skipped. Before: 194 suites passed, 1 skipped; 3,311 passed, 16 skipped.
+- `npm run test:coverage` with thresholds, `npm run lint`, `git diff --check`: exit 0.
+- Per-function coverage against the commit before this work: 706 functions still present, none lower.
+- Whole-repo line coverage 63.12% to 62.51%, branch 47.84% to 47.09%: the percentages fall because tested code was removed.
+- New format-check test: 6 of 6 mutations caught in a throwaway copy. Tests retargeted to `post261` and the 261 mapper: 7 of 7 caught.
+- `cds compile srv`, `ui5lint` (no findings), `ui5 build --all`, `npm run scan:secrets`, `npm run test:e2e:sap-free` (3 of 3): exit 0. These ran before two final test-file-only fixes that do not affect them.
+- Errors made and corrected in this work: `test/liveSapGate.js` deleted and restored; a script stopped midway and its 7 files were restored and re-applied; `mvt261Adapter.test.js` over-trimmed and restored; a literal `$1` written into `movementConfig.test.js` and fixed. The final runs above are after all of these.
+- NOT RUN: `mbt validate` (`mbt` not installed), browser suites that can reach SAP, any SAP call. `post261` was not re-proven against SAP; its code is unchanged.
+
+**Still unused, not removed (not tests):** `modules/sd/customer-return/view/CreateReturnDialog.fragment.xml` and the matching code at `CustomerReturns.controller.js:562-635` (fragment and controller references not fully traced); the 201, 241, 301 and 311 entries in `GM_CODE`, which `getGmCode` tests still read; `MOVEMENT_CONFIG` as an export, used inside the module and by tests.
+
+**Next action:** see Next Steps.
 
 ### 2026-11-04 11:20 IST — Removed `tr-to` and `goods-issue` services: PARTIAL (committed locally, not pushed, not deployed, no SAP proof)
 

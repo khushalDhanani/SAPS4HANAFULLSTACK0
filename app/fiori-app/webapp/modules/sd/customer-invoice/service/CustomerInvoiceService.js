@@ -24,10 +24,6 @@ sap.ui.define([
             return _oModel;
         },
 
-        getInvoices: function (oModel, aFilters, mParameters) {
-            return _readEntitySet(oModel, "/CustomerInvoices", aFilters, mParameters);
-        },
-
         getMetrics: function (oModel) {
             var oTargetModel = oModel || _oModel;
             if (oTargetModel && typeof oTargetModel.bindContext === "function") {

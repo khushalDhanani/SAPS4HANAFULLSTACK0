@@ -4,8 +4,7 @@
  * SAP-dependent test classification (docs/sap-test-classification.md):
  *   Jest (test/unit, test/integration, ...)  never reaches SAP: setupEnv.js scrubs S4_/SAP_/RFC_ keys, node-rfc is
  *                                            mocked, outbound network is blocked. This gate therefore returns false
- *                                            under Jest whatever RUN_LIVE_SAP says, so "live" describe blocks skip
- *                                            instead of failing on the mock.
+ *                                            under Jest whatever RUN_LIVE_SAP says. Live READ-ONLY tools use it as their gate.
  *   Browser E2E (npm run test:e2e)           CAP server reads, write guard on, writes mocked.
  *   Tier C (npm run test:e2e:sap)            dry-run by default; live needs liveWriteGate + RFC preflight + written go.
  *   Tools (tools/*.js)                       ALLOW_LIVE_SAP_TOOLS=1 --allow-live-sap; RUN_LIVE_SAP=1 + non-prod

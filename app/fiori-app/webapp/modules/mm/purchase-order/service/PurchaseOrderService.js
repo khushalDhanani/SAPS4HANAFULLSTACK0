@@ -171,26 +171,6 @@ sap.ui.define([
         },
 
         /**
-         * Queries Purchase Orders list from CAP OData service.
-         *
-         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrQuery]
-         * @param {string} [sQuery] Optional OData query string (e.g. "?$top=10")
-         * @returns {Promise<Array<Object>>}
-         */
-        getPurchaseOrders: function (oModelOrQuery, sQuery) {
-            var oModel = _isModel(oModelOrQuery) ? oModelOrQuery : _oModel;
-            var sQueryVal = _isModel(oModelOrQuery) ? sQuery : oModelOrQuery;
-            if (oModel) {
-                return _readEntitySet(oModel, "/PurchaseOrders");
-            }
-            var sUrl = SERVICE_BASE + "/PurchaseOrders" + (sQueryVal || "");
-            return ODataClient.get(sUrl).then(function (result) {
-                if (!result) return [];
-                return result.value || (result.d && result.d.results) || [];
-            });
-        },
-
-        /**
          * Loads actual configuration and master data from CAP OData service concurrently:
          * Document Types, Company Codes, Purchasing Organizations, and Purchasing Groups.
          *

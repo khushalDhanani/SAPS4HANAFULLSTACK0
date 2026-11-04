@@ -30,21 +30,6 @@ require('../../../app/fiori-app/webapp/model/formatter');
 
 describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
     describe('Common / MM Formatter (webapp/model/formatter.js)', () => {
-        let oContext;
-        const mockResourceBundle = {
-            getText: jest.fn(k => k === "statusComplete" ? "Complete" : "Incomplete")
-        };
-
-        beforeEach(() => {
-            oContext = {
-                getOwnerComponent: () => ({
-                    getModel: () => ({
-                        getResourceBundle: () => mockResourceBundle
-                    })
-                })
-            };
-        });
-
         it('should return empty string for falsy date values', () => {
             expect(mmFormatter.formatDate(null)).toBe("");
             expect(mmFormatter.formatDate(undefined)).toBe("");
@@ -74,17 +59,6 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
 
         it('should return raw value for invalid date strings', () => {
             expect(mmFormatter.formatDate("not-a-date")).toBe("not-a-date");
-        });
-
-        it('should correctly format completeness status, icon, and text without document type', () => {
-            expect(mmFormatter.completenessState(true)).toBe("Success");
-            expect(mmFormatter.completenessState(false)).toBe("Information");
-
-            expect(mmFormatter.completenessIcon(true)).toBe("sap-icon://accept");
-            expect(mmFormatter.completenessIcon(false)).toBe("sap-icon://edit");
-
-            expect(mmFormatter.completenessText.call(oContext, true)).toBe("Complete");
-            expect(mmFormatter.completenessText.call(oContext, false)).toBe("Incomplete");
         });
 
         it('should correctly format authentic Display Status, state, and icon across S/4HANA status fields', () => {

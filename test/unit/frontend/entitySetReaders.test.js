@@ -12,11 +12,8 @@ function loadModule(relativePath, dependencies) {
 }
 
 const cases = [
-  ['mm/purchase-order', 'PurchaseOrder', 'getPurchaseOrders', 'PurchaseOrders', true],
-  ['sd/sales-inquiry', 'SalesInquiry', 'getSalesInquiries', 'SalesInquiries', true],
   ['sd/sales-order', 'SalesOrder', 'getSalesOrders', 'SalesOrders', true],
   ['le/outbound-delivery', 'OutboundDelivery', 'getOrdersDueForDelivery', 'OrdersDueForDelivery', false],
-  ['sd/customer-invoice', 'CustomerInvoice', 'getInvoices', 'CustomerInvoices', false],
   ['sd/customer-return', 'CustomerReturn', 'getCustomerReturns', 'CustomerReturns', false]
 ];
 

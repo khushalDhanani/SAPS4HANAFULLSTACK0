@@ -119,61 +119,6 @@ sap.ui.define([
         },
 
         /**
-         * Fetch storage locations and bins for a material and plant
-         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrMat] - Model or Material
-         * @param {string} [sMatOrPlant] - Material or Plant
-         * @param {string} [sPlant] - Plant if model is provided
-         * @returns {Promise<Array>}
-         */
-        fetchMaterialStorageLocations: function (oModelOrMat, sMatOrPlant, sPlant) {
-            var oModel = _isModel(oModelOrMat) ? oModelOrMat : _oModel;
-            var sMaterial = _isModel(oModelOrMat) ? sMatOrPlant : oModelOrMat;
-            var sPlantVal = _isModel(oModelOrMat) ? sPlant : sMatOrPlant;
-
-            var aFilters = [];
-            if (sMaterial && typeof sMaterial === "string" && sMaterial.trim()) {
-                aFilters.push(new _Filter("Material", _FilterOperator.EQ, sMaterial.trim()));
-            }
-            if (sPlantVal && typeof sPlantVal === "string" && sPlantVal.trim()) {
-                aFilters.push(new _Filter("Plant", _FilterOperator.EQ, sPlantVal.trim()));
-            }
-
-            if (aFilters.length === 0) {
-                return Promise.resolve([]);
-            }
-
-            return _readEntitySet(oModel, "/MaterialStorageLocations", aFilters);
-        },
-
-        /**
-         * Fetch usable batches with SLED information for a material
-         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrMat] - Model or Material
-         * @param {string} [sMatOrPlant] - Material or Plant
-         * @param {string} [sPlantOrSLoc] - Plant or StorageLocation
-         * @param {string} [sSLoc] - StorageLocation if model is provided
-         * @returns {Promise<Array>}
-         */
-        fetchMaterialBatches: function (oModelOrMat, sMatOrPlant, sPlantOrSLoc, sSLoc) {
-            var oModel = _isModel(oModelOrMat) ? oModelOrMat : _oModel;
-            var sMaterial = _isModel(oModelOrMat) ? sMatOrPlant : oModelOrMat;
-            var sPlantVal = _isModel(oModelOrMat) ? sPlantOrSLoc : sMatOrPlant;
-            var sStorageLocation = _isModel(oModelOrMat) ? sSLoc : sPlantOrSLoc;
-
-            if (!sMaterial || typeof sMaterial !== "string" || !sMaterial.trim()) {
-                return Promise.resolve([]);
-            }
-
-            var aFilters = [new _Filter("Material", _FilterOperator.EQ, sMaterial.trim())];
-            if (sPlantVal && typeof sPlantVal === "string" && sPlantVal.trim()) {
-                aFilters.push(new _Filter("Plant", _FilterOperator.EQ, sPlantVal.trim()));
-            }
-            if (sStorageLocation && typeof sStorageLocation === "string" && sStorageLocation.trim()) {
-                aFilters.push(new _Filter("StorageLocation", _FilterOperator.EQ, sStorageLocation.trim()));
-            }
-            return _readEntitySet(oModel, "/MaterialBatches", aFilters);
-        },
-
-        /**
          * Posts Goods Receipt (101) directly to SAP S/4HANA
          * @param {Object} oPayload
          * @param {Object} [mOptions]
