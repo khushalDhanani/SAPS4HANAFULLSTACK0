@@ -2,7 +2,8 @@ const cds = require('@sap/cds');
 const crypto = require('crypto');
 const Mvt261Adapter = require('../../integration/s4hana/wm/Mvt261Adapter');
 const GoodsIssueAttemptStore = require('../goods-issue/GoodsIssueAttemptStore');
-const { classifyPostingError } = require('../goods-issue/handlers/goodsIssuePerType.handler');
+const { classifyPostingError } = require('../goods-issue/classifyPostingError');
+const GoodsIssueAdapter = require('../../integration/s4hana/wm/GoodsIssueAdapter');
 const plantScope = require('../handling-unit/plantScope');
 const { validateMovement261Payload } = require('../../common/movementConfig');
 const LOG = require('../../common/logger')('mvt261-service');
@@ -288,6 +289,17 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
           : classified.message);
       }
     });
+
+    // Background re-check of posting attempts (261, HU stock transfer) whose outcome SAP has not confirmed.
+    // Not started under test or when the interval is 0.
+    const every = GoodsIssueAttemptStore.GoodsIssueAttemptStore.recheckIntervalMs();
+    if (every > 0 && process.env.NODE_ENV !== 'test') {
+      const timer = setInterval(() => {
+        GoodsIssueAttemptStore.recheck(GoodsIssueAdapter)
+          .catch((err) => LOG.error('Posting-attempt re-check failed:', err.message || err));
+      }, every);
+      timer.unref();
+    }
 
     return super.init();
   }

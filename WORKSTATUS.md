@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **`tr-to` and `goods-issue` services removed (2026-11-04 11:20 IST) — PARTIAL, committed locally, not pushed, not deployed:** Movements 201, 241, 301 and 311 had no screen, and the user confirmed that nothing outside the app calls these services. `/odata/v4/tr-to` and `/odata/v4/goods-issue` are gone, along with 41,413 net lines of code and tests. Movement 261, HU transfer and goods receipt keep what they need from goods-issue, and the posting-attempt recheck now runs from the mvt261 service. Jest 3,311 passed, 0 failed, 16 skipped. Not run against SAP. See the entry below. The test replacement listed next was committed as `3869e864` and is not pushed.
+
 - **Targeted test replacement (2026-11-04 10:30 IST) — PARTIAL, uncommitted, only `test/` and this file changed:** 187 false or redundant tests removed, 314 rewritten, 175 added; 75 rewrite verdicts left unchanged (57 browser checks and 16 Jest tests need SAP, 2 await the partial-pick decision). Jest 4,313 passed, 0 failed, 16 skipped; 24 of the passes are `test.failing` entries recording known defects. No production code changed, nothing was run against SAP, and owner decisions are open. Backup tag `test-audit-backup-2026-11-04`. See the entry below. The phase 2 lock and unlock work listed next was committed as `04c19f73` and is not pushed.
 
 - **SU01 User Management Phase 2 (User Lock & Unlock) (2026-11-03 18:22 IST) — PASS (mock-tested, uncommitted; live SAP write gated):** `lockUser` and `unlockUser` actions added to `UserManagementService` (`srv/admin/service.cds`, `srv/admin/service.js`) and `UserManagementAdapter` (`srv/integration/s4hana/admin/UserManagementAdapter.js`). Implements fail-closed self-lock guard protecting the active RFC connection user (`process.env.S4_USERNAME`), atomic single-session LUW with `BAPI_TRANSACTION_COMMIT`, and UI buttons in `UserDetailDialog.fragment.xml` with confirmation dialogs (`MessageBox.confirm`). 42 admin unit tests pass (18 new). Full Jest test suite (226 passed, 4,147 tests) 100% clean. Playwright browser E2E 30/30 passed. Live write remains strictly gated. See entry below.
@@ -102,7 +104,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Test replacement (2026-11-04): the user decides whether to commit it, then answers the open decisions: partial picks versus repeats (`mvt311Process.test.js`), read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, what a failed read-back returns, and removing the `readTable?.mock` branches. Fix the 22 new `test.failing` defects as separate changes; each fix must remove its marker. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
+- `tr-to` and `goods-issue` removal (2026-11-04): before deploying, run `mbt validate` and a read-only `npm run test:e2e`, and check the deployed access logs for callers of the two removed paths. Remove the unused code listed in the entry below as a separate change.
+- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 18 remaining `test.failing` defects as separate changes; each fix must remove its marker. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
@@ -149,6 +152,43 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 11:20 IST — Removed `tr-to` and `goods-issue` services: PARTIAL (committed locally, not pushed, not deployed, no SAP proof)
+
+**Why:** movements 201, 241, 301 and 311 have no screen. Their tests only protected a backend that could still post to SAP. The user confirmed in writing that nothing outside this app calls the services. That is the user's statement; deployed access logs were not checked.
+
+**Removed (78 files; 34 production and tools, 44 tests; net 41,413 lines):**
+- Services: `srv/wm/tr-to/`, and from `srv/wm/goods-issue/` the service, handlers, mappings and per-type validators.
+- Adapters and helpers: `ReservationProcessAdapter.js`, `TrToAdapter.js`, `toState.js`, `authCheck.js`, `resLock.js`, `srv/common/wmStatus.js`, and the goods-issue reservation, batch, stock-unit and dashboard clients.
+- Tools: `test-rfc-trto.js`, `test-step1-picking-to.js`, `report-open-deliveries.js`, `time-gi-reservations.js`, `test-gi-su-list.js`, `show-resv-item.js`, `probe-cap-drilldown.py`.
+- UI wiring: the `goodsIssue` model and data source in `manifest.json`, and its entry in `AuthService.js`. No screen used them.
+
+**Kept, because working flows use it:** `GoodsIssueAttemptStore`, `validation/common.js`, `GoodsIssuePostingClient` and its mappers, and `db/wm/goods-issue-attempt.cds`.
+
+**Changed:**
+- `classifyPostingError` moved unchanged to `srv/wm/goods-issue/classifyPostingError.js`.
+- The posting-attempt recheck timer moved to `srv/wm/mvt261/service.js`, same interval and rules. `GoodsIssueAdapter.js` now holds only the 4 read methods the recheck uses.
+- `tools/smoke-test-deployment.js` checks mvt261 metadata instead of `tr-to`. `jest.config.js` drops the `wmStatus.js` threshold. `tools/probe-cap.py`, `tools/sandbox-discovery.js`, `package.json` and `docs/e2e-coverage-matrix.md` lost their references.
+- `roundTripHuTransfer.e2e.js` live read-back now reads MATDOC directly over RFC, the way `roundTripGoodsReceipt.e2e.js` does. It checks movement 311 and quantity. The old check also compared material and plant, so this one is narrower. It has never run.
+
+**Behavior lost on purpose:** the manual `recheckPostingAttempts` action is gone; only the timer resolves attempts now. The `tr-to/verifyMaterialDocument` read-back is gone.
+
+**Test decision:** TEST ADDED (`test/unit/wm/mvt261RecheckTimer.test.js`), TEST UPDATED (10 mixed test files, where tests of kept code stayed).
+
+**Validation (all run 2026-11-04):**
+- `npm test`: 194 suites passed, 1 skipped; 3,311 passed, 0 failed, 16 skipped. Before: 234 suites passed, 1 skipped; 4,313 passed.
+- `npm run test:coverage` with the configured thresholds, `npm run lint`, `npm run scan:secrets`, `git diff --check`: exit 0. A first run of `test:coverage` FAILED on the `wmStatus.js` threshold; the file had no users left, so it and the threshold were removed.
+- `cds compile srv`, `ui5lint` (no findings), `ui5 build --all`: exit 0.
+- `npm run test:e2e:sap-free`: 3 of 3 passed, including 401 and 403 on `lockUser`, and 3 of 3 again after the final fixes.
+- Mutation checks of the new timer test in a throwaway copy: 5 of 5 caught.
+- Whole-repo line coverage 66.30% to 63.10%, branch 52.41% to 47.84%. The percentages fall because well-tested code was removed. `Mvt261Adapter.js` and `GoodsIssuePostingClient.js` covered lines are unchanged.
+- NOT RUN: `mbt validate` (`mbt` is not installed), browser suites that can reach SAP, any SAP call.
+
+**Not removed, now unused (candidates, each needs its own check):** the 201, 301 and 311 paths in `GoodsIssuePostingClient` and their mappers (left because 261 posts through this file and it cannot be re-proven without SAP); most exports of `srv/common/movementConfig.js` and part of `validation/common.js`; `GoodsIssueAttemptStore.getOpenAttemptReservations`; `s4Config.resLockEnabled`; `warehouseResolver.js` (used only by `tools/sandbox-discovery.js`). `test/unit/wm/goodsIssueSapRfcContract.test.js` (6 skipped) now guards field lists partly used by removed code.
+
+**Historical docs** still name these services (`docs/audits`, `docs/decisions`, `docs/runbooks`, `docs/abap`, `docs/delivery-verification.md`) and were not changed.
+
+**Next action:** see Next Steps.
 
 ### 2026-11-04 10:30 IST — Test audit and targeted test replacement: PARTIAL (uncommitted, no SAP proof)
 

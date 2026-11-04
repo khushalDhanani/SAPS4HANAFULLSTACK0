@@ -6,7 +6,7 @@ import urllib.request, urllib.error
 BASE = "http://localhost:4004"
 AUTH = "Basic " + base64.b64encode(b"khushal:x").decode()
 SERVICES = ["/odata/v4/purchase-order","/odata/v4/journal-entry","/odata/v4/sales-inquiry",
-            "/odata/v4/warehouse-management","/odata/v4/goods-issue","/odata/v4/goods-receipt"]
+            "/odata/v4/warehouse-management","/odata/v4/goods-receipt"]
 FUNCS = {
  "/odata/v4/purchase-order": ["getDashboardMetrics()"],
  "/odata/v4/sales-inquiry": ["getSalesInquiryDefaults()","getInquiryCreationCapabilities()","getSalesInquiryMetrics()","getSalesOrderMetrics()"]

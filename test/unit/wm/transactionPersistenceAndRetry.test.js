@@ -8,14 +8,12 @@
  *     - Confirms genuine SAP document numbers (material documents, reservations, transfer orders).
  *     - Rejects blank, whitespace, or placeholder/mock document numbers.
  *     - Rejects HTTP 2xx that lack a material document (504 GI_POSTING_OUTCOME_UNKNOWN).
- *     - Verifies MATDOC / MSEG read-back in ReservationProcessAdapter; fails closed when persistence check fails.
  *     - Multi-tier read-back in GoodsIssuePostingClient (MATDOC -> MKPF -> OData -> unconfirmed pending).
  *     - Read-back verification in Mvt261Adapter.
  *  2. Safe Retries and Idempotency:
  *     - GoodsIssueAttemptStore: Idempotent replay of identical requests without duplicate SAP posting.
  *     - GoodsIssueAttemptStore: Reference collision detection throws HTTP 409 Conflict.
  *     - GoodsIssueAttemptStore: Generation suffix re-claims (e.g. GI...0 -> GI...1) for safe retry after failure.
- *     - ReservationProcessAdapter: Lifecycle stage progression, failure handling, and retry from failed stage.
  *     - HuStockTransferAdapter: Idempotency caching on ClientAttemptId and BAPI rollback on rejection.
  *
  * All tests use controlled mocks/spies. ZERO live SAP mutations.
@@ -28,7 +26,6 @@ const cds = require('@sap/cds');
 // Test DB initialization for GoodsIssueAttemptStore
 cds.test(__dirname + '/../../../');
 
-const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
 const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient');
 const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
 const Mvt261Adapter = require('../../../srv/integration/s4hana/wm/Mvt261Adapter');
@@ -58,21 +55,6 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
   // 1. Genuine Document Number & Placeholder Rejection
   // =========================================================================
   describe('1. Genuine Document Number Enforcement & Placeholder Rejection', () => {
-
-    test('ReservationProcessAdapter rejects blank or whitespace material document', async () => {
-      const adapter = new ReservationProcessAdapter();
-
-      await expect(
-        adapter.verifyMaterialDocument({
-          materialDocument: '   ',
-          materialDocYear: '2026',
-          movementType: '201'
-        })
-      ).rejects.toMatchObject({
-        status: 400,
-        message: expect.stringMatching(/missing or invalid|missing or empty/i)
-      });
-    });
 
     test('GoodsIssuePostingClient throws 504 GI_POSTING_OUTCOME_UNKNOWN on HTTP 2xx without a material document', async () => {
       const mockS4Client = {
@@ -112,76 +94,6 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
   // 2. SAP Document Persistence Verification (MATDOC, MSEG, LTAK, MKPF)
   // =========================================================================
   describe('2. SAP Document Persistence Verification', () => {
-
-    test('ReservationProcessAdapter.verifyMaterialDocument: confirms persistence when MATDOC contains matching record', async () => {
-      const mockRfc = {
-        readTable: jest.fn().mockImplementation(async (table) => {
-          if (table === 'MATDOC' || table === 'MSEG') {
-            return [{
-              MBLNR: '5000000201',
-              MJAHR: '2026',
-              BWART: '201',
-              MATNR: '000000008000000023',
-              WERKS: '1120',
-              LGORT: 'HS01',
-              RSNUM: '0000520001',
-              RSPOS: '0001',
-              MENGE: '10.000',
-              MEINS: 'EA'
-            }];
-          }
-          return [];
-        })
-      };
-
-      const adapter = new ReservationProcessAdapter({ rfc: mockRfc });
-      adapter._checkMatdocPersistence = true;
-
-      const res = await adapter.verifyMaterialDocument({
-        materialDocument: '5000000201',
-        materialDocYear: '2026',
-        movementType: '201',
-        material: '8000000023',
-        plant: '1120',
-        storageLocation: 'HS01',
-        quantity: 10,
-        reservationNo: '520001'
-      });
-
-      expect(res.success).toBe(true);
-      expect(res.materialDocument).toBe('5000000201');
-      expect(res.materialDocumentYear).toBe('2026');
-      expect(mockRfc.readTable).toHaveBeenCalledWith(
-        'MATDOC',
-        expect.any(Array),
-        expect.arrayContaining([expect.stringContaining('5000000201')]),
-        expect.any(Number)
-      );
-    });
-
-    test('ReservationProcessAdapter.verifyMaterialDocument: fails closed (500) when document cannot be verified in MATDOC/MSEG', async () => {
-      const mockRfc = {
-        readTable: jest.fn().mockResolvedValue([]) // Empty -> MATDOC persistence check fails!
-      };
-
-      const adapter = new ReservationProcessAdapter({ rfc: mockRfc });
-      adapter._checkMatdocPersistence = true;
-
-      await expect(
-        adapter.verifyMaterialDocument({
-          materialDocument: '5000000999',
-          materialDocYear: '2026',
-          movementType: '201',
-          material: '8000000023',
-          plant: '1120',
-          storageLocation: 'HS01',
-          quantity: 10
-        })
-      ).rejects.toMatchObject({
-        status: 500,
-        message: expect.stringMatching(/persistence check failed/i)
-      });
-    });
 
     test('GoodsIssuePostingClient.readBackDocument: Tier 1 MATDOC confirms document persistence', async () => {
       const mockRfc = {
@@ -387,46 +299,6 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
       expect(history.length).toBe(2);
       expect(history[0].Status).toBe('rejected');
       expect(history[1].Status).toBe('sending');
-    });
-
-    test('ReservationProcessAdapter: a flow on an existing reservation records FAILED_TR with the SAP error and creates no second reservation', async () => {
-      const statuses = [];
-      const fms = [];
-      // Plain function RFC double, so the adapter takes its production path (no readTable.mock).
-      const tables = {
-        T320: [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }],
-        CSKS: [{ KOKRS: '1000', KOSTL: '1011201301', DATAB: '20200101', DATBI: '99991231', BKZKP: '' }],
-        MARC: [{ XCHPF: '', SERNP: '' }],
-        MARD: [{ LGORT: 'HS01', LABST: '100.000' }]
-      };
-      const rfc = {
-        session: (fn) => fn(rfc.call),
-        call: async (fm) => {
-          fms.push(fm);
-          if (fm === 'L_TR_CREATE') throw new Error('Warehouse W01 movement 201 not configured');
-          return {};
-        },
-        readTable: async (table) => tables[table] || []
-      };
-
-      const result = await new ReservationProcessAdapter({ rfc }).executeReservationWarehouseFlow({
-        reservationNumber: '520001',
-        reservationItem: '0001',
-        movementType: '201',
-        material: '8000000023',
-        plant: '1120',
-        storageLocation: 'HS01',
-        quantity: 10,
-        unit: 'NOS',
-        costCenter: '1011201301',
-        warehouseNumber: 'W01',
-        persistStatus: (status) => { statuses.push(status); }
-      });
-
-      expect(result).toMatchObject({ success: false, stage: 'TR', processStatus: 'FAILED_TR', reservationNumber: '520001' });
-      expect(result.error).toContain('Warehouse W01 movement 201 not configured');
-      expect(statuses).toEqual(['CREATED', 'RESERVATION_CREATED', 'FAILED_TR']);
-      expect(fms).not.toContain('BAPI_RESERVATION_CREATE1');
     });
 
     test('HuStockTransferAdapter: repeated call with same ClientAttemptId hits idempotency cache', async () => {

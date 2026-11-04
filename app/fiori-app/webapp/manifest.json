@@ -38,14 +38,6 @@
           "odataVersion": "4.0"
         }
       },
-      "goodsIssueService": {
-        "uri": "/odata/v4/goods-issue/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
-      },
       "goodsReceiptService": {
         "uri": "/odata/v4/goods-receipt/",
         "type": "OData",
@@ -138,13 +130,6 @@
       },
       "salesOrder": {
         "dataSource": "salesOrderService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
-      },
-      "goodsIssue": {
-        "dataSource": "goodsIssueService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true

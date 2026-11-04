@@ -12,7 +12,6 @@
  */
 
 const cds = require('@sap/cds');
-const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const Mvt261Adapter = require('../../../srv/integration/s4hana/wm/Mvt261Adapter');
 const HuStockTransferAdapter = require('../../../srv/integration/s4hana/wm/HuStockTransferAdapter');
@@ -23,9 +22,6 @@ const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 const { POST } = cds.test(__dirname + '/../../../');
 
 describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout Recovery [mock only]', () => {
-  let giPost201Spy;
-  let giPost301Spy;
-  let giPost311Spy;
   let _mvt261CycleSpy;
   let mvt261PostSpy;
   let mvt261RevSpy;
@@ -98,34 +94,9 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
     });
 
     // Adapter write spies
-    jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue({
-      success: true,
-      stage: 'RESERVATION_CREATED',
-      reservation: { number: '520001', item: '0001' },
-      reservationNo: '520001',
-      sapVerified: true
-    });
 
-    giPost201Spy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockResolvedValue({
-      MaterialDocument: '4900050142',
-      MaterialDocYear: '2026',
-      PostingStatus: 'POSTED',
-      Confirmed: true
-    });
 
-    giPost301Spy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue301').mockResolvedValue({
-      MaterialDocument: '4900050149',
-      MaterialDocYear: '2026',
-      PostingStatus: 'POSTED',
-      Confirmed: true
-    });
 
-    giPost311Spy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue311').mockResolvedValue({
-      MaterialDocument: '4900050153',
-      MaterialDocYear: '2026',
-      PostingStatus: 'POSTED',
-      Confirmed: true
-    });
 
     _mvt261CycleSpy = jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue({
       Reservation: '0000528780',
@@ -179,80 +150,6 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
   // SECTION 1: Fail Closed If Production Transaction Logging Is Unavailable
   // ===========================================================================
   describe('1. Fail closed if production transaction logging is unavailable', () => {
-
-    test('postGoodsIssue201: aborts with HTTP 503 and NEVER calls SAP when GoodsIssueAttemptStore throws', async () => {
-      jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('Persistent store unreachable'));
-
-      await expect(POST('/odata/v4/goods-issue/postGoodsIssue201', {
-        MovementType: '201',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        Material: '8000000023',
-        IssueQty: 2,
-        Unit: 'KG',
-        CostCenter: '1011201301',
-        PostingDate: '2026-10-24',
-        ClientAttemptId: 'test-gi201-failclosed-003'
-      }, authCarol)).rejects.toMatchObject({
-        response: {
-          status: 503,
-          data: { error: { message: expect.stringMatching(/posting attempt could not be recorded/i) } }
-        }
-      });
-
-      expect(giPost201Spy).not.toHaveBeenCalled();
-    });
-
-    test('postGoodsIssue301: aborts with HTTP 503 and NEVER calls SAP when GoodsIssueAttemptStore throws', async () => {
-      jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('DB failure'));
-
-      await expect(POST('/odata/v4/goods-issue/postGoodsIssue301', {
-        MovementType: '301',
-        ReservationNo: '520301',
-        ReservationItem: '0001',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        ReceivingPlant: '1110',
-        ReceivingStorageLocation: 'CS01',
-        Material: '8000000023',
-        IssueQty: 2,
-        Unit: 'KG',
-        PostingDate: '2026-10-24',
-        ClientAttemptId: 'test-gi301-failclosed-004'
-      }, authCarol)).rejects.toMatchObject({
-        response: {
-          status: 503,
-          data: { error: { message: expect.stringMatching(/posting attempt could not be recorded/i) } }
-        }
-      });
-
-      expect(giPost301Spy).not.toHaveBeenCalled();
-    });
-
-    test('postGoodsIssue311: aborts with HTTP 503 and NEVER calls SAP when GoodsIssueAttemptStore throws', async () => {
-      jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('Disk I/O error'));
-
-      await expect(POST('/odata/v4/goods-issue/postGoodsIssue311', {
-        MovementType: '311',
-        ReservationNo: '520311',
-        ReservationItem: '0001',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        ReceivingStorageLocation: 'HS01',
-        Material: '8000000023',
-        IssueQty: 2,
-        Unit: 'KG',
-        PostingDate: '2026-10-24',
-        ClientAttemptId: 'test-gi311-failclosed-005'
-      }, authCarol)).rejects.toMatchObject({
-        response: {
-          status: 503,
-          data: { error: { message: expect.stringMatching(/posting attempt could not be recorded/i) } }
-        }
-      });
-
-      expect(giPost311Spy).not.toHaveBeenCalled();
-    });
 
     test('Mvt261 postGoodsIssue: aborts with HTTP 503 and NEVER calls SAP when GoodsIssueAttemptStore throws', async () => {
       jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('Attempt store write failure'));
@@ -320,43 +217,6 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
   // ===========================================================================
   describe('2. Duplicate and concurrent posting protection', () => {
 
-    test('postGoodsIssue201: replay of already posted goods issue returns existing document without duplicate SAP call', async () => {
-      // First call succeeds and claims
-      const res1 = await POST('/odata/v4/goods-issue/postGoodsIssue201', {
-        MovementType: '201',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        Material: '8000000023',
-        IssueQty: 2,
-        Unit: 'KG',
-        CostCenter: '1011201301',
-        PostingDate: '2026-10-24',
-        ClientAttemptId: 'replay-gi-201'
-      }, authCarol);
-
-      expect(res1.status).toBe(200);
-      expect(res1.data.PostingStatus).toBe('POSTED');
-      expect(giPost201Spy).toHaveBeenCalledTimes(1);
-
-      // Re-posting with same ClientAttemptId returns the existing posted document
-      const res2 = await POST('/odata/v4/goods-issue/postGoodsIssue201', {
-        MovementType: '201',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        Material: '8000000023',
-        IssueQty: 2,
-        Unit: 'KG',
-        CostCenter: '1011201301',
-        PostingDate: '2026-10-24',
-        ClientAttemptId: 'replay-gi-201'
-      }, authCarol);
-
-      expect(res2.status).toBe(200);
-      expect(res2.data.PostingStatus).toBe('POSTED');
-      expect(res2.data.Confirmed).toBe(true);
-      expect(giPost201Spy).toHaveBeenCalledTimes(1);
-    });
-
     test('Mvt261 postGoodsIssue: a second submit while the first is still at SAP gets 409 and SAP is called once', async () => {
       let reachedSap;
       let releaseSap;
@@ -380,73 +240,12 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       expect(mvt261PostSpy).toHaveBeenCalledTimes(1);
     });
 
-    test('ReservationProcessAdapter postGoodsMovement: de-duplicates concurrent in-flight calls sharing ProcessId', async () => {
-      const adapter = new ReservationProcessAdapter({ mock: true });
-      let callCount = 0;
-      jest.spyOn(adapter, '_postGoodsMovement').mockImplementation(async () => {
-        callCount++;
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        return { success: true, materialDocument: '4900059999', materialDocYear: '2026' };
-      });
-
-      const params = {
-        processId: 'IN_FLIGHT_PROC_99',
-        reservationNumber: '520001',
-        reservationItem: '0001',
-        movementType: '201',
-        material: '8000000023',
-        plant: '1120',
-        storageLocation: 'CS01',
-        quantity: 1
-      };
-
-      const [res1, res2] = await Promise.all([
-        adapter.postGoodsMovement(params),
-        adapter.postGoodsMovement(params)
-      ]);
-
-      expect(res1.materialDocument).toBe('4900059999');
-      expect(res2.materialDocument).toBe('4900059999');
-      expect(callCount).toBe(1);
-    });
   });
 
   // ===========================================================================
   // SECTION 3: Timeout Recovery & Reconciliation
   // ===========================================================================
   describe('3. Timeout recovery and unconfirmed outcome reconciliation', () => {
-
-    test('postGoodsIssue201: network timeout leaves attempt unconfirmed and returns 504 with do-not-post-again message', async () => {
-      const timeoutErr = new Error('ESOCKETTIMEDOUT: connection timed out');
-      timeoutErr.code = 'ESOCKETTIMEDOUT';
-      giPost201Spy.mockRejectedValue(timeoutErr);
-
-      const setStatusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
-
-      await expect(POST('/odata/v4/goods-issue/postGoodsIssue201', {
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        Material: '8000000023',
-        IssueQty: 2,
-        Unit: 'KG',
-        CostCenter: '1011201301',
-        MovementType: '201',
-        PostingDate: '2026-10-24',
-        ClientAttemptId: 'timeout-attempt-201'
-      }, authCarol)).rejects.toMatchObject({
-        response: {
-          status: 504,
-          data: { error: { message: expect.stringMatching(/do not post again/i) } }
-        }
-      });
-
-      // Verify attempt was transitioned to unconfirmed (NOT rejected / deleted)
-      expect(setStatusSpy).toHaveBeenCalledWith(
-        expect.any(String),
-        'unconfirmed',
-        expect.objectContaining({ LastError: expect.stringMatching(/do not post again/i) })
-      );
-    });
 
     test('reconfirmUnconfirmed: promotes unconfirmed attempt to posted when readBackDocument confirms persistence in SAP', async () => {
       await GoodsIssueAttemptStore.create({

@@ -24,12 +24,6 @@ module.exports = {
       functions: 100,
       lines: 90,
       statements: 80
-    },
-    './srv/common/wmStatus.js': {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: 80
     }
   }
 };

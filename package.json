@@ -233,8 +233,7 @@
         "sales-inquiry-adapter": "info",
         "goods-receipt": "info",
         "goods-receipt-adapter": "info",
-        "goods-issue-adapter": "info",
-        "tr-to-adapter": "info"
+        "goods-issue-adapter": "info"
       }
     },
     "cds-plugin-ui5": {

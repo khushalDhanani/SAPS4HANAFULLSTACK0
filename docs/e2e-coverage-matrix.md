@@ -24,7 +24,6 @@ From each `srv/**/service.cds`; which screen calls which action is **Not verifie
 | `/odata/v4/customer-invoice` | `releaseInvoiceToAccounting`, `cancelBillingDocument` |
 | `/odata/v4/customer-return` | `createCustomerReturn` |
 | `/odata/v4/goods-receipt` | `postGoodsReceipt`, `postGoodsReceiptWithStorageUnit` |
-| `/odata/v4/tr-to` | `createTOFromTR`, `postMigoGoodsMovement`, `executeReservationWarehouseFlow`, `verify*` |
 | `/odata/v4/mvt261` | `postGoodsIssue`, `reverse` |
 | `/odata/v4/hu-stock-transfer` | `validateHuStockTransferSelection`, `executeHuStockTransfer`, `executeHuStockTransferSelection` |
 | `/odata/v4/handling-unit` | `labels`, `create`, `pack`, `unpack`, `remove` |

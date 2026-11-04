@@ -113,14 +113,11 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
     });
 
     describe('AuthService.syncModelHeaders', () => {
-        it('should synchronize authorization header to active models (default, salesInquiry, goodsIssue, goodsReceipt, warehouseMgmt)', () => {
+        it('should synchronize authorization header to active models (default, salesInquiry, goodsReceipt, warehouseMgmt)', () => {
             const defaultModel = {
                 changeHttpHeaders: jest.fn()
             };
             const sdModel = {
-                changeHttpHeaders: jest.fn()
-            };
-            const giModel = {
                 changeHttpHeaders: jest.fn()
             };
             const grModel = {
@@ -132,7 +129,6 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             const mockComponent = {
                 getModel: jest.fn((name) => {
                     if (name === "salesInquiry") return sdModel;
-                    if (name === "goodsIssue") return giModel;
                     if (name === "goodsReceipt") return grModel;
                     if (name === "warehouseMgmt") return wmModel;
                     return defaultModel;
@@ -149,9 +145,6 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
                 Authorization: "Bearer sample-jwt-token"
             });
             expect(sdModel.changeHttpHeaders).toHaveBeenCalledWith({
-                Authorization: "Bearer sample-jwt-token"
-            });
-            expect(giModel.changeHttpHeaders).toHaveBeenCalledWith({
                 Authorization: "Bearer sample-jwt-token"
             });
             expect(grModel.changeHttpHeaders).toHaveBeenCalledWith({

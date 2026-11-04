@@ -189,16 +189,12 @@ async function live(baseUrl, data) {
             errors.push(`transfer not confirmed by the UI: ${ui.dialog}`);
         } else {
             details.materialDocument = `${m[1]}/${m[2]}`;
-            const c = ui.cockpit.cockpit;
-            // READ-ONLY read-back: verifyMaterialDocument is a POST action but only reads MATDOC/MSEG
-            // (ReservationProcessAdapter.js:1100-1160). Called from Node, outside the browser write guard.
-            const res = await fetch(`${baseUrl}/odata/v4/tr-to/verifyMaterialDocument`, {
-                method: 'POST',
-                headers: { ...AUTH, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ materialDocument: m[1], materialDocumentYear: m[2], movementType: '311', material: c.Material, quantity: Number(data.transferQty), plant: c.Plant, reservationNo: data.reservationNo, reservationItem: data.reservationItem })
-            });
-            details.readBack = { status: res.status, body: await res.json().catch(() => null) };
-            if (!res.ok || !details.readBack.body || details.readBack.body.success !== true) errors.push(`SAP read-back of ${details.materialDocument} failed: HTTP ${res.status} ${JSON.stringify(details.readBack.body)}`);
+            // READ-ONLY read-back of the document from SAP, outside the browser write guard. Fields as in roundTripGoodsReceipt.e2e.js.
+            const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
+            const rows = await new RfcClient().readTable('MATDOC', ['MBLNR', 'MJAHR', 'BWART', 'MENGE'], [`MBLNR = '${m[1]}'`, `AND MJAHR = '${m[2]}'`], 10);
+            details.readBack = { rows };
+            const isRight = rows.length > 0 && rows.every((r) => String(r.BWART).trim() === '311') && rows.some((r) => Number(r.MENGE) === Number(data.transferQty));
+            if (!isRight) errors.push(`SAP read-back of ${details.materialDocument} does not show movement 311 for quantity ${data.transferQty}: ${JSON.stringify(rows)}`);
         }
     } catch (err) {
         errors.push(`${err.name}: ${err.message.split('\n')[0]}`);

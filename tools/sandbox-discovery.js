@@ -148,7 +148,7 @@ function createReaders(rfc) {
       let ltbk = await rfc.readTable('LTBK', LTBK_F, [`LGNUM = '${wh}'`, `AND RSNUM = '${rs}'`]);
       let link = 'LTBK-RSNUM';
       if (!ltbk.length && rsdat && resb[0]) {
-        // 311/301 staging TRs are created without RSNUM (ReservationProcessAdapter.createTransferRequirement):
+        // 311/301 staging TRs are created without RSNUM (the removed tr-to flow):
         // candidate TRs of the same day whose first item carries the reservation's material and quantity.
         const sameDay = await rfc.readTable('LTBK', LTBK_F, [`LGNUM = '${wh}'`, `AND BDATU = '${rsdat}'`], 50);
         for (const h of sameDay) {

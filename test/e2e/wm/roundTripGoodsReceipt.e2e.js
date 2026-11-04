@@ -169,8 +169,7 @@ async function live(baseUrl, data) {
             errors.push(`posting not confirmed by the UI: ${ui.dialog}`);
         } else {
             details.materialDocument = doc;
-            // READ-ONLY read-back from MATDOC: verifyMaterialDocument rejects 101 (ReservationProcessAdapter.js:1135),
-            // and getStorageUnitDetails answers 404 once the delivery is complete (live 2026-11-02).
+            // READ-ONLY read-back from MATDOC: getStorageUnitDetails answers 404 once the delivery is complete (live 2026-11-02).
             details.readBack = await readReceiptFromSap(doc, data.deliveryDocument);
             errors.push(...receiptReadBackErrors(details.readBack, doc, data));
         }
