@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Orders Due plant scope fixed (2026-11-04 17:20 IST) — PARTIAL, uncommitted, not deployed, confirmed READ-ONLY against SAP:** A plant-limited user can no longer read other plants' due orders. A failed shipping-point lookup now answers 503, and another plant's shipping point answers 403. The user chose refusal over an empty list. Admins are unaffected. Jest 180 suites, 2,826 passed, 0 failed. 15 known defects remain marked `test.failing`. See the entry below.
+
 - **Self-lock guard fixed (2026-11-04 16:50 IST) — PARTIAL, committed locally, not pushed, not deployed, no live lock run:** `lockUser` now compares against the user RFC really connects with, including a BTP destination. Before, it read only `S4_USERNAME`, which production refuses, so the guard did nothing there. Jest 180 suites, 2,819 passed, 0 failed. 17 known defects remain marked `test.failing`. See the entry below.
 
 - **Read-only browser E2E after the removals (2026-11-04 16:35 IST) — PASS for the read-only tier, log and matrix update committed locally, not pushed:** `npm run test:e2e` passed 17 of 17 suites against a local server on `S4HANA_DEV` client 220, with real SAP data and no writes seen. The live-write round trips (`test:e2e:sap`) did not run. See the entry below.
@@ -120,7 +122,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Group 2 (2026-11-04): kept by the user's choice. `getVisualRack`, `checkATP`, `askAI`, `MaterialStorageLocations`, `MaterialBatches`, `DeliveryWithoutRefTypes` and `DeliveryWithoutRefShipToParties` have no screen; remove them only after access logs or owners rule out outside callers. `chat` is used by the Purchase Orders AI assistant and stays.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, check the deployed access logs for callers of the two removed paths. `npm run validate:mta` and the read-only `npm run test:e2e` are done.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
-- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 17 remaining `test.failing` defects as separate changes; each fix must remove its marker. The next security item is the outbound-delivery plant scope, which needs the user's choice: refuse with 503/403, or return an empty list. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
+- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 15 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order still needs the user's decision and a READ-ONLY check for the plant field. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
@@ -167,6 +169,35 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 17:20 IST — Fixed Orders Due plant scope: PARTIAL (uncommitted, not deployed, read-only SAP check passed)
+
+**Why:** a plant-limited user could read other plants' due orders two ways: an empty shipping-point lookup sent SAP no filter at all, and a client `ShippingPoint` filter was never checked against the user's plant. An RFC failure was also cached as an empty list for the cache period. The user chose refusal over an empty list.
+
+**Changed:** `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`:
+- New `_shippingPointsInScope`: 503 when no shipping point can be read for the plant.
+- A named shipping point outside the user's plants answers 403. With a Plant filter, only that plant counts; without one, all of the user's plants count. The comparison ignores case.
+- An empty lookup is no longer cached, so reads work again once SAP recovers.
+- These refusals skip `mapS4Error`, which had turned the 503 into a 500.
+- Admins and calls with no user behave as before.
+
+**Test decision:** TEST UPDATED and TEST ADDED. Both `test.failing` markers are gone, replaced by 9 tests using plain RFC doubles. `does not append $top or $skip` now supplies its shipping points, because a plant-limited user with none is correctly refused.
+
+**Validation (all run 2026-11-04):**
+- `npm test` equivalent with coverage: 180 suites passed; 2,826 passed, 0 failed, 0 skipped. Before: 2,819 passed. `test.failing` entries: 17 to 15.
+- `npm run test:coverage` with thresholds, `npm run lint`, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3 passed.
+- Mutations in a throwaway copy: 8 of 8 caught, including both original bugs.
+- Per-function coverage: 692 functions kept or better, none lower.
+- READ-ONLY against `S4HANA_DEV` client 220, local `cap-e2e` server, stopped afterwards, on the user's go: `npm run test:e2e -- --only="LE screens,Plant isolation"` passed 2 of 2 with no skip; orders due shows 177 rows for plant 1120, the same as before this fix.
+- READ-ONLY HTTP requests on that server: `test-viewer-1120` with no filter 200 (shipping point 1112), with own point 1112 200, with point 9999 403 and the new message, metrics for its plant 200; `test-viewer-noplant` 403; Admin with point 9999 200, 0 rows.
+- NOT RUN: the 503 against a real outage (unit tests only); a user with two plants on real data. How the Orders Due screen displays the 503 and 403 was not checked in a browser.
+
+**Found, not changed:**
+- `getShippingPoints` (`ShippingPointVH`) returns the whole list when the lookup is empty, so a plant-limited user can see other plants' shipping point names, though not their orders.
+- A raw string query to `getOrdersDueForDelivery` skips the shipping point filter. No caller in `srv` or `tools` passes one.
+- PGI, billing and delivery from order still have role checks only.
+
+**Next action:** see Next Steps.
 
 ### 2026-11-04 16:50 IST — Fixed the self-lock guard: PARTIAL (committed locally, not pushed, not deployed, no live lock run)
 

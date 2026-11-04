@@ -128,13 +128,35 @@ class OutboundDeliveryAdapter {
       } catch (_) {}
     }
 
-    if (this._tvstzCache) {
+    // An empty result may be an outage, so it is not cached.
+    if (this._tvstzCache && points.length > 0) {
       this._tvstzCache.set(cleanPlant, {
         points,
         expiresAt: Date.now() + this.cacheTtlMs
       });
     }
 
+    return points;
+  }
+
+  /**
+   * Shipping points a plant-scoped user may read. Refuses rather than answering with no filter, which would
+   * read the orders of every plant.
+   *
+   * @param {Array<string>} plants
+   * @param {Object} [options]
+   * @returns {Promise<Array<string>>}
+   */
+  async _shippingPointsInScope(plants, options = {}) {
+    const lists = await Promise.all(plants.map((plant) => this.getShippingPointsForPlant(plant, options)));
+    const points = [...new Set(lists.flat().map((point) => String(point).trim().toUpperCase()))];
+    if (points.length === 0) {
+      const err = new Error(`The shipping points of plant ${plants.join(', ')} could not be read from SAP; no orders were read. Try again.`);
+      err.status = 503;
+      err.statusCode = 503;
+      err.isScopeRefusal = true;
+      throw err;
+    }
     return points;
   }
 
@@ -257,12 +279,27 @@ class OutboundDeliveryAdapter {
         if (query.skip || query.$skip) skip = Number(query.skip || query.$skip);
       }
 
+      // authorizedPlants is null for an Admin or a call with no user: those are not limited to a plant.
+      const isPlantScoped = authorizedPlants !== null;
+
       // If ShippingPoint is specified, filter by it using odataString
       if (sp) {
+        if (isPlantScoped) {
+          const allowed = await this._shippingPointsInScope(requestedPlant ? [resolvedPlant] : authorizedPlants, options);
+          if (!allowed.includes(String(sp).trim().toUpperCase())) {
+            const err = new Error(`Shipping point '${sp}' is outside user's authorized plants: [${authorizedPlants.join(', ')}]. Access denied.`);
+            err.status = 403;
+            err.statusCode = 403;
+            err.isScopeRefusal = true;
+            throw err;
+          }
+        }
         filterClauses.push(`ShippingPoint eq ${odataString(sp)}`);
       } else {
         // When ShippingPoint is not specified, filter by valid points from TVSTZ for the resolved plant
-        const validPoints = await this.getShippingPointsForPlant(resolvedPlant, options);
+        const validPoints = isPlantScoped
+          ? await this._shippingPointsInScope([resolvedPlant], options)
+          : await this.getShippingPointsForPlant(resolvedPlant, options);
         if (validPoints.length === 1) {
           filterClauses.push(`ShippingPoint eq ${odataString(validPoints[0])}`);
         } else if (validPoints.length > 1) {
@@ -300,6 +337,7 @@ class OutboundDeliveryAdapter {
       }
       return this._formatOrderResults(rawResults, approvalMap);
     } catch (err) {
+      if (err.isScopeRefusal) throw err; // our own refusal, not an S/4 error to map
       const sapErr = mapS4Error(err);
       LOG.error(`Failed to read due orders (${sapErr.status}): ${sapErr.message}`);
       const error = new Error(sapErr.message);

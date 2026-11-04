@@ -286,37 +286,88 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       expect(mockClient.get).not.toHaveBeenCalled();
     });
 
-    // Known defect: srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js:264-271 adds no ShippingPoint filter when TVSTZ yields no points, so a plant-scoped user reads every plant (docs/e2e-coverage-matrix.md:90: scoped lists show only their plant).
-    test.failing('a plant-scoped user never triggers a due-orders read without a ShippingPoint filter when TVSTZ cannot be read', async () => {
-      const scoped = new OutboundDeliveryAdapter({
-        client: mockClient,
-        rfc: { readTable: async () => { throw new Error('RFC down'); } }
+    describe('plant scope on the shipping point filter', () => {
+      const clerk1120 = { attr: { Plant: ['1120'] }, is: () => false };
+      const dueReads = () => mockClient.get.mock.calls.map(([url]) => url).filter((url) => url.includes('C_SalesOrderDueForDeliveryVH'));
+      const capFilter = (user, point) => ({ user, query: { SELECT: { where: [{ ref: ['ShippingPoint'] }, '=', { val: point }] } } });
+      const tvstz = (byPlant) => ({ readTable: async (_t, _f, where) => (byPlant[where[0].slice(9, 13)] || []).map((VSTEL) => ({ VSTEL })) });
+      // Without this the adapter falls back to the shared resolver, which is not what these cases are about.
+      const scopedAdapter = (rfc) => { const a = new OutboundDeliveryAdapter({ client: mockClient, rfc }); a.businessConfigResolver = null; return a; };
+
+      test('refuses with 503 and reads no orders when the shipping points of the plant cannot be read', async () => {
+        const scoped = scopedAdapter({ readTable: async () => { throw new Error('RFC down'); } });
+        await expect(scoped.getOrdersDueForDelivery({}, { user: clerk1120 })).rejects.toMatchObject({
+          status: 503,
+          message: 'The shipping points of plant 1120 could not be read from SAP; no orders were read. Try again.'
+        });
+        expect(dueReads()).toEqual([]);
       });
-      const user = { attr: { Plant: ['1120'] }, is: () => false };
 
-      await scoped.getOrdersDueForDelivery({}, { user }).catch(() => {});
-
-      const unfilteredReads = mockClient.get.mock.calls
-        .map(([url]) => url)
-        .filter((url) => url.includes('C_SalesOrderDueForDeliveryVH') && !url.includes('ShippingPoint eq'));
-      expect(unfilteredReads).toEqual([]);
-    });
-
-    // Known defect: srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js:251,261-262 sends a client ShippingPoint filter to SAP without checking it belongs to the resolved plant, so a plant-scoped user can read another plant's rows (docs/e2e-coverage-matrix.md:90).
-    test.failing('a plant-scoped user cannot read a shipping point outside their plant through $filter', async () => {
-      const scoped = new OutboundDeliveryAdapter({
-        client: mockClient,
-        rfc: { readTable: async () => [{ WERKS: '1120', VSTEL: 'WAVG' }] }
+      test('reads again once SAP recovers: the failed lookup is not cached', async () => {
+        let up = false;
+        const scoped = scopedAdapter({ readTable: async () => { if (!up) throw new Error('RFC down'); return [{ VSTEL: 'WAVG' }]; } });
+        await expect(scoped.getOrdersDueForDelivery({}, { user: clerk1120, skipApprovalCheck: true })).rejects.toMatchObject({ status: 503 });
+        up = true;
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        await expect(scoped.getOrdersDueForDelivery({}, { user: clerk1120, skipApprovalCheck: true })).resolves.toEqual(expect.any(Array));
+        expect(dueReads()[0]).toContain("$filter=ShippingPoint eq 'WAVG'");
       });
-      const capReq = {
-        user: { attr: { Plant: ['1120'] }, is: () => false },
-        query: { SELECT: { where: [{ ref: ['ShippingPoint'] }, '=', { val: '9999' }] } }
-      };
 
-      await scoped.getOrdersDueForDelivery(capReq).catch(() => {});
+      test('refuses with 403 and reads no orders for a shipping point of another plant', async () => {
+        const scoped = scopedAdapter(tvstz({ 1120: ['WAVG'] }));
+        await expect(scoped.getOrdersDueForDelivery(capFilter(clerk1120, '9999'))).rejects.toMatchObject({
+          status: 403,
+          message: "Shipping point '9999' is outside user's authorized plants: [1120]. Access denied."
+        });
+        expect(dueReads()).toEqual([]);
+      });
 
-      const foreignReads = mockClient.get.mock.calls.map(([url]) => url).filter((url) => url.includes("ShippingPoint eq '9999'"));
-      expect(foreignReads).toEqual([]);
+      test('refuses with 503 and reads no orders when a named shipping point cannot be checked', async () => {
+        const scoped = scopedAdapter({ readTable: async () => { throw new Error('RFC down'); } });
+        await expect(scoped.getOrdersDueForDelivery(capFilter(clerk1120, 'WAVG'))).rejects.toMatchObject({ status: 503 });
+        expect(dueReads()).toEqual([]);
+      });
+
+      test('allows a shipping point of the user\'s plant, in any case', async () => {
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        const scoped = scopedAdapter(tvstz({ 1120: ['WAVG'] }));
+        await scoped.getOrdersDueForDelivery(capFilter(clerk1120, 'wavg'), { skipApprovalCheck: true });
+        expect(dueReads()[0]).toContain("ShippingPoint eq 'wavg'");
+      });
+
+      test('a user with two plants reaches a shipping point of the second plant', async () => {
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        const scoped = scopedAdapter(tvstz({ 1120: ['WAVG'], 1130: ['WBBB'] }));
+        const twoPlants = { attr: { Plant: ['1120', '1130'] }, is: () => false };
+        await scoped.getOrdersDueForDelivery(capFilter(twoPlants, 'WBBB'), { skipApprovalCheck: true });
+        expect(dueReads()[0]).toContain("ShippingPoint eq 'WBBB'");
+      });
+
+      test('with a Plant filter, a shipping point of the user\'s other plant is refused', async () => {
+        const scoped = scopedAdapter(tvstz({ 1120: ['WAVG'], 1130: ['WBBB'] }));
+        const twoPlants = { attr: { Plant: ['1120', '1130'] }, is: () => false };
+        const req = { user: twoPlants, query: { SELECT: { where: [{ ref: ['Plant'] }, '=', { val: '1120' }, 'and', { ref: ['ShippingPoint'] }, '=', { val: 'WBBB' }] } } };
+        await expect(scoped.getOrdersDueForDelivery(req)).rejects.toMatchObject({ status: 403 });
+        expect(dueReads()).toEqual([]);
+      });
+
+      test('an Admin is not limited: another plant\'s shipping point is read, and no lookup is needed', async () => {
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        const lookup = jest.fn(async () => { throw new Error('must not be read'); });
+        const scoped = scopedAdapter({ readTable: lookup });
+        const admin = { attr: { Plant: ['1120'] }, is: (r) => r === 'Admin' };
+        await scoped.getOrdersDueForDelivery(capFilter(admin, '9999'), { skipApprovalCheck: true });
+        expect(dueReads()[0]).toContain("ShippingPoint eq '9999'");
+        expect(lookup).not.toHaveBeenCalled();
+      });
+
+      test('an Admin still reads when the lookup is empty', async () => {
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        const scoped = scopedAdapter(tvstz({}));
+        const admin = { attr: { Plant: ['1120'] }, is: (r) => r === 'Admin' };
+        await scoped.getOrdersDueForDelivery({}, { user: admin, skipApprovalCheck: true });
+        expect(dueReads()).toHaveLength(1);
+      });
     });
 
     test('takes plant strictly from authenticated user attribute when query specifies no plant', async () => {
@@ -390,7 +441,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
         }
       };
 
-      await adapter.getOrdersDueForDelivery(capReq);
+      await adapter.getOrdersDueForDelivery(capReq, { shippingPoints: ['1120'] });
       const url = mockClient.get.mock.calls[0][0];
       expect(url).not.toContain('$top=');
       expect(url).not.toContain('$skip=');
