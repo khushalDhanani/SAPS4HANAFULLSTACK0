@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Read-only browser E2E after the removals (2026-11-04 16:35 IST) — PASS for the read-only tier, log and matrix update committed locally, not pushed:** `npm run test:e2e` passed 17 of 17 suites against a local server on `S4HANA_DEV` client 220, with real SAP data and no writes seen. The live-write round trips (`test:e2e:sap`) did not run. See the entry below.
+
 - **Demo rack route removed (2026-11-04 16:20 IST) — PARTIAL, committed locally, not pushed, not deployed:** The route showed hard-coded warehouse data and nothing linked to it. Jest 180 suites, 2,816 passed, 0 failed, 0 skipped. Group 2 APIs were not touched and stay until the user can rule out outside callers. See the entry below.
 
 - **Movement 261 removed (2026-11-04 16:15 IST) — PARTIAL, committed locally, not pushed, not deployed:** The user chose to remove it because its screens had no link in the app. `/odata/v4/mvt261`, its screens, adapter and tools are gone, and this app no longer posts goods issues. Jest 180 suites, 2,823 passed, 0 failed, 0 skipped. The posting-attempt recheck now runs from the HU stock transfer service. No SAP call was made, and browser suites that can reach SAP did not run. See the entry below. The Group 1 work listed next was committed as `18812aa1` and is not pushed.
@@ -112,9 +114,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Movement 261 removal (2026-11-04): before deploying, run a read-only `npm run test:e2e`, and check that no open 261 posting attempts are waiting in the attempt table.
+- Movement 261 removal (2026-11-04): before deploying, check that no open 261 posting attempts are waiting in the attempt table, and check access logs for `/odata/v4/mvt261`. The read-only `npm run test:e2e` is done (2026-11-04 16:35 IST).
 - Group 2 (2026-11-04): kept by the user's choice. `getVisualRack`, `checkATP`, `askAI`, `MaterialStorageLocations`, `MaterialBatches`, `DeliveryWithoutRefTypes` and `DeliveryWithoutRefShipToParties` have no screen; remove them only after access logs or owners rule out outside callers. `chat` is used by the Purchase Orders AI assistant and stays.
-- `tr-to` and `goods-issue` removal (2026-11-04): before deploying, run `mbt validate` and a read-only `npm run test:e2e`, and check the deployed access logs for callers of the two removed paths.
+- `tr-to` and `goods-issue` removal (2026-11-04): before deploying, check the deployed access logs for callers of the two removed paths. `npm run validate:mta` and the read-only `npm run test:e2e` are done.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
 - Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 18 remaining `test.failing` defects as separate changes; each fix must remove its marker. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
@@ -163,6 +165,25 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 16:35 IST — Read-only browser E2E after the removals: PASS for this tier (no live writes run)
+
+**Why:** the removals edited suites that could not run without SAP. The user gave a go for a read-only run. READ-ONLY.
+
+**Target:** local `cap-e2e` server on port 4010, `S4HANA_DEV`, client 220, code at `f11cf3dd`. The server was stopped afterwards.
+
+**Results:**
+- `TARGET_URL=http://localhost:4010 npm run test:e2e`: 17 of 17 suites passed, exit 0, no SKIP in the log. This includes the edited `verifyShellScreens`, `verifyWmScreens`, `verifyPlantIsolation` and `verifyActionFailures`, and the a11y and performance baselines.
+- Real SAP data loaded, for example purchase orders 3,030, sales orders 973, inquiries 693, invoices 520, customer returns 186, HU list 200, HU transfer reservations 78, goods receipt 32. Two zero-row lists are expected: orders due with no plant set, and HU detail with no HU selected.
+- Removed services on the running server: `tr-to`, `goods-issue` and `mvt261` `$metadata` answer 404; `hu-stock-transfer` answers 200.
+- No write seen in the server log: no `/create`, `/post`, `/execute`, `lockUser` or `BAPI_` match. The `POST` lines sampled (last 25) were `$batch` reads; the browser write guard allows a `$batch` only when it holds no change.
+- One server log entry: 400 `Packing instruction id is missing or invalid`, source not traced. It failed no suite.
+
+**Changed:** `docs/e2e-coverage-matrix.md` records this run as the last full run; this file.
+
+**Not proven:** SAP writes. `npm run test:e2e:sap` was not run, so no create or post flow was proven against SAP, and the HU transfer read-back changed in `9186852c` has still never run. Screens were checked by these suites, not by a person. Action and submit failure suites use mocked answers.
+
+**Next action:** see Next Steps.
 
 ### 2026-11-04 16:20 IST — Removed the demo rack route: PARTIAL (committed locally, not pushed, not deployed, not browser-checked)
 
