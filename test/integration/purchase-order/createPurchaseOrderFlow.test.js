@@ -122,4 +122,41 @@ describe('Integration (S/4 HTTP doubled): UI payload through PurchaseOrderServic
             }]
         });
     });
+
+    describe('when SAP does not answer (production mode, where CAP hides 5xx text)', () => {
+        const env = process.env.NODE_ENV;
+        const failing = (step, error) => {
+            purchaseOrderAdapter.client = new S4HttpClient({
+                destinationName: 'S4_TEST',
+                getDestination: async () => ({ url: 'http://s4.example.test' }),
+                executeHttpRequest: async (_destination, request) => {
+                    s4Requests.push(request);
+                    if (request.url.endsWith(step)) throw error;
+                    return { status: 201, data: request.url.endsWith('/C_PurchaseOrderTP') ? draftResponse : activationResponse, headers: {} };
+                }
+            });
+        };
+        const outcome = () => PurchaseOrderService.createPurchaseOrder(uiModel()).catch((e) => e.response.data.error);
+        beforeEach(() => { process.env.NODE_ENV = 'production'; });
+        afterEach(() => { process.env.NODE_ENV = env; });
+
+        it('warns when the activation gets no answer, because SAP may have created the order', async () => {
+            failing('/C_PurchaseOrderTPActivation', Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' }));
+
+            expect(await outcome()).toMatchObject({ message: 'SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.' });
+        });
+
+        it('does not warn when the draft step gets no answer, because no order was activated', async () => {
+            failing('/C_PurchaseOrderTP', Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' }));
+
+            expect((await outcome()).message).not.toContain('NOT confirmed');
+            expect(s4Requests.some((request) => request.url.endsWith('/C_PurchaseOrderTPActivation'))).toBe(false);
+        });
+
+        it('does not warn when SAP refused the activation', async () => {
+            failing('/C_PurchaseOrderTPActivation', Object.assign(new Error('refused'), { response: { status: 400, data: { error: { message: { value: 'Item 10 is incomplete' } } } } }));
+
+            expect((await outcome()).message).not.toContain('NOT confirmed');
+        });
+    });
 });

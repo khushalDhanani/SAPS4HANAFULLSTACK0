@@ -344,7 +344,7 @@
                 </HBox>
                 <Button id="btnCheckIncompletion" text="{i18n>salesInquiryBtnCheckIncompletion}" icon="sap-icon://survey" press=".onCheckIncompletion" type="Default" />
                 <Button id="btnCancelInquiry" text="{i18n>btnCancel}" press=".onCancel" type="Transparent" />
-                <Button id="btnSaveInquiry" text="{i18n>salesInquiryBtnSubmit}" icon="sap-icon://save" press=".onSave" type="Emphasized" />
+                <Button id="btnSaveInquiry" text="{i18n>salesInquiryBtnSubmit}" icon="sap-icon://save" press=".onSave" type="Emphasized" enabled="{= !${newInquiry>/submitBlocked} }" />
             </OverflowToolbar>
         </footer>
     </Page>

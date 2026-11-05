@@ -121,6 +121,8 @@ const MockBaseController = {
     extend: (name, proto) => {
         function Controller() {
             this.onNavBack = jest.fn();
+            this.getText = (_key, _args, fallback) => fallback;
+            this.blockSubmitIfNotConfirmed = require('../helpers/realBlockSubmit').realBlockSubmit();
             if (proto) {
                 Object.assign(this, proto);
             }
@@ -719,6 +721,29 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             expect(mockModel.getProperty("/hasError")).toBe(true);
             expect(mockModel.getProperty("/errorMessage")).toContain("Customer credit limit exceeded");
             expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining("Customer credit limit exceeded"));
+        });
+
+        it("onSave turns submit off after a not-confirmed answer, so a second press sends nothing", async () => {
+            setupValidHeader(mockModel);
+            mockModel.setProperty("/header/SoldToParty", "10135");
+            mockModel.setProperty("/items/0/Material", "1000000003");
+            mockModel.setProperty("/items/0/OrderQuantity", 10);
+            mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            mockModel.setProperty("/items/0/Plant", "1120");
+            mockSalesInquiryService.createSalesInquiry.mockClear();
+            mockSalesInquiryService.createSalesInquiry.mockRejectedValue(new Error("SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again."));
+
+            controller.onSave();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(mockModel.getProperty("/submitBlocked")).toBe(true);
+            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining("Create is turned off"));
+            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.not.stringContaining("Failed to create"));
+
+            controller.onSave();
+
+            expect(mockSalesInquiryService.createSalesInquiry).toHaveBeenCalledTimes(1);
         });
 
         it("onSave handles partial backend creation with warning and navigation to detail", async () => {

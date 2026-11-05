@@ -575,7 +575,7 @@ sap.ui.define([
             var that = this;
             var oModel = this.getView().getModel("createReturnModel");
             var oCreateData = oModel ? oModel.getData() : null;
-            if (!oCreateData) return;
+            if (!oCreateData || oCreateData.submitBlocked) return;
 
             if (!oCreateData.SoldToParty || !oCreateData.SoldToParty.trim()) {
                 MessageBox.error(this.getText("msgCreateReturnValidationFailed"));
@@ -658,7 +658,7 @@ sap.ui.define([
                     if (!sMsg) {
                         sMsg = (oErr && oErr.error && oErr.error.message) || (oErr && oErr.message) || JSON.stringify(oErr);
                     }
-                    MessageBox.error(that.getText("msgCreateReturnFailed", [sMsg]), {
+                    MessageBox.error(that.blockSubmitIfNotConfirmed(oModel, sMsg) || that.getText("msgCreateReturnFailed", [sMsg]), {
                         title: that.getText("titleCreateReturnFailed") || "Create Customer Return Failed",
                         details: (oErr && oErr.originalError && oErr.originalError.message) || (oErr && oErr.stack) || ""
                     });

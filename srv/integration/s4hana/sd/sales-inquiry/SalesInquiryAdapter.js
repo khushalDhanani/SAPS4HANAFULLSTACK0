@@ -1,6 +1,6 @@
 const cds = require('@sap/cds');
 const LOG = require('../../../../common/logger')('sales-inquiry-adapter');
-const { S4HttpClient } = require('../../S4HttpClient');
+const { S4HttpClient, unansweredWrite } = require('../../S4HttpClient');
 const { RfcClient } = require('../../RfcClient');
 const { SalesInquiryRfcCreator } = require('./SalesInquiryRfcCreator');
 const s4Config = require('../../s4Config');
@@ -1579,6 +1579,8 @@ class SalesInquiryAdapter {
           }
         }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
       } catch (orderErr) {
+        const unanswered = unansweredWrite(orderErr);
+        if (unanswered) throw unanswered;
         const sapMsg = orderErr.response?.data?.error?.message?.value ||
           orderErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
           orderErr.message;

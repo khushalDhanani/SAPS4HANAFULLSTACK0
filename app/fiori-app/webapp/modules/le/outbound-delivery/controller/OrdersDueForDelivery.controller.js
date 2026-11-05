@@ -305,6 +305,7 @@ sap.ui.define([
         },
 
         onRefresh: function () {
+            this._oUnconfirmedOrders = {}; // a refresh re-reads SAP, so the worklist shows what SAP holds
             if (!this._getPlant()) {
                 this._loadForPlant();
                 return;
@@ -424,6 +425,11 @@ sap.ui.define([
                 MessageBox.error(this._text("msgSalesOrderRequired", "Sales Order is required."));
                 return;
             }
+            // Per order, not per form: this dialog is reopened from the same worklist row with the same data.
+            if (this._oUnconfirmedOrders && this._oUnconfirmedOrders[sSalesOrder]) {
+                MessageBox.warning(this._oUnconfirmedOrders[sSalesOrder]);
+                return;
+            }
             if (!sShippingPoint || !String(sShippingPoint).trim()) {
                 var sRequiredMsg = this._text("msgShippingPointRequired", "Shipping Point is required. Please choose a valid shipping point from TVSTZ.");
                 if (oDialogModel) {
@@ -469,7 +475,12 @@ sap.ui.define([
                 .catch(function (err) {
                     // Show SAP's own message on failure
                     var sErrorMessage = (err && (err.message || err.statusText)) || "Failed to create outbound delivery.";
-                    MessageBox.error(sErrorMessage);
+                    var sNotConfirmed = that.blockSubmitIfNotConfirmed(oDialogModel, sErrorMessage);
+                    if (sNotConfirmed) {
+                        that._oUnconfirmedOrders = that._oUnconfirmedOrders || {};
+                        that._oUnconfirmedOrders[sSalesOrder] = sNotConfirmed;
+                    }
+                    MessageBox.error(sNotConfirmed || sErrorMessage);
                 })
                 .finally(function () {
                     that._setDialogBusy(false);
@@ -482,6 +493,7 @@ sap.ui.define([
 
             var oModel = oView.getModel("deliveryNoRefDialog");
             if (oModel) {
+                oModel.setProperty("/submitBlocked", false);
                 oModel.setProperty("/shippingPoint", "1104");
                 oModel.setProperty("/deliveryType", "LO2");
                 oModel.setProperty("/plant", "1110");
@@ -556,7 +568,7 @@ sap.ui.define([
         onConfirmCreateDeliveryNoRef: function () {
             var that = this;
             var oModel = this.getView().getModel("deliveryNoRefDialog");
-            if (!oModel || oModel.getProperty("/busy")) return;
+            if (!oModel || oModel.getProperty("/busy") || oModel.getProperty("/submitBlocked")) return;
 
             var sShippingPoint = oModel.getProperty("/shippingPoint");
             var sDeliveryType = oModel.getProperty("/deliveryType");
@@ -618,7 +630,7 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     var sErrMsg = (err && (err.message || err.statusText)) || "Failed to create outbound delivery without reference.";
-                    MessageBox.error(sErrMsg);
+                    MessageBox.error(that.blockSubmitIfNotConfirmed(oModel, sErrMsg) || sErrMsg);
                 })
                 .finally(function () {
                     oModel.setProperty("/busy", false);

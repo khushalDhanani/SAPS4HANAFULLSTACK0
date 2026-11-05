@@ -166,7 +166,8 @@
                 id="btnConfirmDeliveryNoRef"
                 text="{i18n>btnCreateDelivery}"
                 type="Emphasized"
-                press=".onConfirmCreateDeliveryNoRef" />
+                press=".onConfirmCreateDeliveryNoRef"
+                enabled="{= !${deliveryNoRefDialog>/submitBlocked} }" />
         </beginButton>
         <endButton>
             <Button

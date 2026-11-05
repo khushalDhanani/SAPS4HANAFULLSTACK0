@@ -34,6 +34,20 @@ const FAILURES = [
     { name: 'Expired session (401)', fail: { status: 401, code: '401', message: 'E2E simulated: session expired' }, expect: /session|sign|log ?in|authori|401/i }
 ];
 
+/** Create dialogs that must refuse a second submit after a create SAP did not confirm, by their submit button. */
+const SUBMIT_BUTTON = {
+    'Packing instruction: create': 'piCreateSubmit',
+    'Handling unit: create': 'huCreateSubmit',
+    'Orders due: createDelivery': 'btnConfirmDelivery',
+    'Orders due: deliveryWithoutRef': 'btnConfirmDeliveryNoRef'
+};
+const NOT_CONFIRMED = {
+    name: 'Not confirmed (504): pressing submit again sends nothing',
+    fail: { status: 504, code: 'SAP_WRITE_NOT_CONFIRMED', message: 'SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.' },
+    expect: /NOT confirmed/,
+    pressAgain: true
+};
+
 /**
  * A flow is { label, service, action, respond, hash, run(session) }: run() opens the screen and performs every step up to
  * and including the click that triggers the single write (the same steps as the flow's round-trip suite).
@@ -194,6 +208,14 @@ async function failureCase(baseUrl, flow, f) {
         else if (box.type !== 'error') errors.push(`expected an error box, got ${box.type || 'none'}: ${box.text}`);
         const expect = f.expect;
         if (!expect.test(box.text)) errors.push(`error box does not match ${expect}: ${box.text.slice(0, 200)}`);
+        if (f.pressAgain) {
+            await session.page.locator('.sapMMessageBox button').first().click({ timeout: 2000 }).catch(() => {});
+            await session.settle();
+            await session.page.locator(`[id$="${SUBMIT_BUTTON[flow.label]}"]`).first().click({ force: true, timeout: 2000 }).catch(() => {});
+            await session.settle();
+            const sent = calls.filter((c) => !c.mixed).length;
+            if (sent !== 1) errors.push(`create sent ${sent} times after pressing submit again, expected 1`);
+        }
         const screen = await session.page.evaluate(() => window.location.hash);
         if (!screen.includes(flow.hash)) errors.push(`navigated away to ${screen}`);
         const expected = f.fail && f.fail.status ? [{ status: f.fail.status, url: new RegExp(`${flow.service}/(\\$batch|${flow.action})`) }] : [];
@@ -343,7 +365,7 @@ async function verifyActionFailures(options = {}) {
             continue;
         }
         console.log(`\n=== Submit failures: ${flow.label} (write guard on; action MOCKED per case, not SAP) ===`);
-        for (const f of FAILURES) {
+        for (const f of SUBMIT_BUTTON[flow.label] ? [...FAILURES, NOT_CONFIRMED] : FAILURES) {
             const errs = await failureCase(baseUrl, flow, f);
             if (errs.skipped) {
                 console.log(`  [SKIPPED] ${f.name} — ${errs.skipped}`);

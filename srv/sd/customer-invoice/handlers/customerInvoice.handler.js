@@ -158,6 +158,7 @@ function registerCustomerInvoiceHandlers(srv) {
       return await customerInvoiceAdapter.postBillingDocumentToAccounting({ billingDocument: doc }, req);
     } catch (err) {
       LOG.error(`releaseInvoiceToAccounting failed for ${doc}: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 500, err.message);
     }
   });

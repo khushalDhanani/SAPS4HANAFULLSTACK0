@@ -101,15 +101,70 @@ describe('PackingInstructionAdapter.create (deep insert)', () => {
     expect(calls.post[0].data.to_PackingInstructionText).toEqual([{ Language: 'EN', PackingInstructionText: 'standard box' }]);
   });
 
-  it('422 before any POST when there is no component or no P item; 502 when SAP persists nothing', async () => {
+  it('422 before any POST when there is no component or no P item', async () => {
     const noComp = adapter([], {});
     await expect(noComp.a.create({ externalName: 'X', weightUnit: 'KG', components: [] })).rejects.toMatchObject({ status: 422 });
     expect(noComp.calls.post).toHaveLength(0);
     const noP = adapter([], {});
     await expect(noP.a.create({ externalName: 'X', weightUnit: 'KG', components: [{ item: '10', category: 'M', material: '4000000002', targetQty: 1, unit: 'KG' }] })).rejects.toMatchObject({ status: 422 });
     expect(noP.calls.post).toHaveLength(0);
-    const noPersist = adapter(readBackRoutes, {});
-    await expect(noPersist.a.create(input)).rejects.toMatchObject({ status: 502 });
+  });
+
+  describe('after SAP accepted the POST', () => {
+    const UUID = '005056b4-0af6-1fe0-8dc1-fa4bb9c857ee';
+    const notConfirmed = (found) => ({
+      status: 502,
+      $sanitize: false,
+      message: `SAP accepted packing instruction 'BOX_MAT4000_10KG'${found}, but it could not be read back, so it is NOT confirmed. Check it in SAP before creating it again.`
+    });
+    /** Makes the read of one path fail, and every other read succeed. */
+    const failing = (t, match) => {
+      const get = t.a.client.get;
+      t.a.client.get = async (path, opts) => {
+        if (path.includes(match)) throw Object.assign(new Error('internal SAP detail'), { status: 500 });
+        return get(path, opts);
+      };
+      return t;
+    };
+
+    it('does not claim nothing was created when SAP returned no id, and reads nothing', async () => {
+      const { a, calls } = adapter(readBackRoutes, {});
+      const err = await a.create(input).catch((e) => e);
+      expect(err).toMatchObject(notConfirmed(''));
+      expect(err.message).not.toContain('nothing was created');
+      expect(calls.post).toHaveLength(1);
+      expect(calls.get).toEqual([]);
+    });
+
+    it.each([
+      ['the header', 'PackingInstructionHeader(guid'],
+      ['the components', 'to_PackingInstructionComponent'],
+      ['the texts', 'to_PackingInstructionText']
+    ])('warns, naming the number, when the read of %s fails', async (_name, match) => {
+      const t = failing(adapter(readBackRoutes, { PackingInstructionSystemUUID: UUID, PackingInstructionNumber: 'PI-2000000041' }), match);
+      const err = await t.a.create(input).catch((e) => e);
+      expect(err).toMatchObject(notConfirmed(' (PI-2000000041)'));
+      expect(err.message).not.toContain('internal SAP detail');
+      expect(t.calls.post).toHaveLength(1);
+    });
+
+    it('names the id when SAP returned no number', async () => {
+      const t = failing(adapter(readBackRoutes, { PackingInstructionSystemUUID: UUID }), 'PackingInstructionHeader(guid');
+      await expect(t.a.create(input)).rejects.toMatchObject(notConfirmed(` (${UUID})`));
+    });
+
+    it('warns when SAP does not find the document it just returned', async () => {
+      const { a } = adapter([], { PackingInstructionSystemUUID: UUID, PackingInstructionNumber: 'PI-2000000041' });
+      await expect(a.create(input)).rejects.toMatchObject(notConfirmed(' (PI-2000000041)'));
+    });
+
+    it('a POST SAP rejected stays a plain failure', async () => {
+      const t = adapter(readBackRoutes, {});
+      t.a.client.post = async () => { throw Object.assign(new Error('SAP says no'), { status: 400 }); };
+      const err = await t.a.create(input).catch((e) => e);
+      expect(err.status).toBe(400);
+      expect(err.$sanitize).toBeUndefined();
+    });
   });
 
   it('400 on an unsafe field, before any POST', async () => {

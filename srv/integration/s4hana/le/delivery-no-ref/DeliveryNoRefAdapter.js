@@ -197,6 +197,7 @@ class DeliveryNoRefAdapter {
         ItemCount: s4Items.length
       };
     } catch (err) {
+      if (err.$sanitize === false) throw err; // see srv/common/visibleError.js
       const mapped = mapS4Error(err, 'createDeliveryWithoutRef');
       LOG.error(`Failed to create delivery without reference: ${mapped.message}`);
       throw _toError(mapped);

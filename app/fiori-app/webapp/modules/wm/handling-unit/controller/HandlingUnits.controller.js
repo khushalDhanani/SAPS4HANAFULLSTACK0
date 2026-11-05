@@ -469,6 +469,7 @@ sap.ui.define([
         onSubmitCreate: function () {
             var oModel = this.getModel("huCreate");
             var o = oModel.getData();
+            if (o.submitBlocked) return;
             oModel.setProperty("/busy", true);
             oModel.setProperty("/error", "");
             ODataClient.post(BASE_PATH + "/create", { packagingMaterial: o.packagingMaterial, plant: o.plant, storageLocation: o.storageLocation, content: o.content })
@@ -482,7 +483,8 @@ sap.ui.define([
                     });
                 }.bind(this))
                 .catch(function (oError) {
-                    oModel.setProperty("/error", (oError && oError.message) || this.getText("huCreateError"));
+                    var sMessage = (oError && oError.message) || this.getText("huCreateError");
+                    oModel.setProperty("/error", this.blockSubmitIfNotConfirmed(oModel, sMessage) || sMessage);
                 }.bind(this))
                 .then(function () { oModel.setProperty("/busy", false); });
         },

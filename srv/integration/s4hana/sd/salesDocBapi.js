@@ -66,7 +66,10 @@ async function runCreateBapi(rfc, bapi, input, { testRun = false, labels, log } 
             throw failure(`SAP rejected the ${labels.noun}: ${why}`, errs.length ? 400 : 502, { messages: msgs });
         }
 
-        const commit = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+        const commit = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' }).catch((e) => {
+            if (log) log.error(`${bapi}: commit of ${docNo} got no answer: ${e.message}`);
+            throw failure(`SAP created ${labels.noun} ${docNo}, but the commit got no answer, so it is NOT confirmed. Check it in SAP before creating it again.`, 502, { $sanitize: false, [labels.keyProp]: docNo, name: labels.partialName });
+        });
         const commitErrors = errorsOf(messages([].concat((commit && commit.RETURN) || [])));
         if (commitErrors.length) {
             await call('BAPI_TRANSACTION_ROLLBACK', {});

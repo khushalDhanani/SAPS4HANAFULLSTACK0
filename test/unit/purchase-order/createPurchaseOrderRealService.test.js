@@ -21,13 +21,15 @@ function PlainFilter(sPath, sOperator, oValue1) {
 
 const http = { get: null };
 const toast = { show: () => {} };
+const messageBox = { error: jest.fn() };
+const busy = { show: () => {}, hide: () => {} };
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 let Controller;
 let PurchaseOrderModel;
 
 beforeAll(() => {
-    const httpClient = { get: (sUrl) => http.get(sUrl) };
+    const httpClient = { get: (sUrl) => http.get(sUrl), post: (sUrl, oBody) => http.post(sUrl, oBody) };
     require('vm').runInNewContext(require('fs').readFileSync(
         require('path').resolve(__dirname, '../../../app/fiori-app/webapp/service/ODataClient.js'), 'utf8'), {
         sap: { ui: { define: (_deps, factory) => { httpClient.readEntitySet = factory({}).readEntitySet; } } }
@@ -43,7 +45,7 @@ beforeAll(() => {
                 } else if (deps.includes('saps4hana/fiori/service/ODataClient')) {
                     PurchaseOrderService = factory(httpClient, PlainFilter, { EQ: 'EQ' });
                 } else {
-                    Controller = factory({ extend: (_sName, oMembers) => oMembers }, {}, toast, function () {}, function () {}, {}, PlainFilter,
+                    Controller = factory({ extend: (_sName, oMembers) => oMembers }, messageBox, toast, function () {}, function () {}, busy, PlainFilter,
                         { EQ: 'EQ', StartsWith: 'StartsWith' }, PurchaseOrderModel, {}, PurchaseOrderService);
                 }
             }
@@ -83,6 +85,36 @@ describe('CreatePurchaseOrder controller with the real service', () => {
             httpUrls.push(sUrl);
             return { Currency: 'INR', PaymentTerms: '0001', IncotermsClassification: 'EXW', IncotermsLocation1: 'MUMBAI', derived: true, source: 'from last PO', lastPurchaseOrder: '300000001' };
         };
+    });
+
+    it('should do nothing on Create once submit was turned off after a not-confirmed answer', () => {
+        const validate = jest.spyOn(PurchaseOrderModel, 'validateForm');
+        oModel.setProperty('/submitBlocked', true);
+
+        controller.onCreatePress();
+
+        expect(validate).not.toHaveBeenCalled();
+        validate.mockRestore();
+    });
+
+    it('should warn and turn submit off when SAP did not confirm the order, and keep it off', async () => {
+        const text = 'SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.';
+        const validate = jest.spyOn(PurchaseOrderModel, 'validateForm').mockReturnValue({ isValid: true });
+        http.post = jest.fn().mockRejectedValue(new Error(text));
+        controller.blockSubmitIfNotConfirmed = require('../helpers/realBlockSubmit').realBlockSubmit();
+        messageBox.error.mockClear();
+
+        controller.onCreatePress();
+        await flush();
+
+        expect(oModel.getProperty('/submitBlocked')).toBe(true);
+        expect(messageBox.error.mock.calls[0][0]).toContain(text);
+        expect(messageBox.error.mock.calls[0][0]).toContain('Create is turned off');
+
+        controller.onCreatePress();
+
+        expect(http.post).toHaveBeenCalledTimes(1);
+        validate.mockRestore();
     });
 
     const supplierInput = { getBindingContext: () => null, getBindingPath: () => 'Supplier' };

@@ -515,6 +515,7 @@ sap.ui.define([
         onSave: function () {
             var that = this;
             var oModel = this.getView().getModel("newInquiry");
+            if (oModel.getProperty("/submitBlocked")) return;
             var bValid = SalesInquiryModel.validateForm(oModel);
 
             // Validate Plant per item on submit before calling backend
@@ -584,7 +585,7 @@ sap.ui.define([
                         }
                     });
                 } else {
-                    MessageBox.error("Failed to create Sales Inquiry: " + sErrMsg);
+                    MessageBox.error(that.blockSubmitIfNotConfirmed(oModel, sErrMsg) || ("Failed to create Sales Inquiry: " + sErrMsg));
                 }
             });
         },

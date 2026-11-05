@@ -125,6 +125,7 @@ const MockCustomerReturnService = {
 const MockBaseController = {
     extend: function (name, proto) {
         function Controller() {
+            this.blockSubmitIfNotConfirmed = require('../helpers/realBlockSubmit').realBlockSubmit();
             Object.assign(this, proto);
         }
         Controller.prototype = proto;
@@ -507,6 +508,28 @@ describe("CreateCustomerReturn Controller", () => {
             expect(MockBusyIndicator.hide).toHaveBeenCalledTimes(1);
             expect(MockMessageBox.success).toHaveBeenCalledWith("msgReturnCreatedSuccess 4500099", expect.any(Object));
             expect(mockRouter.navTo).toHaveBeenCalledWith("customerReturns", {}, true);
+        });
+
+        test("onConfirmCreateReturn turns submit off after a not-confirmed answer, so a second press sends nothing", async () => {
+            controller.onInit();
+            const createModel = models["createReturnModel"];
+            createModel.setProperty("/SoldToParty", "10082");
+            createModel.setProperty("/ReturnsOrderReason", "101");
+            createModel.setProperty("/Items", [{ Material: "4000000001", OrderQuantity: "10" }]);
+            MockCustomerReturnService.createCustomerReturn.mockClear();
+            MockCustomerReturnService.createCustomerReturn.mockRejectedValueOnce(new Error("SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again."));
+
+            controller.onConfirmCreateReturn();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(createModel.getProperty("/submitBlocked")).toBe(true);
+            expect(MockMessageBox.error.mock.calls[0][0]).toContain("SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.");
+            expect(MockMessageBox.error.mock.calls[0][0]).not.toContain("msgCreateReturnFailed");
+
+            controller.onConfirmCreateReturn();
+
+            expect(MockCustomerReturnService.createCustomerReturn).toHaveBeenCalledTimes(1);
         });
 
         test("onConfirmCreateReturn shows the backend error text in MessageBox.error and stays on the form", async () => {

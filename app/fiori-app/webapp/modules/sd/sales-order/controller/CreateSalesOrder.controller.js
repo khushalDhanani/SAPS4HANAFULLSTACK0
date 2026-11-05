@@ -830,6 +830,7 @@ sap.ui.define([
         onSave: function () {
             var that = this;
             var oModel = this.getView().getModel("newOrder");
+            if (oModel.getProperty("/submitBlocked")) return;
             var bValid = SalesOrderModel.validateForm(oModel);
 
             // Validate Plant per item on submit
@@ -914,7 +915,7 @@ sap.ui.define([
                         "\u2022 Or select a material already listed for this sold-to party.";
                 }
 
-                MessageBox.error(PREFIX + sErrMsg);
+                MessageBox.error(that.blockSubmitIfNotConfirmed(oModel, sErrMsg) || (PREFIX + sErrMsg));
                 SalesOrderModel.updateStatus(oModel);
             });
         },

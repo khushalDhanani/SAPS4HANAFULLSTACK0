@@ -16,7 +16,15 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Admin dashboard user list (2026-11-04 18:12 IST) — PASS for requested display update; uncommitted, not deployed:** Removed Valid From/Valid To columns and fixed blank Full Name by falling back to `BAPI_USER_GET_DETAIL` data; the read-only browser flow passed. The earlier Lock/Unlock row actions remain untested as live SAP writes and need explicit authorization. See the Changes Log.
-- **Handling unit result after a commit (2026-11-04 17:40 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** If anything fails once the commit was sent, create, pack, unpack and delete now answer 502 with the handling unit number and "NOT confirmed. Check it in SAP before trying again", and the text stays visible in production. **Open finding:** `npm run test:coverage` crashed once with exit 139 (SIGSEGV) and passed on two reruns; cause UNKNOWN.
+- **Create forms block a second submit after a not-confirmed answer (2026-11-05 09:58 IST) — PARTIAL, uncommitted, not deployed, browser E2E passed READ-ONLY with mocked SAP answers:** Purchase order, sales inquiry, sales order, customer return, packing instruction, handling unit and delivery without reference turn Create off until the form is reset. Delivery from order refuses that order until the worklist is refreshed. This is a screen-level block only: the server does not enforce it, and a page reload clears it.
+
+- **Unanswered writes and the sales order warning fixed (2026-11-05 09:48 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** A write that gets no answer from SAP now answers 504 with "NOT confirmed: it may have been saved. Check it in SAP before trying again", visible in production. The sales order warning now keeps its code and text in production, so the screen's protection against a second submit can fire. The next entry above blocks a second submit on the create screens.
+
+- **Timed-out writes traced (2026-11-05 09:36 IST) — findings only, no code changed. Fixed in the 09:48 entry:** In production, a timed-out write to SAP shows only a generic error on 10 of the 12 traced writes, with no warning that SAP may hold the document. The sales order partial-creation warning is also lost in production, so the screen's protection against a second submit does not fire. Both are open.
+
+- **Packing instruction create no longer hides an accepted POST (2026-11-05 09:29 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** After SAP accepts the POST, a missing id or a failed read-back answers 502 with "NOT confirmed. Check it in SAP before creating it again", visible in production, and names the number when SAP gave one. The unproven "nothing was created" claim is gone.
+
+- **Handling unit result after a commit (2026-11-04 17:40 IST) — PARTIAL, committed locally as `a9c685f2`, not pushed, not deployed, not run against SAP:** If anything fails once the commit was sent, create, pack, unpack and delete now answer 502 with the handling unit number and "NOT confirmed. Check it in SAP before trying again", and the text stays visible in production. **Open finding:** `npm run test:coverage` crashed once with exit 139 (SIGSEGV) and passed on two reruns; cause UNKNOWN.
 
 - **"Nothing was posted" refusals stay visible in production (2026-11-04 17:32 IST) — PARTIAL, committed locally as `8d4f87dd`, not pushed, not deployed, not run against SAP:** Plant scope refusals, shipping point read failures, posting-log failures, goods receipt read failures and HU stock transfer checks now keep their text in production. Still hidden there: the lock and unlock SAP reason, and other 5xx text.
 
@@ -185,6 +193,120 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-05 09:58 IST — Create forms block a second submit after a not-confirmed answer: PARTIAL (uncommitted, not deployed, browser E2E not run)
+
+**Why:** after a not-confirmed warning the forms stayed open with Create enabled, so only the text stopped a duplicate. The user approved blocking it.
+
+**Changed:**
+- `controller/BaseController.js`: new `blockSubmitIfNotConfirmed`, and text `msgSubmitBlockedNotConfirmed` in both i18n files. It matches the server's wording, the one thing every error path carries.
+- Forms: `/submitBlocked` on the form model, a guard in the submit handler, and `enabled` on the button, for purchase order, sales inquiry, sales order, customer return (both buttons), packing instruction, handling unit and delivery without reference.
+- Delivery from order: a per-order record in `OrdersDueForDelivery.controller.js`, because the dialog reopens from the same row with the same data. A worklist refresh clears it, because a refresh re-reads SAP.
+- The purchase order screen now shows this warning in a message box; a 504 had no box before. The customer return and sales forms drop the contradictory "Failed to create" prefix for this warning.
+
+**TEST DECISION:** TEST ADDED: `test/unit/controller/blockSubmitIfNotConfirmed.test.js`, helper `test/unit/helpers/realBlockSubmit.js`, and cases in the purchase order, sales inquiry, sales order, customer return, Orders Due and handling unit controller tests. Browser cases were added to `verifySubmitFailures.e2e.js` and `verifyActionFailures.e2e.js`, and noted in `docs/e2e-coverage-matrix.md`. They have NOT RUN, because they read test data from SAP and need the user's go for a READ-ONLY run.
+
+**Executed validation (final tree):** `npm run test:coverage` exit 0, 186 suites, 3,029 passed, 0 failed. `test.failing` entries: 10. `npm run lint`, `npm run lint` in `app/fiori-app` (ui5lint: no findings), `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3. Mutations: 23 of 23 caught; 2 first survived (purchase order and delivery without reference failure paths) until tests were added.
+
+**Errors found and fixed during the work:** the first edit put the guard in `onCheckIncompletion` instead of `onSave` on the sales inquiry and sales order forms. A new test caught it.
+
+**NOT RUN / NOT VERIFIED:**
+- The new browser cases, so no real browser has shown a disabled button or the note. Per AGENTS.md this user-facing change is at most PARTIAL until they run.
+- No SAP call and no live write.
+- That real SAP timeout errors reach the screens with this text in production is INFERRED from the mocked runs.
+
+**Known limits, not changed:**
+- A page reload clears the block; the server does not enforce it. Goods receipt and HU stock transfer are the writes with a server-side posting log.
+- The block depends on the wording in `blockSubmitIfNotConfirmed`. A unit test pins the server's texts by hand, so a changed server text fails only if that test is updated too.
+- Invoice release and cancel, goods issue and billing are not create forms and were not changed.
+
+**Next:** with the user's go, run the browser suites READ-ONLY: `npm run test:e2e`.
+
+**Update, READ-ONLY run with the user's go, S4HANA_DEV client 220, `cap-e2e` on port 4010:** `TARGET_URL=http://localhost:4010 npm run test:e2e`: 17 of 17 suites passed. The 8 new cases passed: purchase order, sales inquiry, sales order, customer return, packing instruction, handling unit create, delivery from order, delivery without reference. In these cases the SAP answer is mocked and the write guard is on, so no write reached SAP. This proves the screens, not how SAP behaves on a real timeout. Still NOT RUN: `npm run test:e2e:sap` and any live write.
+
+### 2026-11-05 09:48 IST — Unanswered writes report "not confirmed", and the sales order warning survives production: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+**Why:** the 09:36 trace showed generic errors on timed-out writes, and a sales order warning that production removed. The user approved fixing both.
+
+**Changed:**
+- `salesOrder.handler.js`: the order-already-in-SAP error sets `$sanitize: false`, so `SALES_ORDER_CREATED_VERIFICATION_FAILED` and the text reach the screen in production.
+- `S4HttpClient.js`: new `unansweredWrite`. A timeout, dropped connection or gateway 502/504 on a POST becomes 504 `SAP_WRITE_NOT_CONFIRMED` with the warning. A refused connection, or any other answer from SAP, is unchanged. Reads are unchanged.
+- `S4ErrorMapper.js`: returns an error with `$sanitize: false` unchanged.
+- Direct executor callers: purchase order activation and the sales order header POST use `unansweredWrite`. The purchase order draft step does not, because no order is activated by it.
+- `salesDocBapi.js`: a commit call that drops names the number and warns.
+- Handlers and adapters pass the error on: invoice release, purchase order, sales order, delivery without reference, delivery from order, packing instruction.
+
+**TEST DECISION:** TEST ADDED: `test/integration/unansweredSapWrite.test.js` (real CAP HTTP in production mode, with SAP doubled), `unansweredWrite` cases in `test/unit/s4HttpClient.test.js`, 3 cases in `createPurchaseOrderFlow.test.js`, 1 in `unconfirmedSapResult.test.js`.
+
+**Executed validation:**
+- On the final tree: Jest 185 suites, 2,999 passed, 0 failed; `npm run lint` and `git diff --check` exit 0.
+- Mutations: 17 of 17 caught. One first survived (the real sales order header POST was untested); the tests added for it then caught it.
+- Run before the last test-only addition, not repeated: `npm run test:coverage` exit 0 (2,994 passed), `npm run scan:secrets` exit 0, `npm run test:e2e:sap-free` 3 of 3. `test.failing` entries: 10.
+- NOT RUN: the per-function coverage comparison. Its script and baselines were no longer in the scratchpad.
+
+**NOT RUN / NOT VERIFIED:**
+- No SAP call and no live write.
+- The screens' display of the warning was not checked in a browser, including the sales order screen in production mode.
+- SAP's answers in the tests are hand-written. That the real timeout errors have these shapes is INFERRED.
+- That the deployed app runs with `NODE_ENV=production` is INFERRED.
+
+**Known limits, not changed:**
+- Only the sales order screen resets after its warning. The other create screens stay open with Create enabled, so only the text stops a duplicate.
+- On the direct executor paths the Cloud SDK fetches the CSRF token itself, so a timeout on that read also gives this warning, although nothing was posted. That is a false warning, on the safe side.
+- The inquiry OData branch of `createSalesDocument` is not changed: `srv` creates inquiries through the RFC route.
+- `DeliveryNoRefAdapter.js` still answers a generic error when SAP accepts the POST but returns no number.
+- A dropped commit in lock and unlock stays a plain failure.
+- `S4ErrorMapper.js:183` still maps ETIMEDOUT and ECONNRESET to 503 for reads.
+
+**Next:** the user decides whether create screens should block a second submit after this warning.
+
+### 2026-11-05 09:36 IST — Traced what users see when a write to SAP times out: findings only, no code changed
+
+**How:** each action was run in a throwaway copy of the repo through real CAP HTTP in production mode, as the Admin user, with SAP doubled and the POST failing. No SAP call was made, and nothing from the copy is in the repo. Not every action ran all three failures (axios timeout, ECONNRESET, gateway 504): see the table.
+
+| Write | Failures run | User sees |
+|---|---|---|
+| Invoice release | timeout | 500 "Internal Server Error" |
+| Invoice cancel, customer return, delivery from order, delivery without reference, goods issue, billing | timeout, ECONNRESET, 504 | 500 "Internal Server Error", 503 "Service Unavailable", 502 "Bad Gateway" |
+| Packing instruction create | timeout, ECONNRESET, 504 | 502 "Bad Gateway", 504 "Gateway Timeout" |
+| Purchase order, draft and activation steps | timeout | 500 "Internal Server Error" |
+| Sales order, adapter double rejecting with a timeout | timeout | 500 "Internal Server Error" |
+| Sales inquiry (RFC), BAPI call or commit call drops | connection lost | 500 "Internal Server Error" |
+| Goods receipt | timeout, ECONNRESET, 504 | 504 "Posting outcome unconfirmed... do not post again". Correct: the attempt log also blocks a retry |
+
+**CONFIRMED, most serious:** the sales order partial-creation error is reduced in production to `{ message: "Bad Gateway", code: "502" }` (run with an adapter double). `CreateSalesOrder.controller.js:883` needs the code `SALES_ORDER_CREATED_VERIFICATION_FAILED` and the number in the text to warn and reset the form, so it cannot fire in production and the same order can be submitted again. `salesOrder.handler.js:77` does not set `$sanitize: false`. The earlier fix for errors naming a document missed this handler.
+
+**Other findings:**
+- `S4ErrorMapper.js:183` maps ETIMEDOUT and ECONNRESET to 503, which reads as "try again", although the POST may have reached SAP.
+- `SalesInquiryAdapter` and `PurchaseOrderAdapter` call the executor directly, so a fix only in `S4HttpClient.post` would not cover them.
+- HU stock transfer was not run in this trace; it has its own `_unconfirmedError` and attempt log.
+
+**NOT VERIFIED:** what SAP does on a second identical request for each write; for example whether it refuses a second goods issue or billing. Which writes would really create a duplicate is therefore UNKNOWN. How the screens show the generic errors was not checked in a browser.
+
+**TEST DECISION:** TEST NOT POSSIBLE — no behavior changed in this trace, so no test was added; the runs were throwaway. Assumptions: none beyond those marked above.
+
+**Next:** with the user's go, fix the sales order warning, then add a shared not-confirmed error for a write whose answer never arrived.
+
+### 2026-11-05 09:29 IST — Packing instruction create reports an accepted POST as not confirmed: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+**Why:** the 2026-11-04 17:45 review found that "nothing was created" was unproven after SAP accepted the POST, and that a failed read-back gave a plain error with no number. The user approved fixing both.
+
+**Changed:**
+- `srv/integration/s4hana/wm/PackingInstructionAdapter.js`: after an accepted POST, no id or any failed read of the header, components or texts answers 502 with the warning. It names the number, or the id if SAP gave no number. SAP's raw read error goes to the log only. A POST SAP rejected stays a plain failure.
+- `srv/wm/packing-instruction/service.js`: uses `throwIfTextMustShow`, so the text stays visible in production.
+
+**TEST DECISION:** TEST ADDED: 7 cases in `test/unit/wm/packingInstructionAdapter.test.js` and 1 in `test/integration/unconfirmedSapResult.test.js` (real CAP HTTP in production mode, with SAP doubled). TEST UPDATED: the old "502 when SAP persists nothing" check was replaced.
+
+**Executed validation (final tree):** Jest 184 suites, 2,923 passed, 0 failed. `test.failing` entries: 10. Mutations 8 of 8 caught. `npm run lint`, `npm run test:coverage`, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3. The exit 139 crash from the 2026-11-04 17:40 entry did not recur in this run; its cause is still UNKNOWN. Per-function coverage was not compared in this run.
+
+**NOT RUN / NOT VERIFIED:**
+- No SAP call and no live create; `roundTripPackingInstruction.e2e.js` not run.
+- SAP's answers in the tests are hand-written. Whether SAP ever accepts the POST and returns no id is NOT verified.
+- The dialog's display of this text was not checked in a browser. Its code shows the backend message in the dialog.
+
+**Known limits:** the create dialog stays open with Create enabled after this warning, so only the text guards against a duplicate.
+
+**Next:** trace what users see when an HTTP POST times out. 7 adapters use `client.post`, and SAP may have saved the document.
 
 ### 2026-11-04 18:12 IST — Remove validity columns and show Full Name in Admin list: PASS for requested display update
 

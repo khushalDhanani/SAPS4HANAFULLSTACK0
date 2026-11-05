@@ -1,4 +1,5 @@
 const LOG = require('../../../common/logger')('sales-order');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 const salesInquiryAdapter = require('../../../integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
 const { validateCreateSalesOrderPayload } = require('../../sales-inquiry/validation/salesInquiry.validation');
 const { normalizeSalesDocumentData } = require('../../sales-inquiry/mapping/salesInquiry.mapper');
@@ -77,10 +78,12 @@ function registerSalesOrderHandlers(srv) {
                 req.error({
                     status: error.status || 502,
                     code: 'SALES_ORDER_CREATED_VERIFICATION_FAILED',
-                    message: error.message
+                    message: error.message,
+                    $sanitize: false // CAP would otherwise replace the code and text the screen depends on in production
                 });
                 return;
             }
+            throwIfTextMustShow(error);
             req.error(error.status || 500, `Failed to create Sales Order: ${error.message}`);
         }
     });

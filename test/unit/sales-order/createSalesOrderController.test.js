@@ -119,6 +119,8 @@ const MockBaseController = {
     },
     extend: (name, proto) => {
         function Controller() {
+            this.getText = (_key, _args, fallback) => fallback;
+            this.blockSubmitIfNotConfirmed = require('../helpers/realBlockSubmit').realBlockSubmit();
             this.onNavBack = jest.fn();
             if (proto) {
                 Object.assign(this, proto);
@@ -364,6 +366,37 @@ describe("CreateSalesOrder Controller", () => {
         oOptions.onClose("Close");
         expect(mockView.getModel("newOrder").getProperty("/header/SoldToParty")).toBe("");
         expect(mockRouter.navTo).not.toHaveBeenCalled();
+    });
+
+    it("onSave turns submit off after a not-confirmed answer, so a second press sends nothing", async () => {
+        controller.onInit();
+        const oModel = mockView.getModel("newOrder");
+        oModel.setProperty("/header/SalesOrderType", "ZDOM");
+        oModel.setProperty("/header/SalesOrganization", "1000");
+        oModel.setProperty("/header/DistributionChannel", "10");
+        oModel.setProperty("/header/OrganizationDivision", "52");
+        oModel.setProperty("/header/TransactionCurrency", "INR");
+        oModel.setProperty("/header/SoldToParty", "10135");
+        oModel.setProperty("/header/PaymentTerms", "PT11");
+        oModel.setProperty("/header/ContactPerson", "25116");
+        oModel.setProperty("/items/0/Material", "4000000001");
+        oModel.setProperty("/items/0/Plant", "1120");
+        oModel.setProperty("/items/0/OrderQuantity", "5.000");
+        oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+
+        mockSalesOrderService.createSalesOrder.mockClear();
+        mockSalesOrderService.createSalesOrder.mockRejectedValueOnce(new Error("SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again."));
+
+        controller.onSave();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(oModel.getProperty("/submitBlocked")).toBe(true);
+        expect(mockMessageBox.error.mock.calls[0][0]).toContain("Create is turned off");
+        expect(mockMessageBox.error.mock.calls[0][0]).not.toContain("Failed to create");
+
+        controller.onSave();
+
+        expect(mockSalesOrderService.createSalesOrder).toHaveBeenCalledTimes(1);
     });
 
     test("_loadConfigurationAndDefaults loads server defaults and applies to empty fields", async () => {

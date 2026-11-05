@@ -343,7 +343,7 @@
                 <ToolbarSpacer />
                 <Button id="btnCheckIncompletion" text="{i18n>salesOrderBtnCheckIncompletion}" icon="sap-icon://survey" press=".onCheckIncompletion" type="Default" />
                 <Button id="btnCancelOrder" text="{i18n>btnCancel}" press=".onCancel" type="Transparent" />
-                <Button id="btnSaveOrder" text="{i18n>salesOrderBtnSubmit}" icon="sap-icon://save" press=".onSave" type="Emphasized" />
+                <Button id="btnSaveOrder" text="{i18n>salesOrderBtnSubmit}" icon="sap-icon://save" press=".onSave" type="Emphasized" enabled="{= !${newOrder>/submitBlocked} }" />
             </OverflowToolbar>
         </footer>
     </Page>

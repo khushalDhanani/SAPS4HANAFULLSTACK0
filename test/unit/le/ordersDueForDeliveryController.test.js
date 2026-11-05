@@ -62,6 +62,8 @@ const MockBaseController = {
     },
     extend: function (name, proto) {
         function Controller() {
+            this.getText = (_key, _args, fallback) => fallback;
+            this.blockSubmitIfNotConfirmed = require('../helpers/realBlockSubmit').realBlockSubmit();
             Object.assign(this, proto);
         }
         Controller.prototype = proto;
@@ -549,6 +551,83 @@ describe("OrdersDueForDelivery Controller", () => {
         );
     });
 
+    describe("after a not-confirmed answer", () => {
+        const notConfirmed = "SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.";
+        const openFor = (order) => {
+            const dialogModel = mockView.getModel("deliveryDialog");
+            dialogModel.setProperty("/salesOrder", order);
+            dialogModel.setProperty("/shippingPoint", "1120");
+            dialogModel.setProperty("/deliveryDate", "2026-09-20");
+            return dialogModel;
+        };
+        const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+        beforeEach(() => {
+            controller.onInit();
+            controller._setDialogBusy = jest.fn();
+            MockOutboundDeliveryService.createOutboundDelivery.mockClear();
+            MockMessageBox.error.mockClear();
+            MockMessageBox.warning.mockClear();
+            MockOutboundDeliveryService.createOutboundDelivery.mockRejectedValueOnce(new Error(notConfirmed));
+            openFor("5000104");
+        });
+
+        test("refuses a second create for that order, even if the dialog is reopened, and sends nothing", async () => {
+            controller.onConfirmCreateDelivery();
+            await flush();
+            expect(MockMessageBox.error.mock.calls[0][0]).toContain("Create is turned off");
+
+            openFor("5000104");
+            controller.onConfirmCreateDelivery();
+            await flush();
+
+            expect(MockOutboundDeliveryService.createOutboundDelivery).toHaveBeenCalledTimes(1);
+            expect(MockMessageBox.warning.mock.calls[0][0]).toContain(notConfirmed);
+        });
+
+        test("still allows another order", async () => {
+            controller.onConfirmCreateDelivery();
+            await flush();
+            controller.onCancelCreateDelivery = jest.fn();
+            controller.onRefresh = jest.fn();
+
+            openFor("5000105");
+            controller.onConfirmCreateDelivery();
+            await flush();
+
+            expect(MockOutboundDeliveryService.createOutboundDelivery).toHaveBeenCalledTimes(2);
+        });
+
+        test("allows that order again after a refresh, which re-reads SAP", async () => {
+            controller.onConfirmCreateDelivery();
+            await flush();
+            controller._getPlant = () => "";
+            controller._loadForPlant = jest.fn();
+            controller.onRefresh();
+            controller.onCancelCreateDelivery = jest.fn();
+
+            openFor("5000104");
+            controller.onConfirmCreateDelivery();
+            await flush();
+
+            expect(MockOutboundDeliveryService.createOutboundDelivery).toHaveBeenCalledTimes(2);
+        });
+
+        test("delivery without reference: turns submit off and sends nothing more, until the dialog is reopened", async () => {
+            MockOutboundDeliveryService.createOutboundDelivery.mockReset();
+            const model = mockView.getModel("deliveryNoRefDialog");
+            model.setProperty("/submitBlocked", true);
+
+            controller.onConfirmCreateDeliveryNoRef();
+            await flush();
+            expect(MockOutboundDeliveryService.createDeliveryWithoutRef).not.toHaveBeenCalled();
+
+            controller._pCreateDeliveryNoRefDialog = Promise.resolve({ open: jest.fn() });
+            controller.onOpenCreateDeliveryNoRefDialog();
+            expect(model.getProperty("/submitBlocked")).toBe(false);
+        });
+    });
+
     test.each([[""], ["   "]])("onConfirmCreateDelivery rejects a blank shipping point (%j) without calling the service", (shippingPoint) => {
         controller.onInit();
         const dialogModel = mockView.getModel("deliveryDialog");
@@ -667,6 +746,23 @@ describe("OrdersDueForDelivery Controller", () => {
             controller.onConfirmCreateDeliveryNoRef();
             expect(MockMessageBox.error).toHaveBeenCalled();
             expect(MockOutboundDeliveryService.createDeliveryWithoutRef).not.toHaveBeenCalled();
+        });
+
+        test("onConfirmCreateDeliveryNoRef turns submit off after a not-confirmed answer", async () => {
+            controller.onInit();
+            MockMessageBox.error.mockClear();
+            MockOutboundDeliveryService.createDeliveryWithoutRef.mockClear();
+            MockOutboundDeliveryService.createDeliveryWithoutRef.mockRejectedValueOnce(new Error("SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again."));
+
+            controller.onConfirmCreateDeliveryNoRef();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(mockView.getModel("deliveryNoRefDialog").getProperty("/submitBlocked")).toBe(true);
+            expect(MockMessageBox.error.mock.calls[0][0]).toContain("Create is turned off");
+
+            controller.onConfirmCreateDeliveryNoRef();
+
+            expect(MockOutboundDeliveryService.createDeliveryWithoutRef).toHaveBeenCalledTimes(1);
         });
 
         test("onConfirmCreateDeliveryNoRef creates delivery and updates follow-up panel", async () => {

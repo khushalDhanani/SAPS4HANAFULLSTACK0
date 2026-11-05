@@ -350,3 +350,35 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
         });
     });
 });
+
+describe('unansweredWrite', () => {
+  const { unansweredWrite } = require('../../srv/integration/s4hana/S4HttpClient');
+  const coded = (code) => Object.assign(new Error('x'), { code });
+  const answered = (status) => Object.assign(new Error('x'), { response: { status } });
+
+  it.each([
+    ['a timeout', coded('ECONNABORTED')],
+    ['ETIMEDOUT', coded('ETIMEDOUT')],
+    ['a reset', coded('ECONNRESET')],
+    ['an error with no code', new Error('socket hang up')],
+    ['a gateway 502', answered(502)],
+    ['a gateway 504', answered(504)],
+    ['a code wrapped by the Cloud SDK', Object.assign(new Error('x'), { cause: coded('ECONNABORTED') })],
+    ['a response wrapped by the Cloud SDK', Object.assign(new Error('x'), { cause: answered(504) })]
+  ])('reports %s as not confirmed', (_name, err) => {
+    expect(unansweredWrite(err)).toMatchObject({ status: 504, code: 'SAP_WRITE_NOT_CONFIRMED', $sanitize: false, cause: err });
+  });
+
+  it.each([
+    ['ECONNREFUSED', coded('ECONNREFUSED')],
+    ['ENOTFOUND', coded('ENOTFOUND')],
+    ['EAI_AGAIN', coded('EAI_AGAIN')],
+    ['EHOSTUNREACH', coded('EHOSTUNREACH')],
+    ['ENETUNREACH', coded('ENETUNREACH')],
+    ['SAP refusing with 400', answered(400)],
+    ['SAP answering 500', answered(500)],
+    ['SAP answering 503', answered(503)]
+  ])('does not report %s, which proves SAP did not save it or answered', (_name, err) => {
+    expect(unansweredWrite(err)).toBeNull();
+  });
+});

@@ -58,6 +58,29 @@ function codeOf(err) {
     return err?.code || err?.cause?.code || err?.rootCause?.code || '';
 }
 
+/** No connection was made, so the request never reached SAP. */
+const NEVER_SENT_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH']);
+
+/**
+ * The error for a write that got no answer from SAP (timeout, dropped connection, gateway 502/504), or null if
+ * this failure proves nothing about that. SAP may have saved such a write, so a retry could duplicate it.
+ * $sanitize keeps the text in production: see srv/common/visibleError.js.
+ *
+ * @param {Error} err
+ * @returns {S4HttpError|null}
+ */
+function unansweredWrite(err) {
+    const status = responseOf(err)?.status;
+    const unanswered = status ? [502, 504].includes(status) : !NEVER_SENT_CODES.has(codeOf(err));
+    if (!unanswered) return null;
+    const unknown = new S4HttpError(
+        'SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.',
+        { status: 504, code: 'SAP_WRITE_NOT_CONFIRMED', cause: err }
+    );
+    unknown.$sanitize = false;
+    return unknown;
+}
+
 function stripTrailingSlashes(url) {
     return String(url || '').replace(/\/+$/, '');
 }
@@ -357,7 +380,11 @@ class S4HttpClient {
                 ...cleanHeaders
             }
         };
-        return this._send(destination, requestConfig, 'POST', path, options);
+        try {
+            return await this._send(destination, requestConfig, 'POST', path, options);
+        } catch (err) {
+            throw unansweredWrite(err) || err;
+        }
     }
 
     async _send(destination, requestConfig, method, path, options = {}) {
@@ -407,6 +434,7 @@ class S4HttpClient {
 module.exports = {
     S4HttpClient,
     S4HttpError,
+    unansweredWrite,
     serviceRootOf,
     joinQuery,
     DESTINATION_NOT_CONFIGURED

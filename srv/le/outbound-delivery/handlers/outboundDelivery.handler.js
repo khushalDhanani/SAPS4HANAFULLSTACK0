@@ -268,6 +268,7 @@ function registerOutboundDeliveryHandlers(srv) {
       return result;
     } catch (err) {
       LOG.error(`Error in createDeliveryWithoutRef (${err.status || 500}): ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 500, err.message);
     }
   });

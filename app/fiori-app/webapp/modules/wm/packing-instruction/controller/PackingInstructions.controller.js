@@ -100,7 +100,7 @@ sap.ui.define([
 
         onSubmitCreate: function () {
             var oModel = this.getModel("piCreate");
-            if (oModel.getProperty("/busy")) return;
+            if (oModel.getProperty("/busy") || oModel.getProperty("/submitBlocked")) return;
             var o = oModel.getData();
             var aComponents = [{ item: "10", category: "P", material: o.pkgMaterial, targetQty: Number(o.pkgQty), unit: o.pkgUnit }];
             (o.materials || []).filter(function (m) { return (m.material || "").trim(); })
@@ -115,7 +115,8 @@ sap.ui.define([
                     this.getRouter().navTo("wmPackingInstructionDetail", { systemUUID: encodeURIComponent(oResult.PackingInstructionSystemUUID) });
                 }.bind(this))
                 .catch(function (oError) {
-                    oModel.setProperty("/error", (oError && oError.message) || this.getText("piCreateError"));
+                    var sMessage = (oError && oError.message) || this.getText("piCreateError");
+                    oModel.setProperty("/error", this.blockSubmitIfNotConfirmed(oModel, sMessage) || sMessage);
                 }.bind(this))
                 .then(function () { oModel.setProperty("/busy", false); });
         }

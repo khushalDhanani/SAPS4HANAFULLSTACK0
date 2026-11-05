@@ -63,6 +63,21 @@ sap.ui.define([
          * @param {string} [sFallback] optional fallback string if bundle or key is missing
          * @returns {string} the localized text or key/fallback
          */
+        /**
+         * After a create whose result SAP did not confirm, turns off submit in the form's model, because a second
+         * submit could duplicate the document. The form's next reset turns it on again.
+         * Matches the server's wording, the one thing every error path here carries: see srv/common/visibleError.js.
+         *
+         * @param {sap.ui.model.Model} oModel the form's model
+         * @param {string} sMessage the error text
+         * @returns {string|null} the text to show when submit was turned off, otherwise null
+         */
+        blockSubmitIfNotConfirmed: function (oModel, sMessage) {
+            if (!/NOT confirmed|Do not retry|Check it in SAP before/.test(sMessage || "")) return null;
+            oModel.setProperty("/submitBlocked", true);
+            return sMessage + "\n\n" + this.getText("msgSubmitBlockedNotConfirmed", null, "Create is turned off on this form so this cannot be sent twice. After you have checked SAP, leave this form and start again.");
+        },
+
         getText: function (sKey, aArgs, sFallback) {
             var oResourceModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("i18n") : (this.getView() ? this.getView().getModel("i18n") : null);
             var oBundle = oResourceModel ? oResourceModel.getResourceBundle() : null;

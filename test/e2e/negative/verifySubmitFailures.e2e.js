@@ -20,6 +20,7 @@ const { SPEC: SO } = require('../sd/roundTripSalesOrder.e2e');
 const { deriveData: deriveReturn, fill: fillReturn } = require('../sd/roundTripCustomerReturn.e2e');
 
 const SAP_MESSAGE = 'E2E simulated SAP error: supplier is blocked for purchasing';
+const NOT_CONFIRMED_TEXT = 'SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.';
 const STALE_MESSAGE = 'E2E simulated: document was changed by another user, reload and retry';
 const JSON_TYPE = 'application/json;odata.metadata=minimal';
 const odataError = (status, code, message) => ({
@@ -139,6 +140,33 @@ async function failureCase(screen, baseUrl, values, c) {
     }
 }
 
+/** A create SAP did not confirm: the warning shows, submit turns off, and pressing it again sends nothing. */
+async function notConfirmedBlocksSubmit(screen, baseUrl, values) {
+    const session = await openSession({ baseUrl });
+    let calls = 0;
+    try {
+        await routeAction(screen, session.page, (route) => { calls++; return route.fulfill(answer(screen, 504, 'SAP_WRITE_NOT_CONFIRMED', NOT_CONFIRMED_TEXT)); });
+        await screen.prepare(session, values);
+        const submit = session.page.locator(screen.submit).first();
+        await submit.click();
+        await session.settle();
+        await untilTrue(async () => (await uiState(session.page)).errorUi.length > 0, 5000);
+        const st = await uiState(session.page);
+        const errors = harness(session, screen);
+        if (!st.errorUi.some((t) => /NOT confirmed/.test(t))) errors.push(`warning not shown (error UI: ${st.errorUi.join(' | ') || 'none'})`);
+        if (!st.errorUi.some((t) => /Create is turned off/.test(t))) errors.push('no note that create is turned off');
+        await session.page.locator('.sapMMessageBox button').first().click().catch(() => {});
+        await session.settle();
+        if (!(await submit.evaluate((e) => e.classList.contains('sapMBtnDisabled') || e.getAttribute('aria-disabled') === 'true' || e.disabled))) errors.push('submit is still enabled');
+        await submit.click({ force: true, timeout: 2000 }).catch(() => {});
+        await session.settle();
+        if (calls !== 1) errors.push(`create sent ${calls} times, expected 1`);
+        return errors;
+    } finally {
+        await session.close();
+    }
+}
+
 async function doubleClickWhilePending(screen, baseUrl, values) {
     const session = await openSession({ baseUrl });
     let calls = 0;
@@ -219,6 +247,7 @@ async function verifySubmitFailures(options = {}) {
             continue;
         }
         const cases = CASES.map((c) => ({ name: c.name, run: () => failureCase(screen, baseUrl, values, c) })).concat([
+            { name: 'A not-confirmed answer turns submit off, and pressing it again sends nothing', run: () => notConfirmedBlocksSubmit(screen, baseUrl, values) },
             { name: 'Double click while the request is pending sends one create', run: () => doubleClickWhilePending(screen, baseUrl, values) },
             { name: 'Reload while the request is pending does not resubmit or show success', run: () => reloadWhilePending(screen, baseUrl, values) }
         ]);

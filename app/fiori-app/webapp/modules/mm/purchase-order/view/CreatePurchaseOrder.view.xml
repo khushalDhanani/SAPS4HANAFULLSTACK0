@@ -339,7 +339,7 @@
                     visible="{newPO>/hasError}"
                     press=".onMessageButtonPress" />
                 <ToolbarSpacer />
-                <Button id="btnSave" text="{i18n>btnCreate}" type="Emphasized" press=".onCreatePress" />
+                <Button id="btnSave" text="{i18n>btnCreate}" type="Emphasized" press=".onCreatePress" enabled="{= !${newPO>/submitBlocked} }" />
                 <Button id="btnCancel" text="{i18n>btnCancel}" press=".onCancelPress" />
             </OverflowToolbar>
         </footer>

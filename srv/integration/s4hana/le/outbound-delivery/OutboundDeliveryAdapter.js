@@ -516,6 +516,7 @@ class OutboundDeliveryAdapter {
         DeliveryDocumentType: d.DeliveryDocumentType || ''
       };
     } catch (err) {
+      if (err.$sanitize === false) throw err; // see srv/common/visibleError.js
       const sapErr = mapS4Error(err);
       LOG.error(`Failed to create Outbound Delivery (${sapErr.status}): ${sapErr.message}`);
       const error = new Error(sapErr.message);

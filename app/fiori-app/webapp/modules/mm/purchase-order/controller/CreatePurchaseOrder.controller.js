@@ -1103,6 +1103,7 @@ sap.ui.define([
 
         onCreatePress: function () {
             var oModel = this.getView().getModel("newPO");
+            if (oModel.getProperty("/submitBlocked")) return;
             var oData = oModel.getData();
             var that = this;
 
@@ -1148,6 +1149,11 @@ sap.ui.define([
                 })
                 .catch(function (oError) {
                     BusyIndicator.hide();
+                    var sNotConfirmed = that.blockSubmitIfNotConfirmed(oModel, oError && oError.message);
+                    if (sNotConfirmed) {
+                        MessageBox.error(sNotConfirmed);
+                        return;
+                    }
                     var oErrResult = PurchaseOrderModel.applyBackendErrors(oModel, oError);
 
                     // Open MessagePopover with all backend error details

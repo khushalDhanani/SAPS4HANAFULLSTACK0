@@ -176,6 +176,18 @@ describe('Integration: a SAP write that reading it back does not confirm (produc
             });
         });
 
+        it('a SAP document whose commit call dropped: names the number and warns', async () => {
+            const call = async (fm) => { if (fm === 'BAPI_TRANSACTION_COMMIT') throw new Error('RFC connection lost'); return { SALESDOCUMENT: '0001500200', RETURN: [] }; };
+
+            await expect(runCreateBapi({ session: (fn) => fn(call) }, 'BAPI_X', {}, { labels: { noun: 'inquiry', partialName: 'PartialSalesInquiryError', keyProp: 'SalesInquiry' } })).rejects.toMatchObject({
+                status: 502,
+                $sanitize: false,
+                SalesInquiry: '0001500200',
+                name: 'PartialSalesInquiryError',
+                message: 'SAP created inquiry 0001500200, but the commit got no answer, so it is NOT confirmed. Check it in SAP before creating it again.'
+            });
+        });
+
         it('goods receipt with an unknown outcome: shows the warning not to post again', async () => {
             const posts = stubSap({ get: () => ({ status: 200, headers: {}, data: { d: {} } }), post: () => { throw Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }); } });
 
@@ -214,6 +226,23 @@ describe('Integration: a SAP write that reading it back does not confirm (produc
 
             expect(res.status).toBe(502);
             expect(res.data.error.message).toBe('Create handling unit: SAP may have saved this change to handling unit 2000020166, but it could not be read back, so it is NOT confirmed. Check it in SAP before trying again.');
+        });
+
+        it('packing instruction whose read-back fails: shows the number and the warning', async () => {
+            const posts = stubSap({
+                get: () => { throw new Error('read-back unavailable'); },
+                post: () => ({ status: 201, headers: {}, data: { d: { PackingInstructionSystemUUID: '005056b4-0af6-1fe0-8dc1-fa4bb9c857ee', PackingInstructionNumber: 'PI-2000000041' } } })
+            });
+
+            const res = await direct({
+                path: '/odata/v4/packing-instruction',
+                action: 'create',
+                body: { externalName: 'BOX1', weightUnit: 'KG', components: [{ item: '10', category: 'P', material: '2000000041', targetQty: 1, unit: 'NOS' }] }
+            });
+
+            expect(res.status).toBe(502);
+            expect(res.data.error.message).toBe("SAP accepted packing instruction 'BOX1' (PI-2000000041), but it could not be read back, so it is NOT confirmed. Check it in SAP before creating it again.");
+            expect(posts).toHaveLength(1);
         });
 
         it('handling unit committed but not read back: shows the number and the warning', async () => {

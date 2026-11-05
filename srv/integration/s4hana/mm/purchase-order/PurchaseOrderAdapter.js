@@ -2,7 +2,7 @@
 const cds = require('@sap/cds');
 const LOG = require('../../../../common/logger')('purchase-order-adapter');
 const SessionContext = require('../../SessionContext');
-const { S4HttpClient } = require('../../S4HttpClient');
+const { S4HttpClient, unansweredWrite } = require('../../S4HttpClient');
 const s4Config = require('../../s4Config');
 const TtlCache = require('../../../../common/TtlCache');
 
@@ -208,7 +208,9 @@ class PurchaseOrderAdapter {
         ...(cookie ? { 'Cookie': cookie } : {}),
         ...(token ? { 'X-CSRF-Token': token } : {})
       }
-    }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : !token });
+    }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : !token }).catch((err) => {
+      throw unansweredWrite(err) || err;
+    });
 
     const activationResult = actResp.data;
     return activationResult.d || activationResult;

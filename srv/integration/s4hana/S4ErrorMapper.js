@@ -138,6 +138,7 @@ function mapS4Error(error) {
             details: []
         };
     }
+    if (error.$sanitize === false) return error; // already says what the user must know: see srv/common/visibleError.js
 
     const message = extractS4ErrorMessage(error);
     let code = _extractErrorCode(error);
