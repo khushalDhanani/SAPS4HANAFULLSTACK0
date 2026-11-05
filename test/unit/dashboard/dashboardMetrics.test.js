@@ -150,7 +150,7 @@ describe('Unit: Dashboard Controller live figures', () => {
         global.sap = {
             ui: {
                 define: jest.fn((deps, factory) => {
-                    DashboardControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast, mockAuthService, undefined, undefined, undefined, undefined, { SortOrder: {} });
+                    DashboardControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast, mockAuthService, undefined, undefined, undefined, { SortOrder: {} }, { emptyFilters: () => ({ search: '' }) });
                 })
             }
         };
@@ -447,8 +447,8 @@ describe('Unit: Dashboard view binds only live figures', () => {
         expect(tiles.length).toBe(figureCount);
 
         const mismatched = tiles.filter(([, tile, numeric]) => {
-            const state = tile.match(/\sstate="\{path: 'dashboardView>\/(\w+)', formatter: '\.formatTileState'\}"/);
-            const value = numeric.match(/\svalue="\{path: 'dashboardView>\/(\w+)'/);
+            const state = tile.match(/\sstate="\{path: '(?:dashboardView>\/|adminView>\/kpis\/)(\w+)', formatter: '\.formatTileState'\}"/);
+            const value = numeric.match(/\svalue="\{path: '(?:dashboardView>\/|adminView>\/kpis\/)(\w+)'/);
             return !state || !value || state[1] !== value[1];
         }).map(([, tile]) => tile.match(/\sid="(\w+)"/)[1]);
         expect(mismatched).toEqual([]);

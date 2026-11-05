@@ -46,26 +46,28 @@ const MockBaseController = {
 };
 
 let DashboardController;
+let Logic;
+const mockFile = { save: jest.fn() };
 
 beforeAll(() => {
-    global.sap = {
-        ui: {
-            define: jest.fn((dependencies, factory) => {
-                DashboardController = factory(
-                    MockBaseController,
-                    MockJSONModel,
-                    mockODataClient,
-                    mockMessageToast,
-                    mockAuthService,
-                    mockMessageBox,
-                    MockFilter,
-                    { EQ: 'EQ' },
-                    MockSorter,
-                    { SortOrder: { Ascending: 'Ascending', Descending: 'Descending', None: 'None' } }
-                );
-            })
-        }
-    };
+    const encodeXML = (value) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    global.sap = { ui: { define: jest.fn((dependencies, factory) => { Logic = factory(encodeXML); }) } };
+    require('../../../app/fiori-app/webapp/modules/admin/user-management/util/UserListLogic.js');
+    global.sap.ui.define = jest.fn((dependencies, factory) => {
+        DashboardController = factory(
+            MockBaseController,
+            MockJSONModel,
+            mockODataClient,
+            mockMessageToast,
+            mockAuthService,
+            mockMessageBox,
+            MockFilter,
+            MockSorter,
+            { SortOrder: { Ascending: 'Ascending', Descending: 'Descending', None: 'None' } },
+            Logic,
+            mockFile
+        );
+    });
     require('../../../app/fiori-app/webapp/controller/Dashboard.controller.js');
 });
 
@@ -73,16 +75,38 @@ beforeEach(() => {
     jest.clearAllMocks();
 });
 
-function makeController(aUsers) {
+function makeController(aUsers, oExtra = {}) {
     const oModel = new MockJSONModel({
         users: aUsers,
         userCount: aUsers.length,
-        selectedUser: null
+        selectedUser: null,
+        filters: Logic.emptyFilters(),
+        selection: {},
+        bulk: { results: [] },
+        undo: { text: '' },
+        ...oExtra
     });
+    oModel.refresh = jest.fn();
     const controller = new DashboardController();
+    const oBinding = { filter: jest.fn(), sort: jest.fn() };
+    const mControls = {};
+    const fnControl = (sId) => {
+        mControls[sId] = mControls[sId] || {
+            open: jest.fn(),
+            close: jest.fn(),
+            setEscapeHandler: jest.fn(),
+            setDateValue: jest.fn(),
+            setSecondDateValue: jest.fn(),
+            getColumns: () => [],
+            getItems: () => [],
+            getBinding: () => oBinding
+        };
+        return mControls[sId];
+    };
     controller.getView = () => ({ getModel: () => oModel });
     controller.getOwnerComponent = () => null;
-    return { controller, model: oModel };
+    controller.byId = fnControl;
+    return { controller, model: oModel, binding: oBinding, control: fnControl };
 }
 
 describe('Admin dashboard user list', () => {
@@ -101,12 +125,12 @@ describe('Admin dashboard user list', () => {
             'press=".onLockUser"',
             'press=".onUnlockUser"'
         ].forEach((sBinding) => expect(sView).toContain(sBinding));
-        expect(sView).toContain('text="{adminView>fullName}"');
+        expect(sView).toContain("'adminView>fullName', 'adminView>/filters/search'");
         expect(sView).not.toContain('text="{i18n>adminDetailValidFrom}"');
         expect(sView).not.toContain('text="{i18n>adminDetailValidTo}"');
         expect(sView).not.toContain('adminView>validFrom');
         expect(sView).not.toContain('adminView>validTo');
-        expect(sView).toContain('detailsAvailable} &amp;&amp; !${adminView>isLocked}');
+        expect(sView).toContain('detailsAvailable} &amp;&amp; !${adminView>isLocked} &amp;&amp; !${adminView>protectedReason}');
         expect(sView).toContain('detailsAvailable} &amp;&amp; ${adminView>isLocked} === true');
     });
 
@@ -220,9 +244,9 @@ describe('Admin dashboard user list', () => {
             expect(model.getProperty('/detailBusy')).toBe(false);
         });
 
-        test('the lock button needs a known lock state', () => {
+        test('the lock button needs a known lock state and an unprotected user', () => {
             const sFragment = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/fragment/UserDetailPane.fragment.xml'), 'utf8');
-            expect(sFragment).toContain('visible="{= ${adminView>/selectedUser/isLocked} === false }"');
+            expect(sFragment).toContain('visible="{= ${adminView>/selectedUser/isLocked} === false &amp;&amp; !${adminView>/selectedUser/protectedReason} }"');
             expect(sFragment).toContain('visible="{= ${adminView>/selectedUser/isLocked} === true }"');
         });
 
@@ -237,46 +261,6 @@ describe('Admin dashboard user list', () => {
             expect(controller.formatAdminUserType('')).toBe('-');
             expect(controller.formatAdminUserType('Q')).toBe('Q');
         });
-    });
-
-    test('keeps search, filter and refresh in the table toolbar and removes the old section copies', () => {
-        const sView = fs.readFileSync(
-            path.join(__dirname, '../../../app/fiori-app/webapp/view/Dashboard.view.xml'),
-            'utf8'
-        );
-        const sToolbar = sView.slice(sView.indexOf('id="adminUsersTable"')).match(/<OverflowToolbar>[\s\S]*?<\/OverflowToolbar>/)[0];
-        ['id="adminLockStatusFilter"', 'id="adminUserSearchField"', 'id="btnRefreshUsers"'].forEach((sId) => {
-            expect(sToolbar).toContain(sId);
-            expect(sView.split(sId)).toHaveLength(2);
-        });
-        expect(sView).not.toContain('dashboardWelcomePrefix');
-        expect(sView).not.toContain('auth>/user/username');
-    });
-
-    test.each([
-        ['active', [['detailsAvailable', 'EQ', true], ['isLocked', 'EQ', false]]],
-        ['locked', [['detailsAvailable', 'EQ', true], ['isLocked', 'EQ', true]]],
-        ['unavailable', [['detailsAvailable', 'EQ', false]]]
-    ])('filters the bound rows by the %s lock status', (sKey, aExpected) => {
-        const { controller } = makeController([]);
-        const oBinding = { filter: jest.fn() };
-        controller.byId = () => ({ getBinding: () => oBinding });
-
-        controller.onFilterUsersByLockStatus({ getSource: () => ({ getSelectedKey: () => sKey }) });
-
-        const oFilter = oBinding.filter.mock.calls[0][0];
-        expect(oFilter.args[0].and).toBe(true);
-        expect(oFilter.args[0].filters.map((f) => f.args)).toEqual(aExpected);
-    });
-
-    test('clears the filter when All is selected', () => {
-        const { controller } = makeController([]);
-        const oBinding = { filter: jest.fn() };
-        controller.byId = () => ({ getBinding: () => oBinding });
-
-        controller.onFilterUsersByLockStatus({ getSource: () => ({ getSelectedKey: () => '' }) });
-
-        expect(oBinding.filter).toHaveBeenCalledWith([]);
     });
 
     test('sorts ascending first, toggles on the same column, and restarts ascending on another', () => {
@@ -305,23 +289,289 @@ describe('Admin dashboard user list', () => {
         expect(oUsername.setSortIndicator).toHaveBeenLastCalledWith('None');
     });
 
-    test('shows the filtered row count in the toolbar', () => {
-        const { controller, model } = makeController([{ username: 'ALICE' }, { username: 'BOB' }]);
+    describe('list view', () => {
+        const row = (username, extra = {}) => ({ username, fullName: username, detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20260101', lastChangedBy: 'ADMIN', protectedReason: '', selected: false, ...extra });
 
-        controller.onAdminUsersUpdated({ getParameter: (sName) => (sName === 'total' ? 1 : undefined) });
+        test('a load asks for up to the service limit, and counts follow the filters', async () => {
+            const { controller, model } = makeController([], { filters: { ...Logic.emptyFilters(), lockStatus: 'locked' } });
+            mockODataClient.get.mockResolvedValue({ value: [row('A'), row('B', { isLocked: true })] });
 
-        expect(model.getProperty('/userCount')).toBe(1);
+            await controller._loadAdminUsers();
+
+            expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/user-management/listUsers(search='',maxRows=1000)");
+            expect(model.getProperty('/userCount')).toBe(1);
+            expect(model.getProperty('/kpis')).toMatchObject({ total: 2, active: 1, locked: 1 });
+            expect(model.getProperty('/listLimitText')).toBe('');
+        });
+
+        test('a full page warns that the list may be cut off', async () => {
+            const { controller, model } = makeController([]);
+            mockODataClient.get.mockResolvedValue({ value: Array.from({ length: 1000 }, (_, i) => row(`U${i}`)) });
+
+            await controller._loadAdminUsers();
+
+            expect(model.getProperty('/listLimitText')).toContain('1000');
+        });
+
+        test('a failed load shows the Failed card state and the error text', async () => {
+            const { controller, model } = makeController([row('A')]);
+            mockODataClient.get.mockRejectedValue(new Error('SAP down'));
+
+            await controller._loadAdminUsers();
+
+            expect(model.getProperty('/kpis').total).toBeNull();
+            expect(model.getProperty('/users')).toEqual([]);
+            expect(mockMessageToast.show).toHaveBeenCalledWith('SAP down');
+        });
+
+        test('a reload keeps the selection, except users that became unselectable', async () => {
+            const { controller, model } = makeController([row('A', { selected: true }), row('B', { selected: true })]);
+            mockODataClient.get.mockResolvedValue({ value: [row('A'), row('B', { protectedReason: 'type' })] });
+
+            await controller._loadAdminUsers();
+
+            expect(model.getProperty('/users').map((user) => user.selected)).toEqual([true, false]);
+        });
+
+        test('a filter deselects rows it hides, so a bulk action only reaches rows on screen', () => {
+            const { controller, model } = makeController([row('A', { selected: true }), row('B', { selected: true, isLocked: true })]);
+
+            controller._mergeAdminFilters({ lockStatus: 'locked' });
+
+            expect(model.getProperty('/users').map((user) => user.selected)).toEqual([false, true]);
+            expect(model.getProperty('/selection').count).toBe(1);
+            expect(model.getProperty('/chips').map((chip) => chip.key)).toEqual(['lockStatus:']);
+        });
+
+        test('select all takes filtered selectable rows only', () => {
+            const users = [row('A'), row('P', { protectedReason: 'self' }), row('L', { isLocked: true })];
+            const { controller, model } = makeController(users, { filters: { ...Logic.emptyFilters(), lockStatus: 'active' } });
+
+            controller.onSelectAllUsers({ getParameter: () => true });
+
+            expect(users.map((user) => user.selected)).toEqual([true, false, false]);
+            expect(model.getProperty('/selection')).toMatchObject({ count: 1, canLock: true, canUnlock: false });
+        });
+
+        test('search waits for the debounce before filtering', () => {
+            jest.useFakeTimers();
+            const { controller, model } = makeController([row('A')]);
+
+            controller.onSearchUsersLive({ getParameter: () => 'x' });
+            expect(model.getProperty('/filters/search')).toBe('');
+            jest.advanceTimersByTime(300);
+            expect(model.getProperty('/filters/search')).toBe('x');
+            jest.useRealTimers();
+        });
+
+        test('export writes the filtered rows in sort order', () => {
+            const { controller } = makeController([row('A', { isLocked: true }), row('C'), row('B')], { filters: { ...Logic.emptyFilters(), lockStatus: 'active' } });
+            controller._oAdminSort = { property: 'username', descending: true };
+
+            controller.onExportUsers();
+
+            const sCsv = mockFile.save.mock.calls[0][0];
+            expect(sCsv.split('\r\n').slice(1).map((line) => line.split(',')[0])).toEqual(['C', 'B']);
+        });
+
+        test('the tooltip says why a user cannot be selected', () => {
+            const { controller } = makeController([]);
+            expect(controller.formatAdminSelectTooltip('A', 'type', true)).toContain('System and Service');
+            expect(controller.formatAdminSelectTooltip('A', 'self', true)).toContain('your own user');
+            expect(controller.formatAdminSelectTooltip('A', 'connection', true)).toContain('connects to SAP');
+            expect(controller.formatAdminSelectTooltip('A', '', false)).toContain('could not be read');
+            expect(controller.formatAdminSelectTooltip('A', '', true)).toBe('Select user A');
+        });
     });
 
-    test('takes the count after a load from the filtered binding, not the rows SAP returned', async () => {
-        const { controller, model } = makeController([]);
-        controller.byId = () => ({ getBinding: () => ({ getLength: () => 1 }) });
-        mockODataClient.get.mockResolvedValue({ value: [{ username: 'ALICE' }, { username: 'BOB' }] });
+    describe('bulk lock and unlock', () => {
+        const row = (username, extra = {}) => ({ username, fullName: username, detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20260101', lastChangedBy: 'ADMIN', protectedReason: '', selected: true, ...extra });
+        /** A stub SAP: posts succeed, except names in `fail`; reads report the state each action left. */
+        function stubSap(state = {}, fail = []) {
+            mockODataClient.post.mockImplementation(async (url, body) => {
+                if (fail.includes(body.username)) {
+                    throw Object.assign(new Error('No authorization'), { code: 'SU/001' });
+                }
+                state[body.username] = url.endsWith('/lockUser');
+                return { success: true, status: 'success', messages: [], message: 'done' };
+            });
+            mockODataClient.get.mockImplementation(async (url) => {
+                const username = /username='([^']*)'/.exec(url)[1];
+                return { username, isLocked: state[username] === true };
+            });
+        }
+        const open = (controller, action) => {
+            controller._openBulkConfirm(action);
+            return controller.onConfirmBulk();
+        };
 
-        await controller._loadAdminUsers('');
+        beforeEach(() => jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] }));
+        afterEach(() => jest.useRealTimers());
 
-        expect(model.getProperty('/users')).toHaveLength(2);
-        expect(model.getProperty('/userCount')).toBe(1);
+        test('the confirm dialog previews ten names, and counts the skipped', () => {
+            const users = Array.from({ length: 12 }, (_, i) => row(`U${i}`)).concat(row('L', { isLocked: true }));
+            const { controller, model, control } = makeController(users);
+
+            controller._openBulkConfirm('lock');
+
+            const bulk = model.getProperty('/bulk');
+            expect(control('userBulkConfirmDialog').open).toHaveBeenCalled();
+            expect(bulk.run).toHaveLength(12);
+            expect(bulk.preview).toContain('U9 and 2 more');
+            expect(bulk.preview).not.toContain('U10');
+            expect(bulk.skippedText).toContain('1 already');
+        });
+
+        test('runs per user with the reason, reads each back, and summarizes', async () => {
+            const { controller, model, control } = makeController([row('A'), row('B', { isLocked: true })]);
+            stubSap();
+            controller._openBulkConfirm('lock');
+            model.setProperty('/bulk/reason', 'Left the company');
+
+            await controller.onConfirmBulk();
+
+            expect(mockODataClient.post.mock.calls).toEqual([['/odata/v4/user-management/lockUser', { username: 'A', reason: 'Left the company' }]]);
+            expect(model.getProperty('/bulk/summary')).toBe('1 succeeded · 0 failed · 1 skipped');
+            expect(control('userBulkProgressDialog').close).toHaveBeenCalled();
+            expect(control('userBulkResultDialog').open).toHaveBeenCalled();
+            expect(model.getProperty('/users/0/isLocked')).toBe(true);
+        });
+
+        test('never runs more than five at once', async () => {
+            const { controller } = makeController(Array.from({ length: 12 }, (_, i) => row(`U${i}`)));
+            let running = 0;
+            let peak = 0;
+            mockODataClient.post.mockImplementation(async () => {
+                running++;
+                peak = Math.max(peak, running);
+                await new Promise((resolve) => setImmediate(resolve));
+                running--;
+                return { status: 'success', messages: [] };
+            });
+            mockODataClient.get.mockImplementation(async (url) => ({ username: /username='([^']*)'/.exec(url)[1], isLocked: true }));
+
+            await open(controller, 'lock');
+
+            expect(peak).toBe(5);
+        });
+
+        test('a failure keeps its BAPI message and its row selected; successes are deselected', async () => {
+            const users = [row('OK'), row('BAD')];
+            const { controller, model } = makeController(users);
+            stubSap({}, ['BAD']);
+
+            await open(controller, 'lock');
+
+            const bad = model.getProperty('/bulk/results').find((r) => r.username === 'BAD');
+            expect(bad).toMatchObject({ status: 'error', message: 'No authorization', technical: 'E SU/001: No authorization', state: 'Error' });
+            expect(model.getProperty('/users').map((user) => [user.username, user.selected])).toEqual([['OK', false], ['BAD', true]]);
+            expect(model.getProperty('/bulk/failed')).toBe(1);
+        });
+
+        test('accepted by SAP but with the wrong state afterwards counts as failed', async () => {
+            const { controller, model } = makeController([row('A')]);
+            mockODataClient.post.mockResolvedValue({ status: 'success', messages: [] });
+            mockODataClient.get.mockResolvedValue({ username: 'A', isLocked: false });
+
+            await open(controller, 'lock');
+
+            expect(model.getProperty('/bulk/summary')).toBe('0 succeeded · 1 failed · 0 skipped');
+            expect(model.getProperty('/bulk/results')[0].message).toContain('did not confirm');
+        });
+
+        test('accepted by SAP with a failed read-back is a warning, and its row becomes unavailable', async () => {
+            const { controller, model } = makeController([row('A')]);
+            mockODataClient.post.mockResolvedValue({ status: 'success', messages: [] });
+            mockODataClient.get.mockRejectedValue(new Error('Read failed'));
+
+            await open(controller, 'lock');
+
+            expect(model.getProperty('/bulk/results')[0].status).toBe('warning');
+            expect(model.getProperty('/users/0').detailsAvailable).toBe(false);
+        });
+
+        test('a BAPI warning is shown and still counts as succeeded', async () => {
+            const { controller, model } = makeController([row('A')]);
+            mockODataClient.post.mockResolvedValue({ status: 'warning', messages: [{ type: 'W', id: 'SU', number: '002', message: 'Careful' }] });
+            mockODataClient.get.mockResolvedValue({ username: 'A', isLocked: true });
+
+            await open(controller, 'lock');
+
+            expect(model.getProperty('/bulk/results')[0]).toMatchObject({ status: 'warning', message: 'Careful', technical: 'W SU/002: Careful', state: 'Warning' });
+            expect(model.getProperty('/bulk/summary')).toBe('1 succeeded · 0 failed · 0 skipped');
+        });
+
+        test('cancel stops new calls, and reports the rest as skipped and still selected', async () => {
+            const users = Array.from({ length: 8 }, (_, i) => row(`U${i}`));
+            const { controller, model } = makeController(users);
+            let calls = 0;
+            mockODataClient.post.mockImplementation(async () => {
+                calls++;
+                controller.onCancelBulkRun();
+                await new Promise((resolve) => setImmediate(resolve));
+                return { status: 'success', messages: [] };
+            });
+            mockODataClient.get.mockImplementation(async (url) => ({ username: /username='([^']*)'/.exec(url)[1], isLocked: true }));
+
+            await open(controller, 'lock');
+
+            expect(calls).toBeLessThanOrEqual(5);
+            const sum = Logic.aggregateResults(model.getProperty('/bulk/results'));
+            expect(sum.succeeded + sum.skipped).toBe(8);
+            expect(sum.skipped).toBe(8 - calls);
+            expect(model.getProperty('/users').filter((user) => user.selected)).toHaveLength(8 - calls);
+        });
+
+        test('retry runs only the failed users, with the same action and reason', async () => {
+            const { controller, model } = makeController([row('OK'), row('BAD')]);
+            stubSap({}, ['BAD']);
+            controller._openBulkConfirm('lock');
+            model.setProperty('/bulk/reason', 'R');
+            await controller.onConfirmBulk();
+            mockODataClient.post.mockClear();
+            stubSap({ OK: true });
+
+            await controller.onRetryFailedBulk();
+
+            expect(mockODataClient.post.mock.calls).toEqual([['/odata/v4/user-management/lockUser', { username: 'BAD', reason: 'R' }]]);
+            expect(model.getProperty('/bulk/summary')).toBe('1 succeeded · 0 failed · 0 skipped');
+        });
+
+        test('undo applies the inverse to succeeded users only, once', async () => {
+            const { controller, model } = makeController([row('OK'), row('BAD')]);
+            stubSap({}, ['BAD']);
+            await open(controller, 'lock');
+            expect(model.getProperty('/undo/text')).toBe('1 users locked.');
+            mockODataClient.post.mockClear();
+
+            await controller.onUndoBulk();
+
+            expect(mockODataClient.post.mock.calls).toEqual([['/odata/v4/user-management/unlockUser', { username: 'OK', reason: 'Undo of a bulk action' }]]);
+            expect(model.getProperty('/undo/text')).toBe('');
+        });
+
+        test('undo is offered for ten seconds', async () => {
+            const { controller, model } = makeController([row('OK')]);
+            stubSap();
+            await open(controller, 'lock');
+
+            jest.advanceTimersByTime(9999);
+            expect(model.getProperty('/undo/text')).not.toBe('');
+            jest.advanceTimersByTime(1);
+            expect(model.getProperty('/undo/text')).toBe('');
+            await expect(controller.onUndoBulk()).resolves.toBeUndefined();
+        });
+
+        test('results download as CSV with status and BAPI details', async () => {
+            const { controller } = makeController([row('BAD')]);
+            stubSap({}, ['BAD']);
+            await open(controller, 'lock');
+
+            controller.onDownloadBulkResults();
+
+            const sCsv = mockFile.save.mock.calls[mockFile.save.mock.calls.length - 1][0];
+            expect(sCsv).toContain('BAD,error,No authorization,E SU/001: No authorization');
+        });
     });
 
     test('uses the row username for a Lock/Unlock action', () => {

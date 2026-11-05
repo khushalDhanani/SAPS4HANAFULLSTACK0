@@ -6,9 +6,10 @@ sap.ui.define([
     "saps4hana/fiori/service/AuthService",
     "sap/m/MessageBox",
     "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator",
     "sap/ui/model/Sorter",
-    "sap/ui/core/library"
+    "sap/ui/core/library",
+    "saps4hana/fiori/modules/admin/user-management/util/UserListLogic",
+    "sap/ui/core/util/File"
 ], function (
     BaseController,
     JSONModel,
@@ -17,13 +18,24 @@ sap.ui.define([
     AuthService,
     MessageBox,
     Filter,
-    FilterOperator,
     Sorter,
-    coreLibrary
+    coreLibrary,
+    UserListLogic,
+    FileUtil
 ) {
     "use strict";
 
     var SortOrder = coreLibrary.SortOrder;
+
+    var ADMIN_STATE_KEY = "admin.userList.state";
+    var UNDO_WINDOW_MS = 10000;
+    var SEARCH_DEBOUNCE_MS = 300;
+    var RESULT_LOOK = {
+        success: { state: "Success", icon: "sap-icon://sys-enter-2", text: "adminBulkStatusSuccess" },
+        warning: { state: "Warning", icon: "sap-icon://alert", text: "adminBulkStatusWarning" },
+        error: { state: "Error", icon: "sap-icon://error", text: "adminBulkStatusError" },
+        skipped: { state: "None", icon: "sap-icon://less", text: "adminBulkStatusSkipped" }
+    };
 
     /**
      * Counts returned by PurchaseOrderService.getDashboardMetrics(). Each is read live from SAP S/4HANA.
@@ -63,11 +75,23 @@ sap.ui.define([
         METRIC_KEYS: METRIC_KEYS,
 
         onInit: function () {
+            var oSaved = this._readAdminState();
+            this._oAdminSort = oSaved.sort;
             var oAdminModel = new JSONModel({
                 users: [],
                 userCount: 0,
                 busy: false,
-                searchQuery: "",
+                filters: oSaved.filters,
+                searchInput: oSaved.filters.search,
+                kpis: {},
+                kpiSelected: { total: "false", active: "false", locked: "false", changedToday: "false", changedLast7: "false" },
+                chips: [],
+                changedByOptions: [],
+                showingText: "",
+                listLimitText: "",
+                selection: { count: 0, canLock: false, canUnlock: false, all: false, partial: false, text: "", hint: "" },
+                bulk: { results: [], failed: 0, percent: 0, cancelling: false },
+                undo: { text: "" },
                 noDataText: this._text("adminNoUsers", "No SAP users found."),
                 selectedUser: null,
                 detailBusy: false,
@@ -344,31 +368,43 @@ sap.ui.define([
          * @param {string} [sSearch]
          * @returns {Promise<void>}
          */
-        _loadAdminUsers: function (sSearch) {
+        _loadAdminUsers: function () {
             var oAdminModel = this.getView().getModel("adminView");
             if (!oAdminModel) {
                 return Promise.resolve();
             }
 
-            var sQuery = (sSearch !== undefined && sSearch !== null) ? String(sSearch).trim() : (oAdminModel.getProperty("/searchQuery") || "");
             oAdminModel.setProperty("/busy", true);
+            oAdminModel.setProperty("/kpis", {}); // a card shows Loading until its count arrives
 
-            var sUrl = "/odata/v4/user-management/listUsers(search='" + encodeURIComponent(sQuery) + "',maxRows=200)";
+            var sUrl = "/odata/v4/user-management/listUsers(search='',maxRows=" + UserListLogic.LIST_LIMIT + ")";
             var that = this;
 
             return ODataClient.get(sUrl)
                 .then(function (res) {
                     var aUsers = (res && res.value) || [];
+                    var mSelected = {};
+                    (oAdminModel.getProperty("/users") || []).forEach(function (oUser) {
+                        mSelected[oUser.username] = oUser.selected;
+                    });
+                    aUsers.forEach(function (oUser) {
+                        // A user that became unselectable since the last load does not stay selected.
+                        oUser.selected = !!mSelected[oUser.username] && UserListLogic.isSelectable(oUser);
+                    });
                     oAdminModel.setProperty("/users", aUsers);
-                    // Rows matching the previous filtered set fire no table update, so read the filtered length here.
-                    oAdminModel.setProperty("/userCount", that.byId("adminUsersTable").getBinding("items").getLength());
+                    oAdminModel.setProperty("/listLimitText", aUsers.length >= UserListLogic.LIST_LIMIT
+                        ? that._text("adminListLimitReached", "Only the first {0} SAP users were loaded.", [String(UserListLogic.LIST_LIMIT)])
+                        : "");
                     oAdminModel.setProperty("/noDataText", that._text("adminNoUsers", "No SAP users found."));
                     oAdminModel.setProperty("/busy", false);
                     that._bAdminUsersLoaded = true;
+                    that._applyAdminSort();
+                    that._applyAdminFilters();
                 })
                 .catch(function (err) {
                     oAdminModel.setProperty("/users", []);
                     oAdminModel.setProperty("/userCount", 0);
+                    oAdminModel.setProperty("/kpis", { total: null, active: null, locked: null, changedToday: null, changedLast7: null });
                     oAdminModel.setProperty("/noDataText", that._text("adminLoadFailed", "Failed to load SAP users."));
                     oAdminModel.setProperty("/busy", false);
                     var sMsg = (err && err.message) || that._text("adminLoadFailed", "Failed to load SAP users.");
@@ -376,47 +412,531 @@ sap.ui.define([
                 });
         },
 
+        _readAdminState: function () {
+            var oFilters = UserListLogic.emptyFilters();
+            var oSort = null;
+            try {
+                var oSaved = JSON.parse(sessionStorage.getItem(ADMIN_STATE_KEY)) || {};
+                Object.keys(oFilters).forEach(function (sKey) {
+                    if (typeof oSaved.filters[sKey] === typeof oFilters[sKey] && Array.isArray(oSaved.filters[sKey]) === Array.isArray(oFilters[sKey])) {
+                        oFilters[sKey] = oSaved.filters[sKey];
+                    }
+                });
+                oSort = oSaved.sort && typeof oSaved.sort.property === "string" ? oSaved.sort : null;
+            } catch (e) {
+                // Storage blocked or no saved view: start with no filters.
+            }
+            return { filters: oFilters, sort: oSort };
+        },
+
+        _saveAdminState: function (oFilters) {
+            try {
+                sessionStorage.setItem(ADMIN_STATE_KEY, JSON.stringify({ filters: oFilters, sort: this._oAdminSort }));
+            } catch (e) {
+                // Storage blocked: the view just is not kept across a refresh.
+            }
+        },
+
+        _adminToday: function () {
+            return new Date();
+        },
+
+        _chipsFor: function (oFilters) {
+            var that = this;
+            var aChips = [];
+            var fnAdd = function (sKey, sTextKey, aArgs) {
+                aChips.push({ key: sKey, text: that._text(sTextKey, sKey, aArgs) });
+            };
+            if (oFilters.search) {
+                fnAdd("search:", "adminChipSearch", [oFilters.search]);
+            }
+            if (oFilters.lockStatus) {
+                var mStatus = { active: "adminStatusUnlocked", locked: "adminStatusLocked", unavailable: "adminDetailsUnavailable" };
+                fnAdd("lockStatus:", "adminChipLockStatus", [this._text(mStatus[oFilters.lockStatus], oFilters.lockStatus)]);
+            }
+            oFilters.userTypes.forEach(function (sType) {
+                fnAdd("userTypes:" + sType, "adminChipUserType", [that.formatAdminUserType(sType)]);
+            });
+            oFilters.changedBy.forEach(function (sUser) {
+                fnAdd("changedBy:" + sUser, "adminChipChangedBy", [sUser]);
+            });
+            if (oFilters.changedFrom || oFilters.changedTo) {
+                fnAdd("changed:", "adminChipChanged", [this.formatAdminDate(oFilters.changedFrom), this.formatAdminDate(oFilters.changedTo)]);
+            }
+            return aChips;
+        },
+
+        /**
+         * The one place the list view is derived from: rows, counts, cards, chips and selection all follow the filters.
+         * Rows a filter hides are deselected, so a bulk action never reaches users that are not on screen.
+         */
+        _applyAdminFilters: function () {
+            var oAdminModel = this.getView().getModel("adminView");
+            var aUsers = oAdminModel.getProperty("/users") || [];
+            var oFilters = oAdminModel.getProperty("/filters");
+            var dToday = this._adminToday();
+            var aVisible = UserListLogic.filterUsers(aUsers, oFilters);
+            var mVisible = {};
+            aVisible.forEach(function (oUser) {
+                mVisible[oUser.username] = true;
+            });
+
+            aUsers.forEach(function (oUser) {
+                if (!mVisible[oUser.username]) {
+                    oUser.selected = false;
+                }
+            });
+            this.byId("adminUsersTable").getBinding("items").filter(new Filter({
+                path: "username",
+                test: function (sUsername) {
+                    return !!mVisible[sUsername];
+                }
+            }));
+
+            var oSelected = {};
+            ["total", "active", "locked", "changedToday", "changedLast7"].forEach(function (sKpi) {
+                oSelected[sKpi] = String(UserListLogic.isKpiSelected(sKpi, oFilters, dToday));
+            });
+            var mChangedBy = {};
+            aUsers.concat(oFilters.changedBy.map(function (sUser) {
+                return { lastChangedBy: sUser };
+            })).forEach(function (oUser) {
+                if (oUser.lastChangedBy) {
+                    mChangedBy[oUser.lastChangedBy] = true;
+                }
+            });
+
+            oAdminModel.setProperty("/kpis", UserListLogic.computeKpis(aUsers, dToday));
+            oAdminModel.setProperty("/kpiSelected", oSelected);
+            oAdminModel.setProperty("/chips", this._chipsFor(oFilters));
+            oAdminModel.setProperty("/changedByOptions", Object.keys(mChangedBy).sort().map(function (sUser) {
+                return { key: sUser };
+            }));
+            oAdminModel.setProperty("/userCount", aVisible.length);
+            oAdminModel.setProperty("/showingText", this._text("adminShowingOf", "Showing {0} of {1} users", [String(aVisible.length), String(aUsers.length)]));
+            if (aUsers.length && !aVisible.length) {
+                oAdminModel.setProperty("/noDataText", this._text("adminFilterNoMatch", "No users match your filters."));
+            } else {
+                oAdminModel.setProperty("/noDataText", this._text("adminNoUsers", "No SAP users found."));
+            }
+            this._syncAdminDateRange(oFilters);
+            this._updateUserSelectionState(aUsers, aVisible);
+            this._saveAdminState(oFilters);
+        },
+
+        _updateUserSelectionState: function (aUsers, aVisible) {
+            var oAdminModel = this.getView().getModel("adminView");
+            var oState = UserListLogic.selectionState(aUsers, aVisible);
+            var iGrowingShown = this.byId("adminUsersTable").getItems ? this.byId("adminUsersTable").getItems().length : aVisible.length;
+            oState.text = this._text("adminBulkSelected", "{0} selected", [String(oState.count)]);
+            oState.hint = oState.all && oState.count > iGrowingShown
+                ? this._text("adminBulkAllFilteredHint", "All {0} selectable filtered users, including rows not shown yet", [String(oState.count)])
+                : "";
+            oAdminModel.setProperty("/selection", oState);
+            oAdminModel.refresh();
+        },
+
+        _syncAdminDateRange: function (oFilters) {
+            var oRange = this.byId("adminChangedRangeFilter");
+            if (!oRange) {
+                return;
+            }
+            var fnToDate = function (sDay) {
+                return sDay ? new Date(Number(sDay.slice(0, 4)), Number(sDay.slice(4, 6)) - 1, Number(sDay.slice(6, 8))) : null;
+            };
+            oRange.setDateValue(fnToDate(oFilters.changedFrom));
+            oRange.setSecondDateValue(fnToDate(oFilters.changedTo));
+        },
+
+        _setAdminFilters: function (oFilters) {
+            var oAdminModel = this.getView().getModel("adminView");
+            clearTimeout(this._iAdminSearchTimer);
+            oAdminModel.setProperty("/filters", oFilters);
+            oAdminModel.setProperty("/searchInput", oFilters.search);
+            this._applyAdminFilters();
+        },
+
+        _mergeAdminFilters: function (oChange) {
+            var oFilters = this.getView().getModel("adminView").getProperty("/filters");
+            this._setAdminFilters(Object.assign({}, oFilters, oChange));
+        },
+
+        onSearchUsersLive: function (oEvent) {
+            var that = this;
+            var sQuery = oEvent.getParameter("newValue");
+            clearTimeout(this._iAdminSearchTimer);
+            this._iAdminSearchTimer = setTimeout(function () {
+                that._mergeAdminFilters({ search: sQuery });
+            }, SEARCH_DEBOUNCE_MS);
+        },
+
         onSearchUsers: function (oEvent) {
-            var sQuery = oEvent ? oEvent.getParameter("query") : "";
-            this.getView().getModel("adminView").setProperty("/searchQuery", sQuery);
-            this._loadAdminUsers(sQuery);
+            this._mergeAdminFilters({ search: oEvent.getParameter("query") || "" });
+        },
+
+        onLockStatusFilterChange: function (oEvent) {
+            this._mergeAdminFilters({ lockStatus: oEvent.getSource().getSelectedKey() });
+        },
+
+        onUserTypeFilterChange: function (oEvent) {
+            this._mergeAdminFilters({ userTypes: oEvent.getSource().getSelectedKeys() });
+        },
+
+        onChangedByFilterChange: function (oEvent) {
+            this._mergeAdminFilters({ changedBy: oEvent.getSource().getSelectedKeys() });
+        },
+
+        onChangedRangeFilterChange: function (oEvent) {
+            var oRange = oEvent.getSource();
+            var dFrom = oRange.getDateValue();
+            var dTo = oRange.getSecondDateValue();
+            this._mergeAdminFilters({
+                changedFrom: dFrom ? UserListLogic.dayKey(dFrom) : "",
+                changedTo: dTo ? UserListLogic.dayKey(dTo) : (dFrom ? UserListLogic.dayKey(dFrom) : "")
+            });
+        },
+
+        onKpiPress: function (oEvent) {
+            var oFilters = this.getView().getModel("adminView").getProperty("/filters");
+            this._setAdminFilters(UserListLogic.toggleKpi(oEvent.getSource().data("kpi"), oFilters, this._adminToday()));
+        },
+
+        onRemoveFilterChip: function (oEvent) {
+            var oFilters = this.getView().getModel("adminView").getProperty("/filters");
+            (oEvent.getParameter("tokens") || []).forEach(function (oToken) {
+                oFilters = UserListLogic.removeChip(oFilters, oToken.getKey());
+            });
+            this._setAdminFilters(oFilters);
+        },
+
+        onClearAdminFilters: function () {
+            this._setAdminFilters(UserListLogic.emptyFilters());
         },
 
         onRefreshUsers: function () {
-            var sQuery = this.getView().getModel("adminView").getProperty("/searchQuery") || "";
-            this._loadAdminUsers(sQuery);
+            this._loadAdminUsers();
         },
 
-        // The filter and sort stay on the binding, so they also apply to rows from a later search or refresh.
-        onFilterUsersByLockStatus: function (oEvent) {
-            var sKey = oEvent.getSource().getSelectedKey();
-            var fnIs = function (sPath, bValue) {
-                return new Filter(sPath, FilterOperator.EQ, bValue);
-            };
-            var mFilters = {
-                active: [fnIs("detailsAvailable", true), fnIs("isLocked", false)],
-                locked: [fnIs("detailsAvailable", true), fnIs("isLocked", true)],
-                unavailable: [fnIs("detailsAvailable", false)]
-            };
-            this.byId("adminUsersTable").getBinding("items").filter(mFilters[sKey] ? new Filter({ filters: mFilters[sKey], and: true }) : []);
+        _applyAdminSort: function () {
+            var oTable = this.byId("adminUsersTable");
+            var oSort = this._oAdminSort;
+            oTable.getColumns().forEach(function (oColumn) {
+                var bSorted = !!oSort && oColumn.getHeader().data("sortProperty") === oSort.property;
+                oColumn.setSortIndicator(bSorted ? (oSort.descending ? SortOrder.Descending : SortOrder.Ascending) : SortOrder.None);
+            });
+            oTable.getBinding("items").sort(oSort ? new Sorter(oSort.property, oSort.descending) : []);
         },
 
         onSortUsers: function (oEvent) {
             var sProperty = oEvent.getSource().data("sortProperty");
-            this._bAdminSortDescending = this._sAdminSortProperty === sProperty && !this._bAdminSortDescending;
-            this._sAdminSortProperty = sProperty;
-
-            var oTable = this.byId("adminUsersTable");
-            var sIndicator = this._bAdminSortDescending ? SortOrder.Descending : SortOrder.Ascending;
-            oTable.getColumns().forEach(function (oColumn) {
-                oColumn.setSortIndicator(oColumn.getHeader().data("sortProperty") === sProperty ? sIndicator : SortOrder.None);
-            });
-            oTable.getBinding("items").sort(new Sorter(sProperty, this._bAdminSortDescending));
+            var oCurrent = this._oAdminSort;
+            this._oAdminSort = { property: sProperty, descending: !!oCurrent && oCurrent.property === sProperty && !oCurrent.descending };
+            this._applyAdminSort();
+            this._saveAdminState(this.getView().getModel("adminView").getProperty("/filters"));
         },
 
-        // The toolbar count follows the filter, not only the rows SAP returned.
-        onAdminUsersUpdated: function (oEvent) {
-            this.getView().getModel("adminView").setProperty("/userCount", oEvent.getParameter("total"));
+        onExportUsers: function () {
+            var that = this;
+            var oAdminModel = this.getView().getModel("adminView");
+            var aRows = UserListLogic.sortUsers(
+                UserListLogic.filterUsers(oAdminModel.getProperty("/users"), oAdminModel.getProperty("/filters")),
+                this._oAdminSort
+            );
+            var fnLabel = function (sKey, sDefault) {
+                return that._text(sKey, sDefault);
+            };
+            var sCsv = UserListLogic.toCsv(aRows, [
+                { label: fnLabel("adminColUsername", "Username"), value: function (o) { return o.username; } },
+                { label: fnLabel("adminColFullName", "Full Name"), value: function (o) { return o.fullName; } },
+                { label: fnLabel("adminColLockStatus", "Lock Status"), value: function (o) { return that._lockStatusText(o); } },
+                { label: fnLabel("adminColUserType", "User Type"), value: function (o) { return o.userType; } },
+                { label: fnLabel("adminColLastChanged", "Last Changed"), value: function (o) { return that.formatAdminDate(o.lastChanged); } },
+                { label: fnLabel("adminDetailLastChangedBy", "Changed By"), value: function (o) { return o.lastChangedBy; } }
+            ]);
+            FileUtil.save(sCsv, "sap-users", "csv", "text/csv", "utf-8", true);
+        },
+
+        _lockStatusText: function (oUser) {
+            if (!oUser.detailsAvailable) {
+                return this._text("adminDetailsUnavailable", "Details unavailable");
+            }
+            return oUser.isLocked ? this._text("adminStatusLocked", "Locked") : this._text("adminStatusUnlocked", "Active");
+        },
+
+        formatAdminHighlight: function (sValue, sSearch) {
+            return UserListLogic.highlight(sValue, sSearch);
+        },
+
+        formatAdminUsername: function (sValue, sSearch) {
+            return "<strong>" + UserListLogic.highlight(sValue, sSearch) + "</strong>";
+        },
+
+        formatAdminSelectTooltip: function (sUsername, sProtectedReason, bDetailsAvailable) {
+            var mReasons = {
+                self: ["adminProtectedSelf", "You cannot lock your own user."],
+                connection: ["adminProtectedConnection", "This is the user the app connects to SAP with, so it cannot be locked."],
+                type: ["adminProtectedType", "System and Service users are protected from locking."]
+            };
+            if (mReasons[sProtectedReason]) {
+                return this._text(mReasons[sProtectedReason][0], mReasons[sProtectedReason][1]);
+            }
+            return bDetailsAvailable
+                ? this._text("adminBulkSelectUser", "Select user {0}", [sUsername])
+                : this._text("adminBulkNoDetails", "This user's details could not be read from SAP.");
+        },
+
+        _visibleAdminUsers: function () {
+            var oAdminModel = this.getView().getModel("adminView");
+            return UserListLogic.filterUsers(oAdminModel.getProperty("/users"), oAdminModel.getProperty("/filters"));
+        },
+
+        onUserSelectionChange: function () {
+            this._updateUserSelectionState(this.getView().getModel("adminView").getProperty("/users"), this._visibleAdminUsers());
+        },
+
+        onSelectAllUsers: function (oEvent) {
+            var bSelected = oEvent.getParameter("selected");
+            var aVisible = this._visibleAdminUsers();
+            aVisible.filter(UserListLogic.isSelectable).forEach(function (oUser) {
+                oUser.selected = bSelected;
+            });
+            this._updateUserSelectionState(this.getView().getModel("adminView").getProperty("/users"), aVisible);
+        },
+
+        onClearUserSelection: function () {
+            var aUsers = this.getView().getModel("adminView").getProperty("/users");
+            aUsers.forEach(function (oUser) {
+                oUser.selected = false;
+            });
+            this._updateUserSelectionState(aUsers, this._visibleAdminUsers());
+        },
+
+        onBulkLock: function () {
+            this._openBulkConfirm("lock");
+        },
+
+        onBulkUnlock: function () {
+            this._openBulkConfirm("unlock");
+        },
+
+        _openBulkConfirm: function (sAction) {
+            var oAdminModel = this.getView().getModel("adminView");
+            var oTargets = UserListLogic.bulkTargets(oAdminModel.getProperty("/users"), sAction);
+            var aPreview = oTargets.run.slice(0, 10);
+            var sPreview = aPreview.join(", ");
+            var bLock = sAction === "lock";
+            oAdminModel.setProperty("/bulk", Object.assign({}, oAdminModel.getProperty("/bulk"), {
+                action: sAction,
+                run: oTargets.run,
+                skipped: oTargets.skipped,
+                reason: "",
+                confirmTitle: bLock ? this._text("adminBulkConfirmLockTitle", "Lock Users") : this._text("adminBulkConfirmUnlockTitle", "Unlock Users"),
+                confirmButton: bLock ? this._text("adminBulkLockSelected", "Lock selected") : this._text("adminBulkUnlockSelected", "Unlock selected"),
+                confirmText: this._text(bLock ? "adminBulkConfirmLockText" : "adminBulkConfirmUnlockText", bLock ? "Lock {0} SAP users?" : "Unlock {0} SAP users?", [String(oTargets.run.length)]),
+                skippedText: oTargets.skipped.length ? this._text("adminBulkConfirmSkipped", "{0} already in that state will be skipped.", [String(oTargets.skipped.length)]) : "",
+                preview: oTargets.run.length > aPreview.length
+                    ? this._text("adminBulkPreviewMore", "{0} and {1} more", [sPreview, String(oTargets.run.length - aPreview.length)])
+                    : sPreview
+            }));
+            this.byId("userBulkConfirmDialog").open();
+        },
+
+        onCancelBulkConfirm: function () {
+            this.byId("userBulkConfirmDialog").close();
+        },
+
+        onConfirmBulk: function () {
+            var oBulk = this.getView().getModel("adminView").getProperty("/bulk");
+            this.byId("userBulkConfirmDialog").close();
+            this._aBulkSucceeded = [];
+            return this._runBulk(oBulk.action, oBulk.run, oBulk.skipped, oBulk.reason, false);
+        },
+
+        /** One user: the lock or unlock, then a read-back, because only SAP's own state proves the change. */
+        _bulkWorker: function (sAction, sReason, sUsername) {
+            var that = this;
+            var bExpectLocked = sAction === "lock";
+            var sUrl = "/odata/v4/user-management/" + sAction + "User";
+            return ODataClient.post(sUrl, { username: sUsername, reason: sReason || "" })
+                .then(function (res) {
+                    var oResult = {
+                        username: sUsername,
+                        status: (res && res.status) || "success",
+                        messages: (res && res.messages && res.messages.length) ? res.messages : [{ type: "S", id: "", number: "", message: (res && res.message) || "" }]
+                    };
+                    var sDetailUrl = "/odata/v4/user-management/getUserDetail(username='" + encodeURIComponent(sUsername) + "')";
+                    return ODataClient.get(sDetailUrl).then(function (detailRes) {
+                        var oDetail = detailRes && detailRes.value ? detailRes.value : detailRes;
+                        that._updateAdminUserListEntry(oDetail, true);
+                        if (oDetail.isLocked !== bExpectLocked) {
+                            oResult.status = "error";
+                            oResult.messages = oResult.messages.concat({
+                                type: "E",
+                                id: "",
+                                number: "",
+                                message: that._text("adminActionStatusMismatch", "SAP did not confirm the requested lock status for user {0}.", [sUsername])
+                            });
+                        }
+                        return oResult;
+                    }, function () {
+                        that._markAdminUserDetailsUnavailable(sUsername, true);
+                        oResult.status = "warning";
+                        oResult.messages = oResult.messages.concat({
+                            type: "W",
+                            id: "",
+                            number: "",
+                            message: that._text("adminBulkReadBackFailed", "SAP accepted the action, but its result could not be read back.")
+                        });
+                        return oResult;
+                    });
+                })
+                .catch(function (err) {
+                    return UserListLogic.errorToResult(sUsername, err);
+                });
+        },
+
+        _runBulk: function (sAction, aRun, aSkipped, sReason, bIsUndo) {
+            var that = this;
+            var oAdminModel = this.getView().getModel("adminView");
+            var oProgress = this.byId("userBulkProgressDialog");
+            var bLock = sAction === "lock";
+            this._bBulkCancelled = false;
+            this._clearUndo();
+            oAdminModel.setProperty("/bulk", Object.assign({}, oAdminModel.getProperty("/bulk"), {
+                action: sAction,
+                reason: sReason,
+                isUndo: bIsUndo,
+                cancelling: false,
+                percent: 0,
+                progressTitle: bLock ? this._text("adminBulkProgressLockTitle", "Locking Users") : this._text("adminBulkProgressUnlockTitle", "Unlocking Users"),
+                progressText: this._text("adminBulkProgressText", "{0} / {1} processed", ["0", String(aRun.length)])
+            }));
+            oProgress.setEscapeHandler(function (oEscape) {
+                that.onCancelBulkRun();
+                oEscape.reject();
+            });
+            oProgress.open();
+
+            return UserListLogic.runWithConcurrency(aRun, UserListLogic.BULK_CONCURRENCY, this._bulkWorker.bind(this, sAction, sReason), function () {
+                return that._bBulkCancelled;
+            }, function (iDone, iTotal) {
+                oAdminModel.setProperty("/bulk/percent", Math.round((iDone / iTotal) * 100));
+                oAdminModel.setProperty("/bulk/progressText", that._text("adminBulkProgressText", "{0} / {1} processed", [String(iDone), String(iTotal)]));
+            }).then(function (aResults) {
+                oProgress.close();
+                that._showBulkResults(sAction, aRun.map(function (sUsername, i) {
+                    return aResults[i] || {
+                        username: sUsername,
+                        status: "skipped",
+                        notStarted: true,
+                        messages: [{ type: "I", id: "", number: "", message: that._text("adminBulkSkippedCancelled", "Not processed: the run was cancelled.") }]
+                    };
+                }).concat(aSkipped.map(function (sUsername) {
+                    return {
+                        username: sUsername,
+                        status: "skipped",
+                        messages: [{ type: "I", id: "", number: "", message: that._text("adminBulkSkippedAlready", "Already in the target state.") }]
+                    };
+                })), bIsUndo);
+            });
+        },
+
+        onCancelBulkRun: function () {
+            this._bBulkCancelled = true;
+            this.getView().getModel("adminView").setProperty("/bulk/cancelling", true);
+        },
+
+        _showBulkResults: function (sAction, aResults, bIsUndo) {
+            var that = this;
+            var oAdminModel = this.getView().getModel("adminView");
+            var oSum = UserListLogic.aggregateResults(aResults);
+            var mStaySelected = {};
+            aResults.forEach(function (oResult) {
+                mStaySelected[oResult.username] = oResult.status === "error" || !!oResult.notStarted;
+            });
+            aResults = aResults.map(function (oResult) {
+                var oLook = RESULT_LOOK[oResult.status];
+                return Object.assign({}, oResult, {
+                    state: oLook.state,
+                    icon: oLook.icon,
+                    statusText: that._text(oLook.text, oResult.status),
+                    message: oResult.messages.map(function (m) {
+                        return m.message;
+                    }).join(" "),
+                    technical: oResult.messages.filter(function (m) {
+                        return m.id;
+                    }).map(function (m) {
+                        return m.type + " " + m.id + "/" + m.number + ": " + m.message;
+                    }).join("\n")
+                });
+            });
+            (oAdminModel.getProperty("/users") || []).forEach(function (oUser) {
+                if (mStaySelected[oUser.username] !== undefined) {
+                    oUser.selected = mStaySelected[oUser.username] && UserListLogic.isSelectable(oUser);
+                }
+            });
+            this._aBulkSucceeded = (this._aBulkSucceeded || []).concat(UserListLogic.usernamesWithStatus(aResults, ["success", "warning"]));
+            oAdminModel.setProperty("/bulk", Object.assign({}, oAdminModel.getProperty("/bulk"), {
+                results: aResults,
+                failed: oSum.failed,
+                resultTitle: this._text("adminBulkResultTitle", "Result"),
+                summary: this._text("adminBulkSummary", "{0} succeeded · {1} failed · {2} skipped", [String(oSum.succeeded), String(oSum.failed), String(oSum.skipped)])
+            }));
+            this._applyAdminFilters();
+            if (this._aBulkSucceeded.length && !bIsUndo) {
+                this._offerUndo(sAction, this._aBulkSucceeded);
+            }
+            this.byId("userBulkResultDialog").open();
+        },
+
+        onRetryFailedBulk: function () {
+            var oBulk = this.getView().getModel("adminView").getProperty("/bulk");
+            this.byId("userBulkResultDialog").close();
+            return this._runBulk(oBulk.action, UserListLogic.usernamesWithStatus(oBulk.results, ["error"]), [], oBulk.reason, oBulk.isUndo);
+        },
+
+        onDownloadBulkResults: function () {
+            var that = this;
+            var aResults = this.getView().getModel("adminView").getProperty("/bulk/results");
+            var sCsv = UserListLogic.toCsv(aResults, [
+                { label: this._text("adminColUsername", "Username"), value: function (o) { return o.username; } },
+                { label: this._text("adminBulkColStatus", "Status"), value: function (o) { return that._text(RESULT_LOOK[o.status].text, o.status); } },
+                { label: this._text("adminBulkColMessage", "Message"), value: function (o) { return o.message; } },
+                { label: this._text("adminBulkDetails", "Details"), value: function (o) { return o.technical; } }
+            ]);
+            FileUtil.save(sCsv, "user-lock-results", "csv", "text/csv", "utf-8", true);
+        },
+
+        onCloseBulkResults: function () {
+            this.byId("userBulkResultDialog").close();
+        },
+
+        _offerUndo: function (sAction, aUsernames) {
+            var that = this;
+            var oAdminModel = this.getView().getModel("adminView");
+            this._clearUndo();
+            this._oUndo = { action: sAction === "lock" ? "unlock" : "lock", usernames: aUsernames };
+            oAdminModel.setProperty("/undo/text", sAction === "lock"
+                ? this._text("adminBulkUndoLocked", "{0} users locked.", [String(aUsernames.length)])
+                : this._text("adminBulkUndoUnlocked", "{0} users unlocked.", [String(aUsernames.length)]));
+            this._iUndoTimer = setTimeout(function () {
+                that._clearUndo();
+            }, UNDO_WINDOW_MS);
+        },
+
+        _clearUndo: function () {
+            clearTimeout(this._iUndoTimer);
+            this._oUndo = null;
+            this.getView().getModel("adminView").setProperty("/undo/text", "");
+        },
+
+        onUndoBulk: function () {
+            var oUndo = this._oUndo;
+            if (!oUndo) {
+                return Promise.resolve();
+            }
+            this._aBulkSucceeded = [];
+            return this._runBulk(oUndo.action, oUndo.usernames, [], this._text("adminBulkUndoReason", "Undo of a bulk action"), true);
         },
 
         onSelectUser: function (oEvent) {
@@ -520,7 +1040,7 @@ sap.ui.define([
             });
         },
 
-        _updateAdminUserListEntry: function (oDetail) {
+        _updateAdminUserListEntry: function (oDetail, bDeferView) {
             var oAdminModel = this.getView().getModel("adminView");
             var aUsers = oAdminModel ? oAdminModel.getProperty("/users") || [] : [];
             var sUsername = oDetail && oDetail.username;
@@ -535,12 +1055,15 @@ sap.ui.define([
                         lastChanged: oDetail.lastChanged,
                         lastChangedBy: oDetail.lastChangedBy
                     }));
+                    if (!bDeferView) {
+                        this._applyAdminFilters();
+                    }
                     return;
                 }
             }
         },
 
-        _markAdminUserDetailsUnavailable: function (sUsername) {
+        _markAdminUserDetailsUnavailable: function (sUsername, bDeferView) {
             var oAdminModel = this.getView().getModel("adminView");
             var aUsers = oAdminModel ? oAdminModel.getProperty("/users") || [] : [];
             for (var i = 0; i < aUsers.length; i++) {
@@ -552,8 +1075,12 @@ sap.ui.define([
                         validFrom: null,
                         validTo: null,
                         lastChanged: null,
-                        lastChangedBy: null
+                        lastChangedBy: null,
+                        selected: false
                     }));
+                    if (!bDeferView) {
+                        this._applyAdminFilters();
+                    }
                     return;
                 }
             }
@@ -615,6 +1142,8 @@ sap.ui.define([
         },
 
         onExit: function () {
+            clearTimeout(this._iAdminSearchTimer);
+            clearTimeout(this._iUndoTimer);
             if (this._oAuthBinding) {
                 this._oAuthBinding.detachChange(this._onAuthChanged, this);
                 this._oAuthBinding = null;

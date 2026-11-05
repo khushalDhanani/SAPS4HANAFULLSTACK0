@@ -119,7 +119,7 @@
                     text="{i18n>adminBtnLockUser}"
                     type="Negative"
                     icon="sap-icon://locked"
-                    visible="{= ${adminView>/selectedUser/isLocked} === false }"
+                    visible="{= ${adminView>/selectedUser/isLocked} === false &amp;&amp; !${adminView>/selectedUser/protectedReason} }"
                     press=".onLockUser" />
                 <Button
                     id="btnUnlockUser"

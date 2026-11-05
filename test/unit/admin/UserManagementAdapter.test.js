@@ -316,6 +316,8 @@ describe('UserManagementAdapter.lockUser', () => {
     expect(mockCall).toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
     expect(result).toEqual({
       success: true,
+      status: 'success',
+      messages: [],
       message: "User 'ALICE' locked successfully in SAP",
       username: 'ALICE',
     });
@@ -369,6 +371,8 @@ describe('UserManagementAdapter.unlockUser', () => {
     expect(mockCall).toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
     expect(result).toEqual({
       success: true,
+      status: 'success',
+      messages: [],
       message: "User 'BOB' unlocked successfully in SAP",
       username: 'BOB',
     });

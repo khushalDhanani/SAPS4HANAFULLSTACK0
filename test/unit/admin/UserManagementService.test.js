@@ -18,6 +18,7 @@ jest.mock('../../../srv/integration/s4hana/admin/UserManagementAdapter', () => (
     getUserDetail: mockGetUserDetail,
     lockUser:      mockLockUser,
     unlockUser:    mockUnlockUser,
+    getConnectionUser: jest.fn().mockResolvedValue('CONNECTED_ADMIN'),
   })),
 }));
 

@@ -230,6 +230,18 @@
         font-size: 0.75rem !important;
     }
 }
+/* Sub-User Master: the selected KPI card, and search matches in the table */
+.adminKpiTiles .sapMGT[data-selected="true"] {
+    outline: 0.125rem solid var(--sapSelectedColor, #0064d9);
+    outline-offset: -0.125rem;
+}
+
+.adminSearchMatch {
+    background: var(--sapHighlightColor, #0064d9);
+    color: var(--sapContent_ContrastTextColor, #ffffff);
+    border-radius: 0.125rem;
+}
+
 /* ---------- Ask AI assistant widget (bottom-right) ---------- */
 .aiFab {
     position: fixed !important;

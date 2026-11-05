@@ -1,9 +1,8 @@
 /**
- * UserManagementService — Phase 1 (read-only)
+ * UserManagementService
  *
- * Provides Admin-only access to SAP SU01 user data via RFC BAPIs.
- * All operations are read-only in Phase 1. Write operations (lock, create, etc.)
- * require S_USR_ADM authority on the RFC connection user — see WORKSTATUS.md.
+ * Provides Admin-only access to SAP SU01 user data via RFC BAPIs: list and detail reads, lock and unlock.
+ * Lock and unlock require S_USR_ADM authority on the RFC connection user — see WORKSTATUS.md.
  *
  * Gated to the Admin role only. No data is accessible to any other role.
  */
@@ -30,6 +29,7 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         validTo         : String;
         lastChanged     : String;
         lastChangedBy   : String;
+        protectedReason : String;   // why the user cannot be locked: self, connection, type, or empty
     };
 
     /**
@@ -68,6 +68,7 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         roleCount    : Integer;
         profileCount : Integer;
         lastChanged  : String;   // LASTMODIFIED.MODDATE
+        protectedReason: String; // why the user cannot be locked: self, connection, type, or empty
         lastChangedTime: String; // LASTMODIFIED.MODTIME
         lastChangedBy: String;   // LASTMODIFIED.MODIFIER
         roles        : array of {   // ACTIVITYGROUPS
@@ -86,18 +87,25 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         success : Boolean;
         message : String;
         username: String;
+        status  : String;   // success or warning, from the BAPI RETURN table
+        messages: array of {   // BAPI RETURN
+            type   : String;
+            id     : String;
+            number : String;
+            message: String;
+        };
     };
 
     /**
      * Lock an SAP user account.
      * Backed by BAPI_USER_LOCK + BAPI_TRANSACTION_COMMIT in a single session.
-     * Rejects attempts to lock the active RFC connection user (fail-closed).
+     * Refuses protected users (srv/admin/protectedUsers.js), including the active RFC connection user (fail-closed).
      */
-    action lockUser(username: String) returns ActionResult;
+    action lockUser(username: String, reason: String) returns ActionResult;
 
     /**
      * Unlock an SAP user account.
      * Backed by BAPI_USER_UNLOCK + BAPI_TRANSACTION_COMMIT in a single session.
      */
-    action unlockUser(username: String) returns ActionResult;
+    action unlockUser(username: String, reason: String) returns ActionResult;
 }

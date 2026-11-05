@@ -1,0 +1,107 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="userBulkConfirmDialog"
+        title="{adminView>/bulk/confirmTitle}"
+        contentWidth="30rem">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <Text text="{adminView>/bulk/confirmText}" class="sapUiTinyMarginBottom" />
+                <Text
+                    text="{adminView>/bulk/skippedText}"
+                    visible="{= !!${adminView>/bulk/skippedText} }"
+                    class="sapUiTinyMarginBottom" />
+                <Label text="{i18n>adminBulkPreview}" />
+                <Text id="userBulkPreview" text="{adminView>/bulk/preview}" class="sapUiTinyMarginBottom" />
+                <Label text="{i18n>adminBulkReason}" labelFor="userBulkReason" />
+                <TextArea
+                    id="userBulkReason"
+                    value="{adminView>/bulk/reason}"
+                    valueLiveUpdate="true"
+                    maxLength="500"
+                    rows="3"
+                    width="100%" />
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnBulkConfirm"
+                text="{adminView>/bulk/confirmButton}"
+                type="{= ${adminView>/bulk/action} === 'lock' ? 'Negative' : 'Emphasized' }"
+                press=".onConfirmBulk" />
+        </beginButton>
+        <endButton>
+            <Button text="{i18n>btnCancel}" press=".onCancelBulkConfirm" />
+        </endButton>
+    </Dialog>
+
+    <Dialog id="userBulkProgressDialog" title="{adminView>/bulk/progressTitle}" contentWidth="24rem">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <ProgressIndicator
+                    id="userBulkProgress"
+                    percentValue="{adminView>/bulk/percent}"
+                    displayValue="{adminView>/bulk/progressText}"
+                    state="Information"
+                    width="100%" />
+                <Text
+                    text="{i18n>adminBulkStopping}"
+                    visible="{adminView>/bulk/cancelling}" />
+            </VBox>
+        </content>
+        <endButton>
+            <Button
+                id="btnBulkCancel"
+                text="{i18n>btnCancel}"
+                enabled="{= !${adminView>/bulk/cancelling} }"
+                press=".onCancelBulkRun" />
+        </endButton>
+    </Dialog>
+
+    <Dialog id="userBulkResultDialog" title="{adminView>/bulk/resultTitle}" contentWidth="44rem">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <Title id="userBulkSummary" text="{adminView>/bulk/summary}" level="H4" class="sapUiTinyMarginBottom" />
+                <Table id="userBulkResults" items="{adminView>/bulk/results}" noDataText="{i18n>adminBulkNoResults}" contextualWidth="Auto">
+                    <columns>
+                        <Column width="8rem"><Text text="{i18n>adminBulkColStatus}" /></Column>
+                        <Column width="10rem"><Text text="{i18n>adminColUsername}" /></Column>
+                        <Column><Text text="{i18n>adminBulkColMessage}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <ObjectStatus text="{adminView>statusText}" state="{adminView>state}" icon="{adminView>icon}" />
+                                <Text text="{adminView>username}" />
+                                <VBox>
+                                    <Text text="{adminView>message}" />
+                                    <Panel
+                                        expandable="true"
+                                        headerText="{i18n>adminBulkDetails}"
+                                        visible="{= !!${adminView>technical} }">
+                                        <Text text="{adminView>technical}" />
+                                    </Panel>
+                                </VBox>
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+        <buttons>
+            <Button
+                id="btnBulkRetry"
+                text="{i18n>adminBulkRetryFailed}"
+                type="Emphasized"
+                visible="{= ${adminView>/bulk/failed} > 0 }"
+                press=".onRetryFailedBulk" />
+            <Button
+                id="btnBulkDownload"
+                text="{i18n>adminBulkDownload}"
+                icon="sap-icon://download"
+                press=".onDownloadBulkResults" />
+            <Button text="{i18n>adminDialogClose}" press=".onCloseBulkResults" />
+        </buttons>
+    </Dialog>
+</core:FragmentDefinition>

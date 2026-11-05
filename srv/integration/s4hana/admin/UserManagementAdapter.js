@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * UserManagementAdapter — Phase 1 (read-only)
+ * UserManagementAdapter
  *
  * Encapsulates all SU01 BAPI calls within srv/integration/s4hana/ per architecture rules.
- * Phase 1: BAPI_USER_GETLIST + BAPI_USER_GET_DETAIL only.
+ * Reads: BAPI_USER_GETLIST + BAPI_USER_GET_DETAIL. Writes: BAPI_USER_LOCK / BAPI_USER_UNLOCK + BAPI_TRANSACTION_COMMIT.
  *
  * Evidence (DS4/220, 2026-11-03):
  *   - BAPI_USER_GETLIST: import param MAX_ROWS; table USERLIST {USERNAME, FIRSTNAME, LASTNAME, FULLNAME}
@@ -19,6 +19,8 @@
 const { RfcClient } = require('../RfcClient');
 const LOG = require('../../../common/logger')('user-management-adapter');
 
+const toMessage = (m) => ({ type: m.TYPE, id: m.ID, number: m.NUMBER, message: m.MESSAGE });
+
 /** SAP reports a failed commit in RETURN, without throwing, so RETURN decides whether the change really happened. */
 async function commitOrFail(call, action, bname) {
   const commit = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
@@ -27,7 +29,36 @@ async function commitOrFail(call, action, bname) {
   LOG.error('BAPI_TRANSACTION_COMMIT RETURN error:', failed.TYPE, failed.ID, failed.NUMBER, failed.MESSAGE);
   // A failed rollback must not hide the commit error, which is what the caller needs to see.
   await call('BAPI_TRANSACTION_ROLLBACK', {}).catch((e) => LOG.warn('BAPI_TRANSACTION_ROLLBACK failed:', e.message));
-  throw Object.assign(new Error(`SAP did not commit the ${action} of user '${bname}': ${failed.MESSAGE}`), { status: 502 });
+  throw Object.assign(new Error(`SAP did not commit the ${action} of user '${bname}': ${failed.MESSAGE}`), { status: 502, sapMessage: toMessage(failed) });
+}
+
+/** One lock or unlock BAPI in the caller's LUW: commits only when RETURN holds no E or A, otherwise rolls back. */
+async function changeLock(call, fm, action, bname) {
+  let res;
+  try {
+    res = await call(fm, { USERNAME: bname });
+  } catch (e) {
+    LOG.error(`${fm} failed:`, e.message);
+    throw Object.assign(new Error(`Failed to ${action} user in SAP: ${e.message}`), { status: 502, cause: e });
+  }
+
+  const messages = [].concat(res.RETURN || []).map(toMessage);
+  const errorMsg = messages.find((m) => m.type === 'E' || m.type === 'A');
+  if (errorMsg) {
+    LOG.error(`${fm} RETURN error:`, errorMsg.type, errorMsg.id, errorMsg.number, errorMsg.message);
+    // A failed rollback must not hide the BAPI error, which is what the caller needs to see.
+    await call('BAPI_TRANSACTION_ROLLBACK', {}).catch((e) => LOG.warn('BAPI_TRANSACTION_ROLLBACK failed:', e.message));
+    throw Object.assign(new Error(`SAP error: ${errorMsg.message}`), { status: 502, sapMessage: errorMsg });
+  }
+
+  await commitOrFail(call, action, bname);
+  return {
+    success: true,
+    status: messages.some((m) => m.type === 'W') ? 'warning' : 'success',
+    messages,
+    message: `User '${bname}' ${action}ed successfully in SAP`,
+    username: bname,
+  };
 }
 
 // Lock flag characters returned by BAPI_USER_GET_DETAIL ISLOCKED
@@ -236,6 +267,12 @@ class UserManagementAdapter {
     }
   }
 
+  /** The user RFC logs on with: local env, or the BTP destination in production. */
+  async getConnectionUser() {
+    const { user } = await this._rfc.resolveConnectionParams();
+    return String(user || '').trim().toUpperCase();
+  }
+
   /**
    * Lock an SAP user account via BAPI_USER_LOCK + BAPI_TRANSACTION_COMMIT.
    * Runs in a single RFC session LUW.
@@ -249,9 +286,8 @@ class UserManagementAdapter {
       throw Object.assign(new Error('username is required'), { status: 400 });
     }
     const bname = username.trim().toUpperCase();
-    // The user RFC really logs on with: local env, or the BTP destination in production. A failed read rejects, so nothing is locked.
-    const { user } = await this._rfc.resolveConnectionParams();
-    if (bname === String(user || '').trim().toUpperCase()) {
+    // A failed read rejects, so nothing is locked.
+    if (bname === await this.getConnectionUser()) {
       throw Object.assign(
         new Error(`Cannot lock user '${bname}': operation refused because it is the active RFC connection user`),
         { status: 403 }
@@ -259,29 +295,7 @@ class UserManagementAdapter {
     }
     LOG.info('lockUser', { username: bname });
 
-    return this._rfc.session(async (call) => {
-      let res;
-      try {
-        res = await call('BAPI_USER_LOCK', { USERNAME: bname });
-      } catch (e) {
-        LOG.error('BAPI_USER_LOCK failed:', e.message);
-        throw Object.assign(new Error(`Failed to lock user in SAP: ${e.message}`), { status: 502, cause: e });
-      }
-
-      const returnMsgs = res.RETURN || [];
-      const errorMsg = returnMsgs.find(m => m.TYPE === 'E' || m.TYPE === 'A');
-      if (errorMsg) {
-        LOG.error('BAPI_USER_LOCK RETURN error:', errorMsg.TYPE, errorMsg.ID, errorMsg.NUMBER, errorMsg.MESSAGE);
-        throw Object.assign(new Error(`SAP error: ${errorMsg.MESSAGE}`), { status: 502 });
-      }
-
-      await commitOrFail(call, 'lock', bname);
-      return {
-        success: true,
-        message: `User '${bname}' locked successfully in SAP`,
-        username: bname
-      };
-    });
+    return this._rfc.session((call) => changeLock(call, 'BAPI_USER_LOCK', 'lock', bname));
   }
 
   /**
@@ -298,29 +312,7 @@ class UserManagementAdapter {
     const bname = username.trim().toUpperCase();
     LOG.info('unlockUser', { username: bname });
 
-    return this._rfc.session(async (call) => {
-      let res;
-      try {
-        res = await call('BAPI_USER_UNLOCK', { USERNAME: bname });
-      } catch (e) {
-        LOG.error('BAPI_USER_UNLOCK failed:', e.message);
-        throw Object.assign(new Error(`Failed to unlock user in SAP: ${e.message}`), { status: 502, cause: e });
-      }
-
-      const returnMsgs = res.RETURN || [];
-      const errorMsg = returnMsgs.find(m => m.TYPE === 'E' || m.TYPE === 'A');
-      if (errorMsg) {
-        LOG.error('BAPI_USER_UNLOCK RETURN error:', errorMsg.TYPE, errorMsg.ID, errorMsg.NUMBER, errorMsg.MESSAGE);
-        throw Object.assign(new Error(`SAP error: ${errorMsg.MESSAGE}`), { status: 502 });
-      }
-
-      await commitOrFail(call, 'unlock', bname);
-      return {
-        success: true,
-        message: `User '${bname}' unlocked successfully in SAP`,
-        username: bname
-      };
-    });
+    return this._rfc.session((call) => changeLock(call, 'BAPI_USER_UNLOCK', 'unlock', bname));
   }
 }
 

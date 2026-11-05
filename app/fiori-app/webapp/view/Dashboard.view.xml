@@ -296,37 +296,205 @@
                                         <f:beginColumnPages>
                                             <Page id="adminUserListPage" showHeader="false" backgroundDesign="Transparent">
                                                 <content>
+                                                <HBox id="adminKpiTiles" wrap="Wrap" class="adminKpiTiles sapUiTinyMarginBottom">
+                                                    <GenericTile
+                                                        id="adminKpiTotal"
+                                                        header="{i18n>adminKpiTotal}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/total', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/total', formatter: '.formatMetricValue'}" valueColor="Neutral" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="total" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/total}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiActive"
+                                                        header="{i18n>adminKpiActive}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/active', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/active', formatter: '.formatMetricValue'}" valueColor="Good" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="active" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/active}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiLocked"
+                                                        header="{i18n>adminKpiLocked}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/locked', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/locked', formatter: '.formatMetricValue'}" valueColor="Error" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="locked" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/locked}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiChangedToday"
+                                                        header="{i18n>adminKpiChangedToday}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/changedToday', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/changedToday', formatter: '.formatMetricValue'}" valueColor="Neutral" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="changedToday" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/changedToday}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiChangedLast7"
+                                                        header="{i18n>adminKpiChangedLast7}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/changedLast7', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/changedLast7', formatter: '.formatMetricValue'}" valueColor="Neutral" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="changedLast7" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/changedLast7}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                </HBox>
+
+                                                <MessageStrip
+                                                    id="adminListLimitStrip"
+                                                    text="{adminView>/listLimitText}"
+                                                    type="Warning"
+                                                    showIcon="true"
+                                                    visible="{= !!${adminView>/listLimitText} }"
+                                                    class="sapUiTinyMarginBottom" />
+                                                <MessageStrip
+                                                    id="adminUndoStrip"
+                                                    text="{adminView>/undo/text}"
+                                                    type="Success"
+                                                    showIcon="true"
+                                                    visible="{= !!${adminView>/undo/text} }"
+                                                    class="sapUiTinyMarginBottom">
+                                                    <link>
+                                                        <Link id="adminUndoLink" text="{i18n>adminBulkUndo}" press=".onUndoBulk" />
+                                                    </link>
+                                                </MessageStrip>
+
+                                                <HBox id="adminFilterBar" wrap="Wrap" alignItems="End" class="sapUiTinyMarginBottom">
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminColLockStatus}" labelFor="adminLockStatusFilter" />
+                                                        <Select
+                                                            id="adminLockStatusFilter"
+                                                            selectedKey="{adminView>/filters/lockStatus}"
+                                                            change=".onLockStatusFilterChange">
+                                                            <items>
+                                                                <core:Item key="" text="{i18n>adminFilterAll}" />
+                                                                <core:Item key="active" text="{i18n>adminStatusUnlocked}" />
+                                                                <core:Item key="locked" text="{i18n>adminStatusLocked}" />
+                                                                <core:Item key="unavailable" text="{i18n>adminDetailsUnavailable}" />
+                                                            </items>
+                                                        </Select>
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminColUserType}" labelFor="adminUserTypeFilter" />
+                                                        <MultiComboBox
+                                                            id="adminUserTypeFilter"
+                                                            width="12rem"
+                                                            selectedKeys="{adminView>/filters/userTypes}"
+                                                            selectionFinish=".onUserTypeFilterChange">
+                                                            <items>
+                                                                <core:Item key="A" text="{i18n>adminUserTypeA}" />
+                                                                <core:Item key="B" text="{i18n>adminUserTypeB}" />
+                                                                <core:Item key="C" text="{i18n>adminUserTypeC}" />
+                                                                <core:Item key="L" text="{i18n>adminUserTypeL}" />
+                                                                <core:Item key="S" text="{i18n>adminUserTypeS}" />
+                                                            </items>
+                                                        </MultiComboBox>
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminDetailLastChangedBy}" labelFor="adminChangedByFilter" />
+                                                        <MultiComboBox
+                                                            id="adminChangedByFilter"
+                                                            width="12rem"
+                                                            selectedKeys="{adminView>/filters/changedBy}"
+                                                            items="{adminView>/changedByOptions}"
+                                                            selectionFinish=".onChangedByFilterChange">
+                                                            <core:Item key="{adminView>key}" text="{adminView>key}" />
+                                                        </MultiComboBox>
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminColLastChanged}" labelFor="adminChangedRangeFilter" />
+                                                        <DateRangeSelection
+                                                            id="adminChangedRangeFilter"
+                                                            width="14rem"
+                                                            displayFormat="dd-MM-yyyy"
+                                                            change=".onChangedRangeFilterChange" />
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminSearchLabel}" labelFor="adminUserSearchField" />
+                                                        <SearchField
+                                                            id="adminUserSearchField"
+                                                            width="18rem"
+                                                            value="{adminView>/searchInput}"
+                                                            placeholder="{i18n>adminSearchPlaceholder}"
+                                                            liveChange=".onSearchUsersLive"
+                                                            search=".onSearchUsers" />
+                                                    </VBox>
+                                                </HBox>
+
+                                                <HBox id="adminChipBar" wrap="Wrap" alignItems="Center" visible="{= ${adminView>/chips}.length > 0 }" class="sapUiTinyMarginBottom">
+                                                    <Tokenizer id="adminFilterChips" tokens="{adminView>/chips}" tokenDelete=".onRemoveFilterChip">
+                                                        <Token key="{adminView>key}" text="{adminView>text}" />
+                                                    </Tokenizer>
+                                                    <Button id="btnClearAdminFilters" text="{i18n>adminFilterClearAll}" type="Transparent" press=".onClearAdminFilters" />
+                                                </HBox>
+
                                                 <Table
                                                     id="adminUsersTable"
                                                     noDataText="{adminView>/noDataText}"
                                                     busy="{adminView>/busy}"
+                                                    sticky="ColumnHeaders,HeaderToolbar,InfoToolbar"
                                                     items="{
                                                         path: 'adminView>/users'
                                                     }"
                                                     contextualWidth="Auto"
                                                     growing="true"
-                                                    growingThreshold="20"
-                                                    updateFinished=".onAdminUsersUpdated">
+                                                    growingThreshold="20">
+                                                    <noData>
+                                                        <VBox alignItems="Center" class="sapUiSmallMargin">
+                                                            <Text id="adminNoDataText" text="{adminView>/noDataText}" />
+                                                            <Button
+                                                                text="{i18n>adminFilterClear}"
+                                                                type="Transparent"
+                                                                visible="{= ${adminView>/chips}.length > 0 }"
+                                                                press=".onClearAdminFilters" />
+                                                        </VBox>
+                                                    </noData>
                                                     <headerToolbar>
                                                         <OverflowToolbar>
                                                             <Title text="{i18n>adminUsersTableTitle} ({adminView>/userCount})" level="H4" />
+                                                            <Text id="adminShowingText" text="{adminView>/showingText}" class="textMuted" />
                                                             <ToolbarSpacer />
-                                                            <Label text="{i18n>adminColLockStatus}" labelFor="adminLockStatusFilter" />
-                                                            <Select
-                                                                id="adminLockStatusFilter"
-                                                                change=".onFilterUsersByLockStatus">
-                                                                <items>
-                                                                    <core:Item key="" text="{i18n>adminFilterAll}" />
-                                                                    <core:Item key="active" text="{i18n>adminStatusUnlocked}" />
-                                                                    <core:Item key="locked" text="{i18n>adminStatusLocked}" />
-                                                                    <core:Item key="unavailable" text="{i18n>adminDetailsUnavailable}" />
-                                                                </items>
-                                                            </Select>
-                                                            <SearchField
-                                                                id="adminUserSearchField"
-                                                                width="18rem"
-                                                                placeholder="{i18n>adminSearchPlaceholder}"
-                                                                search=".onSearchUsers" />
+                                                            <Button
+                                                                id="btnExportUsers"
+                                                                icon="sap-icon://excel-attachment"
+                                                                text="{i18n>adminExportCsv}"
+                                                                type="Transparent"
+                                                                enabled="{= ${adminView>/userCount} > 0 }"
+                                                                press=".onExportUsers" />
                                                             <Button
                                                                 id="btnRefreshUsers"
                                                                 icon="sap-icon://refresh"
@@ -335,7 +503,43 @@
                                                                 press=".onRefreshUsers" />
                                                         </OverflowToolbar>
                                                     </headerToolbar>
+                                                    <infoToolbar>
+                                                        <OverflowToolbar id="adminSelectionToolbar" visible="{= ${adminView>/selection/count} > 0 }">
+                                                            <Title id="adminSelectionCount" text="{adminView>/selection/text}" level="H5" />
+                                                            <Text text="{adminView>/selection/hint}" visible="{= !!${adminView>/selection/hint} }" class="textMuted" />
+                                                            <ToolbarSpacer />
+                                                            <Button
+                                                                id="btnBulkLock"
+                                                                text="{i18n>adminBulkLockSelected}"
+                                                                icon="sap-icon://locked"
+                                                                type="Negative"
+                                                                enabled="{adminView>/selection/canLock}"
+                                                                press=".onBulkLock" />
+                                                            <Button
+                                                                id="btnBulkUnlock"
+                                                                text="{i18n>adminBulkUnlockSelected}"
+                                                                icon="sap-icon://unlocked"
+                                                                type="Emphasized"
+                                                                enabled="{adminView>/selection/canUnlock}"
+                                                                press=".onBulkUnlock" />
+                                                            <Button
+                                                                id="btnClearSelection"
+                                                                text="{i18n>adminBulkClearSelection}"
+                                                                type="Transparent"
+                                                                press=".onClearUserSelection" />
+                                                        </OverflowToolbar>
+                                                    </infoToolbar>
                                                     <columns>
+                                                        <Column width="2.75rem">
+                                                            <header>
+                                                                <CheckBox
+                                                                    id="adminSelectAll"
+                                                                    selected="{adminView>/selection/all}"
+                                                                    partiallySelected="{adminView>/selection/partial}"
+                                                                    tooltip="{i18n>adminBulkSelectAllFiltered}"
+                                                                    select=".onSelectAllUsers" />
+                                                            </header>
+                                                        </Column>
                                                         <Column width="10rem">
                                                             <header>
                                                                 <Link text="{i18n>adminColUsername}" press=".onSortUsers">
@@ -400,11 +604,13 @@
                                                             navigated="{= ${adminView>username} === ${adminView>/selectedUser/username} }"
                                                             press=".onSelectUser">
                                                             <cells>
-                                                                <ObjectIdentifier
-                                                                    title="{adminView>username}"
-                                                                    titleActive="true"
-                                                                    titlePress=".onSelectUser" />
-                                                                <Text text="{adminView>fullName}" />
+                                                                <CheckBox
+                                                                    selected="{adminView>selected}"
+                                                                    enabled="{= ${adminView>detailsAvailable} &amp;&amp; !${adminView>protectedReason} }"
+                                                                    tooltip="{parts: ['adminView>username', 'adminView>protectedReason', 'adminView>detailsAvailable'], formatter: '.formatAdminSelectTooltip'}"
+                                                                    select=".onUserSelectionChange" />
+                                                                <FormattedText htmlText="{parts: ['adminView>username', 'adminView>/filters/search'], formatter: '.formatAdminUsername'}" />
+                                                                <FormattedText htmlText="{parts: ['adminView>fullName', 'adminView>/filters/search'], formatter: '.formatAdminHighlight'}" />
                                                                 <ObjectStatus
                                                                     text="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? ${i18n>adminStatusLocked} : ${i18n>adminStatusUnlocked}) : ${i18n>adminDetailsUnavailable} }"
                                                                     state="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? 'Error' : 'Success') : 'Warning' }"
@@ -421,7 +627,7 @@
                                                                         text="{i18n>adminBtnLockUser}"
                                                                         type="Negative"
                                                                         icon="sap-icon://locked"
-                                                                        visible="{= ${adminView>detailsAvailable} &amp;&amp; !${adminView>isLocked} }"
+                                                                        visible="{= ${adminView>detailsAvailable} &amp;&amp; !${adminView>isLocked} &amp;&amp; !${adminView>protectedReason} }"
                                                                         press=".onLockUser" />
                                                                     <Button
                                                                         text="{i18n>adminBtnUnlockUser}"
@@ -448,5 +654,8 @@
                 </VBox>
             </VBox>
         </content>
+        <dependents>
+            <core:Fragment fragmentName="saps4hana.fiori.fragment.UserBulkDialogs" type="XML" />
+        </dependents>
     </Page>
 </mvc:View>

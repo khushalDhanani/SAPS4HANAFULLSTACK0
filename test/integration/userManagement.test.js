@@ -17,19 +17,24 @@ const ADMIN = { auth: { username: 'khushal', password: '' }, validateStatus: () 
 const VIEWER = { auth: { username: 'test-viewer-1120', password: '' }, validateStatus: () => true };
 const ANONYMOUS = { validateStatus: () => true };
 
+const DEFAULT_ANSWERS = { BAPI_USER_GET_DETAIL: { LOGONDATA: { USTYP: 'A' }, ISLOCKED: {}, RETURN: [] } };
+
 /** Answers each function module from `answers` (a value, or a function that may throw); records every call. */
 function stubRfc(answers = {}) {
     const calls = [];
     jest.spyOn(RfcClient.prototype, 'resolveConnectionParams').mockResolvedValue({ user: 'CONNECTED_ADMIN' });
     jest.spyOn(RfcClient.prototype, 'session').mockImplementation((fn) => fn(async (fm, params) => {
         calls.push({ fm, params });
-        const answer = answers[fm];
+        const answer = fm in answers ? answers[fm] : DEFAULT_ANSWERS[fm];
         return typeof answer === 'function' ? answer(params) : answer;
     }));
     return calls;
 }
 
 const down = () => { throw new Error('RFC connection dropped'); };
+// lockUser reads the target's user type first; a dialog user is not protected.
+const TYPE_READ = { fm: 'BAPI_USER_GET_DETAIL', params: { USERNAME: 'ALICE' } };
+const detailOfType = (USTYP) => ({ LOGONDATA: { USTYP }, ISLOCKED: {}, RETURN: [] });
 const LOCK_OK = { BAPI_USER_LOCK: { RETURN: [] }, BAPI_TRANSACTION_COMMIT: {} };
 const UNLOCK_OK = { BAPI_USER_UNLOCK: { RETURN: [] }, BAPI_TRANSACTION_COMMIT: {} };
 
@@ -97,6 +102,7 @@ describe('Integration: SU01 user management', () => {
             ]);
             expect(res.status).toBe(200);
             expect(res.data.value).toEqual([{
+                protectedReason: '',
                 username: 'ALICE',
                 firstName: '',
                 lastName: '',
@@ -109,6 +115,21 @@ describe('Integration: SU01 user management', () => {
                 lastChanged: '20261001',
                 lastChangedBy: 'ADMIN'
             }]);
+        });
+
+        it('listUsers and getUserDetail flag why a user cannot be locked', async () => {
+            const detailBy = { ALICE: 'A', SVC: 'S', SYS: 'B', [ADMIN.auth.username.toUpperCase()]: 'A', CONNECTED_ADMIN: 'A' };
+            stubRfc({
+                BAPI_USER_GETLIST: { USERLIST: Object.keys(detailBy).map((USERNAME) => ({ USERNAME })), RETURN: [] },
+                BAPI_USER_GET_DETAIL: ({ USERNAME }) => detailOfType(detailBy[USERNAME])
+            });
+
+            const list = await axios.get(`${BASE}/listUsers(search='',maxRows=10)`, ADMIN);
+            const reasons = Object.fromEntries(list.data.value.map((u) => [u.username, u.protectedReason]));
+            expect(reasons).toEqual({ ALICE: '', SVC: 'type', SYS: 'type', [ADMIN.auth.username.toUpperCase()]: 'self', CONNECTED_ADMIN: 'connection' });
+
+            const detail = await axios.get(`${BASE}/getUserDetail(username='SVC')`, ADMIN);
+            expect(detail.data.protectedReason).toBe('type');
         });
 
         it('listUsers answers 502 with the adapter text when the RFC call fails', async () => {
@@ -164,11 +185,84 @@ describe('Integration: SU01 user management', () => {
             const res = await axios.post(`${BASE}/lockUser`, { username: '  alice  ' }, ADMIN);
 
             expect(calls).toEqual([
+                TYPE_READ,
                 { fm: 'BAPI_USER_LOCK', params: { USERNAME: 'ALICE' } },
                 { fm: 'BAPI_TRANSACTION_COMMIT', params: { WAIT: 'X' } }
             ]);
             expect(res.status).toBe(200);
             expect(res.data).toMatchObject({ success: true, message: "User 'ALICE' locked successfully in SAP", username: 'ALICE' });
+        });
+
+        it.each(['B', 'S'])('refuses a user of protected type %s with 403, and sends no lock', async (USTYP) => {
+            const calls = stubRfc({ ...LOCK_OK, BAPI_USER_GET_DETAIL: detailOfType(USTYP) });
+
+            const res = await axios.post(`${BASE}/lockUser`, { username: 'ALICE' }, ADMIN);
+
+            expect(res.status).toBe(403);
+            expect(calls).toEqual([TYPE_READ]);
+        });
+
+        it('refuses the logged-in user with 403, and nothing reaches SAP', async () => {
+            const calls = stubRfc(LOCK_OK);
+
+            const res = await axios.post(`${BASE}/lockUser`, { username: ADMIN.auth.username }, ADMIN);
+
+            expect(res.status).toBe(403);
+            expect(calls).toEqual([]);
+        });
+
+        it('fails closed: no lock is sent when the type read fails', async () => {
+            const calls = stubRfc({ ...LOCK_OK, BAPI_USER_GET_DETAIL: down });
+
+            const res = await axios.post(`${BASE}/lockUser`, { username: 'ALICE' }, ADMIN);
+
+            expect(res.status).toBe(502);
+            expect(calls).toEqual([TYPE_READ]);
+        });
+
+        it('rolls back without a commit on an E message, and returns the SAP message id', async () => {
+            const calls = stubRfc({
+                BAPI_USER_LOCK: { RETURN: [{ TYPE: 'E', ID: 'SU', NUMBER: '001', MESSAGE: 'No authorization' }] },
+                BAPI_TRANSACTION_ROLLBACK: {}
+            });
+
+            const res = await axios.post(`${BASE}/lockUser`, { username: 'ALICE' }, ADMIN);
+
+            expect(calls.map((c) => c.fm)).toEqual(['BAPI_USER_GET_DETAIL', 'BAPI_USER_LOCK', 'BAPI_TRANSACTION_ROLLBACK']);
+            expect(res.status).toBe(502);
+            expect(res.data.error).toMatchObject({ code: 'SU/001', message: 'SAP error: No authorization' });
+        });
+
+        it('reports a warning and its messages when the BAPI returns type W', async () => {
+            stubRfc({ ...LOCK_OK, BAPI_USER_LOCK: { RETURN: [{ TYPE: 'W', ID: 'SU', NUMBER: '002', MESSAGE: 'Careful' }] } });
+
+            const res = await axios.post(`${BASE}/lockUser`, { username: 'ALICE' }, ADMIN);
+
+            expect(res.status).toBe(200);
+            expect(res.data).toMatchObject({ status: 'warning', messages: [{ type: 'W', id: 'SU', number: '002', message: 'Careful' }] });
+        });
+
+        it('rejects a reason over 500 characters before anything reaches SAP', async () => {
+            const calls = stubRfc(LOCK_OK);
+
+            const res = await axios.post(`${BASE}/lockUser`, { username: 'ALICE', reason: 'x'.repeat(501) }, ADMIN);
+
+            expect(res.status).toBe(400);
+            expect(calls).toEqual([]);
+        });
+
+        it('writes an audit line with who, target, action, result and reason, for success and refusal', async () => {
+            const info = jest.spyOn(console, 'info').mockImplementation(() => {});
+            const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+            const auditLines = () => [...info.mock.calls, ...log.mock.calls].map((args) => args.join(' ')).filter((line) => line.includes('AUDIT'));
+            stubRfc({ ...LOCK_OK });
+            await axios.post(`${BASE}/lockUser`, { username: 'ALICE', reason: 'Left\nthe company' }, ADMIN);
+            expect(auditLines().join()).toEqual(expect.stringContaining('"target":"ALICE","action":"lock","result":"success","reason":"Left\\nthe company"'));
+            expect(auditLines().join()).toContain(`"who":"${ADMIN.auth.username}"`);
+
+            stubRfc({ ...LOCK_OK, BAPI_USER_GET_DETAIL: detailOfType('S') });
+            await axios.post(`${BASE}/lockUser`, { username: 'ALICE' }, ADMIN);
+            expect(auditLines().join()).toContain('"result":"refused"');
         });
 
         it('refuses the RFC connection user in any case with 403, and nothing reaches SAP', async () => {
@@ -204,7 +298,8 @@ describe('Integration: SU01 user management', () => {
             const calls = stubRfc({ [bapi]: { RETURN: [] }, BAPI_TRANSACTION_COMMIT: commit, BAPI_TRANSACTION_ROLLBACK: rollback });
             return { calls, sent: axios.post(`${BASE}/${action}`, { username }, ADMIN) };
         };
-        const names = (calls) => calls.map((c) => c.fm);
+        // lockUser reads the user type first; these tests are about what follows it.
+        const names = (calls) => calls.map((c) => c.fm).filter((fm) => fm !== 'BAPI_USER_GET_DETAIL');
 
         it.each(['E', 'A'])('answers 502 and rolls back when the commit returns a type %s message', async (TYPE) => {
             const { calls, sent } = run({ RETURN: { TYPE, MESSAGE: 'Update terminated' } });
@@ -246,6 +341,15 @@ describe('Integration: SU01 user management', () => {
     });
 
     describe('unlockUser', () => {
+        it('allows unlocking a protected user, so it can be recovered', async () => {
+            const calls = stubRfc({ ...UNLOCK_OK, BAPI_USER_GET_DETAIL: detailOfType('S') });
+
+            const res = await axios.post(`${BASE}/unlockUser`, { username: 'ALICE' }, ADMIN);
+
+            expect(res.status).toBe(200);
+            expect(calls.map((c) => c.fm)).toEqual(['BAPI_USER_UNLOCK', 'BAPI_TRANSACTION_COMMIT']);
+        });
+
         it('trims and upper-cases the username, unlocks, commits with WAIT and reports the user', async () => {
             const calls = stubRfc(UNLOCK_OK);
 

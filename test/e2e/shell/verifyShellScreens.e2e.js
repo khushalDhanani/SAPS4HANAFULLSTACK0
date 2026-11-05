@@ -101,13 +101,14 @@ async function verifySidebar(baseUrl) {
                     const row = table.getItems().find((item) => item.getBindingContext('adminView'));
                     const cells = row ? row.getCells() : [];
                     const context = row && row.getBindingContext('adminView');
-                    const actions = cells[6] && cells[6].getItems ? cells[6].getItems() : [];
+                    const actions = cells[7] && cells[7].getItems ? cells[7].getItems() : [];
                     return {
                         headers: table.getColumns().map((column) => column.getHeader().getText()),
                         detailsAvailable: context ? context.getProperty('detailsAvailable') : null,
                         fullName: context ? context.getProperty('fullName') : '',
-                        displayedFullName: cells[1] && cells[1].getText ? cells[1].getText() : '',
-                        status: cells[2] && cells[2].getText ? cells[2].getText() : '',
+                        displayedFullName: cells[2] && cells[2].getHtmlText ? cells[2].getDomRef().textContent : '',
+                        protectedReason: context ? context.getProperty('protectedReason') : '',
+                        status: cells[3] && cells[3].getText ? cells[3].getText() : '',
                         visibleActions: actions
                             .filter((control) => control.isA('sap.m.Button') && control.getVisible())
                             .map((control) => control.getText())
@@ -129,7 +130,7 @@ async function verifySidebar(baseUrl) {
                     }
                     if (!adminList.status) problems.push('first row has no visible lock/detail status');
                     if (!adminList.visibleActions.includes('View Detail')) problems.push('first row has no View Detail action');
-                    if (adminList.detailsAvailable === true
+                    if (adminList.detailsAvailable === true && !adminList.protectedReason
                         && !adminList.visibleActions.some((action) => action === 'Lock User' || action === 'Unlock User')) {
                         problems.push('first row has no applicable Lock/Unlock action');
                     }
@@ -293,7 +294,7 @@ async function verifyUserDetailPane(baseUrl) {
         .filter((key) => String(state[key]) !== String(wanted[key]))
         .map((key) => `expected ${key} ${wanted[key]}, got ${state[key]}`);
     const openRow = async (username) => {
-        await page.locator('[id$="--adminUsersTable"] tr', { hasText: username }).locator('td').nth(1).click();
+        await page.locator('[id$="--adminUsersTable"] tr', { hasText: username }).locator('td').nth(2).click();
         await session.settle();
         await page.waitForTimeout(600); // the column animation
     };
@@ -360,7 +361,7 @@ async function verifyUserDetailPane(baseUrl) {
             const table = Element.registry.filter((c) => c.getId().endsWith('--adminUsersTable'))[0];
             return table.getItems()[0].getBindingContext('adminView').getProperty('username');
         });
-        await live.page.locator('[id$="--adminUsersTable"] tr', { hasText: username }).first().locator('td').nth(1).click();
+        await live.page.locator('[id$="--adminUsersTable"] tr', { hasText: username }).first().locator('td').nth(2).click();
         await live.settle();
         await live.page.waitForTimeout(600);
         const state = await paneState(live.page);
@@ -373,6 +374,240 @@ async function verifyUserDetailPane(baseUrl) {
         step(errors, details, 'Live side pane', [`${err.name}: ${err.message.split('\n')[0]}`]);
     } finally {
         await live.close();
+    }
+    return { errors, details };
+}
+
+const BULK_ROWS = [
+    { username: 'ALPHA', fullName: 'Alpha User', detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20260101', lastChangedBy: 'ADMIN', protectedReason: '' },
+    { username: 'BETA', fullName: 'Beta User', detailsAvailable: true, isLocked: true, userType: 'A', lastChanged: '20260102', lastChangedBy: 'DRATHOD', protectedReason: '' },
+    { username: 'NOAUTH', fullName: '=Formula User', detailsAvailable: true, isLocked: false, userType: 'C', lastChanged: '20260103', lastChangedBy: 'ADMIN', protectedReason: '' },
+    { username: 'SVC', fullName: 'Service User', detailsAvailable: true, isLocked: false, userType: 'S', lastChanged: '20260104', lastChangedBy: 'ADMIN', protectedReason: 'type' },
+    { username: 'ME', fullName: 'Logged In', detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20260105', lastChangedBy: 'ADMIN', protectedReason: 'self' },
+    { username: 'SLOW1', fullName: 'Slow One', detailsAvailable: true, isLocked: false, userType: 'L', lastChanged: '20260106', lastChangedBy: 'ADMIN', protectedReason: '' }
+];
+
+const bulkState = (page) => page.evaluate(() => {
+    const Element = window.sap.ui.require('sap/ui/core/Element');
+    const byId = (suffix) => Element.registry.filter((c) => c.getId().endsWith('--' + suffix))[0];
+    const shown = (control) => !!control && !!control.getDomRef() && control.getDomRef().getClientRects().length > 0;
+    const table = byId('adminUsersTable');
+    const rowFor = (name) => table.getItems().find((item) => item.getBindingContext('adminView').getProperty('username') === name);
+    return {
+        rows: table.getItems().map((item) => item.getBindingContext('adminView').getProperty('username')),
+        showing: byId('adminShowingText').getText(),
+        kpis: Object.fromEntries(['Total', 'Active', 'Locked'].map((k) => [k, byId('adminKpi' + k).getDomRef().innerText.replace(/\D+/g, ' ').trim()])),
+        lockedSelected: byId('adminKpiLocked').getDomRef().getAttribute('data-selected'),
+        lockFilter: byId('adminLockStatusFilter').getSelectedKey(),
+        chips: byId('adminFilterChips').getTokens().map((t) => t.getText()),
+        selectionShown: shown(byId('adminSelectionToolbar')),
+        selectionText: byId('adminSelectionCount').getText(),
+        canLock: byId('btnBulkLock').getEnabled(),
+        canUnlock: byId('btnBulkUnlock').getEnabled(),
+        protectedBoxes: ['SVC', 'ME', 'ALPHA'].map((name) => { const box = rowFor(name) && rowFor(name).getCells()[0]; return box ? `${name}:${box.getEnabled()}:${box.getTooltip_AsString()}` : `${name}:none`; }),
+        rowLock: ['SVC', 'ALPHA'].map((name) => { const row = rowFor(name); return row ? `${name}:${row.getCells()[7].getItems().filter((c) => c.getVisible()).map((c) => c.getText()).join('+')}` : `${name}:none`; }),
+        confirmOpen: byId('userBulkConfirmDialog').isOpen(),
+        preview: byId('userBulkPreview').getText(),
+        progressOpen: byId('userBulkProgressDialog').isOpen(),
+        progressText: byId('userBulkProgress').getDisplayValue(),
+        resultOpen: byId('userBulkResultDialog').isOpen(),
+        summary: byId('userBulkSummary').getText(),
+        results: byId('userBulkResults').getItems().map((item) => { const r = item.getBindingContext('adminView').getObject(); return `${r.username}:${r.status}:${r.technical}`; }),
+        retryShown: shown(byId('btnBulkRetry')),
+        undoShown: shown(byId('adminUndoStrip')),
+        highlighted: [...document.querySelectorAll('[id$="--adminUsersTable"] .adminSearchMatch')].map((e) => e.textContent),
+        selected: table.getModel('adminView').getProperty('/users').filter((u) => u.selected).map((u) => u.username)
+    };
+});
+
+async function verifyBulkFlow(baseUrl) {
+    console.log('\n=== Sub-User Master KPIs, filters and bulk actions (SAP stubbed; nothing reaches SAP, write guard on) ===');
+    const errors = [];
+    const details = [];
+    const session = await openSession({ baseUrl });
+    const { page } = session;
+    const lockState = Object.fromEntries(BULK_ROWS.map((row) => [row.username, row.isLocked]));
+    const posts = [];
+    let noAuthFails = true;
+    let hold = null;
+
+    const expect = (state, wanted) => Object.keys(wanted)
+        .filter((key) => String(state[key]) !== String(wanted[key]))
+        .map((key) => `expected ${key} "${wanted[key]}", got "${state[key]}"`);
+    const tick = async (name) => {
+        await page.locator('[id$="--adminUsersTable"] tr', { hasText: name }).locator('.sapMCb').first().click();
+        await page.waitForTimeout(150);
+    };
+    const pressBtn = async (suffix) => {
+        await page.locator(`[id$="--${suffix}"]`).click();
+    };
+    const waitDialog = (suffix) => page.waitForFunction((id) => {
+        const Element = window.sap.ui.require('sap/ui/core/Element');
+        return Element.registry.filter((c) => c.getId().endsWith('--' + id))[0].isOpen();
+    }, suffix);
+
+    try {
+        await page.route('**/odata/v4/user-management/listUsers*', (route) => route.fulfill({
+            json: { value: BULK_ROWS.map((row) => ({ ...row, isLocked: lockState[row.username] })) }
+        }));
+        await page.route('**/odata/v4/user-management/getUserDetail*', (route) => {
+            const username = decodeURIComponent(route.request().url().match(/username='([^']*)'/)[1]);
+            return route.fulfill({ json: { ...paneDetail(username, lockState[username]), protectedReason: '' } });
+        });
+        await page.route(/\/odata\/v4\/user-management\/(lock|unlock)User$/, async (route) => {
+            const body = route.request().postDataJSON();
+            const lock = route.request().url().endsWith('/lockUser');
+            posts.push(`${lock ? 'lock' : 'unlock'}:${body.username}:${body.reason}`);
+            if (hold && body.username === hold.name) await hold.gate;
+            if (body.username === 'NOAUTH' && noAuthFails) {
+                return route.fulfill({ status: 502, json: { error: { code: 'SU/001', message: 'SAP error: No authorization' } } });
+            }
+            lockState[body.username] = lock;
+            return route.fulfill({ json: { success: true, status: 'success', messages: [], message: `User ${body.username} done` } });
+        });
+        await page.evaluate(() => window.sessionStorage.clear()).catch(() => {});
+        await openHash(session, 'dashboard/admin');
+
+        const start = await bulkState(page);
+        step(errors, details, 'KPI cards count the whole list', expect({ ...start, t: start.kpis.Total, a: start.kpis.Active, l: start.kpis.Locked, s: start.showing }, { t: '6', a: '5', l: '1', s: 'Showing 6 of 6 users' }));
+
+        const protectedProblems = [];
+        if (!start.protectedBoxes[0].startsWith('SVC:false:System and Service')) protectedProblems.push(`SVC box: ${start.protectedBoxes[0]}`);
+        if (!start.protectedBoxes[1].startsWith('ME:false:You cannot lock')) protectedProblems.push(`ME box: ${start.protectedBoxes[1]}`);
+        if (!start.protectedBoxes[2].startsWith('ALPHA:true')) protectedProblems.push(`ALPHA box: ${start.protectedBoxes[2]}`);
+        if (start.rowLock[0].includes('Lock User')) protectedProblems.push(`SVC row: ${start.rowLock[0]}`);
+        if (!start.rowLock[1].includes('Lock User')) protectedProblems.push(`ALPHA row: ${start.rowLock[1]}`);
+        step(errors, details, 'Protected users cannot be selected or row-locked, and say why', protectedProblems);
+
+        await page.click('[id$="--adminKpiLocked"]');
+        await session.settle();
+        const carded = await bulkState(page);
+        const cardProblems = expect(carded, { rows: 'BETA', lockedSelected: 'true', lockFilter: 'locked', showing: 'Showing 1 of 6 users' });
+        if (carded.chips.join() !== 'Lock Status: Locked') cardProblems.push(`chips: ${carded.chips}`);
+        await page.click('[id$="--adminKpiLocked"]');
+        await session.settle();
+        cardProblems.push(...expect(await bulkState(page), { lockedSelected: 'false', lockFilter: '', showing: 'Showing 6 of 6 users' }));
+        step(errors, details, 'A KPI card filters, selects itself, syncs the filter and chip, and clears on a second click', cardProblems);
+
+        const box = page.locator('[id$="--adminUserSearchField"] input');
+        await box.fill('user');
+        await page.waitForTimeout(450);
+        const found = await bulkState(page);
+        const foundProblems = expect(found, { showing: 'Showing 4 of 6 users' });
+        if (!found.highlighted.length || !found.highlighted.every((text) => text.toLowerCase() === 'user')) foundProblems.push(`highlight: ${found.highlighted}`);
+        await box.fill('');
+        await page.waitForTimeout(450);
+        step(errors, details, 'Search matches the full name after the debounce, and highlights the match', foundProblems);
+
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.evaluate(() => window.sessionStorage.setItem('admin.userList.state', JSON.stringify({ filters: { lockStatus: 'locked', userTypes: [], changedBy: [], changedFrom: '', changedTo: '', search: '' }, sort: null })));
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await waitForRoute(page);
+        await session.settle();
+        await page.waitForFunction(() => document.querySelector('[id$="--adminUsersTable"] tbody'));
+        await page.waitForTimeout(500);
+        step(errors, details, 'A refresh keeps the saved filter', expect(await bulkState(page), { rows: 'BETA', lockFilter: 'locked' }));
+        await page.locator('[id$="--btnClearAdminFilters"]').click();
+        await session.settle();
+
+        const [csvDownload] = await Promise.all([page.waitForEvent('download'), pressBtn('btnExportUsers')]);
+        const csvText = require('fs').readFileSync(await csvDownload.path(), 'utf8');
+        const csvProblems = [];
+        if (!csvText.includes('\'=Formula User')) csvProblems.push('a formula-like name was not neutralized');
+        if (csvText.trim().split('\r\n').length !== 7) csvProblems.push(`${csvText.trim().split('\r\n').length} lines`);
+        step(errors, details, 'Export downloads the filtered rows as safe CSV', csvProblems);
+
+        await tick('ALPHA');
+        await tick('BETA');
+        await tick('NOAUTH');
+        const picked = await bulkState(page);
+        step(errors, details, 'Selecting rows shows the toolbar with Lock and Unlock enabled', expect(picked, { selectionShown: true, selectionText: '3 selected', canLock: true, canUnlock: true }));
+
+        await pressBtn('btnBulkLock');
+        await waitDialog('userBulkConfirmDialog');
+        const confirm = await bulkState(page);
+        const confirmProblems = expect(confirm, { preview: 'ALPHA, NOAUTH' });
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(400);
+        if ((await bulkState(page)).confirmOpen) confirmProblems.push('Esc did not close the dialog');
+        if (posts.length) confirmProblems.push(`calls before confirming: ${posts}`);
+        step(errors, details, 'The confirm dialog previews the users, closes on Esc, and sends nothing until confirmed', confirmProblems);
+
+        await pressBtn('btnBulkLock');
+        await waitDialog('userBulkConfirmDialog');
+        await page.locator('[id$="--userBulkReason"] textarea').fill('Offboarding');
+        await pressBtn('btnBulkConfirm');
+        await waitDialog('userBulkResultDialog');
+        await page.waitForTimeout(300);
+        const result = await bulkState(page);
+        const resultProblems = expect(result, { summary: '1 succeeded · 1 failed · 1 skipped', retryShown: true, selected: 'NOAUTH', undoShown: true });
+        if (!posts.includes('lock:ALPHA:Offboarding') || posts.some((p) => p.includes('BETA'))) resultProblems.push(`posts: ${posts}`);
+        if (!result.results.some((r) => r === 'NOAUTH:error:E SU/001: SAP error: No authorization')) resultProblems.push(`results: ${result.results}`);
+        if (!result.results.some((r) => r.startsWith('BETA:skipped'))) resultProblems.push(`results: ${result.results}`);
+        step(errors, details, 'The result shows per-user BAPI messages, skips the already locked, and keeps the failed selected', resultProblems);
+
+        noAuthFails = false;
+        posts.length = 0;
+        await pressBtn('btnBulkRetry');
+        await page.waitForFunction(() => {
+            const Element = window.sap.ui.require('sap/ui/core/Element');
+            const dialog = Element.registry.filter((c) => c.getId().endsWith('--userBulkSummary'))[0];
+            return dialog.getText() === '1 succeeded · 0 failed · 0 skipped';
+        });
+        const retried = await bulkState(page);
+        const retryProblems = expect(retried, { selected: '' });
+        if (posts.join() !== 'lock:NOAUTH:Offboarding') retryProblems.push(`posts: ${posts}`);
+        step(errors, details, 'Retry failed runs only the failed user', retryProblems);
+
+        await page.locator('.sapMDialog:visible').getByRole('button', { name: 'Close' }).click();
+        await page.waitForTimeout(400);
+        posts.length = 0;
+        await page.locator('[id$="--adminUndoLink"]').click();
+        await page.waitForFunction(() => {
+            const Element = window.sap.ui.require('sap/ui/core/Element');
+            return Element.registry.filter((c) => c.getId().endsWith('--userBulkSummary'))[0].getText() === '2 succeeded · 0 failed · 0 skipped';
+        });
+        const undoProblems = [];
+        if (posts.slice().sort().join() !== 'unlock:ALPHA:Undo of a bulk action,unlock:NOAUTH:Undo of a bulk action') undoProblems.push(`posts: ${posts}`);
+        if ((await bulkState(page)).undoShown) undoProblems.push('undo is still offered after undoing');
+        step(errors, details, 'Undo unlocks exactly the users the run succeeded on', undoProblems);
+        await page.locator('.sapMDialog:visible').getByRole('button', { name: 'Close' }).click();
+        await page.waitForTimeout(400);
+
+        await page.locator('[id$="--adminSelectAll"]').click();
+        await page.waitForTimeout(200);
+        const all = await bulkState(page);
+        step(errors, details, 'Select all takes only selectable filtered users', expect(all, { selected: 'ALPHA,BETA,NOAUTH,SLOW1', selectionText: '4 selected' }));
+
+        let release;
+        hold = { name: 'ALPHA', gate: new Promise((resolve) => { release = resolve; }) };
+        posts.length = 0;
+        await page.locator('[id$="--btnClearSelection"]').click();
+        await page.waitForTimeout(150);
+        await tick('ALPHA');
+        await pressBtn('btnBulkLock');
+        await waitDialog('userBulkConfirmDialog');
+        await pressBtn('btnBulkConfirm');
+        await waitDialog('userBulkProgressDialog');
+        const running = await bulkState(page);
+        const progressProblems = expect(running, { progressOpen: true, progressText: '0 / 1 processed' });
+        await pressBtn('btnBulkCancel');
+        release();
+        await waitDialog('userBulkResultDialog');
+        await page.waitForTimeout(300);
+        progressProblems.push(...expect(await bulkState(page), { summary: '1 succeeded · 0 failed · 0 skipped', progressOpen: false }));
+        step(errors, details, 'The progress dialog counts calls and lets the running call finish on Cancel', progressProblems);
+        await page.locator('.sapMDialog:visible').getByRole('button', { name: 'Close' }).click();
+
+        const problems = session.consoleErrors.filter((m) => !/502/.test(m)).concat(
+            session.networkErrors.filter((e) => e.status !== 502).map((e) => `HTTP ${e.status} ${e.url}`),
+            session.blocked.map((b) => `write guard blocked ${b.reason}`)
+        );
+        step(errors, details, 'Bulk flow: no unexpected console error, failed request or blocked write', problems);
+    } catch (err) {
+        step(errors, details, 'Bulk flow', [`${err.name}: ${err.message.split('\n')[0]}`]);
+    } finally {
+        await session.close();
     }
     return { errors, details };
 }
@@ -502,10 +737,12 @@ const adminTableState = (page) => page.evaluate(() => {
     return {
         title: toolbar.getContent()[0].getText(),
         toolbarIds: toolbar.getContent().map((c) => c.getId().split('--').pop()),
+        filterBarIds: ['adminLockStatusFilter', 'adminUserTypeFilter', 'adminChangedByFilter', 'adminChangedRangeFilter', 'adminUserSearchField']
+            .filter((id) => Element.registry.filter((c) => c.getId().endsWith('--' + id)).length),
         rows: table.getItems().map((item) => item.getBindingContext('adminView').getProperty('username')),
-        indicator: table.getColumns()[0].getSortIndicator(),
+        indicator: table.getColumns()[1].getSortIndicator(),
         busy: table.getBusy(),
-        noData: table.getNoDataText()
+        noData: Element.registry.filter((c) => c.getId().endsWith('--adminNoDataText'))[0].getText()
     };
 });
 
@@ -548,9 +785,10 @@ async function verifyAdminTable(baseUrl) {
 
         const initial = await adminTableState(page);
         const problems = expectRows(initial, 'Sub-User Master (3)', ['BETA', 'ALPHA', 'GAMMA']);
-        ['adminLockStatusFilter', 'adminUserSearchField', 'btnRefreshUsers'].forEach((id) => {
+        ['btnExportUsers', 'btnRefreshUsers'].forEach((id) => {
             if (!initial.toolbarIds.includes(id)) problems.push(`${id} is not in the table toolbar`);
         });
+        if (initial.filterBarIds.length !== 5) problems.push(`filter bar has only ${initial.filterBarIds}`);
         step(errors, details, 'Sub-User Master shows the bound rows, with its controls in the toolbar', problems);
 
         await sortUsername();
@@ -574,22 +812,22 @@ async function verifyAdminTable(baseUrl) {
         step(errors, details, 'The lock status filter narrows the rows and the toolbar count', locked);
 
         await search('NOMATCH');
-        const searching = [];
-        await page.waitForTimeout(100);
-        if (!(await adminTableState(page)).busy) searching.push('table is not busy while the search runs');
-        await session.settle();
+        await page.waitForTimeout(400); // the search debounce
         const empty = await adminTableState(page);
-        searching.push(...expectRows(empty, 'Sub-User Master (0)', []));
-        if (empty.noData !== 'No SAP users found.') searching.push(`empty text is "${empty.noData}"`);
-        if (searches[searches.length - 1] !== 'NOMATCH') searching.push('search did not reach listUsers');
-        step(errors, details, 'Search uses listUsers, shows the busy state and the empty text', searching);
+        const searching = expectRows(empty, 'Sub-User Master (0)', []);
+        if (empty.noData !== 'No users match your filters.') searching.push(`empty text is "${empty.noData}"`);
+        if (searches.length !== 1) searching.push(`search called the server ${searches.length - 1} extra time(s)`);
+        step(errors, details, 'Search filters on the page, and shows the no-match text', searching);
 
         await search('');
-        await session.settle();
+        await page.waitForTimeout(400);
         await chooseFilter('Locked');
         await page.locator('[id$="--btnRefreshUsers"]').click();
+        await page.waitForTimeout(100);
+        const refreshing = (await adminTableState(page)).busy ? [] : ['table is not busy during a refresh'];
         await session.settle();
-        step(errors, details, 'The filter still applies after a refresh', expectRows(await adminTableState(page), 'Sub-User Master (1)', ['BETA']));
+        refreshing.push(...expectRows(await adminTableState(page), 'Sub-User Master (1)', ['BETA']));
+        step(errors, details, 'A refresh shows the busy state, and the filter still applies after it', refreshing);
 
         const card = await page.evaluate(() => ({
             text: document.body.innerText.includes('Integrated S/4HANA business'),
@@ -711,8 +949,9 @@ async function verifyShellScreens(options = {}) {
     const e = await verifyAdminTable(baseUrl);
     const f = await verifyUserMasterGroup(baseUrl);
     const g = await verifyUserDetailPane(baseUrl);
-    const errors = a.errors.concat(b.errors, c.errors, d.errors, e.errors, f.errors, g.errors);
-    return { status: errors.length ? 'FAIL' : 'PASS', errors, details: a.details.concat(b.details, c.details, d.details, e.details, f.details, g.details) };
+    const h = await verifyBulkFlow(baseUrl);
+    const errors = a.errors.concat(b.errors, c.errors, d.errors, e.errors, f.errors, g.errors, h.errors);
+    return { status: errors.length ? 'FAIL' : 'PASS', errors, details: a.details.concat(b.details, c.details, d.details, e.details, f.details, g.details, h.details) };
 }
 
 if (require.main === module) {
