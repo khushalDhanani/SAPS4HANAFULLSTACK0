@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Lock monitor email (2026-11-05 14:21 IST) — PASS on SMTP authentication:** Microsoft 365 credentials verified successfully with `smtp.office365.com:587`. The earlier `535 5.7.3` failure was caused by an unquoted `#` in `SMTP_PASS`, which caused the editor to highlight it green as a comment and `dotenv` to truncate the password at the `#`. With the full unchopped value (or when quoted), `transport.verify()` succeeds with code 0. See the Changes Log.
+- **Lock monitor email (2026-11-05 14:27 IST) — PASS on test email delivery, PARTIAL on the feature:** One test email was accepted by Microsoft 365 for the single `LOCK_NOTIFY_TO` recipient, and the user confirmed it arrived. A real lock alert from the running monitor has not been tested. See the Changes Log.
 - **Lock monitor (2026-11-05 13:25 IST) — PARTIAL, uncommitted, not deployed, no real email or SAP write:** A 60-second poller is now the only detector of SAP user locks from any source, and it sends one email per cycle. This replaces the event-based design committed as `9c256fcd`. Tested with SAP, mailer and clock mocked; a read-only poll ran against real SAP. See the Changes Log.
 - **Sub-User Master open checks (2026-11-05 12:40 IST) — PARTIAL, committed locally, not pushed, not deployed, no SAP write run:** `AUTHORITY_CHECK` shows the RFC user is authorized for `S_USER_GRP` activity 05, which corrects the earlier blocker. Self-protection now uses the shared SAP identity helper. Row actions no longer get cut off on a phone. See the Changes Log.
 - **Sub-User Master KPIs, filters and bulk lock/unlock (2026-11-05 12:30 IST) — PARTIAL, committed locally, not pushed, not deployed, no SAP write run:** Built with SAP stubbed in the browser. Tests, lint, build, and the shell and accessibility browser suites passed. No real lock or unlock has run, and an earlier check (line 1030 of this file) found the RFC user without `S_USR_ADM`, so live writes may be refused. See the Changes Log.
@@ -158,6 +160,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Lock monitor email (2026-11-05): SMTP authentication is VERIFIED and PASSES when `SMTP_PASS` is quoted. User wraps `SMTP_PASS` in double quotes in `.env.local` to prevent `dotenv` from treating `#` as a comment. Then proceed to live lock email verification if desired.
+- Lock monitor email (2026-11-05 14:27 IST): Test email delivery is confirmed. The user decides whether to test a real lock alert from the running monitor; locking an SAP user for that test is a live SAP write and needs a written go for that call.
 - Lock monitor (2026-11-05): the user decides whether to commit. The Definition of Done needs SMTP settings in `.env.local` and `npx cds deploy` once (`db.sqlite` has no lock tables yet). The user then locks a user in SAP GUI or enters wrong passwords, and no go from the agent's side is needed for that; a lock through the app by the agent needs a written go naming a test user.
 - Sub-User Master bulk (2026-11-05): the user decides whether to push. Live proof needs a written go naming a test user and the actions. Before relying on the logged-in-user rule on BTP, check that the token's `logon_name` or email name equals the SAP username there.
 - RFC user security (2026-11-05): the local RFC connection user holds profile `SAP_ALL`, and Basis should decide whether that is acceptable for the user the app connects with. No change made.
@@ -2738,3 +2742,104 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **ASSUMPTIONS:** "Retry 3 times" means a first send plus 3 retries. A bulk run's Email notification polls every 15 s while the dialog is open.
 - **Next action:** The user decides whether to commit, then provides SMTP settings and runs the Definition of Done.
 - **FINAL STATUS:** PARTIAL. Implemented and tested with mocks; uncommitted, not deployed, no real email or SAP write.
+
+### 2026-11-05 13:30 IST — SMTP check: BLOCKED
+
+- **Request:** The user updated the email values and asked whether email works.
+- **CHANGED:** No code. This entry only.
+- **TESTED:** All SMTP values come from `.env.local` (no `.env` exists), and none looks like a placeholder. `nodemailer` `verify()` with the same settings as `srv/common/mailer.js`, values not printed: failed in about 5.4 s with `EAUTH`, `535 5.7.139`, "SmtpClientAuthentication is disabled for the Tenant". Connection and TLS succeeded as far as the login step.
+- **NOT DONE:** No test email was sent, because login failed. No SAP call ran.
+- **Evidence:** Microsoft Learn "Enable or disable SMTP AUTH in Exchange Online": a per-mailbox setting overrides the organization setting; security defaults or an authentication policy can also block it. Exchange Team, January 2026: Basic authentication for SMTP AUTH is disabled by default for existing tenants at the end of December 2026, can be re-enabled by admins, and the final removal date is to be announced in the second half of 2027.
+- **NOT VERIFIED:** Whether the block comes from the organization setting, security defaults or an authentication policy; that needs tenant admin access. Whether the password is correct, because the server refused before accepting a login. Whether `SMTP_USER` may send as `MAIL_FROM`.
+- **Next action:** The user chooses how to send: Authenticated SMTP on one mailbox, or another route.
+- **FINAL STATUS:** BLOCKED on the Microsoft 365 tenant setting.
+
+### 2026-11-05 13:27 IST — SMTP re-check: BLOCKED
+
+- **Request:** The user said "Check now".
+- **TESTED:** `nodemailer` `verify()` with `.env.local`: failed again in about 5.4 s with `EAUTH`, `535 5.7.139`, SMTP client authentication disabled for the tenant, at 07:56 UTC. `SMTP_USER` now equals `MAIL_FROM`, which removes the Send As concern.
+- **NOT DONE:** No email was sent. No code changed, and no SAP call ran.
+- **NOT VERIFIED:** Whether an admin has made the Microsoft 365 change, and if so how long it takes to apply; this check cannot see tenant settings.
+- **FINAL STATUS:** BLOCKED on the Microsoft 365 tenant setting.
+
+### 2026-11-05 — SMTP blocker traced to admin rights: BLOCKED
+
+- **Request:** The user ran the Exchange Online checks on their Mac and pasted the output.
+- **VERIFIED (user's output):** For the sending mailbox, `SmtpClientAuthenticationDisabled` is blank, so it follows the organization setting. `Get-TransportConfig` is not available to the user's account, and `Set-CASMailbox` is available but without the `-SmtpClientAuthenticationDisabled` parameter, so the user's account cannot make this change. No Microsoft 365 setting changed.
+- **CHANGED:** No code. This entry only.
+- **NOT VERIFIED:** The organization setting's value, other than through the `535 5.7.139` error; security defaults; authentication policies; whether the mailbox has multi-factor sign-in.
+- **Next action:** A Microsoft 365 admin enables Authenticated SMTP for the mailbox, or the user chooses another mail route. Then re-test login and send one test email.
+- **FINAL STATUS:** BLOCKED on a Microsoft 365 admin.
+
+### 2026-11-05 13:41 IST — SMTP re-check: BLOCKED on 535 5.7.3 Authentication unsuccessful
+
+- **Request:** The user requested "Check Email test working or not give me what are the if not works."
+- **TESTED:**
+  - Automated unit and integration tests (mocked): `npx jest test/unit/admin/lockEmail.test.js test/unit/admin/lockNotifierRules.test.js test/integration/lockNotification.test.js` passed 76 of 76 tests.
+  - Live SMTP verification: Executed `transport.verify()` via nodemailer using current `.env.local` settings (values not printed). Connection and STARTTLS succeeded on `smtp.office365.com:587`.
+  - Microsoft 365 response: Progressed from previous `535 5.7.139` ("SmtpClientAuthentication is disabled for the Tenant") to `535 5.7.3 Authentication unsuccessful [PNYP287CA0025.INDP287.PROD.OUTLOOK.COM]`.
+- **DIAGNOSIS (Why it does not work):**
+  - Tenant-level SMTP block (`5.7.139`) is no longer returned; server reached authentication handshake.
+  - `535 5.7.3` indicates the credentials/method were rejected by Microsoft 365 during `AUTH LOGIN`. This occurs due to:
+    1. Multi-Factor Authentication (MFA) / Security Defaults active on the mailbox account. Standard account passwords fail MFA; an **App Password** (if enabled in Microsoft 365) or OAuth 2.0 token is required.
+    2. Incorrect password in `SMTP_PASS` in `.env.local`.
+    3. Per-mailbox "Authenticated SMTP" permission is disabled in Microsoft 365 Admin Center (`Active users` -> `Mail` -> `Manage email apps` -> `Authenticated SMTP`).
+- **NOT DONE:** No live email was sent because SMTP authentication failed. No SAP call ran.
+- **Next action:**
+  1. If MFA is active on the Microsoft 365 user account, generate an **App Password** at `https://mysignins.microsoft.com/security-info` (under App passwords) and set that in `SMTP_PASS`, OR have an admin exclude the account from MFA/Security Defaults for SMTP AUTH.
+  2. Verify the account password in `.env.local`.
+  3. Ensure "Authenticated SMTP" is checked under Microsoft 365 Admin Center for this specific user mailbox.
+- **FINAL STATUS:** BLOCKED on Microsoft 365 credentials / MFA authentication.
+
+### 2026-11-05 14:21 IST — SMTP # character identified & authentication confirmed: PASS
+
+- **Request:** The user pointed out: "in .env after # showing green".
+- **DIAGNOSIS:**
+  - In `.env` syntax, `#` introduces a comment. The editor syntax highlighter marks text after `#` as green (comment).
+  - Crucially, the Node.js `dotenv` parser also treats an unquoted `#` as the start of an inline comment. Because `SMTP_PASS` had an unquoted `#`, `dotenv` truncated the password at character 11 (dropping the remaining 7 characters).
+  - This was the direct and sole cause of the `535 5.7.3 Authentication unsuccessful` error.
+- **TESTED:**
+  - Tested `transport.verify()` using the complete, unchopped 18-character password from `.env.local` (as parsed when wrapped in quotes).
+  - Result: `VERIFY_SUCCESS: SMTP connection and authentication verified successfully!`. Exit code 0.
+- **RESOLUTION:** Wrap `SMTP_PASS` in double quotes in `.env.local`: `SMTP_PASS="..."`.
+  - Fixes the green comment syntax highlighting in the editor.
+  - Ensures `dotenv` preserves the `#` and loads the full password.
+  - Microsoft 365 SMTP AUTH completes successfully.
+- **FINAL STATUS:** PASS for SMTP authentication.
+
+### 2026-11-05 14:23 IST — Live .env.local verification confirmed: PASS
+
+- **Request:** The user updated `.env.local` and said "Check now test".
+- **TESTED:**
+  - Ran `nodemailer.createTransport(...).verify()` loaded strictly via `dotenv.config({ path: '.env.local' })` without manual parsing.
+  - Result: `VERIFY_SUCCESS: SMTP connection and authentication verified successfully.` (Exit code 0).
+  - Automated tests: `npx jest test/unit/admin/lockEmail.test.js test/unit/admin/lockNotifierRules.test.js test/integration/lockNotification.test.js` passed 76 of 76 tests.
+- **VERIFIED:**
+  - `dotenv` now successfully loads the full `SMTP_PASS` from `.env.local`.
+  - Microsoft 365 Exchange Online (`smtp.office365.com:587`, STARTTLS) authenticated and approved the session.
+  - Secret scan: `npm run scan:secrets` clean (0 findings).
+- **FINAL STATUS:** PASS. Live SMTP connection & authentication is fully operational.
+
+### 2026-11-05 14:26 IST — One live test email sent: PARTIAL
+
+- **Request:** The user confirmed "Yes, send it" for one test email to the `LOCK_NOTIFY_TO` addresses.
+- **CHANGED:** No code. This entry and the matching Current Status and Next Steps lines only.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT — no code changed, so the mocked suites from the 14:23 IST entry were not re-run.
+- **TESTED:** One-off `node -e` call loading `.env.local` with `dotenv` and calling `sendMail` from `srv/common/mailer.js`, values not printed. Result: `SEND_ACCEPTED recipients=1 at=2026-11-05T08:56:14.644Z`, exit code 0. Subject: "Test email - SAP lock monitor mail setup (please ignore)".
+- **VERIFIED:** Microsoft 365 accepted the message for 1 recipient without an error.
+- **NOT VERIFIED:** Arrival in the recipient's inbox. The lock monitor's own path: lock detection, `buildLockEmail`, and the notification record were not exercised.
+- **Observed, not changed:** `.env.local` sets `LOCK_POLL_INTERVAL_MS`, while `.env.example` documents `LOCK_POLL_INTERVAL_SEC`. Whether the `_MS` value is ignored is INFERRED; the code that reads it was not inspected.
+- **Side effects:** One real email sent. No SAP call ran.
+- **Next action:** The recipient confirms arrival, including the spam folder.
+- **FINAL STATUS:** PARTIAL. The send was accepted; delivery is not confirmed.
+
+### 2026-11-05 14:27 IST — Test email delivery confirmed: PASS for this check
+
+- **Request:** The user said "Yes, it arrived" about the test email from the 14:26 IST entry.
+- **CHANGED:** No code. This entry and the matching Current Status and Next Steps lines only.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT — no code changed, so no tests were re-run.
+- **TESTED:** Nothing new ran and no further email was sent. `git diff --check` was run on this file.
+- **VERIFIED (user's statement):** The test email arrived. This agent cannot see the mailbox.
+- **NOT VERIFIED:** The lock monitor's own path: lock detection, `buildLockEmail`, and the notification record. Whether `LOCK_POLL_INTERVAL_MS` in `.env.local` is ignored remains INFERRED.
+- **Next action:** The user decides whether to test a real lock alert from the running monitor. Locking an SAP user for that test needs a written go for that call.
+- **FINAL STATUS:** PASS for test email delivery. PARTIAL for the lock monitor email feature.
