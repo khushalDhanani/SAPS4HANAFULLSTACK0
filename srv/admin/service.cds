@@ -2,7 +2,7 @@
  * UserManagementService
  *
  * Provides Admin-only access to SAP SU01 user data via RFC BAPIs: list and detail reads, lock and unlock.
- * Lock and unlock require S_USR_ADM authority on the RFC connection user — see WORKSTATUS.md.
+ * The RFC connection user holds S_USER_GRP activity 05 on DS4/220 (AUTHORITY_CHECK, 2026-11-05) — see WORKSTATUS.md.
  *
  * Gated to the Admin role only. No data is accessible to any other role.
  */

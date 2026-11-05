@@ -3,6 +3,7 @@
 const cds = require('@sap/cds');
 const { UserManagementAdapter } = require('../integration/s4hana/admin/UserManagementAdapter');
 const { protectionReason } = require('./protectedUsers');
+const { resolveUserIdentity } = require('../auth/userIdentity');
 const LOG = require('../common/logger')('user-management-service');
 
 const MAX_REASON_LENGTH = 500;
@@ -85,7 +86,8 @@ module.exports = class UserManagementService extends cds.ApplicationService {
   }
 
   async _protectionContext(req) {
-    return { actor: req.user?.id, connectionUser: await this._getAdapter().getConnectionUser() };
+    // The SAP logon, not the raw CAP id, which can be an email under XSUAA.
+    return { actor: resolveUserIdentity(req), connectionUser: await this._getAdapter().getConnectionUser() };
   }
 
   /** Who did what to whom, and why. One line per attempt, so refused and failed attempts are recorded too. */

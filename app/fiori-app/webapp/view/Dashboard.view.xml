@@ -594,7 +594,7 @@
                                                                 </Link>
                                                             </header>
                                                         </Column>
-                                                        <Column hAlign="End" width="16rem">
+                                                        <Column hAlign="End" width="16rem" minScreenWidth="Tablet" demandPopin="true">
                                                             <Text text="{i18n>adminColActions}" />
                                                         </Column>
                                                     </columns>

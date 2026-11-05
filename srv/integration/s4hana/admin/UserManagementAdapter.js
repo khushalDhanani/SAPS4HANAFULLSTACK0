@@ -12,7 +12,7 @@
  *   - BAPI_USER_GET_DETAIL: import param USERNAME (confirmed; BNAME throws "field not found").
  *     Returns ADDRESS (FULLNAME, E_MAIL), ADMINDATA, COMPANY, DEFAULTS, LOGONDATA, ISLOCKED, ACTIVITYGROUPS, PROFILES, LASTMODIFIED.
  *     Field names and meanings verified against the DS4/220 dictionary (DDIF_FIELDINFO_GET, DD07T), 2026-11-05.
- *   - RFC connection user has S_USER_GRP (5 roles, blank ACTVT/CLASS), NO S_USR_ADM.
+ *   - RFC connection user: AUTHORITY_CHECK on S_USER_GRP activity 05 passes (2026-11-05); it holds profile SAP_ALL.
  *     Cross-user GET_DETAIL confirmed working (AAKANSHA PATEL, DS4/220).
  */
 

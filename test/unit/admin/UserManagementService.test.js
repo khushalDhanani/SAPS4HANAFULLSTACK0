@@ -71,6 +71,41 @@ describe('UserManagementService._handleListUsers', () => {
   });
 });
 
+// ── protection uses the SAP logon of the caller ──
+
+describe('UserManagementService lock protection identity', () => {
+  beforeEach(() => {
+    mockLockUser.mockReset();
+    mockGetUserDetail.mockReset();
+    mockGetUserDetail.mockResolvedValue({ username: 'ALICE', userType: 'A' });
+    mockLockUser.mockResolvedValue({ status: 'success' });
+  });
+
+  test.each([
+    ['the XSUAA logon name', { id: 'alice.smith@example.test', attr: { logon_name: 'alice' } }],
+    ['the email name when no logon name is set', { id: 'someone-else', attr: { email: 'alice@example.test' } }],
+    ['the CAP id when no attributes are set', { id: 'alice' }],
+  ])('refuses self-lock when the caller is identified by %s', async (_name, user) => {
+    const req = makeReq({ username: 'ALICE' });
+    req.user = user;
+
+    await svc._handleLockUser(req);
+
+    expect(req.reject).toHaveBeenCalledWith(403, expect.stringContaining('your own user'));
+    expect(mockLockUser).not.toHaveBeenCalled();
+  });
+
+  test('locks another user', async () => {
+    const req = makeReq({ username: 'ALICE' });
+    req.user = { id: 'bob@example.test', attr: { logon_name: 'BOB' } };
+
+    await svc._handleLockUser(req);
+
+    expect(mockLockUser).toHaveBeenCalledWith('ALICE');
+    expect(req.reject).not.toHaveBeenCalled();
+  });
+});
+
 // ── getUserDetail ─────────────────────────────────────────────────────────────
 
 describe('UserManagementService._handleGetUserDetail', () => {

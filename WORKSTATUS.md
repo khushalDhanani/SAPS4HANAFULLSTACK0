@@ -15,6 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Sub-User Master open checks (2026-11-05 12:40 IST) — PARTIAL, committed locally, not pushed, not deployed, no SAP write run:** `AUTHORITY_CHECK` shows the RFC user is authorized for `S_USER_GRP` activity 05, which corrects the earlier blocker. Self-protection now uses the shared SAP identity helper. Row actions no longer get cut off on a phone. See the Changes Log.
 - **Sub-User Master KPIs, filters and bulk lock/unlock (2026-11-05 12:30 IST) — PARTIAL, committed locally, not pushed, not deployed, no SAP write run:** Built with SAP stubbed in the browser. Tests, lint, build, and the shell and accessibility browser suites passed. No real lock or unlock has run, and an earlier check (line 1030 of this file) found the RFC user without `S_USR_ADM`, so live writes may be refused. See the Changes Log.
 - **Dashboard header card removed (2026-11-05 11:58 IST) — PARTIAL, committed locally, not pushed, not deployed:** The "Integrated S/4HANA business modules and operational insights" card is gone from every `/dashboard` section, along with its Refresh button and connection status. Tests, lint, build, and the shell and accessibility browser suites passed. See the Changes Log.
 - **User detail side pane (2026-11-05 11:50 IST) — PARTIAL, committed locally, not pushed, not deployed:** Clicking a user on `/dashboard/admin` opens a right-side pane (`sap.f.FlexibleColumnLayout`) with SU01-style details from `BAPI_USER_GET_DETAIL`; it replaces the dialog. Tests, lint, build, and the shell and accessibility browser suites passed, including one live read. Lock/Unlock from the pane was not run against SAP. See the Changes Log.
@@ -156,7 +157,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Sub-User Master bulk (2026-11-05): the user decides whether to push. Live proof needs Basis to confirm `S_USR_ADM` on the RFC user, then a written go naming a test user and the actions. Before relying on the logged-in-user rule on BTP, check that `req.user.id` equals the SAP username there.
+- Sub-User Master bulk (2026-11-05): the user decides whether to push. Live proof needs a written go naming a test user and the actions. Before relying on the logged-in-user rule on BTP, check that the token's `logon_name` or email name equals the SAP username there.
+- RFC user security (2026-11-05): the local RFC connection user holds profile `SAP_ALL`, and Basis should decide whether that is acceptable for the user the app connects with. No change made.
 - Dashboard header card removal (2026-11-05): the user decides whether to push. The dashboard no longer has a Refresh button or a "figures as of" time; `metrics.asOf` is still returned by `PurchaseOrderAdapter.js:349` and is now unused by this screen.
 - User detail side pane (2026-11-05): the user decides whether to push. A live Lock or Unlock from the pane needs a written go naming the test user.
 - Sub-User Master (2026-11-05): the user decides whether to push. `listUsers` is called with `maxRows=200` and the table shows 200 rows on DS4/220, so sort, filter and count cover only those rows; the user decides whether that cap is acceptable.
@@ -2679,3 +2681,19 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
 - **Next action:** The user decides whether to push, then arranges `S_USR_ADM` confirmation and a written go for a live test.
 - **FINAL STATUS:** PARTIAL. Implemented, browser-tested with SAP stubbed and committed locally; not pushed, not deployed, no SAP write.
+
+### 2026-11-05 12:40 IST — Sub-User Master open checks: PARTIAL
+
+- **Request:** The user said "Next". I took it to mean the checks still open that cannot change anything in SAP, because the push and a live test both need the user's go.
+- **Correction to earlier entries:** The entry at line 1030 and the 12:30 entry say writes may be blocked because the RFC user lacks `S_USR_ADM`. The earlier probe read roles only. This run shows it holds profile `SAP_ALL`, and `AUTHORITY_CHECK` on `S_USER_GRP` activity 05 (lock, by SAP's general convention) returns `USER_IS_AUTHORIZED` for class blank and `SUPER`. The same check returns `USER_NOT_AUTHORIZED` for two ordinary dialog users and `USER_DONT_EXIST` for a fake user, so it does discriminate. `S_USR_ADM` is still in none of the 95 roles.
+- **SAP (READ-ONLY, DS4/220):** `AUTHORITY_CHECK`, `BAPI_USER_GET_DETAIL` on the RFC user, `RFC_READ_TABLE` on `TFDIR` and `AGR_1251`. No write BAPI, no commit.
+- **CHANGED:** `srv/admin/service.js`: self-protection uses the existing `srv/auth/userIdentity.js` instead of the raw `req.user.id`, which under XSUAA can be an email; I missed this helper in the 12:30 work. `Dashboard.view.xml`: the Actions column drops below the row under tablet width, because each row's Lock button was cut off at the screen edge on a phone. `service.cds`, `UserManagementAdapter.js`: comments corrected.
+- **TEST DECISION:** TEST ADDED: `test/unit/admin/UserManagementService.test.js` (self-protection by logon name, email name and CAP id), `test/unit/admin/adminDashboardList.test.js` (Actions column).
+- **TESTED:** `npx jest --runInBand --silent`: 190 suites, 3,147 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. `npx cds compile srv/admin/service.cds --to json`: exit 0. ESLint on `srv/admin`, the adapter folder and `test/unit/admin`: clean. `git diff --check`: clean. Shell browser suite: 69 PASS, 0 FAIL. `node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
+- **VERIFIED:** At 390x844 with live read-only data: the sections fit the screen width, the Lock button is inside it (358 of 390 px), the pane takes the full width and Close returns to the list, and there were no console errors. The phone check is a one-off script, not part of the suite.
+- **NOT VERIFIED:** A real lock or unlock. That `BAPI_USER_LOCK` checks only `S_USER_GRP`. BTP token attributes. Bulk selection and dialogs at phone width. Screen reader output. Full `npm run test:e2e` and GitHub Actions. The RFC user on other environments: this result is for the local connection only.
+- **Finding, not changed:** The RFC connection user holds `SAP_ALL`, full system authorization, so any flaw in this app's SAP access would run with it. On a phone the cards and filters fill the first screen, so the list needs scrolling.
+- **ASSUMPTIONS:** Activity 05 of `S_USER_GRP` is the lock activity: SAP's general convention, not read from this system.
+- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
+- **Next action:** The user decides whether to push, and names a test user and the actions for a live test.
+- **FINAL STATUS:** PARTIAL. Committed locally; not pushed, not deployed, no SAP write.

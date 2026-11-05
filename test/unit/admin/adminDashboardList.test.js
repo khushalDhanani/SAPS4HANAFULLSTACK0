@@ -148,6 +148,11 @@ describe('Admin dashboard user list', () => {
             expect(fs.existsSync(path.join(webapp, 'fragment/UserDetailDialog.fragment.xml'))).toBe(false);
         });
 
+        test('row actions drop below the row on a narrow screen instead of being cut off', () => {
+            const sView = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/Dashboard.view.xml'), 'utf8');
+            expect(sView).toContain('<Column hAlign="End" width="16rem" minScreenWidth="Tablet" demandPopin="true">');
+        });
+
         test('every pane text exists in both bundles', () => {
             const webapp = path.join(__dirname, '../../../app/fiori-app/webapp');
             const sFragment = fs.readFileSync(path.join(webapp, 'fragment/UserDetailPane.fragment.xml'), 'utf8');
