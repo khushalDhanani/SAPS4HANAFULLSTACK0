@@ -101,11 +101,21 @@ service UserManagementService @(path: '/odata/v4/user-management') {
      * Backed by BAPI_USER_LOCK + BAPI_TRANSACTION_COMMIT in a single session.
      * Refuses protected users (srv/admin/protectedUsers.js), including the active RFC connection user (fail-closed).
      */
-    action lockUser(username: String, reason: String) returns ActionResult;
+    action lockUser(username: String, reason: String, bulkRunId: String) returns ActionResult;
 
     /**
      * Unlock an SAP user account.
      * Backed by BAPI_USER_UNLOCK + BAPI_TRANSACTION_COMMIT in a single session.
      */
     action unlockUser(username: String, reason: String) returns ActionResult;
+
+    /**
+     * Sends the one summary email of a bulk lock run: the caller's successfully locked users in that run.
+     * Status is sent, retrying (first attempt failed, retries continue), failed, not_configured, or none.
+     * A second call finds nothing left to send.
+     */
+    action finishBulkLock(bulkRunId: String) returns {
+        status: String;
+        count : Integer;
+    };
 }

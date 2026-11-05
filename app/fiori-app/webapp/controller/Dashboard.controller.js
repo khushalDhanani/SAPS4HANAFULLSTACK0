@@ -9,7 +9,8 @@ sap.ui.define([
     "sap/ui/model/Sorter",
     "sap/ui/core/library",
     "saps4hana/fiori/modules/admin/user-management/util/UserListLogic",
-    "sap/ui/core/util/File"
+    "sap/ui/core/util/File",
+    "sap/base/util/uid"
 ], function (
     BaseController,
     JSONModel,
@@ -21,7 +22,8 @@ sap.ui.define([
     Sorter,
     coreLibrary,
     UserListLogic,
-    FileUtil
+    FileUtil,
+    uid
 ) {
     "use strict";
 
@@ -155,6 +157,11 @@ sap.ui.define([
             this.getView().getModel("dashboardView").setProperty("/selectedTab", bAllowed ? sSection : "overview");
             if (sSection === "admin" && bAllowed && !this._bAdminUsersLoaded) {
                 this._loadAdminUsers();
+            }
+            var oQuery = oEvent ? oEvent.getParameter("arguments")["?query"] : null;
+            if (sSection === "admin" && bAllowed && oQuery && oQuery.user) {
+                // A link from a lock alert: opens at once, without waiting for the list.
+                this._openUserDetail(String(oQuery.user).toUpperCase());
             }
             // A sidebar click only changes the section; the figures reload on arrival from another screen.
             if (this._bFiguresLoaded) {
@@ -753,11 +760,15 @@ sap.ui.define([
         },
 
         /** One user: the lock or unlock, then a read-back, because only SAP's own state proves the change. */
-        _bulkWorker: function (sAction, sReason, sUsername) {
+        _bulkWorker: function (sAction, sReason, sRunId, sUsername) {
             var that = this;
             var bExpectLocked = sAction === "lock";
             var sUrl = "/odata/v4/user-management/" + sAction + "User";
-            return ODataClient.post(sUrl, { username: sUsername, reason: sReason || "" })
+            var oBody = { username: sUsername, reason: sReason || "" };
+            if (sRunId) {
+                oBody.bulkRunId = sRunId;
+            }
+            return ODataClient.post(sUrl, oBody)
                 .then(function (res) {
                     var oResult = {
                         username: sUsername,
@@ -800,6 +811,8 @@ sap.ui.define([
             var oAdminModel = this.getView().getModel("adminView");
             var oProgress = this.byId("userBulkProgressDialog");
             var bLock = sAction === "lock";
+            // Groups the run's locks into one email; unlocks send none.
+            var sRunId = bLock ? uid() : "";
             this._bBulkCancelled = false;
             this._clearUndo();
             oAdminModel.setProperty("/bulk", Object.assign({}, oAdminModel.getProperty("/bulk"), {
@@ -817,7 +830,7 @@ sap.ui.define([
             });
             oProgress.open();
 
-            return UserListLogic.runWithConcurrency(aRun, UserListLogic.BULK_CONCURRENCY, this._bulkWorker.bind(this, sAction, sReason), function () {
+            return UserListLogic.runWithConcurrency(aRun, UserListLogic.BULK_CONCURRENCY, this._bulkWorker.bind(this, sAction, sReason, sRunId), function () {
                 return that._bBulkCancelled;
             }, function (iDone, iTotal) {
                 oAdminModel.setProperty("/bulk/percent", Math.round((iDone / iTotal) * 100));
@@ -838,7 +851,39 @@ sap.ui.define([
                         messages: [{ type: "I", id: "", number: "", message: that._text("adminBulkSkippedAlready", "Already in the target state.") }]
                     };
                 })), bIsUndo);
+                return that._finishBulkNotification(sRunId);
             });
+        },
+
+        /** Reports the summary email in the open result dialog. Its outcome never affects the locks. */
+        _finishBulkNotification: function (sRunId) {
+            var that = this;
+            var oAdminModel = this.getView().getModel("adminView");
+            var fnShow = function (sTextKey, sDefault, sState) {
+                oAdminModel.setProperty("/bulk/notifyText", sTextKey ? that._text(sTextKey, sDefault) : "");
+                oAdminModel.setProperty("/bulk/notifyState", sState || "None");
+            };
+            var bAnyLocked = (oAdminModel.getProperty("/bulk/results") || []).some(function (oResult) {
+                return oResult.status === "success" || oResult.status === "warning";
+            });
+            if (!sRunId || !bAnyLocked) {
+                fnShow("");
+                return Promise.resolve();
+            }
+            fnShow("adminBulkNotifySending", "Sending...");
+            return ODataClient.post("/odata/v4/user-management/finishBulkLock", { bulkRunId: sRunId })
+                .then(function (res) {
+                    var mLook = {
+                        sent: ["adminBulkNotifySent", "Sent", "Success"],
+                        retrying: ["adminBulkNotifyRetrying", "First attempt failed, retrying in the background", "Warning"],
+                        not_configured: ["adminBulkNotifyNotConfigured", "Not configured", "Warning"]
+                    };
+                    var aLook = mLook[res && res.status] || ["adminBulkNotifyFailed", "Failed", "Error"];
+                    fnShow(aLook[0], aLook[1], aLook[2]);
+                })
+                .catch(function () {
+                    fnShow("adminBulkNotifyFailed", "Failed", "Error");
+                });
         },
 
         onCancelBulkRun: function () {
@@ -944,9 +989,12 @@ sap.ui.define([
             var oContext = oSource.getBindingContext("adminView");
             var sUsername = oContext ? oContext.getProperty("username") : null;
             if (!sUsername) {
-                return;
+                return undefined;
             }
+            return this._openUserDetail(sUsername);
+        },
 
+        _openUserDetail: function (sUsername) {
             var oAdminModel = this.getView().getModel("adminView");
             var that = this;
             var fnIsShown = function () {

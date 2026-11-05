@@ -345,6 +345,13 @@ async function verifyUserDetailPane(baseUrl) {
         await page.waitForTimeout(600);
         step(errors, details, 'Close returns the list to full width', expect(await paneState(page), { layout: 'OneColumn', paneShown: false, navigated: '' }));
 
+        await openHash(session, 'dashboard/admin?user=BETA');
+        await page.waitForTimeout(800); // the column animation
+        const linked = expect(await paneState(page), { layout: 'TwoColumnsBeginExpanded', paneShown: true, title: 'BETA', error: '' });
+        await page.click('[id$="--btnCloseUserDetail"]');
+        await page.waitForTimeout(600);
+        step(errors, details, 'A link with ?user= opens that user in the pane', linked);
+
         const problems = session.consoleErrors.concat(session.networkErrors.map((e) => `HTTP ${e.status} ${e.url}`), session.blocked.map((b) => `write guard blocked ${b.reason}`));
         step(errors, details, 'Side pane flow: no unexpected console error, failed request or blocked write', problems);
     } catch (err) {
@@ -412,6 +419,7 @@ const bulkState = (page) => page.evaluate(() => {
         progressText: byId('userBulkProgress').getDisplayValue(),
         resultOpen: byId('userBulkResultDialog').isOpen(),
         summary: byId('userBulkSummary').getText(),
+        notify: byId('userBulkNotify').getText(),
         results: byId('userBulkResults').getItems().map((item) => { const r = item.getBindingContext('adminView').getObject(); return `${r.username}:${r.status}:${r.technical}`; }),
         retryShown: shown(byId('btnBulkRetry')),
         undoShown: shown(byId('adminUndoStrip')),
@@ -454,6 +462,7 @@ async function verifyBulkFlow(baseUrl) {
             const username = decodeURIComponent(route.request().url().match(/username='([^']*)'/)[1]);
             return route.fulfill({ json: { ...paneDetail(username, lockState[username]), protectedReason: '' } });
         });
+        await page.route(/\/odata\/v4\/user-management\/finishBulkLock$/, (route) => route.fulfill({ json: { status: 'sent', count: 1 } }));
         await page.route(/\/odata\/v4\/user-management\/(lock|unlock)User$/, async (route) => {
             const body = route.request().postDataJSON();
             const lock = route.request().url().endsWith('/lockUser');
@@ -540,7 +549,11 @@ async function verifyBulkFlow(baseUrl) {
         await waitDialog('userBulkResultDialog');
         await page.waitForTimeout(300);
         const result = await bulkState(page);
-        const resultProblems = expect(result, { summary: '1 succeeded · 1 failed · 1 skipped', retryShown: true, selected: 'NOAUTH', undoShown: true });
+        await page.waitForFunction(() => {
+            const Element = window.sap.ui.require('sap/ui/core/Element');
+            return Element.registry.filter((c) => c.getId().endsWith('--userBulkNotify'))[0].getText() === 'Sent';
+        });
+        const resultProblems = expect(await bulkState(page), { summary: '1 succeeded · 1 failed · 1 skipped', retryShown: true, selected: 'NOAUTH', undoShown: true, notify: 'Sent' });
         if (!posts.includes('lock:ALPHA:Offboarding') || posts.some((p) => p.includes('BETA'))) resultProblems.push(`posts: ${posts}`);
         if (!result.results.some((r) => r === 'NOAUTH:error:E SU/001: SAP error: No authorization')) resultProblems.push(`results: ${result.results}`);
         if (!result.results.some((r) => r.startsWith('BETA:skipped'))) resultProblems.push(`results: ${result.results}`);

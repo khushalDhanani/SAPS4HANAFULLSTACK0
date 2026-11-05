@@ -63,6 +63,13 @@
         <content>
             <VBox class="sapUiSmallMargin">
                 <Title id="userBulkSummary" text="{adminView>/bulk/summary}" level="H4" class="sapUiTinyMarginBottom" />
+                <ObjectStatus
+                    id="userBulkNotify"
+                    title="{i18n>adminBulkNotify}"
+                    text="{adminView>/bulk/notifyText}"
+                    state="{adminView>/bulk/notifyState}"
+                    visible="{= !!${adminView>/bulk/notifyText} }"
+                    class="sapUiTinyMarginBottom" />
                 <Table id="userBulkResults" items="{adminView>/bulk/results}" noDataText="{i18n>adminBulkNoResults}" contextualWidth="Auto">
                     <columns>
                         <Column width="8rem"><Text text="{i18n>adminBulkColStatus}" /></Column>

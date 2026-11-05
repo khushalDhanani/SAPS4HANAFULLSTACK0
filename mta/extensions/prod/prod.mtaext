@@ -7,6 +7,8 @@ modules:
     parameters:
       memory: 1024M
       instances: 2
+    properties:
+      LOCK_NOTIFY_TO: khushal@aether.co.in
   - name: saps4hana-approuter
     parameters:
       memory: 512M

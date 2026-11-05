@@ -188,7 +188,7 @@
         },
         {
           "name": "dashboard",
-          "pattern": "dashboard/:section:",
+          "pattern": "dashboard/:section::?query:",
           "target": "TargetDashboard"
         },
         {

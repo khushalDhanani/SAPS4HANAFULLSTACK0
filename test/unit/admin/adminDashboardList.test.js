@@ -65,7 +65,8 @@ beforeAll(() => {
             MockSorter,
             { SortOrder: { Ascending: 'Ascending', Descending: 'Descending', None: 'None' } },
             Logic,
-            mockFile
+            mockFile,
+            () => 'run-1'
         );
     });
     require('../../../app/fiori-app/webapp/controller/Dashboard.controller.js');
@@ -151,6 +152,29 @@ describe('Admin dashboard user list', () => {
         test('row actions drop below the row on a narrow screen instead of being cut off', () => {
             const sView = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/Dashboard.view.xml'), 'utf8');
             expect(sView).toContain('<Column hAlign="End" width="16rem" minScreenWidth="Tablet" demandPopin="true">');
+        });
+
+        test('a link with ?user= opens that user for an admin, and is ignored otherwise', async () => {
+            const { controller, model } = makeController([]);
+            const dashboardModel = new MockJSONModel({ selectedTab: '' });
+            controller.getView = () => ({ getModel: (name) => (name === 'dashboardView' ? dashboardModel : model) });
+            controller._bFiguresLoaded = true;
+            controller._bAdminUsersLoaded = true;
+            mockODataClient.get.mockResolvedValue({ username: 'ALICE', isLocked: false, roles: [] });
+            const matched = (section, query) => ({ getParameter: () => ({ section, '?query': query }) });
+
+            mockAuthService.hasAnyRole.mockReturnValue(true);
+            controller._onDashboardMatched(matched('admin', { user: 'alice' }));
+            expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/user-management/getUserDetail(username='ALICE')");
+            expect(model.getProperty('/selectedUser/username')).toBe('ALICE');
+
+            mockODataClient.get.mockClear();
+            controller._onDashboardMatched(matched('admin'));
+            expect(mockODataClient.get).not.toHaveBeenCalled();
+
+            mockAuthService.hasAnyRole.mockReturnValue(false);
+            controller._onDashboardMatched(matched('admin', { user: 'alice' }));
+            expect(mockODataClient.get).not.toHaveBeenCalled();
         });
 
         test('every pane text exists in both bundles', () => {
@@ -392,8 +416,13 @@ describe('Admin dashboard user list', () => {
     describe('bulk lock and unlock', () => {
         const row = (username, extra = {}) => ({ username, fullName: username, detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20260101', lastChangedBy: 'ADMIN', protectedReason: '', selected: true, ...extra });
         /** A stub SAP: posts succeed, except names in `fail`; reads report the state each action left. */
+        let notifyStatus = 'sent';
+        const sapCalls = () => mockODataClient.post.mock.calls.filter(([url]) => !url.endsWith('/finishBulkLock'));
         function stubSap(state = {}, fail = []) {
             mockODataClient.post.mockImplementation(async (url, body) => {
+                if (url.endsWith('/finishBulkLock')) {
+                    return { status: notifyStatus, count: 1 };
+                }
                 if (fail.includes(body.username)) {
                     throw Object.assign(new Error('No authorization'), { code: 'SU/001' });
                 }
@@ -435,7 +464,7 @@ describe('Admin dashboard user list', () => {
 
             await controller.onConfirmBulk();
 
-            expect(mockODataClient.post.mock.calls).toEqual([['/odata/v4/user-management/lockUser', { username: 'A', reason: 'Left the company' }]]);
+            expect(sapCalls()).toEqual([['/odata/v4/user-management/lockUser', { username: 'A', reason: 'Left the company', bulkRunId: 'run-1' }]]);
             expect(model.getProperty('/bulk/summary')).toBe('1 succeeded · 0 failed · 1 skipped');
             expect(control('userBulkProgressDialog').close).toHaveBeenCalled();
             expect(control('userBulkResultDialog').open).toHaveBeenCalled();
@@ -510,7 +539,10 @@ describe('Admin dashboard user list', () => {
             const users = Array.from({ length: 8 }, (_, i) => row(`U${i}`));
             const { controller, model } = makeController(users);
             let calls = 0;
-            mockODataClient.post.mockImplementation(async () => {
+            mockODataClient.post.mockImplementation(async (url) => {
+                if (url.endsWith('/finishBulkLock')) {
+                    return { status: 'sent', count: 1 };
+                }
                 calls++;
                 controller.onCancelBulkRun();
                 await new Promise((resolve) => setImmediate(resolve));
@@ -538,7 +570,7 @@ describe('Admin dashboard user list', () => {
 
             await controller.onRetryFailedBulk();
 
-            expect(mockODataClient.post.mock.calls).toEqual([['/odata/v4/user-management/lockUser', { username: 'BAD', reason: 'R' }]]);
+            expect(sapCalls()).toEqual([['/odata/v4/user-management/lockUser', { username: 'BAD', reason: 'R', bulkRunId: 'run-1' }]]);
             expect(model.getProperty('/bulk/summary')).toBe('1 succeeded · 0 failed · 0 skipped');
         });
 
@@ -551,7 +583,7 @@ describe('Admin dashboard user list', () => {
 
             await controller.onUndoBulk();
 
-            expect(mockODataClient.post.mock.calls).toEqual([['/odata/v4/user-management/unlockUser', { username: 'OK', reason: 'Undo of a bulk action' }]]);
+            expect(sapCalls()).toEqual([['/odata/v4/user-management/unlockUser', { username: 'OK', reason: 'Undo of a bulk action' }]]);
             expect(model.getProperty('/undo/text')).toBe('');
         });
 
@@ -565,6 +597,50 @@ describe('Admin dashboard user list', () => {
             jest.advanceTimersByTime(1);
             expect(model.getProperty('/undo/text')).toBe('');
             await expect(controller.onUndoBulk()).resolves.toBeUndefined();
+        });
+
+        test.each([
+            ['sent', 'Sent', 'Success'],
+            ['retrying', 'First attempt failed, retrying in the background', 'Warning'],
+            ['not_configured', 'Not configured', 'Warning'],
+            ['failed', 'Failed', 'Error']
+        ])('shows the email status %s after a lock run', async (status, text, state) => {
+            const { controller, model } = makeController([row('A')]);
+            notifyStatus = status;
+            stubSap();
+
+            await open(controller, 'lock');
+
+            expect(mockODataClient.post).toHaveBeenLastCalledWith('/odata/v4/user-management/finishBulkLock', { bulkRunId: 'run-1' });
+            expect(model.getProperty('/bulk/notifyText')).toBe(text);
+            expect(model.getProperty('/bulk/notifyState')).toBe(state);
+            notifyStatus = 'sent';
+        });
+
+        test('a failed status call shows Failed and still opens the result dialog', async () => {
+            const { controller, model, control } = makeController([row('A')]);
+            stubSap();
+            const fnLock = mockODataClient.post.getMockImplementation();
+            mockODataClient.post.mockImplementation((url, body) => (url.endsWith('/finishBulkLock') ? Promise.reject(new Error('down')) : fnLock(url, body)));
+
+            await open(controller, 'lock');
+
+            expect(control('userBulkResultDialog').open).toHaveBeenCalled();
+            expect(model.getProperty('/bulk/notifyText')).toBe('Failed');
+            expect(model.getProperty('/bulk/summary')).toBe('1 succeeded · 0 failed · 0 skipped');
+        });
+
+        test('no email status when nothing was locked, or for unlock', async () => {
+            const { controller, model } = makeController([row('BAD')]);
+            stubSap({}, ['BAD']);
+            await open(controller, 'lock');
+            expect(model.getProperty('/bulk/notifyText')).toBe('');
+
+            const unlock = makeController([row('L', { isLocked: true })]);
+            stubSap({ L: true });
+            await open(unlock.controller, 'unlock');
+            expect(mockODataClient.post.mock.calls.filter(([url, body]) => url.endsWith('/finishBulkLock') && body.bulkRunId === '')).toEqual([]);
+            expect(unlock.model.getProperty('/bulk/notifyText')).toBe('');
         });
 
         test('results download as CSV with status and BAPI details', async () => {

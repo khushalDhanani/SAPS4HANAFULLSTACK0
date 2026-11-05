@@ -19,6 +19,8 @@
 const { RfcClient } = require('../RfcClient');
 const LOG = require('../../../common/logger')('user-management-adapter');
 
+const sapLiteral = (value) => String(value).trim().toUpperCase().replace(/'/g, "''");
+
 const toMessage = (m) => ({ type: m.TYPE, id: m.ID, number: m.NUMBER, message: m.MESSAGE });
 
 /** SAP reports a failed commit in RETURN, without throwing, so RETURN decides whether the change really happened. */
@@ -265,6 +267,30 @@ class UserManagementAdapter {
       LOG.error('BAPI_USER_GET_DETAIL session failed:', e.message);
       throw Object.assign(new Error('Failed to retrieve user detail from SAP'), { status: 502, cause: e });
     }
+  }
+
+  /**
+   * USR02.UFLAG, read by name so no hash column is ever requested. One read covers every user in about 60 ms,
+   * where listUsers takes about 19 s (DS4/220, 278 users, 2026-11-05).
+   * @param {string} [username] - one user, or all when omitted
+   * @returns {Promise<Array<{username: string, uflag: number}>>}
+   */
+  async readLockFlags(username) {
+    const where = username ? [`BNAME = '${sapLiteral(username)}'`] : [];
+    const rows = await this._rfc.readTable('USR02', ['BNAME', 'UFLAG'], where);
+    return rows.map((row) => ({ username: row.BNAME, uflag: Number(row.UFLAG) || 0 }));
+  }
+
+  /**
+   * The newest USH02 row of a user: when the lock state last changed, and who changed it.
+   * RFC_READ_TABLE has no ordering, so all of the user's rows are read and sorted here.
+   * @returns {Promise<{lockedAt: string, changedBy: string, uflag: number}|null>}
+   */
+  async readLastLockChange(username) {
+    const rows = await this._rfc.readTable('USH02', ['MODDA', 'MODTI', 'MODBE', 'UFLAG'], [`BNAME = '${sapLiteral(username)}'`]);
+    if (!rows.length) return null;
+    const latest = rows.reduce((newest, row) => (`${row.MODDA}${row.MODTI}` > `${newest.MODDA}${newest.MODTI}` ? row : newest));
+    return { lockedAt: `${latest.MODDA}${latest.MODTI}`, changedBy: latest.MODBE, uflag: Number(latest.UFLAG) || 0 };
   }
 
   /** The user RFC logs on with: local env, or the BTP destination in production. */

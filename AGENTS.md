@@ -93,7 +93,7 @@ Keep responsibilities separated according to this repository structure:
 | Area | Responsibility | Must not contain |
 | --- | --- | --- |
 | `app/fiori-app/` | SAPUI5/Fiori presentation, view models, presentation logic | Credentials, persistence, direct database access, S/4 technical calls, business workflows |
-| `db/` | CAP CDS persistence model for posting attempts, until the SAP table replaces it | UI logic, HTTP calls, environment-specific configuration |
+| `db/` | CAP CDS persistence model for posting attempts and lock notifications, until SAP tables replace them | UI logic, HTTP calls, environment-specific configuration |
 | `srv/` | CAP APIs, authorization, validation, orchestration | UI implementation or duplicate integration clients |
 | `srv/integration/s4hana/` | S/4 clients, API services, adapters, technical mappings | UI behavior or CAP business workflows |
 | `config/` | Version-safe service configuration templates | Secrets or production-only values |
@@ -120,6 +120,7 @@ Keep responsibilities separated according to this repository structure:
 - Never hardcode or commit usernames, passwords, client secrets, OAuth tokens, API keys, certificates, private keys, URLs, SAP clients, or environment-specific values.
 - Treat `.env`, `.env.*`, credential files, service keys, and local configuration as secrets. Do not display their values in logs, test output, error reports, commits, or documentation.
 - Use local environment variables only for local development. Use BTP Destination, Connectivity, and XSUAA service bindings for deployed environments.
+  Recorded exception (user's choice, 2026-11-05): SMTP settings for lock notification email come from env variables in every environment; in deployed systems they are set with `cf set-env`, outside Git.
 - Place environment-specific deployment configuration under `mta/extensions/dev/`, `mta/extensions/test/`, or `mta/extensions/prod/`; production secrets must remain outside Git.
 - Do not bypass certificate validation, authorization checks, CSRF protection, or destination/connectivity mechanisms merely to make a request work.
 

@@ -51,3 +51,7 @@ For the dispatch queue only, the application provisions an SAP HANA Cloud HDI co
 - Queue records are durable across restarts and visible to every application instance.
 - Without a bound database (for example a deployment that omits the container), the queue is unavailable: `getQueueSummary` reports `StoreAvailable: false`, reads are empty, and a failed SAP posting is returned to the user as an error instead of a queued success. Nothing is ever recorded locally in that case.
 - Queued items are always marked `QUEUED` / `FAILED` until S/4HANA confirms a material document; the queue never claims SAP persistence (AGENTS.md).
+
+## Addendum (2026-11-05): lock notification tables
+
+The user chose to keep lock notification state in the existing HDI container for now. `UserLockSnapshot` and `UserLockNotification` (`db/admin/user-lock.cds`) are operational markers for deduplicating alerts, not business documents; SAP stays the system of record for users and locks. They must move with the rest when the application database is removed (`docs/decisions/sap-only-persistence-migration.md`).

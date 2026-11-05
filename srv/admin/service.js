@@ -4,9 +4,12 @@ const cds = require('@sap/cds');
 const { UserManagementAdapter } = require('../integration/s4hana/admin/UserManagementAdapter');
 const { protectionReason } = require('./protectedUsers');
 const { resolveUserIdentity } = require('../auth/userIdentity');
+const lockNotifier = require('./lockNotifier');
+const { audit } = require('./audit');
 const LOG = require('../common/logger')('user-management-service');
 
 const MAX_REASON_LENGTH = 500;
+const RUN_ID = /^[\w-]{1,64}$/;
 
 const PROTECTED_MESSAGES = {
   self: (username) => `Cannot lock user '${username}': you cannot lock your own user`,
@@ -16,7 +19,7 @@ const PROTECTED_MESSAGES = {
 /**
  * UserManagementService Handler
  *
- * Orchestrates listUsers, getUserDetail, lockUser and unlockUser.
+ * Orchestrates listUsers, getUserDetail, lockUser, unlockUser and finishBulkLock.
  * All actions require the Admin role (declared in service.cds).
  *
  * Input validation happens here before the adapter is called.
@@ -31,6 +34,9 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     this.on('getUserDetail', this._handleGetUserDetail.bind(this));
     this.on('lockUser',     this._handleLockUser.bind(this));
     this.on('unlockUser',   this._handleUnlockUser.bind(this));
+    this.on('finishBulkLock', this._handleFinishBulkLock.bind(this));
+
+    lockNotifier.startJob(() => this._getAdapter());
 
     await super.init();
   }
@@ -90,11 +96,9 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     return { actor: resolveUserIdentity(req), connectionUser: await this._getAdapter().getConnectionUser() };
   }
 
-  /** Who did what to whom, and why. One line per attempt, so refused and failed attempts are recorded too. */
+  /** Who did what to whom, and why. */
   _audit(req, action, username, result, reason) {
-    LOG.info('AUDIT', JSON.stringify({
-      who: req.user?.id, when: new Date().toISOString(), target: username, action, result, reason,
-    }));
+    audit({ who: req.user?.id, target: username, action, result, reason });
   }
 
   /** Validates the input common to lockUser and unlockUser; rejects and returns null when it is invalid. */
@@ -110,7 +114,11 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     if (reason.length > MAX_REASON_LENGTH) {
       return req.reject(400, `reason must be at most ${MAX_REASON_LENGTH} characters`);
     }
-    return { username: username.toUpperCase(), reason };
+    const bulkRunId = String(req.data.bulkRunId ?? '').trim();
+    if (bulkRunId && !RUN_ID.test(bulkRunId)) {
+      return req.reject(400, 'bulkRunId contains invalid characters');
+    }
+    return { username: username.toUpperCase(), reason, bulkRunId };
   }
 
   /** Runs one lock or unlock, audits the outcome and rejects with SAP's own message id when SAP gave one. */
@@ -139,16 +147,35 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     if (!input) return undefined;
 
     const adapter = this._getAdapter();
-    return this._changeLock(req, 'lock', async () => {
+    let locked = false;
+    let detail = null;
+    const result = await this._changeLock(req, 'lock', async () => {
       const context = await this._protectionContext(req);
       // Only the type needs an SAP read, and the adapter itself refuses the connection user.
       const nameReason = protectionReason({ username: input.username }, context);
-      const blocked = nameReason || protectionReason(await adapter.getUserDetail(input.username), context);
+      detail = nameReason ? null : await adapter.getUserDetail(input.username);
+      const blocked = nameReason || protectionReason(detail, context);
       if (blocked && blocked !== 'connection') {
         throw Object.assign(new Error(PROTECTED_MESSAGES[blocked](input.username)), { status: 403 });
       }
-      return adapter.lockUser(input.username);
+      await lockNotifier.beforeAppLock(input.username);
+      const res = await adapter.lockUser(input.username);
+      locked = true;
+      return res;
     }, input);
+
+    // Outside _changeLock, so that nothing about the notification can report the lock as failed.
+    if (locked) {
+      await lockNotifier.afterAppLock(adapter, {
+        username: input.username,
+        actor: resolveUserIdentity(req),
+        reason: input.reason,
+        bulkRunId: input.bulkRunId,
+        fullName: detail ? detail.fullName : '',
+        detail,
+      });
+    }
+    return result;
   }
 
   /**
@@ -158,7 +185,24 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     const input = this._lockInput(req);
     if (!input) return undefined;
 
-    return this._changeLock(req, 'unlock', () => this._getAdapter().unlockUser(input.username), input);
+    let unlocked = false;
+    const result = await this._changeLock(req, 'unlock', async () => {
+      const res = await this._getAdapter().unlockUser(input.username);
+      unlocked = true;
+      return res;
+    }, input);
+    // A later lock of this user is a new event, so Undo followed by a re-lock still alerts.
+    if (unlocked) await lockNotifier.afterAppUnlock(input.username);
+    return result;
+  }
+
+  /**
+   * finishBulkLock(bulkRunId) — sends the one summary email of a bulk lock run, for the caller's own events.
+   */
+  async _handleFinishBulkLock(req) {
+    const bulkRunId = String(req.data.bulkRunId ?? '').trim();
+    if (!RUN_ID.test(bulkRunId)) return req.reject(400, 'bulkRunId is required');
+    return lockNotifier.finishBulkRun(bulkRunId, resolveUserIdentity(req));
   }
 };
 

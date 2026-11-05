@@ -152,3 +152,7 @@ The affected Playwright flows and SAP round trips must be selected from `docs/e2
 ## Next action
 
 The missing prerequisite is a verified SAP implementation/contract for the responsibilities above. The scoped discovery did not find one. The user selected ZAMM and will supply the development target and transport request. The approved technical design and verified replacement contracts must also be established before dependent implementation or deployment. No further generic approval is needed for the already authorized migration scope; what is missing is backend capability and contract evidence.
+
+## Lock notification tables — 2026-11-05 IST
+
+The user chose to add `UserLockSnapshot` and `UserLockNotification` to the application database for now, while the SAP table route waits for a transport. Complete removal of the application database must now also replace these two tables.
