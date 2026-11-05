@@ -5,7 +5,11 @@ sap.ui.define([
     "sap/m/MessageToast",
     "saps4hana/fiori/service/AuthService",
     "sap/ui/core/Fragment",
-    "sap/m/MessageBox"
+    "sap/m/MessageBox",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator",
+    "sap/ui/model/Sorter",
+    "sap/ui/core/library"
 ], function (
     BaseController,
     JSONModel,
@@ -13,9 +17,15 @@ sap.ui.define([
     MessageToast,
     AuthService,
     Fragment,
-    MessageBox
+    MessageBox,
+    Filter,
+    FilterOperator,
+    Sorter,
+    coreLibrary
 ) {
     "use strict";
+
+    var SortOrder = coreLibrary.SortOrder;
 
     /**
      * Counts returned by PurchaseOrderService.getDashboardMetrics(). Each is read live from SAP S/4HANA.
@@ -361,7 +371,8 @@ sap.ui.define([
                 .then(function (res) {
                     var aUsers = (res && res.value) || [];
                     oAdminModel.setProperty("/users", aUsers);
-                    oAdminModel.setProperty("/userCount", aUsers.length);
+                    // Rows matching the previous filtered set fire no table update, so read the filtered length here.
+                    oAdminModel.setProperty("/userCount", that.byId("adminUsersTable").getBinding("items").getLength());
                     oAdminModel.setProperty("/noDataText", that._text("adminNoUsers", "No SAP users found."));
                     oAdminModel.setProperty("/busy", false);
                     that._bAdminUsersLoaded = true;
@@ -385,6 +396,38 @@ sap.ui.define([
         onRefreshUsers: function () {
             var sQuery = this.getView().getModel("adminView").getProperty("/searchQuery") || "";
             this._loadAdminUsers(sQuery);
+        },
+
+        // The filter and sort stay on the binding, so they also apply to rows from a later search or refresh.
+        onFilterUsersByLockStatus: function (oEvent) {
+            var sKey = oEvent.getSource().getSelectedKey();
+            var fnIs = function (sPath, bValue) {
+                return new Filter(sPath, FilterOperator.EQ, bValue);
+            };
+            var mFilters = {
+                active: [fnIs("detailsAvailable", true), fnIs("isLocked", false)],
+                locked: [fnIs("detailsAvailable", true), fnIs("isLocked", true)],
+                unavailable: [fnIs("detailsAvailable", false)]
+            };
+            this.byId("adminUsersTable").getBinding("items").filter(mFilters[sKey] ? new Filter({ filters: mFilters[sKey], and: true }) : []);
+        },
+
+        onSortUsers: function (oEvent) {
+            var sProperty = oEvent.getSource().data("sortProperty");
+            this._bAdminSortDescending = this._sAdminSortProperty === sProperty && !this._bAdminSortDescending;
+            this._sAdminSortProperty = sProperty;
+
+            var oTable = this.byId("adminUsersTable");
+            var sIndicator = this._bAdminSortDescending ? SortOrder.Descending : SortOrder.Ascending;
+            oTable.getColumns().forEach(function (oColumn) {
+                oColumn.setSortIndicator(oColumn.getHeader().data("sortProperty") === sProperty ? sIndicator : SortOrder.None);
+            });
+            oTable.getBinding("items").sort(new Sorter(sProperty, this._bAdminSortDescending));
+        },
+
+        // The toolbar count follows the filter, not only the rows SAP returned.
+        onAdminUsersUpdated: function (oEvent) {
+            this.getView().getModel("adminView").setProperty("/userCount", oEvent.getParameter("total"));
         },
 
         onSelectUser: function (oEvent) {

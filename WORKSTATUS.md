@@ -15,6 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Sub-User Master table and dashboard greeting (2026-11-05 11:04 IST) — PARTIAL, committed locally, not pushed, not deployed:** The Admin user table is now the Sub-User Master, with search, lock status filter, refresh and sortable columns. The dashboard greeting line is gone. Tests, lint, build, and the shell and accessibility browser suites passed; sort and filter were proven with controlled rows; lock/unlock was not run against SAP. See the Changes Log.
 - **Admin dashboard user list (2026-11-04 18:12 IST) — PASS for requested display update; uncommitted, not deployed:** Removed Valid From/Valid To columns and fixed blank Full Name by falling back to `BAPI_USER_GET_DETAIL` data; the read-only browser flow passed. The earlier Lock/Unlock row actions remain untested as live SAP writes and need explicit authorization. See the Changes Log.
 - **Purchase order form: ZSER storage location (2026-11-05 10:41 IST) — PARTIAL, uncommitted, not deployed, browser E2E not run, not run against SAP:** The form no longer blocks a ZSER (service) order with no storage location; the server already accepted it.
 
@@ -151,6 +152,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Sub-User Master (2026-11-05): the user decides whether to push. `listUsers` is called with `maxRows=200` and the table shows 200 rows on DS4/220, so sort, filter and count cover only those rows; the user decides whether that cap is acceptable.
 - Movement 261 removal (2026-11-04): before deploying, check that no open 261 posting attempts are waiting in the attempt table, and check access logs for `/odata/v4/mvt261`. The read-only `npm run test:e2e` is done (2026-11-04 16:35 IST).
 - Group 2 (2026-11-04): kept by the user's choice. `getVisualRack`, `checkATP`, `askAI`, `MaterialStorageLocations`, `MaterialBatches`, `DeliveryWithoutRefTypes` and `DeliveryWithoutRefShipToParties` have no screen; remove them only after access logs or owners rule out outside callers. `chat` is used by the Purchase Orders AI assistant and stays.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, check the deployed access logs for callers of the two removed paths. `npm run validate:mta` and the read-only `npm run test:e2e` are done.
@@ -2570,3 +2572,23 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **ASSUMPTIONS:** none.
 - **Next action:** The user confirms the target user. Any lock is a separate step that needs a written go for that call.
 - **FINAL STATUS:** BLOCKED. Existence check done; no lock sent.
+
+### 2026-11-05 11:04 IST — Sub-User Master table and dashboard greeting removal: PARTIAL
+
+- **Request:** On `/dashboard/admin`, add a Sub-User Master table with toolbar, search, sort, filter, busy state, empty text and i18n labels; move existing sub-user data and logic into it; remove the Welcome card from every PO view. No new libraries and no API, data or other-tab change.
+- **Findings:** Nothing in the repo is called a sub-user, and no PO view has a Welcome card. The user was asked and chose: SAP Users are the sub-users, and only the "Welcome back" line on the dashboard header is removed.
+- **CHANGED:** `Dashboard.view.xml`: `adminUsersTable` stays a `sap.m.Table` bound to `adminView>/users`; search and refresh moved into its toolbar, and a lock status filter and sortable column headers were added. `Dashboard.controller.js`: `onFilterUsersByLockStatus`, `onSortUsers`, `onAdminUsersUpdated`; the count after a load now comes from the filtered binding. `i18n.properties`, `i18n_en.properties`: `adminUsersTableTitle` is "Sub-User Master", `adminFilterAll` added, `dashboardWelcomePrefix` removed. `docs/e2e-coverage-matrix.md` row `dashboard` updated. No PO view, API, service or other tab changed.
+- **Behaviour note:** The greeting was the Overview's only heading, so the shell suite failed with "no visible page title". The header's existing subtitle is now the H2 heading in the greeting's place. No new text was added, but its style changed from muted text to a heading.
+- **Bug found and fixed during validation:** A refresh returning the same filtered rows fires no table update, so the count showed the unfiltered total. The new browser step caught it.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED: `test/unit/admin/adminDashboardList.test.js`, `test/unit/dashboard/dashboardMetrics.test.js` (factory mock), `test/e2e/shell/verifyShellScreens.e2e.js` (`verifyAdminTable`).
+- **TESTED before the change:** `npx jest --runInBand --silent`: 188 suites, 3,051 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded.
+- **TESTED after the change:** `npx jest --runInBand --silent`: 188 suites, 3,059 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. ESLint on the three changed test files: clean. `git diff --check`: clean. `TARGET_URL=http://localhost:4010 node test/e2e/shell/verifyShellScreens.e2e.js`: 39 PASS, 0 FAIL. `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
+- **SAP:** READ-ONLY only. The browser suites and two screenshots read `listUsers` and dashboard metrics with the write guard on. No lock, unlock or other write was sent.
+- **VERIFIED:** Sort, filter, count, search, busy state and empty text in a browser with controlled `listUsers` rows (UI proof, not SAP proof). The live list renders in the new table, 200 rows on the system this server reaches. Header status and actions remain.
+- **NOT VERIFIED:** Lock and Unlock against SAP; the row handlers are unchanged and remain Tier C pending. Phone layout of the new toolbar. Full `npm run test:e2e` and GitHub Actions were not run.
+- **Warnings:** The UI5 MCP API lookup failed with a CDN error (`sdk.openui5.org/1.136.5`), so control behaviour was proven in the browser instead. The accessibility suite passed with the existing dashboard counts, `aria-allowed-attr`×5 and `label-content-name-mismatch`×10; the baseline file still says 4 for the first rule because it compares rule ids.
+- **Dead-code review:** `dashboardWelcomePrefix` had no other user and was removed. The CSS class `dashboardUserGreetingRow` still styles the row, so it stays under its old name.
+- **ASSUMPTIONS:** Sub-users are the SAP users from `listUsers` (user's choice). The lock status filter is the only filter; a user type filter was not requested specifically and was not added.
+- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
+- **Next action:** The user decides whether to push, and whether the 200-row cap is acceptable.
+- **FINAL STATUS:** PARTIAL. Implemented, browser-tested and committed locally; not pushed, not deployed, no SAP write.

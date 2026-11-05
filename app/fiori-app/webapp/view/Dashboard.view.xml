@@ -20,14 +20,13 @@
                 <HBox class="sapUiSmallMarginBottom dashboardHeroHeader" justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap">
                     <VBox class="sapUiTinyMarginBottom dashboardHeroTitleContainer">
                         <HBox alignItems="Center" wrap="Wrap" class="dashboardUserGreetingRow">
-                            <Title text="{i18n>dashboardWelcomePrefix}{auth>/user/username}!" level="H2" titleStyle="H3" class="sapUiTinyMarginEnd" />
+                            <Title text="{i18n>dashboardSubtitle}" level="H2" titleStyle="H5" wrapping="true" class="sapUiTinyMarginEnd" />
                             <ObjectStatus
                                 id="dashboardConnectionStatus"
                                 text="{dashboardView>/connectionText}"
                                 state="{dashboardView>/connectionState}"
                                 inverted="false" />
                         </HBox>
-                        <Text text="{i18n>dashboardSubtitle}" class="sapUiTinyMarginTop textMuted" />
                     </VBox>
                     <HBox alignItems="Center" wrap="Wrap" class="sapUiTinyMarginBottom dashboardHeroActions">
                         <Button
@@ -321,26 +320,10 @@
                         <!-- ADMINISTRATOR -->
                         <VBox id="sectionAdmin" visible="{= ${dashboardView>/selectedTab} === 'admin' }">
                             <VBox class="sapUiSmallMarginTop">
-                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom">
-                                    <VBox>
-                                        <Title text="{i18n>adminUserManagementTitle}" level="H3" titleStyle="H4" />
-                                        <Text text="{i18n>adminUserManagementDesc}" class="textMuted" />
-                                    </VBox>
-                                    <HBox alignItems="Center">
-                                        <SearchField
-                                            id="adminUserSearchField"
-                                            width="18rem"
-                                            placeholder="{i18n>adminSearchPlaceholder}"
-                                            search=".onSearchUsers"
-                                            class="sapUiTinyMarginEnd" />
-                                        <Button
-                                            id="btnRefreshUsers"
-                                            icon="sap-icon://refresh"
-                                            text="{i18n>commonRefresh}"
-                                            type="Transparent"
-                                            press=".onRefreshUsers" />
-                                    </HBox>
-                                </HBox>
+                                <VBox class="sapUiSmallMarginBottom">
+                                    <Title text="{i18n>adminUserManagementTitle}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>adminUserManagementDesc}" class="textMuted" />
+                                </VBox>
 
                                 <Table
                                     id="adminUsersTable"
@@ -350,31 +333,90 @@
                                         path: 'adminView>/users'
                                     }"
                                     growing="true"
-                                    growingThreshold="20">
+                                    growingThreshold="20"
+                                    updateFinished=".onAdminUsersUpdated">
                                     <headerToolbar>
                                         <OverflowToolbar>
                                             <Title text="{i18n>adminUsersTableTitle} ({adminView>/userCount})" level="H4" />
                                             <ToolbarSpacer />
+                                            <Label text="{i18n>adminColLockStatus}" labelFor="adminLockStatusFilter" />
+                                            <Select
+                                                id="adminLockStatusFilter"
+                                                change=".onFilterUsersByLockStatus">
+                                                <items>
+                                                    <core:Item key="" text="{i18n>adminFilterAll}" />
+                                                    <core:Item key="active" text="{i18n>adminStatusUnlocked}" />
+                                                    <core:Item key="locked" text="{i18n>adminStatusLocked}" />
+                                                    <core:Item key="unavailable" text="{i18n>adminDetailsUnavailable}" />
+                                                </items>
+                                            </Select>
+                                            <SearchField
+                                                id="adminUserSearchField"
+                                                width="18rem"
+                                                placeholder="{i18n>adminSearchPlaceholder}"
+                                                search=".onSearchUsers" />
+                                            <Button
+                                                id="btnRefreshUsers"
+                                                icon="sap-icon://refresh"
+                                                text="{i18n>commonRefresh}"
+                                                type="Transparent"
+                                                press=".onRefreshUsers" />
                                         </OverflowToolbar>
                                     </headerToolbar>
                                     <columns>
                                         <Column width="10rem">
-                                            <Text text="{i18n>adminColUsername}" />
+                                            <header>
+                                                <Link text="{i18n>adminColUsername}" press=".onSortUsers">
+                                                    <customData>
+                                                        <core:CustomData key="sortProperty" value="username" />
+                                                    </customData>
+                                                </Link>
+                                            </header>
                                         </Column>
                                         <Column minScreenWidth="Tablet" demandPopin="true">
-                                            <Text text="{i18n>adminColFullName}" />
+                                            <header>
+                                                <Link text="{i18n>adminColFullName}" press=".onSortUsers">
+                                                    <customData>
+                                                        <core:CustomData key="sortProperty" value="fullName" />
+                                                    </customData>
+                                                </Link>
+                                            </header>
                                         </Column>
                                         <Column minScreenWidth="Tablet" demandPopin="true" width="8rem">
-                                            <Text text="{i18n>adminColLockStatus}" />
+                                            <header>
+                                                <Link text="{i18n>adminColLockStatus}" press=".onSortUsers">
+                                                    <customData>
+                                                        <core:CustomData key="sortProperty" value="isLocked" />
+                                                    </customData>
+                                                </Link>
+                                            </header>
                                         </Column>
                                         <Column minScreenWidth="Desktop" demandPopin="true" width="7rem">
-                                            <Text text="{i18n>adminColUserType}" />
+                                            <header>
+                                                <Link text="{i18n>adminColUserType}" press=".onSortUsers">
+                                                    <customData>
+                                                        <core:CustomData key="sortProperty" value="userType" />
+                                                    </customData>
+                                                </Link>
+                                            </header>
                                         </Column>
                                         <Column minScreenWidth="Desktop" demandPopin="true" width="9rem">
-                                            <Text text="{i18n>adminColLastChanged}" />
+                                            <header>
+                                                <Link text="{i18n>adminColLastChanged}" press=".onSortUsers">
+                                                    <customData>
+                                                        <core:CustomData key="sortProperty" value="lastChanged" />
+                                                    </customData>
+                                                </Link>
+                                            </header>
                                         </Column>
                                         <Column minScreenWidth="Desktop" demandPopin="true" width="9rem">
-                                            <Text text="{i18n>adminDetailLastChangedBy}" />
+                                            <header>
+                                                <Link text="{i18n>adminDetailLastChangedBy}" press=".onSortUsers">
+                                                    <customData>
+                                                        <core:CustomData key="sortProperty" value="lastChangedBy" />
+                                                    </customData>
+                                                </Link>
+                                            </header>
                                         </Column>
                                         <Column hAlign="End" width="22rem">
                                             <Text text="{i18n>adminColActions}" />

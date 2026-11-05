@@ -7,6 +7,19 @@ const mockODataClient = { get: jest.fn(), post: jest.fn() };
 const mockMessageToast = { show: jest.fn() };
 const mockMessageBox = { error: jest.fn(), confirm: jest.fn() };
 mockMessageBox.Action = { OK: 'OK', CANCEL: 'CANCEL' };
+
+class MockFilter {
+    constructor(...args) {
+        this.args = args;
+    }
+}
+
+class MockSorter {
+    constructor(path, descending) {
+        this.path = path;
+        this.descending = descending;
+    }
+}
 const mockAuthService = { hasAnyRole: jest.fn() };
 
 class MockJSONModel {
@@ -45,7 +58,11 @@ beforeAll(() => {
                     mockMessageToast,
                     mockAuthService,
                     { load: jest.fn() },
-                    mockMessageBox
+                    mockMessageBox,
+                    MockFilter,
+                    { EQ: 'EQ' },
+                    MockSorter,
+                    { SortOrder: { Ascending: 'Ascending', Descending: 'Descending', None: 'None' } }
                 );
             })
         }
@@ -92,6 +109,91 @@ describe('Admin dashboard user list', () => {
         expect(sView).not.toContain('adminView>validTo');
         expect(sView).toContain('detailsAvailable} &amp;&amp; !${adminView>isLocked}');
         expect(sView).toContain('detailsAvailable} &amp;&amp; ${adminView>isLocked} === true');
+    });
+
+    test('keeps search, filter and refresh in the table toolbar and removes the old section copies', () => {
+        const sView = fs.readFileSync(
+            path.join(__dirname, '../../../app/fiori-app/webapp/view/Dashboard.view.xml'),
+            'utf8'
+        );
+        const sToolbar = sView.slice(sView.indexOf('id="adminUsersTable"')).match(/<OverflowToolbar>[\s\S]*?<\/OverflowToolbar>/)[0];
+        ['id="adminLockStatusFilter"', 'id="adminUserSearchField"', 'id="btnRefreshUsers"'].forEach((sId) => {
+            expect(sToolbar).toContain(sId);
+            expect(sView.split(sId)).toHaveLength(2);
+        });
+        expect(sView).not.toContain('dashboardWelcomePrefix');
+        expect(sView).not.toContain('auth>/user/username');
+    });
+
+    test.each([
+        ['active', [['detailsAvailable', 'EQ', true], ['isLocked', 'EQ', false]]],
+        ['locked', [['detailsAvailable', 'EQ', true], ['isLocked', 'EQ', true]]],
+        ['unavailable', [['detailsAvailable', 'EQ', false]]]
+    ])('filters the bound rows by the %s lock status', (sKey, aExpected) => {
+        const { controller } = makeController([]);
+        const oBinding = { filter: jest.fn() };
+        controller.byId = () => ({ getBinding: () => oBinding });
+
+        controller.onFilterUsersByLockStatus({ getSource: () => ({ getSelectedKey: () => sKey }) });
+
+        const oFilter = oBinding.filter.mock.calls[0][0];
+        expect(oFilter.args[0].and).toBe(true);
+        expect(oFilter.args[0].filters.map((f) => f.args)).toEqual(aExpected);
+    });
+
+    test('clears the filter when All is selected', () => {
+        const { controller } = makeController([]);
+        const oBinding = { filter: jest.fn() };
+        controller.byId = () => ({ getBinding: () => oBinding });
+
+        controller.onFilterUsersByLockStatus({ getSource: () => ({ getSelectedKey: () => '' }) });
+
+        expect(oBinding.filter).toHaveBeenCalledWith([]);
+    });
+
+    test('sorts ascending first, toggles on the same column, and restarts ascending on another', () => {
+        const { controller } = makeController([]);
+        const oBinding = { sort: jest.fn() };
+        const fnColumn = (sProperty) => ({
+            getHeader: () => ({ data: () => sProperty }),
+            setSortIndicator: jest.fn()
+        });
+        const oUsername = fnColumn('username');
+        const oActions = fnColumn(null);
+        controller.byId = () => ({ getColumns: () => [oUsername, oActions], getBinding: () => oBinding });
+        const fnPress = (sProperty) => controller.onSortUsers({ getSource: () => ({ data: () => sProperty }) });
+
+        fnPress('username');
+        expect(oBinding.sort).toHaveBeenLastCalledWith(expect.objectContaining({ path: 'username', descending: false }));
+        expect(oUsername.setSortIndicator).toHaveBeenLastCalledWith('Ascending');
+        expect(oActions.setSortIndicator).toHaveBeenLastCalledWith('None');
+
+        fnPress('username');
+        expect(oBinding.sort).toHaveBeenLastCalledWith(expect.objectContaining({ path: 'username', descending: true }));
+        expect(oUsername.setSortIndicator).toHaveBeenLastCalledWith('Descending');
+
+        fnPress('userType');
+        expect(oBinding.sort).toHaveBeenLastCalledWith(expect.objectContaining({ path: 'userType', descending: false }));
+        expect(oUsername.setSortIndicator).toHaveBeenLastCalledWith('None');
+    });
+
+    test('shows the filtered row count in the toolbar', () => {
+        const { controller, model } = makeController([{ username: 'ALICE' }, { username: 'BOB' }]);
+
+        controller.onAdminUsersUpdated({ getParameter: (sName) => (sName === 'total' ? 1 : undefined) });
+
+        expect(model.getProperty('/userCount')).toBe(1);
+    });
+
+    test('takes the count after a load from the filtered binding, not the rows SAP returned', async () => {
+        const { controller, model } = makeController([]);
+        controller.byId = () => ({ getBinding: () => ({ getLength: () => 1 }) });
+        mockODataClient.get.mockResolvedValue({ value: [{ username: 'ALICE' }, { username: 'BOB' }] });
+
+        await controller._loadAdminUsers('');
+
+        expect(model.getProperty('/users')).toHaveLength(2);
+        expect(model.getProperty('/userCount')).toBe(1);
     });
 
     test('uses the row username for a Lock/Unlock action', () => {

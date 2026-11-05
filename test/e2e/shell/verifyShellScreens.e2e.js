@@ -233,6 +233,129 @@ async function verifySidebar(baseUrl) {
     return { errors, details };
 }
 
+// Controlled rows, so sort and filter are proven whatever SAP holds. UI proof only: listUsers itself is covered above.
+const ADMIN_ROWS = [
+    { username: 'BETA', fullName: 'Beta User', detailsAvailable: true, isLocked: true, userType: 'A', lastChanged: '20261104', lastChangedBy: 'ADMIN' },
+    { username: 'ALPHA', fullName: 'Alpha User', detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20261103', lastChangedBy: 'ADMIN' },
+    { username: 'GAMMA', fullName: 'GAMMA', detailsAvailable: false, isLocked: null, userType: null, lastChanged: null, lastChangedBy: null }
+];
+
+/** What the Sub-User Master table currently shows. */
+const adminTableState = (page) => page.evaluate(() => {
+    const Element = window.sap.ui.require('sap/ui/core/Element');
+    const table = Element.registry.filter((c) => c.getId().endsWith('--adminUsersTable'))[0];
+    const toolbar = table.getHeaderToolbar();
+    return {
+        title: toolbar.getContent()[0].getText(),
+        toolbarIds: toolbar.getContent().map((c) => c.getId().split('--').pop()),
+        rows: table.getItems().map((item) => item.getBindingContext('adminView').getProperty('username')),
+        indicator: table.getColumns()[0].getSortIndicator(),
+        busy: table.getBusy(),
+        noData: table.getNoDataText()
+    };
+});
+
+async function verifyAdminTable(baseUrl) {
+    console.log('\n=== Sub-User Master table and dashboard header (UI proof with controlled rows, write guard on) ===');
+    const errors = [];
+    const details = [];
+    const session = await openSession({ baseUrl });
+    const { page } = session;
+    const searches = [];
+
+    const expectRows = (state, title, rows) => {
+        const problems = [];
+        if (state.title !== title) problems.push(`expected title "${title}", got "${state.title}"`);
+        if (state.rows.join() !== rows.join()) problems.push(`expected rows [${rows}], got [${state.rows}]`);
+        return problems;
+    };
+    const chooseFilter = async (text) => {
+        await page.click('[id$="--adminLockStatusFilter"]');
+        await page.locator('.sapMSelectList li:visible', { hasText: new RegExp(`^${text}$`) }).click();
+        await session.settle();
+    };
+    const sortUsername = async () => {
+        await page.locator('[id$="--adminUsersTable"] th a', { hasText: 'Username' }).click();
+        await session.settle();
+    };
+    const search = async (text) => {
+        await page.locator('[id$="--adminUserSearchField"] input').fill(text);
+        await page.locator('[id$="--adminUserSearchField"] input').press('Enter');
+    };
+
+    try {
+        await page.route('**/odata/v4/user-management/listUsers*', async (route) => {
+            const query = decodeURIComponent(route.request().url().match(/search='([^']*)'/)[1]);
+            searches.push(query);
+            await new Promise((resolve) => setTimeout(resolve, 300)); // long enough to see the busy state
+            await route.fulfill({ json: { value: ADMIN_ROWS.filter((row) => row.username.includes(query)) } });
+        });
+        await openHash(session, 'dashboard/admin');
+
+        const initial = await adminTableState(page);
+        const problems = expectRows(initial, 'Sub-User Master (3)', ['BETA', 'ALPHA', 'GAMMA']);
+        ['adminLockStatusFilter', 'adminUserSearchField', 'btnRefreshUsers'].forEach((id) => {
+            if (!initial.toolbarIds.includes(id)) problems.push(`${id} is not in the table toolbar`);
+        });
+        step(errors, details, 'Sub-User Master shows the bound rows, with its controls in the toolbar', problems);
+
+        await sortUsername();
+        const ascending = await adminTableState(page);
+        const sorted = expectRows(ascending, 'Sub-User Master (3)', ['ALPHA', 'BETA', 'GAMMA']);
+        if (ascending.indicator !== 'Ascending') sorted.push(`indicator is ${ascending.indicator}`);
+        await sortUsername();
+        const descending = await adminTableState(page);
+        sorted.push(...expectRows(descending, 'Sub-User Master (3)', ['GAMMA', 'BETA', 'ALPHA']));
+        if (descending.indicator !== 'Descending') sorted.push(`indicator is ${descending.indicator}`);
+        step(errors, details, 'A column header sorts the rows and toggles direction', sorted);
+
+        await chooseFilter('Locked');
+        const locked = expectRows(await adminTableState(page), 'Sub-User Master (1)', ['BETA']);
+        await chooseFilter('Active');
+        locked.push(...expectRows(await adminTableState(page), 'Sub-User Master (1)', ['ALPHA']));
+        await chooseFilter('Details unavailable');
+        locked.push(...expectRows(await adminTableState(page), 'Sub-User Master (1)', ['GAMMA']));
+        await chooseFilter('All');
+        locked.push(...expectRows(await adminTableState(page), 'Sub-User Master (3)', ['GAMMA', 'BETA', 'ALPHA']));
+        step(errors, details, 'The lock status filter narrows the rows and the toolbar count', locked);
+
+        await search('NOMATCH');
+        const searching = [];
+        await page.waitForTimeout(100);
+        if (!(await adminTableState(page)).busy) searching.push('table is not busy while the search runs');
+        await session.settle();
+        const empty = await adminTableState(page);
+        searching.push(...expectRows(empty, 'Sub-User Master (0)', []));
+        if (empty.noData !== 'No SAP users found.') searching.push(`empty text is "${empty.noData}"`);
+        if (searches[searches.length - 1] !== 'NOMATCH') searching.push('search did not reach listUsers');
+        step(errors, details, 'Search uses listUsers, shows the busy state and the empty text', searching);
+
+        await search('');
+        await session.settle();
+        await chooseFilter('Locked');
+        await page.locator('[id$="--btnRefreshUsers"]').click();
+        await session.settle();
+        step(errors, details, 'The filter still applies after a refresh', expectRows(await adminTableState(page), 'Sub-User Master (1)', ['BETA']));
+
+        const header = await page.evaluate(() => ({
+            greeting: document.body.innerText.includes('Welcome back'),
+            kept: ['dashboardConnectionStatus', 'btnQuickCreatePO', 'btnQuickManagePOs', 'btnRefreshDashboard']
+                .filter((id) => !document.querySelector(`[id$="--${id}"]`))
+        }));
+        const headerProblems = header.kept.map((id) => `${id} is missing`);
+        if (header.greeting) headerProblems.push('the Welcome greeting is still shown');
+        step(errors, details, 'The dashboard header has no greeting and keeps its status and actions', headerProblems);
+
+        const failed = session.consoleErrors.concat(session.networkErrors.map((e) => `HTTP ${e.status} ${e.url}`), session.blocked.map((b) => `write guard blocked ${b.reason}`));
+        step(errors, details, 'Sub-User Master flow: no console error, failed request or blocked write', failed);
+    } catch (err) {
+        step(errors, details, 'Sub-User Master flow', [`${err.name}: ${err.message.split('\n')[0]}`]);
+    } finally {
+        await session.close();
+    }
+    return { errors, details };
+}
+
 /** The active theme, what is saved, and the page background as actually painted. */
 const themeState = (page) => page.evaluate(() => ({
     active: window.sap.ui.require('sap/ui/core/Theming').getTheme(),
@@ -329,8 +452,9 @@ async function verifyShellScreens(options = {}) {
     const b = await runScreens({ baseUrl, user: null, title: 'Shell login', steps: SIGNED_OUT });
     const c = await verifySidebar(baseUrl);
     const d = await verifyThemeSwitcher(baseUrl);
-    const errors = a.errors.concat(b.errors, c.errors, d.errors);
-    return { status: errors.length ? 'FAIL' : 'PASS', errors, details: a.details.concat(b.details, c.details, d.details) };
+    const e = await verifyAdminTable(baseUrl);
+    const errors = a.errors.concat(b.errors, c.errors, d.errors, e.errors);
+    return { status: errors.length ? 'FAIL' : 'PASS', errors, details: a.details.concat(b.details, c.details, d.details, e.details) };
 }
 
 if (require.main === module) {
