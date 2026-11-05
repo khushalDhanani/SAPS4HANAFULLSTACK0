@@ -353,6 +353,7 @@ describe('Unit: Dashboard Controller live figures', () => {
                 const oViewModel = controller.getView().getModel('dashboardView');
 
                 mockAuthService.hasAnyRole.mockReturnValueOnce(false);
+                controller._watchLockMonitor = jest.fn(); // polls the server; has its own tests
                 controller._onDashboardMatched(matched('admin'));
                 expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
                 expect(mockAuthService.hasAnyRole).toHaveBeenLastCalledWith(['Admin']);

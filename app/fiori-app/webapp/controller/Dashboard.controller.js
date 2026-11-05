@@ -32,6 +32,8 @@ sap.ui.define([
     var ADMIN_STATE_KEY = "admin.userList.state";
     var UNDO_WINDOW_MS = 10000;
     var SEARCH_DEBOUNCE_MS = 300;
+    var BULK_EMAIL_CHECK_MS = 15000;
+    var LOCK_MONITOR_REFRESH_MS = 60000;
     var RESULT_LOOK = {
         success: { state: "Success", icon: "sap-icon://sys-enter-2", text: "adminBulkStatusSuccess" },
         warning: { state: "Warning", icon: "sap-icon://alert", text: "adminBulkStatusWarning" },
@@ -94,6 +96,7 @@ sap.ui.define([
                 selection: { count: 0, canLock: false, canUnlock: false, all: false, partial: false, text: "", hint: "" },
                 bulk: { results: [], failed: 0, percent: 0, cancelling: false },
                 undo: { text: "" },
+                lockMonitor: { text: "", state: "None" },
                 noDataText: this._text("adminNoUsers", "No SAP users found."),
                 selectedUser: null,
                 detailBusy: false,
@@ -158,10 +161,13 @@ sap.ui.define([
             if (sSection === "admin" && bAllowed && !this._bAdminUsersLoaded) {
                 this._loadAdminUsers();
             }
-            var oQuery = oEvent ? oEvent.getParameter("arguments")["?query"] : null;
-            if (sSection === "admin" && bAllowed && oQuery && oQuery.user) {
-                // A link from a lock alert: opens at once, without waiting for the list.
-                this._openUserDetail(String(oQuery.user).toUpperCase());
+            if (sSection === "admin" && bAllowed) {
+                this._watchLockMonitor();
+                var oQuery = oEvent.getParameter("arguments")["?query"];
+                if (oQuery && oQuery.search) {
+                    // A link from a lock alert: the list opens with that username searched.
+                    this._mergeAdminFilters({ search: String(oQuery.search) });
+                }
             }
             // A sidebar click only changes the section; the figures reload on arrival from another screen.
             if (this._bFiguresLoaded) {
@@ -851,18 +857,19 @@ sap.ui.define([
                         messages: [{ type: "I", id: "", number: "", message: that._text("adminBulkSkippedAlready", "Already in the target state.") }]
                     };
                 })), bIsUndo);
-                return that._finishBulkNotification(sRunId);
+                return that._trackBulkEmail(sRunId);
             });
         },
 
-        /** Reports the summary email in the open result dialog. Its outcome never affects the locks. */
-        _finishBulkNotification: function (sRunId) {
+        /** The email comes from the lock monitor's next check, so the open result dialog follows it until it is sent. */
+        _trackBulkEmail: function (sRunId) {
             var that = this;
             var oAdminModel = this.getView().getModel("adminView");
             var fnShow = function (sTextKey, sDefault, sState) {
                 oAdminModel.setProperty("/bulk/notifyText", sTextKey ? that._text(sTextKey, sDefault) : "");
                 oAdminModel.setProperty("/bulk/notifyState", sState || "None");
             };
+            clearTimeout(this._iBulkEmailTimer);
             var bAnyLocked = (oAdminModel.getProperty("/bulk/results") || []).some(function (oResult) {
                 return oResult.status === "success" || oResult.status === "warning";
             });
@@ -870,20 +877,77 @@ sap.ui.define([
                 fnShow("");
                 return Promise.resolve();
             }
-            fnShow("adminBulkNotifySending", "Sending...");
-            return ODataClient.post("/odata/v4/user-management/finishBulkLock", { bulkRunId: sRunId })
+            fnShow("adminBulkNotifyQueued", "Queued", "Information");
+            var fnCheck = function () {
+                return ODataClient.get("/odata/v4/user-management/getBulkLockEmailStatus(bulkRunId='" + encodeURIComponent(sRunId) + "')")
+                    .then(function (res) {
+                        var sStatus = res && res.status;
+                        if (sStatus === "sent") {
+                            fnShow("adminBulkNotifySent", "Sent", "Success");
+                        } else if (sStatus === "not_configured") {
+                            fnShow("adminBulkNotifyNotConfigured", "Not configured", "Warning");
+                        } else {
+                            if (sStatus === "retrying") {
+                                fnShow("adminBulkNotifyRetrying", "Sending failed, will retry on the next check", "Warning");
+                            }
+                            that._iBulkEmailTimer = setTimeout(fnCheck, BULK_EMAIL_CHECK_MS);
+                        }
+                    })
+                    .catch(function () {
+                        // Only this display failed: the email does not depend on it. Queued stays shown.
+                    });
+            };
+            return fnCheck();
+        },
+
+        _lockMonitorView: function (oStatus) {
+            var fnTime = function (sIso) {
+                return sIso ? new Date(sIso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : "-";
+            };
+            var sTime = fnTime(oStatus.lastCheckedAt);
+            var mLook = {
+                ok: this._text("adminLockMonitorActive", "Lock monitor: Active \u00b7 Last checked {0}", [sTime]),
+                starting: this._text("adminLockMonitorStarting", "Lock monitor: Active \u00b7 First check pending"),
+                failed: this._text("adminLockMonitorFailed", "Lock monitor: Last check failed \u00b7 {0}", [sTime]),
+                stale: this._text("adminLockMonitorStale", "Lock monitor: Not checking \u00b7 Last checked {0}", [sTime]),
+                off: this._text("adminLockMonitorOff", "Lock monitor: Off (email not configured)")
+            };
+            var mState = { ok: "Success", starting: "Success", failed: "Error", stale: "Error", off: "None" };
+            return {
+                text: mLook[oStatus.state] || this._text("adminLockMonitorUnknown", "Lock monitor: Status not available"),
+                state: mState[oStatus.state] || "Error",
+                recipient: oStatus.recipient,
+                intervalText: this._text("adminNotifyIntervalValue", "{0} seconds", [String(oStatus.pollIntervalSec)]),
+                maxPerEmail: oStatus.maxPerEmail,
+                pendingEmails: oStatus.pendingEmails
+            };
+        },
+
+        _refreshLockMonitor: function () {
+            var that = this;
+            var oAdminModel = this.getView().getModel("adminView");
+            return ODataClient.get("/odata/v4/user-management/getLockMonitor()")
                 .then(function (res) {
-                    var mLook = {
-                        sent: ["adminBulkNotifySent", "Sent", "Success"],
-                        retrying: ["adminBulkNotifyRetrying", "First attempt failed, retrying in the background", "Warning"],
-                        not_configured: ["adminBulkNotifyNotConfigured", "Not configured", "Warning"]
-                    };
-                    var aLook = mLook[res && res.status] || ["adminBulkNotifyFailed", "Failed", "Error"];
-                    fnShow(aLook[0], aLook[1], aLook[2]);
+                    oAdminModel.setProperty("/lockMonitor", that._lockMonitorView(res || {}));
                 })
                 .catch(function () {
-                    fnShow("adminBulkNotifyFailed", "Failed", "Error");
+                    oAdminModel.setProperty("/lockMonitor", that._lockMonitorView({}));
                 });
+        },
+
+        _watchLockMonitor: function () {
+            var that = this;
+            this._refreshLockMonitor();
+            clearInterval(this._iLockMonitorTimer);
+            this._iLockMonitorTimer = setInterval(function () {
+                if (that.getView().getModel("dashboardView").getProperty("/selectedTab") === "admin") {
+                    that._refreshLockMonitor();
+                }
+            }, LOCK_MONITOR_REFRESH_MS);
+        },
+
+        onOpenNotifySettings: function (oEvent) {
+            this.byId("adminNotifySettings").openBy(oEvent.getSource());
         },
 
         onCancelBulkRun: function () {
@@ -935,6 +999,7 @@ sap.ui.define([
         },
 
         onRetryFailedBulk: function () {
+            clearTimeout(this._iBulkEmailTimer);
             var oBulk = this.getView().getModel("adminView").getProperty("/bulk");
             this.byId("userBulkResultDialog").close();
             return this._runBulk(oBulk.action, UserListLogic.usernamesWithStatus(oBulk.results, ["error"]), [], oBulk.reason, oBulk.isUndo);
@@ -953,6 +1018,7 @@ sap.ui.define([
         },
 
         onCloseBulkResults: function () {
+            clearTimeout(this._iBulkEmailTimer);
             this.byId("userBulkResultDialog").close();
         },
 
@@ -991,10 +1057,7 @@ sap.ui.define([
             if (!sUsername) {
                 return undefined;
             }
-            return this._openUserDetail(sUsername);
-        },
 
-        _openUserDetail: function (sUsername) {
             var oAdminModel = this.getView().getModel("adminView");
             var that = this;
             var fnIsShown = function () {
@@ -1192,6 +1255,8 @@ sap.ui.define([
         onExit: function () {
             clearTimeout(this._iAdminSearchTimer);
             clearTimeout(this._iUndoTimer);
+            clearTimeout(this._iBulkEmailTimer);
+            clearInterval(this._iLockMonitorTimer);
             if (this._oAuthBinding) {
                 this._oAuthBinding.detachChange(this._onAuthChanged, this);
                 this._oAuthBinding = null;

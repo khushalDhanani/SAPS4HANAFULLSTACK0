@@ -19,7 +19,7 @@ const PROTECTED_MESSAGES = {
 /**
  * UserManagementService Handler
  *
- * Orchestrates listUsers, getUserDetail, lockUser, unlockUser and finishBulkLock.
+ * Orchestrates listUsers, getUserDetail, lockUser and unlockUser, and answers for the lock monitor.
  * All actions require the Admin role (declared in service.cds).
  *
  * Input validation happens here before the adapter is called.
@@ -34,7 +34,8 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     this.on('getUserDetail', this._handleGetUserDetail.bind(this));
     this.on('lockUser',     this._handleLockUser.bind(this));
     this.on('unlockUser',   this._handleUnlockUser.bind(this));
-    this.on('finishBulkLock', this._handleFinishBulkLock.bind(this));
+    this.on('getLockMonitor', () => lockNotifier.monitorStatus());
+    this.on('getBulkLockEmailStatus', this._handleBulkLockEmailStatus.bind(this));
 
     lockNotifier.startJob(() => this._getAdapter());
 
@@ -148,34 +149,25 @@ module.exports = class UserManagementService extends cds.ApplicationService {
 
     const adapter = this._getAdapter();
     let locked = false;
-    let detail = null;
-    const result = await this._changeLock(req, 'lock', async () => {
-      const context = await this._protectionContext(req);
-      // Only the type needs an SAP read, and the adapter itself refuses the connection user.
-      const nameReason = protectionReason({ username: input.username }, context);
-      detail = nameReason ? null : await adapter.getUserDetail(input.username);
-      const blocked = nameReason || protectionReason(detail, context);
-      if (blocked && blocked !== 'connection') {
-        throw Object.assign(new Error(PROTECTED_MESSAGES[blocked](input.username)), { status: 403 });
-      }
-      await lockNotifier.beforeAppLock(input.username);
-      const res = await adapter.lockUser(input.username);
-      locked = true;
-      return res;
-    }, input);
-
-    // Outside _changeLock, so that nothing about the notification can report the lock as failed.
-    if (locked) {
-      await lockNotifier.afterAppLock(adapter, {
-        username: input.username,
-        actor: resolveUserIdentity(req),
-        reason: input.reason,
-        bulkRunId: input.bulkRunId,
-        fullName: detail ? detail.fullName : '',
-        detail,
-      });
+    try {
+      return await this._changeLock(req, 'lock', async () => {
+        const context = await this._protectionContext(req);
+        // Only the type needs an SAP read, and the adapter itself refuses the connection user.
+        const nameReason = protectionReason({ username: input.username }, context);
+        const blocked = nameReason || protectionReason(await adapter.getUserDetail(input.username), context);
+        if (blocked && blocked !== 'connection') {
+          throw Object.assign(new Error(PROTECTED_MESSAGES[blocked](input.username)), { status: 403 });
+        }
+        // Written first: the monitor may see the lock before this request ends.
+        await lockNotifier.recordAppLock({ ...input, actor: context.actor });
+        const res = await adapter.lockUser(input.username);
+        locked = true;
+        return res;
+      }, input);
+    } finally {
+      // In finally, because req.reject throws: a failed lock must not leave a note to mislabel a later one.
+      if (!locked) await lockNotifier.discardAppLock(input.username);
     }
-    return result;
   }
 
   /**
@@ -191,18 +183,17 @@ module.exports = class UserManagementService extends cds.ApplicationService {
       unlocked = true;
       return res;
     }, input);
-    // A later lock of this user is a new event, so Undo followed by a re-lock still alerts.
-    if (unlocked) await lockNotifier.afterAppUnlock(input.username);
+    if (unlocked) await lockNotifier.discardAppLock(input.username);
     return result;
   }
 
   /**
-   * finishBulkLock(bulkRunId) — sends the one summary email of a bulk lock run, for the caller's own events.
+   * getBulkLockEmailStatus(bulkRunId) — whether the lock monitor has emailed a bulk run yet.
    */
-  async _handleFinishBulkLock(req) {
+  async _handleBulkLockEmailStatus(req) {
     const bulkRunId = String(req.data.bulkRunId ?? '').trim();
     if (!RUN_ID.test(bulkRunId)) return req.reject(400, 'bulkRunId is required');
-    return lockNotifier.finishBulkRun(bulkRunId, resolveUserIdentity(req));
+    return lockNotifier.bulkEmailStatus(bulkRunId);
   }
 };
 

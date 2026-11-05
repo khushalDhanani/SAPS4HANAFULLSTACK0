@@ -282,6 +282,16 @@ class UserManagementAdapter {
   }
 
   /**
+   * All full names in one read of the view USER_ADDR, instead of a BAPI_USER_GET_DETAIL per user.
+   * On DS4/220 it held 262 of 278 users (2026-11-05); a user missing here has no name in the alert.
+   * @returns {Promise<Map<string, string>>}
+   */
+  async readFullNames() {
+    const rows = await this._rfc.readTable('USER_ADDR', ['BNAME', 'NAME_TEXTC']);
+    return new Map(rows.map((row) => [row.BNAME, row.NAME_TEXTC]));
+  }
+
+  /**
    * The newest USH02 row of a user: when the lock state last changed, and who changed it.
    * RFC_READ_TABLE has no ordering, so all of the user's rows are read and sorted here.
    * @returns {Promise<{lockedAt: string, changedBy: string, uflag: number}|null>}

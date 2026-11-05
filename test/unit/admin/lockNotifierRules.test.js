@@ -2,76 +2,144 @@
 
 jest.mock('../../../srv/common/mailer', () => ({ isConfigured: jest.fn(() => true), sendMail: jest.fn() }));
 
-const { diffLockState, lockTypeOf, pollIntervalMs, startJob } = require('../../../srv/admin/lockNotifier');
+const {
+  diffLockState, splitSettled, describeLock, lockLabel, pollIntervalSec, maxPerEmail, recipients, startJob,
+} = require('../../../srv/admin/lockNotifier');
 
-const NOW = '2026-11-05T10:00:00.000Z';
+const NOW = new Date('2026-11-05T10:00:00.000Z');
+const secondsAgo = (s) => new Date(NOW.getTime() - s * 1000).toISOString();
 const snapshots = (rows) => new Map(rows.map((row) => [row.username, row]));
 
-describe('diffLockState', () => {
-  test('a user seen for the first time is stored silently, even if locked', () => {
-    const diff = diffLockState([{ username: 'A', uflag: 64 }, { username: 'B', uflag: 0 }], snapshots([]), NOW);
-    expect(diff).toEqual({ baseline: [{ username: 'A', uflag: 64 }, { username: 'B', uflag: 0 }], newlyLocked: [], changed: [] });
-  });
-
-  test('unlocked to locked is a new lock', () => {
-    const diff = diffLockState([{ username: 'A', uflag: 64 }], snapshots([{ username: 'A', uflag: 0 }]), NOW);
-    expect(diff.newlyLocked).toEqual([{ username: 'A', oldFlag: 0, uflag: 64, newBits: 64 }]);
-  });
-
-  test('an added lock type is new, even on an already locked user', () => {
-    const diff = diffLockState([{ username: 'A', uflag: 192 }], snapshots([{ username: 'A', uflag: 128 }]), NOW);
-    expect(diff.newlyLocked).toEqual([{ username: 'A', oldFlag: 128, uflag: 192, newBits: 64 }]);
-  });
-
-  test('no change is nothing', () => {
-    const diff = diffLockState([{ username: 'A', uflag: 64 }], snapshots([{ username: 'A', uflag: 64 }]), NOW);
-    expect(diff).toEqual({ baseline: [], newlyLocked: [], changed: [] });
-  });
-
-  test.each([[64, 0], [192, 64]])('a lock going away (%i to %i) updates the state with no alert', (from, to) => {
-    const diff = diffLockState([{ username: 'A', uflag: to }], snapshots([{ username: 'A', uflag: from }]), NOW);
-    expect(diff.newlyLocked).toEqual([]);
-    expect(diff.changed).toEqual([{ username: 'A', oldFlag: from, uflag: to }]);
-  });
-
-  test('a user the app is locking right now is skipped until the window ends', () => {
-    const row = { username: 'A', uflag: 0, appLockUntil: '2026-11-05T10:01:00.000Z' };
-    expect(diffLockState([{ username: 'A', uflag: 64 }], snapshots([row]), NOW).newlyLocked).toEqual([]);
-    expect(diffLockState([{ username: 'A', uflag: 64 }], snapshots([row]), '2026-11-05T10:02:00.000Z').newlyLocked).toHaveLength(1);
-  });
-
-  test('a user missing from SAP is left alone, not treated as unlocked', () => {
-    const diff = diffLockState([{ username: 'B', uflag: 0 }], snapshots([{ username: 'A', uflag: 64 }, { username: 'B', uflag: 0 }]), NOW);
-    expect(diff).toEqual({ baseline: [], newlyLocked: [], changed: [] });
+describe('lockLabel', () => {
+  test.each([
+    [32, 'Global lock (CUA)'],
+    [64, 'Locked by administrator'],
+    [128, 'Locked due to incorrect logon attempts'],
+    [192, 'Locked by administrator + Locked due to incorrect logon attempts'],
+    [8, 'Lock status 8'],
+  ])('UFLAG %i is "%s"', (uflag, label) => {
+    expect(lockLabel(uflag)).toBe(label);
   });
 });
 
-describe('lockTypeOf', () => {
-  test.each([
-    [64, { lockedLocal: 'L' }, 'admin-local'],
-    [32, { lockedGlobal: 'L' }, 'admin-global'],
-    [128, { lockedWrong: 'L' }, 'wrong-password'],
-  ])('bits %i with ISLOCKED %j give %s', (bits, detail, expected) => {
-    expect(lockTypeOf(bits, detail)).toBe(expected);
+describe('diffLockState', () => {
+  test('unlocked to locked is a new lock', () => {
+    expect(diffLockState([{ username: 'A', uflag: 64 }], snapshots([{ username: 'A', uflag: 0 }])).newlyLocked)
+      .toEqual([{ username: 'A', uflag: 64 }]);
   });
 
-  test('names the new lock, not the older one, when two are set', () => {
-    expect(lockTypeOf(128, { lockedLocal: 'L', lockedWrong: 'L' })).toBe('wrong-password');
-    expect(lockTypeOf(64, { lockedLocal: 'L', lockedWrong: 'L' })).toBe('admin-local');
+  test('a user the snapshot has never seen, already locked, is a new lock', () => {
+    expect(diffLockState([{ username: 'NEW', uflag: 128 }], snapshots([{ username: 'A', uflag: 0 }])).newlyLocked)
+      .toEqual([{ username: 'NEW', uflag: 128 }]);
   });
 
-  test('falls back to UFLAG when ISLOCKED says nothing or could not be read', () => {
-    expect(lockTypeOf(128, { lockedWrong: 'U' })).toBe('wrong-password');
-    expect(lockTypeOf(64, null)).toBe('admin-local');
+  test('a new user who is not locked is stored with no alert', () => {
+    const diff = diffLockState([{ username: 'NEW', uflag: 0 }], snapshots([{ username: 'A', uflag: 0 }]));
+    expect(diff.newlyLocked).toEqual([]);
+    expect(diff.states).toEqual([{ username: 'NEW', uflag: 0 }]);
   });
 
-  test('NO_USER_PW never decides the type', () => {
-    expect(lockTypeOf(64, { lockedNoPw: 'L', lockedLocal: 'U' })).toBe('admin-local');
+  test('already locked stays silent', () => {
+    expect(diffLockState([{ username: 'A', uflag: 64 }], snapshots([{ username: 'A', uflag: 64 }])))
+      .toEqual({ newlyLocked: [], states: [], removed: [] });
+  });
+
+  test.each([[128, 192], [64, 128], [64, 0]])('a change from %i to %i only updates the snapshot', (from, to) => {
+    const diff = diffLockState([{ username: 'A', uflag: to }], snapshots([{ username: 'A', uflag: from }]));
+    expect(diff.newlyLocked).toEqual([]);
+    expect(diff.states).toEqual([{ username: 'A', uflag: to }]);
+  });
+
+  test('a user gone from SAP leaves the snapshot', () => {
+    expect(diffLockState([{ username: 'B', uflag: 0 }], snapshots([{ username: 'A', uflag: 64 }, { username: 'B', uflag: 0 }])).removed)
+      .toEqual(['A']);
+  });
+});
+
+describe('splitSettled', () => {
+  const locks = [{ username: 'A', uflag: 64 }, { username: 'B', uflag: 64 }, { username: 'C', uflag: 64 }];
+
+  test('a run still locking is held, whole, and an unrelated lock is not', () => {
+    const contexts = [
+      { username: 'A', bulkRunId: 'r1', at: secondsAgo(40) },
+      { username: 'B', bulkRunId: 'r1', at: secondsAgo(5) },
+    ];
+    const { settled, held } = splitSettled(locks, contexts, NOW);
+    expect(held.map((l) => l.username)).toEqual(['A', 'B']);
+    expect(settled.map((l) => l.username)).toEqual(['C']);
+  });
+
+  test('a run that has gone quiet is released', () => {
+    const contexts = [{ username: 'A', bulkRunId: 'r1', at: secondsAgo(21) }, { username: 'B', bulkRunId: 'r1', at: secondsAgo(30) }];
+    expect(splitSettled(locks, contexts, NOW).held).toEqual([]);
+  });
+
+  test('a single app lock is never held', () => {
+    expect(splitSettled(locks, [{ username: 'A', bulkRunId: '', at: secondsAgo(1) }], NOW).held).toEqual([]);
+  });
+});
+
+describe('describeLock', () => {
+  const lock = { username: 'A', uflag: 64 };
+  const change = { lockedAt: '20261105095900', changedBy: 'SAPADMIN', uflag: 64 };
+  const base = { fullName: 'A Name', previousLockedAt: '', now: NOW };
+
+  test('a recent app note gives the source, who and why', () => {
+    const event = describeLock(lock, { ...base, change, context: { actor: 'khushal', reason: 'Left', bulkRunId: 'r1', at: secondsAgo(60) } });
+    expect(event).toMatchObject({ source: 'Fiori app', lockedBy: 'khushal', reason: 'Left', bulkRunId: 'r1', lockedAt: '20261105095900', fullName: 'A Name' });
+  });
+
+  test('with no note it is SAP, locked by the Changed By value', () => {
+    expect(describeLock(lock, { ...base, change })).toMatchObject({ source: 'SAP / automatic', lockedBy: 'SAPADMIN', reason: '' });
+  });
+
+  test('with no note and no history, Locked By is Unknown', () => {
+    expect(describeLock(lock, { ...base, change: null })).toMatchObject({ source: 'SAP / automatic', lockedBy: 'Unknown' });
+  });
+
+  test('an old note is ignored', () => {
+    const event = describeLock(lock, { ...base, change, context: { actor: 'khushal', reason: 'Left', at: secondsAgo(301) } });
+    expect(event).toMatchObject({ source: 'SAP / automatic', lockedBy: 'SAPADMIN' });
+  });
+
+  test('a note never explains an incorrect-logon lock', () => {
+    const event = describeLock({ username: 'A', uflag: 128 }, { ...base, change: null, context: { actor: 'khushal', reason: 'Left', at: secondsAgo(5) } });
+    expect(event).toMatchObject({ source: 'SAP / automatic', lockType: 'Locked due to incorrect logon attempts' });
+  });
+
+  test('uses the detection time when history is older, or does not show this lock', () => {
+    const detected = '20261105100000';
+    expect(describeLock(lock, { ...base, change, previousLockedAt: change.lockedAt }).lockedAt).toBe(detected);
+    expect(describeLock(lock, { ...base, change: { ...change, uflag: 0 } }).lockedAt).toBe(detected);
+  });
+
+  test('a detection time never collides with the last one reported', () => {
+    expect(describeLock(lock, { ...base, change: null, previousLockedAt: '20261105100000' }).lockedAt).toBe('20261105100001');
+  });
+});
+
+describe('settings', () => {
+  test('the interval defaults to 60 seconds, and 0 turns it off', () => {
+    expect(pollIntervalSec({})).toBe(60);
+    expect(pollIntervalSec({ LOCK_POLL_INTERVAL_SEC: '30' })).toBe(30);
+    expect(pollIntervalSec({ LOCK_POLL_INTERVAL_SEC: '0' })).toBe(0);
+    expect(pollIntervalSec({ LOCK_POLL_INTERVAL_SEC: 'x' })).toBe(60);
+  });
+
+  test('the email limit defaults to 50', () => {
+    expect(maxPerEmail({})).toBe(50);
+    expect(maxPerEmail({ LOCK_MAX_PER_EMAIL: '10' })).toBe(10);
+    expect(maxPerEmail({ LOCK_MAX_PER_EMAIL: '0' })).toBe(50);
+  });
+
+  test('the recipient may be a comma-separated list', () => {
+    expect(recipients({ LOCK_NOTIFY_TO: ' a@example.test, b@example.test ,' })).toEqual(['a@example.test', 'b@example.test']);
+    expect(recipients({})).toEqual([]);
   });
 });
 
 describe('job start conditions', () => {
-  const env = { LOCK_POLL_INTERVAL_MS: '1000', NODE_ENV: 'production' };
+  const env = { NODE_ENV: 'production', LOCK_POLL_INTERVAL_SEC: '60' };
   let timer;
 
   beforeEach(() => { process.env.LOCK_NOTIFY_TO = 'alerts@example.test'; });
@@ -81,11 +149,8 @@ describe('job start conditions', () => {
     delete process.env.LOCK_NOTIFY_TO;
   });
 
-  test('the interval defaults to 5 minutes, and 0 turns it off', () => {
-    expect(pollIntervalMs({})).toBe(300000);
-    expect(pollIntervalMs({ LOCK_POLL_INTERVAL_MS: '60000' })).toBe(60000);
-    expect(pollIntervalMs({ LOCK_POLL_INTERVAL_MS: 'x' })).toBe(300000);
-    expect(startJob(jest.fn(), { ...env, LOCK_POLL_INTERVAL_MS: '0' })).toBeNull();
+  test('0 turns it off', () => {
+    expect(startJob(jest.fn(), { ...env, LOCK_POLL_INTERVAL_SEC: '0' })).toBeNull();
   });
 
   test('runs on the first instance only', () => {

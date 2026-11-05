@@ -2,12 +2,14 @@
 
 /** Builds the lock alert. Pure: no SAP, database or SMTP. All values reach the HTML escaped. */
 
-const LOCK_TYPE_TEXT = {
-  'admin-global': 'Locked globally by administrator',
-  'admin-local': 'Locked locally by administrator',
-  'wrong-password': 'Locked by incorrect logons',
-};
-const SOURCE_TEXT = { app: 'This app', SAP: 'SAP', auto: 'Automatic (SAP)' };
+const COLUMNS = [
+  ['Username', 'username'],
+  ['Full Name', 'fullName'],
+  ['Lock Type', 'lockType'],
+  ['Locked By', 'lockedBy'],
+  ['Source', 'source'],
+  ['Reason', 'reason'],
+];
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -15,54 +17,52 @@ const escapeHtml = (value) => String(value ?? '')
 /** A header value holding a line break could add mail headers. */
 const oneLine = (value) => String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
 
-function formatLockedAt({ lockedAt, lockedAtSource }) {
-  const t = String(lockedAt || '');
-  if (!/^\d{14}$/.test(t)) return t;
-  const label = lockedAtSource === 'sap' ? 'SAP time' : 'detected, UTC';
-  return `${t.slice(6, 8)}-${t.slice(4, 6)}-${t.slice(0, 4)} ${t.slice(8, 10)}:${t.slice(10, 12)}:${t.slice(12, 14)} (${label})`;
-}
+const formatDetectedAt = (iso) => (iso ? `${String(iso).slice(0, 19).replace('T', ' ')} UTC` : '');
 
+/** Opens the SU01 screen with the username search filled in. */
 function userLink(username, appUrl) {
   const base = String(appUrl || '').trim().replace(/#.*$/, '');
-  return base ? `${base}#/dashboard/admin?user=${encodeURIComponent(username)}` : '';
-}
-
-function fieldsOf(event, appUrl) {
-  return {
-    link: userLink(event.username, appUrl),
-    rows: [
-      ['Username', event.username],
-      ['Full name', event.fullName],
-      ['Lock type', LOCK_TYPE_TEXT[event.lockType] || event.lockType],
-      ['Locked by', event.lockedBy],
-      ['Time', formatLockedAt(event)],
-      ['Source', SOURCE_TEXT[event.source] || event.source],
-      ['Reason', event.reason],
-    ].filter(([, value]) => value),
-  };
+  return base ? `${base}#/dashboard/admin?search=${encodeURIComponent(username)}` : '';
 }
 
 /**
- * @param {object[]} events - the notified locks, at least one
- * @param {{appUrl?: string}} [options]
+ * One email for one poll cycle. Above maxListed, the first are listed and the rest are counted.
+ *
+ * @param {object[]} events - the locks to report, at least one
+ * @param {{appUrl?: string, maxListed?: number}} [options]
  * @returns {{subject: string, text: string, html: string}}
  */
-function buildLockEmail(events, { appUrl } = {}) {
+function buildLockEmail(events, { appUrl, maxListed = 50 } = {}) {
   const subject = oneLine(events.length === 1
     ? `[SAP Alert] User ${events[0].username} locked`
     : `[SAP Alert] ${events.length} users locked`);
+  const listed = events.slice(0, maxListed);
+  const more = events.length - listed.length;
 
-  const blocks = events.map((event) => fieldsOf(event, appUrl));
-  const text = blocks.map(({ rows, link }) => [
-    ...rows.map(([label, value]) => `${label}: ${value}`),
-    ...(link ? [`Open in app: ${link}`] : []),
-  ].join('\n')).join('\n\n');
+  const text = listed.map((event) => {
+    const link = userLink(event.username, appUrl);
+    return [
+      ...COLUMNS.map(([label, field]) => `${label}: ${event[field] || '-'}`),
+      `Detected At: ${formatDetectedAt(event.detectedAt)}`,
+      ...(link ? [`Open in app: ${link}`] : []),
+    ].join('\n');
+  }).join('\n\n') + (more ? `\n\nand ${more} more` : '');
 
-  const html = blocks.map(({ rows, link }) => `<table>${rows
-    .map(([label, value]) => `<tr><th align="left">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`)
-    .join('')}${link ? `<tr><td colspan="2"><a href="${escapeHtml(link)}">Open in app</a></td></tr>` : ''}</table>`).join('<hr>');
+  const headers = [...COLUMNS.map(([label]) => label), 'Detected At', ...(appUrl ? ['Link'] : [])];
+  const rows = listed.map((event) => {
+    const link = userLink(event.username, appUrl);
+    const cells = [
+      ...COLUMNS.map(([, field]) => escapeHtml(event[field] || '-')),
+      escapeHtml(formatDetectedAt(event.detectedAt)),
+      ...(appUrl ? [link ? `<a href="${escapeHtml(link)}">Open in app</a>` : ''] : []),
+    ];
+    return `<tr>${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`;
+  }).join('');
+  const html = `<p>${escapeHtml(subject)}</p><table border="1" cellpadding="4" cellspacing="0">`
+    + `<tr>${headers.map((header) => `<th align="left">${escapeHtml(header)}</th>`).join('')}</tr>${rows}</table>`
+    + (more ? `<p>and ${more} more</p>` : '');
 
-  return { subject, text, html: `<p>${escapeHtml(subject)}</p>${html}` };
+  return { subject, text, html };
 }
 
-module.exports = { buildLockEmail, formatLockedAt, userLink };
+module.exports = { buildLockEmail, formatDetectedAt, userLink };

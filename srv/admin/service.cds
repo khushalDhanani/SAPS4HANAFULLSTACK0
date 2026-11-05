@@ -110,12 +110,21 @@ service UserManagementService @(path: '/odata/v4/user-management') {
     action unlockUser(username: String, reason: String) returns ActionResult;
 
     /**
-     * Sends the one summary email of a bulk lock run: the caller's successfully locked users in that run.
-     * Status is sent, retrying (first attempt failed, retries continue), failed, not_configured, or none.
-     * A second call finds nothing left to send.
+     * The lock monitor, for the SU01 header. State is off, starting, ok, failed, or stale.
      */
-    action finishBulkLock(bulkRunId: String) returns {
+    function getLockMonitor() returns {
+        state        : String;
+        lastCheckedAt: Timestamp;
+        recipient    : String;
+        pollIntervalSec: Integer;
+        maxPerEmail  : Integer;
+        pendingEmails: Integer;
+    };
+
+    /**
+     * Whether the lock monitor has emailed a bulk run: queued, sent, retrying, or not_configured.
+     */
+    function getBulkLockEmailStatus(bulkRunId: String) returns {
         status: String;
-        count : Integer;
     };
 }

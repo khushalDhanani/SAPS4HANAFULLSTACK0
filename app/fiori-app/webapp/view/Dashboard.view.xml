@@ -284,10 +284,25 @@
                         <!-- ADMINISTRATOR -->
                         <VBox id="sectionAdmin" visible="{= ${dashboardView>/selectedTab} === 'admin' }">
                             <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiSmallMarginBottom">
-                                    <Title text="{i18n>adminUserManagementTitle}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>adminUserManagementDesc}" class="textMuted" />
-                                </VBox>
+                                <HBox justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" class="sapUiSmallMarginBottom">
+                                    <VBox>
+                                        <Title text="{i18n>adminUserManagementTitle}" level="H3" titleStyle="H4" />
+                                        <Text text="{i18n>adminUserManagementDesc}" class="textMuted" />
+                                    </VBox>
+                                    <HBox alignItems="Center" wrap="Wrap">
+                                        <ObjectStatus
+                                            id="adminLockMonitor"
+                                            icon="sap-icon://circle-task-2"
+                                            text="{adminView>/lockMonitor/text}"
+                                            state="{adminView>/lockMonitor/state}"
+                                            class="sapUiTinyMarginEnd" />
+                                        <Button
+                                            id="btnNotifySettings"
+                                            text="{i18n>adminNotifySettings}"
+                                            type="Transparent"
+                                            press=".onOpenNotifySettings" />
+                                    </HBox>
+                                </HBox>
 
                                 <VBox height="calc(100vh - 11.5rem)" renderType="Bare">
                                     <f:FlexibleColumnLayout

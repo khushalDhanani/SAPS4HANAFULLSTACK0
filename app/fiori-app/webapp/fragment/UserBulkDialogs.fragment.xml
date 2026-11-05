@@ -111,4 +111,23 @@
             <Button text="{i18n>adminDialogClose}" press=".onCloseBulkResults" />
         </buttons>
     </Dialog>
+
+    <Popover
+        id="adminNotifySettings"
+        title="{i18n>adminNotifySettings}"
+        placement="Bottom"
+        contentWidth="20rem">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <Label text="{i18n>adminNotifyRecipient}" />
+                <Text id="adminNotifyRecipient" text="{= ${adminView>/lockMonitor/recipient} || '-' }" class="sapUiTinyMarginBottom" />
+                <Label text="{i18n>adminNotifyInterval}" />
+                <Text id="adminNotifyInterval" text="{adminView>/lockMonitor/intervalText}" class="sapUiTinyMarginBottom" />
+                <Label text="{i18n>adminNotifyMaxPerEmail}" />
+                <Text text="{adminView>/lockMonitor/maxPerEmail}" class="sapUiTinyMarginBottom" />
+                <Label text="{i18n>adminNotifyPending}" />
+                <Text id="adminNotifyPending" text="{adminView>/lockMonitor/pendingEmails}" />
+            </VBox>
+        </content>
+    </Popover>
 </core:FragmentDefinition>

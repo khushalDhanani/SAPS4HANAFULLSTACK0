@@ -54,4 +54,4 @@ For the dispatch queue only, the application provisions an SAP HANA Cloud HDI co
 
 ## Addendum (2026-11-05): lock notification tables
 
-The user chose to keep lock notification state in the existing HDI container for now. `UserLockSnapshot` and `UserLockNotification` (`db/admin/user-lock.cds`) are operational markers for deduplicating alerts, not business documents; SAP stays the system of record for users and locks. They must move with the rest when the application database is removed (`docs/decisions/sap-only-persistence-migration.md`).
+The user chose to keep lock notification state in the existing HDI container for now. The lock monitor's four tables (`db/admin/user-lock.cds`) are operational markers for detecting locks and deduplicating alerts, not business documents; SAP stays the system of record for users and locks. They must move with the rest when the application database is removed (`docs/decisions/sap-only-persistence-migration.md`).

@@ -154,27 +154,54 @@ describe('Admin dashboard user list', () => {
             expect(sView).toContain('<Column hAlign="End" width="16rem" minScreenWidth="Tablet" demandPopin="true">');
         });
 
-        test('a link with ?user= opens that user for an admin, and is ignored otherwise', async () => {
+        test('a link with ?search= fills the search for an admin, and is ignored otherwise', () => {
             const { controller, model } = makeController([]);
             const dashboardModel = new MockJSONModel({ selectedTab: '' });
             controller.getView = () => ({ getModel: (name) => (name === 'dashboardView' ? dashboardModel : model) });
             controller._bFiguresLoaded = true;
             controller._bAdminUsersLoaded = true;
-            mockODataClient.get.mockResolvedValue({ username: 'ALICE', isLocked: false, roles: [] });
+            controller._watchLockMonitor = jest.fn();
             const matched = (section, query) => ({ getParameter: () => ({ section, '?query': query }) });
 
             mockAuthService.hasAnyRole.mockReturnValue(true);
-            controller._onDashboardMatched(matched('admin', { user: 'alice' }));
-            expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/user-management/getUserDetail(username='ALICE')");
-            expect(model.getProperty('/selectedUser/username')).toBe('ALICE');
+            controller._onDashboardMatched(matched('admin', { search: 'ALICE' }));
+            expect(model.getProperty('/filters/search')).toBe('ALICE');
+            expect(model.getProperty('/searchInput')).toBe('ALICE');
+            expect(controller._watchLockMonitor).toHaveBeenCalled();
 
-            mockODataClient.get.mockClear();
+            controller._setAdminFilters(Logic.emptyFilters());
             controller._onDashboardMatched(matched('admin'));
-            expect(mockODataClient.get).not.toHaveBeenCalled();
+            expect(model.getProperty('/filters/search')).toBe('');
 
             mockAuthService.hasAnyRole.mockReturnValue(false);
-            controller._onDashboardMatched(matched('admin', { user: 'alice' }));
-            expect(mockODataClient.get).not.toHaveBeenCalled();
+            controller._onDashboardMatched(matched('admin', { search: 'ALICE' }));
+            expect(model.getProperty('/filters/search')).toBe('');
+        });
+
+        test.each([
+            [{ state: 'ok', lastCheckedAt: '2026-11-05T10:15:00.000Z' }, /^Lock monitor: Active · Last checked \d{2}:\d{2}$/, 'Success'],
+            [{ state: 'starting' }, /^Lock monitor: Active · First check pending$/, 'Success'],
+            [{ state: 'failed', lastCheckedAt: '2026-11-05T10:15:00.000Z' }, /^Lock monitor: Last check failed · .+/, 'Error'],
+            [{ state: 'stale', lastCheckedAt: '2026-11-05T10:15:00.000Z' }, /^Lock monitor: Not checking · Last checked .+/, 'Error'],
+            [{ state: 'off' }, /^Lock monitor: Off \(email not configured\)$/, 'None'],
+            [{}, /^Lock monitor: Status not available$/, 'Error']
+        ])('the monitor status %j shows the right text and dot', (status, text, state) => {
+            const { controller } = makeController([]);
+            const view = controller._lockMonitorView(status);
+            expect(view.text).toMatch(text);
+            expect(view.state).toBe(state);
+        });
+
+        test('the settings show what the server reports, and a failed status read shows as unknown', async () => {
+            const { controller, model } = makeController([]);
+            mockODataClient.get.mockResolvedValue({ state: 'ok', recipient: 'a@example.test', pollIntervalSec: 60, maxPerEmail: 50, pendingEmails: 2 });
+            await controller._refreshLockMonitor();
+            expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/user-management/getLockMonitor()');
+            expect(model.getProperty('/lockMonitor')).toMatchObject({ recipient: 'a@example.test', intervalText: '60 seconds', maxPerEmail: 50, pendingEmails: 2 });
+
+            mockODataClient.get.mockRejectedValue(new Error('down'));
+            await controller._refreshLockMonitor();
+            expect(model.getProperty('/lockMonitor')).toMatchObject({ text: 'Lock monitor: Status not available', state: 'Error' });
         });
 
         test('every pane text exists in both bundles', () => {
@@ -417,12 +444,9 @@ describe('Admin dashboard user list', () => {
         const row = (username, extra = {}) => ({ username, fullName: username, detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20260101', lastChangedBy: 'ADMIN', protectedReason: '', selected: true, ...extra });
         /** A stub SAP: posts succeed, except names in `fail`; reads report the state each action left. */
         let notifyStatus = 'sent';
-        const sapCalls = () => mockODataClient.post.mock.calls.filter(([url]) => !url.endsWith('/finishBulkLock'));
+        const sapCalls = () => mockODataClient.post.mock.calls;
         function stubSap(state = {}, fail = []) {
             mockODataClient.post.mockImplementation(async (url, body) => {
-                if (url.endsWith('/finishBulkLock')) {
-                    return { status: notifyStatus, count: 1 };
-                }
                 if (fail.includes(body.username)) {
                     throw Object.assign(new Error('No authorization'), { code: 'SU/001' });
                 }
@@ -430,6 +454,9 @@ describe('Admin dashboard user list', () => {
                 return { success: true, status: 'success', messages: [], message: 'done' };
             });
             mockODataClient.get.mockImplementation(async (url) => {
+                if (url.includes('getBulkLockEmailStatus')) {
+                    return { status: notifyStatus };
+                }
                 const username = /username='([^']*)'/.exec(url)[1];
                 return { username, isLocked: state[username] === true };
             });
@@ -539,10 +566,7 @@ describe('Admin dashboard user list', () => {
             const users = Array.from({ length: 8 }, (_, i) => row(`U${i}`));
             const { controller, model } = makeController(users);
             let calls = 0;
-            mockODataClient.post.mockImplementation(async (url) => {
-                if (url.endsWith('/finishBulkLock')) {
-                    return { status: 'sent', count: 1 };
-                }
+            mockODataClient.post.mockImplementation(async () => {
                 calls++;
                 controller.onCancelBulkRun();
                 await new Promise((resolve) => setImmediate(resolve));
@@ -601,9 +625,9 @@ describe('Admin dashboard user list', () => {
 
         test.each([
             ['sent', 'Sent', 'Success'],
-            ['retrying', 'First attempt failed, retrying in the background', 'Warning'],
+            ['retrying', 'Sending failed, will retry on the next check', 'Warning'],
             ['not_configured', 'Not configured', 'Warning'],
-            ['failed', 'Failed', 'Error']
+            ['queued', 'Queued', 'Information']
         ])('shows the email status %s after a lock run', async (status, text, state) => {
             const { controller, model } = makeController([row('A')]);
             notifyStatus = status;
@@ -611,22 +635,49 @@ describe('Admin dashboard user list', () => {
 
             await open(controller, 'lock');
 
-            expect(mockODataClient.post).toHaveBeenLastCalledWith('/odata/v4/user-management/finishBulkLock', { bulkRunId: 'run-1' });
+            expect(mockODataClient.get).toHaveBeenLastCalledWith("/odata/v4/user-management/getBulkLockEmailStatus(bulkRunId='run-1')");
             expect(model.getProperty('/bulk/notifyText')).toBe(text);
             expect(model.getProperty('/bulk/notifyState')).toBe(state);
+            controller.onCloseBulkResults();
             notifyStatus = 'sent';
         });
 
-        test('a failed status call shows Failed and still opens the result dialog', async () => {
+        test('keeps checking until the email is sent, and stops when the dialog closes', async () => {
+            const { controller, model } = makeController([row('A')]);
+            notifyStatus = 'queued';
+            stubSap();
+            await open(controller, 'lock');
+            const statusCalls = () => mockODataClient.get.mock.calls.filter(([url]) => url.includes('getBulkLockEmailStatus')).length;
+            expect(statusCalls()).toBe(1);
+
+            notifyStatus = 'sent';
+            await jest.advanceTimersByTimeAsync(15000);
+            expect(statusCalls()).toBe(2);
+            expect(model.getProperty('/bulk/notifyText')).toBe('Sent');
+
+            await jest.advanceTimersByTimeAsync(60000);
+            expect(statusCalls()).toBe(2);
+
+            const second = makeController([row('B')]);
+            notifyStatus = 'queued';
+            await open(second.controller, 'lock');
+            const before = statusCalls();
+            second.controller.onCloseBulkResults();
+            await jest.advanceTimersByTimeAsync(60000);
+            expect(statusCalls()).toBe(before);
+            notifyStatus = 'sent';
+        });
+
+        test('a failed status check leaves Queued, and the result dialog still opens', async () => {
             const { controller, model, control } = makeController([row('A')]);
             stubSap();
-            const fnLock = mockODataClient.post.getMockImplementation();
-            mockODataClient.post.mockImplementation((url, body) => (url.endsWith('/finishBulkLock') ? Promise.reject(new Error('down')) : fnLock(url, body)));
+            const fnRead = mockODataClient.get.getMockImplementation();
+            mockODataClient.get.mockImplementation((url) => (url.includes('getBulkLockEmailStatus') ? Promise.reject(new Error('down')) : fnRead(url)));
 
             await open(controller, 'lock');
 
             expect(control('userBulkResultDialog').open).toHaveBeenCalled();
-            expect(model.getProperty('/bulk/notifyText')).toBe('Failed');
+            expect(model.getProperty('/bulk/notifyText')).toBe('Queued');
             expect(model.getProperty('/bulk/summary')).toBe('1 succeeded · 0 failed · 0 skipped');
         });
 
@@ -638,8 +689,9 @@ describe('Admin dashboard user list', () => {
 
             const unlock = makeController([row('L', { isLocked: true })]);
             stubSap({ L: true });
+            mockODataClient.get.mockClear();
             await open(unlock.controller, 'unlock');
-            expect(mockODataClient.post.mock.calls.filter(([url, body]) => url.endsWith('/finishBulkLock') && body.bulkRunId === '')).toEqual([]);
+            expect(mockODataClient.get.mock.calls.filter(([url]) => url.includes('getBulkLockEmailStatus'))).toEqual([]);
             expect(unlock.model.getProperty('/bulk/notifyText')).toBe('');
         });
 

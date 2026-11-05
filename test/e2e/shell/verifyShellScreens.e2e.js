@@ -244,6 +244,15 @@ async function verifySidebar(baseUrl) {
     return { errors, details };
 }
 
+const adminLinkState = (page) => page.evaluate(() => {
+    const Element = window.sap.ui.require('sap/ui/core/Element');
+    const table = Element.registry.filter((c) => c.getId().endsWith('--adminUsersTable'))[0];
+    return {
+        search: table.getModel('adminView').getProperty('/filters/search'),
+        rows: table.getItems().map((item) => item.getBindingContext('adminView').getProperty('username'))
+    };
+});
+
 /** The Sub-User Master layout and the side pane as rendered. */
 const paneState = (page) => page.evaluate(() => {
     const Element = window.sap.ui.require('sap/ui/core/Element');
@@ -345,12 +354,13 @@ async function verifyUserDetailPane(baseUrl) {
         await page.waitForTimeout(600);
         step(errors, details, 'Close returns the list to full width', expect(await paneState(page), { layout: 'OneColumn', paneShown: false, navigated: '' }));
 
-        await openHash(session, 'dashboard/admin?user=BETA');
-        await page.waitForTimeout(800); // the column animation
-        const linked = expect(await paneState(page), { layout: 'TwoColumnsBeginExpanded', paneShown: true, title: 'BETA', error: '' });
-        await page.click('[id$="--btnCloseUserDetail"]');
-        await page.waitForTimeout(600);
-        step(errors, details, 'A link with ?user= opens that user in the pane', linked);
+        await openHash(session, 'dashboard/admin?search=BETA');
+        await session.settle();
+        const searched = await adminLinkState(page);
+        const linked = searched.search === 'BETA' && searched.rows.join() === 'BETA' ? [] : [`search "${searched.search}", rows [${searched.rows}]`];
+        step(errors, details, 'A link with ?search= opens the list with that username searched', linked);
+        await page.locator('[id$="--btnClearAdminFilters"]').click();
+        await session.settle();
 
         const problems = session.consoleErrors.concat(session.networkErrors.map((e) => `HTTP ${e.status} ${e.url}`), session.blocked.map((b) => `write guard blocked ${b.reason}`));
         step(errors, details, 'Side pane flow: no unexpected console error, failed request or blocked write', problems);
@@ -462,7 +472,10 @@ async function verifyBulkFlow(baseUrl) {
             const username = decodeURIComponent(route.request().url().match(/username='([^']*)'/)[1]);
             return route.fulfill({ json: { ...paneDetail(username, lockState[username]), protectedReason: '' } });
         });
-        await page.route(/\/odata\/v4\/user-management\/finishBulkLock$/, (route) => route.fulfill({ json: { status: 'sent', count: 1 } }));
+        await page.route('**/odata/v4/user-management/getBulkLockEmailStatus*', (route) => route.fulfill({ json: { status: 'sent' } }));
+        await page.route('**/odata/v4/user-management/getLockMonitor*', (route) => route.fulfill({
+            json: { state: 'ok', lastCheckedAt: new Date().toISOString(), recipient: 'alerts@example.test', pollIntervalSec: 60, maxPerEmail: 50, pendingEmails: 0 }
+        }));
         await page.route(/\/odata\/v4\/user-management\/(lock|unlock)User$/, async (route) => {
             const body = route.request().postDataJSON();
             const lock = route.request().url().endsWith('/lockUser');
@@ -476,6 +489,19 @@ async function verifyBulkFlow(baseUrl) {
         });
         await page.evaluate(() => window.sessionStorage.clear()).catch(() => {});
         await openHash(session, 'dashboard/admin');
+
+        await page.waitForFunction(() => {
+            const Element = window.sap.ui.require('sap/ui/core/Element');
+            return /^Lock monitor: Active/.test(Element.registry.filter((c) => c.getId().endsWith('--adminLockMonitor'))[0].getText());
+        });
+        await page.locator('[id$="--btnNotifySettings"]').click();
+        await page.locator('.sapMPopover').getByText('alerts@example.test').waitFor();
+        const settingsProblems = (await page.locator('.sapMPopover').getByText('60 seconds').count()) ? [] : ['the interval is not shown'];
+        const dot = await page.evaluate(() => window.sap.ui.require('sap/ui/core/Element').registry.filter((c) => c.getId().endsWith('--adminLockMonitor'))[0].getState());
+        if (dot !== 'Success') settingsProblems.push(`status dot is ${dot}`);
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+        step(errors, details, 'The header shows the lock monitor with a green dot, and the settings show recipient and interval', settingsProblems);
 
         const start = await bulkState(page);
         step(errors, details, 'KPI cards count the whole list', expect({ ...start, t: start.kpis.Total, a: start.kpis.Active, l: start.kpis.Locked, s: start.showing }, { t: '6', a: '5', l: '1', s: 'Showing 6 of 6 users' }));

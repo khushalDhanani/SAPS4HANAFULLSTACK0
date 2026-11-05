@@ -1,40 +1,59 @@
 'use strict';
 
-const { buildLockEmail, formatLockedAt, userLink } = require('../../../srv/admin/lockEmail');
+const { buildLockEmail, formatDetectedAt, userLink } = require('../../../srv/admin/lockEmail');
 
 const event = (username, extra = {}) => ({
   username,
   fullName: `${username} Name`,
-  lockType: 'admin-local',
+  lockType: 'Locked by administrator',
   lockedBy: 'ADMIN',
-  lockedAt: '20261105101500',
-  lockedAtSource: 'sap',
-  source: 'app',
+  source: 'Fiori app',
   reason: '',
+  detectedAt: '2026-11-05T10:15:00.000Z',
   ...extra,
 });
 
 describe('buildLockEmail', () => {
-  test('single lock: subject and every field in both versions', () => {
+  test('one user: subject and every column in both versions', () => {
     const mail = buildLockEmail([event('ALICE', { reason: 'Left the company' })], { appUrl: 'https://app.test/index.html' });
 
     expect(mail.subject).toBe('[SAP Alert] User ALICE locked');
-    ['ALICE', 'ALICE Name', 'Locked locally by administrator', 'ADMIN', '05-11-2026 10:15:00 (SAP time)', 'This app', 'Left the company', 'https://app.test/index.html#/dashboard/admin?user=ALICE']
+    ['ALICE', 'ALICE Name', 'Locked by administrator', 'ADMIN', 'Fiori app', 'Left the company', '2026-11-05 10:15:00 UTC', 'https://app.test/index.html#/dashboard/admin?search=ALICE']
       .forEach((text) => {
         expect(mail.text).toContain(text);
         expect(mail.html).toContain(text);
       });
+    ['Username', 'Full Name', 'Lock Type', 'Locked By', 'Source', 'Reason', 'Detected At'].forEach((header) => {
+      expect(mail.html).toContain(`<th align="left">${header}</th>`);
+    });
   });
 
-  test('bulk summary: one mail listing exactly the events given', () => {
-    const mail = buildLockEmail([event('ALICE'), event('BOB', { lockType: 'wrong-password', source: 'auto' })]);
+  test('several users: one table, subject with the count', () => {
+    const mail = buildLockEmail([event('ALICE'), event('BOB')]);
 
     expect(mail.subject).toBe('[SAP Alert] 2 users locked');
+    expect(mail.html.match(/<table/g)).toHaveLength(1);
+    expect(mail.html.match(/<tr>/g)).toHaveLength(3);
     expect(mail.text).toContain('Username: ALICE');
     expect(mail.text).toContain('Username: BOB');
-    expect(mail.text).toContain('Locked by incorrect logons');
-    expect(mail.text).toContain('Automatic (SAP)');
-    expect(mail.text).not.toContain('CAROL');
+  });
+
+  test('flood guard: lists the first ones and says how many more', () => {
+    const events = Array.from({ length: 53 }, (_, i) => event(`U${i}`));
+
+    const mail = buildLockEmail(events, { maxListed: 50 });
+
+    expect(mail.subject).toBe('[SAP Alert] 53 users locked');
+    expect(mail.text).toContain('Username: U49');
+    expect(mail.text).not.toContain('Username: U50');
+    expect(mail.text).toContain('and 3 more');
+    expect(mail.html).toContain('<td>U49</td>');
+    expect(mail.html).not.toContain('<td>U50</td>');
+    expect(mail.html).toContain('and 3 more');
+  });
+
+  test('exactly the limit says nothing about more', () => {
+    expect(buildLockEmail([event('A'), event('B')], { maxListed: 2 }).text).not.toContain('more');
   });
 
   test('escapes HTML from SAP values and the reason, in the HTML version only', () => {
@@ -50,21 +69,21 @@ describe('buildLockEmail', () => {
     expect(buildLockEmail([event('A\r\nBcc: x@example.test')]).subject).toBe('[SAP Alert] User A Bcc: x@example.test locked');
   });
 
-  test('leaves out empty fields, and the link when no app URL is set', () => {
-    const mail = buildLockEmail([event('ALICE', { reason: '', lockedBy: '' })]);
+  test('an empty value shows as a dash, and no app URL means no link', () => {
+    const mail = buildLockEmail([event('ALICE', { reason: '' })]);
 
-    expect(mail.text).not.toContain('Reason');
-    expect(mail.text).not.toContain('Locked by:');
+    expect(mail.text).toContain('Reason: -');
     expect(mail.text).not.toContain('Open in app');
     expect(mail.html).not.toContain('<a ');
-  });
-
-  test('labels a detection time apart from a time SAP recorded', () => {
-    expect(formatLockedAt({ lockedAt: '20261105101500', lockedAtSource: 'detected' })).toBe('05-11-2026 10:15:00 (detected, UTC)');
+    expect(mail.html).not.toContain('Link</th>');
   });
 
   test('the link encodes the username and replaces any fragment in the base URL', () => {
-    expect(userLink('A/B#C', 'https://app.test/#/old')).toBe('https://app.test/#/dashboard/admin?user=A%2FB%23C');
+    expect(userLink('A/B#C', 'https://app.test/#/old')).toBe('https://app.test/#/dashboard/admin?search=A%2FB%23C');
     expect(userLink('A', '  ')).toBe('');
+  });
+
+  test('shows a missing time as empty', () => {
+    expect(formatDetectedAt(null)).toBe('');
   });
 });

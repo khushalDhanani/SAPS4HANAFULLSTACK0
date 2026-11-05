@@ -155,4 +155,4 @@ The missing prerequisite is a verified SAP implementation/contract for the respo
 
 ## Lock notification tables — 2026-11-05 IST
 
-The user chose to add `UserLockSnapshot` and `UserLockNotification` to the application database for now, while the SAP table route waits for a transport. Complete removal of the application database must now also replace these two tables.
+The user chose to add the lock monitor's four tables (`db/admin/user-lock.cds`) to the application database for now, while the SAP table route waits for a transport. Complete removal of the application database must now also replace them.
