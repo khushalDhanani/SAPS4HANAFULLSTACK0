@@ -97,6 +97,11 @@ describe('describeLock', () => {
     expect(describeLock(lock, { ...base, change: null })).toMatchObject({ source: 'SAP / automatic', lockedBy: 'Unknown' });
   });
 
+  test('history for a different lock does not identify who locked the user', () => {
+    const event = describeLock({ username: 'A', uflag: 128 }, { ...base, change });
+    expect(event).toMatchObject({ source: 'SAP / automatic', lockedBy: 'Unknown' });
+  });
+
   test('an old note is ignored', () => {
     const event = describeLock(lock, { ...base, change, context: { actor: 'khushal', reason: 'Left', at: secondsAgo(301) } });
     expect(event).toMatchObject({ source: 'SAP / automatic', lockedBy: 'SAPADMIN' });

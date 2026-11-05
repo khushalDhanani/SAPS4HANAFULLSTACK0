@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Lock alert guarantee review (2026-11-05 15:14 IST) — BLOCKED on alert policy clarification:** The poller emails transitions it observes after a baseline, but intentionally suppresses email for already-locked accounts at first baseline, and polling can miss a lock that is cleared between checks. A startup digest could email every pre-existing locked account; no policy chosen. No code changed in this review.
+- **Lock email attribution (2026-11-05 15:10 IST) — PASS for the code change:** A history row identifies “Locked By” only when `shownByHistory` confirms it belongs to the detected lock. Focused unit and notification integration tests, CAP compilation, and lint passed. No live lock or email was triggered.
 - **Lock monitor email (2026-11-05 14:21 IST) — PASS on SMTP authentication:** Microsoft 365 credentials verified successfully with `smtp.office365.com:587`. The earlier `535 5.7.3` failure was caused by an unquoted `#` in `SMTP_PASS`, which caused the editor to highlight it green as a comment and `dotenv` to truncate the password at the `#`. With the full unchopped value (or when quoted), `transport.verify()` succeeds with code 0. See the Changes Log.
 - **Lock monitor email (2026-11-05 14:27 IST) — PASS on test email delivery, PARTIAL on the feature:** One test email was accepted by Microsoft 365 for the single `LOCK_NOTIFY_TO` recipient, and the user confirmed it arrived. A real lock alert from the running monitor has not been tested. See the Changes Log.
 - **Lock monitor (2026-11-05 13:25 IST) — PARTIAL, uncommitted, not deployed, no real email or SAP write:** A 60-second poller is now the only detector of SAP user locks from any source, and it sends one email per cycle. This replaces the event-based design committed as `9c256fcd`. Tested with SAP, mailer and clock mocked; a read-only poll ran against real SAP. See the Changes Log.
@@ -160,6 +162,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Lock alert guarantee (2026-11-05): Decide whether initial baseline should send a one-time digest of all currently locked accounts (possibly many pre-existing locks), or stay silent and alert only on future observed unlocked-to-locked transitions. A 60-second poll cannot guarantee detection of locks cleared between polls; guaranteeing every lock action requires a verified event source.
 - Lock monitor email (2026-11-05): SMTP authentication is VERIFIED and PASSES when `SMTP_PASS` is quoted. User wraps `SMTP_PASS` in double quotes in `.env.local` to prevent `dotenv` from treating `#` as a comment. Then proceed to live lock email verification if desired.
 - Lock monitor email (2026-11-05 14:27 IST): Test email delivery is confirmed. The user decides whether to test a real lock alert from the running monitor; locking an SAP user for that test is a live SAP write and needs a written go for that call.
 - Lock monitor (2026-11-05): the user decides whether to commit. The Definition of Done needs SMTP settings in `.env.local` and `npx cds deploy` once (`db.sqlite` has no lock tables yet). The user then locks a user in SAP GUI or enters wrong passwords, and no go from the agent's side is needed for that; a lock through the app by the agent needs a written go naming a test user.
@@ -220,6 +223,44 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-05 15:14 IST — Lock alert guarantee review: BLOCKED on initial-state policy (no code changed)
+
+**Why:** The user asked whether there are lock notifier issues and requested email whenever a user is locked.
+
+**Findings:** `srv/admin/lockNotifier.js` seeds the initial snapshot without notifications, including users already locked (`pollOnce`, `if (!snapshots.size)`). After the baseline, detection is a 60-second state poll, so a lock that is cleared between polls is not observable. When the SMTP host/from or recipient is missing, `startJob` does not run. If a mail attempt fails, the notification stays queued and retries on a later successful SAP poll. These behaviors mean the code cannot guarantee an email for every lock action. A one-time initial digest could email accounts whose locks predate monitoring; their lock time cannot be established from the baseline alone. Existing project status also says the lock-monitor DB tables have not been deployed to `db.sqlite`.
+
+**Changed:** No code changed. Asked for the initial-baseline policy before changing behavior that may send a large alert.
+
+**TEST DECISION:** EXISTING TEST SUFFICIENT for this review: `test/integration/lockNotification.test.js` explicitly verifies baseline suppression, observed lock notifications, queued mail retries, and an app lock undone before the next poll.
+
+**Executed validation:**
+- `npx jest test/unit/admin/lockNotifierRules.test.js --runInBand` — passed, 1 suite / 30 tests.
+- `npx jest test/integration/lockNotification.test.js --runInBand` — passed, 1 suite / 38 tests.
+- `git diff --check` — passed.
+
+**NOT RUN:** No live SAP read/write, lock alert email, deployment, or browser flow. The tests mock SAP and mail.
+
+**Next:** User chooses whether startup should send a one-time digest of already-locked accounts. Even after that choice, a state poll cannot promise to detect locks cleared between polls.
+
+### 2026-11-05 15:10 IST — Prevent stale lock history from naming “Locked By”: PASS for the code change (not deployed; no live lock email)
+
+**Why:** A history row could be for another lock type, but its `changedBy` value was still shown as the actor for the newly detected lock.
+
+**Changed:** `srv/admin/lockNotifier.js` now uses `change.changedBy` only when `shownByHistory` confirms that the history row matches this lock; otherwise it reports `Unknown`. Added a regression test in `test/unit/admin/lockNotifierRules.test.js` for an incorrect-logon lock alongside a different administrator-lock history row.
+
+**TEST DECISION:** TEST ADDED: mismatched lock-history regression case.
+
+**Executed validation:**
+- `npx jest test/unit/admin/lockNotifierRules.test.js --runInBand` — passed, 1 suite / 30 tests.
+- `npx jest test/integration/lockNotification.test.js --runInBand` — passed, 1 suite / 38 tests.
+- `npx cds compile srv/` — passed.
+- `npm run lint` — passed with two existing unused-eslint-disable warnings in `test/unit/controller/blockSubmitIfNotConfirmed.test.js` and `test/unit/helpers/realBlockSubmit.js`.
+- `git diff --check` — passed.
+
+**NOT RUN / LIMITATIONS:** No live SAP lock, email, or browser flow was triggered. CAP MCP docs/model tools were not available in this session; no CDS, API, or CAP runtime contract was changed. The regression test verifies lock-description behavior; it does not establish how often this issue occurs.
+
+**Next:** The user decides whether to run a real lock alert; a live SAP lock requires explicit authorization for that specific operation.
 
 ### 2026-11-05 10:49 IST — Value help fills alias columns when no columns are selected: PARTIAL (uncommitted, not deployed, no browser or SAP run)
 

@@ -102,7 +102,7 @@ function describeLock({ username, uflag }, { context, change, fullName, previous
     uflag,
     lockedAt: shownByHistory ? change.lockedAt : (detected > previousLockedAt ? detected : String(Number(previousLockedAt) + 1)),
     lockType: lockLabel(uflag),
-    lockedBy: noteApplies ? context.actor : ((change && change.changedBy) || 'Unknown'),
+    lockedBy: noteApplies ? context.actor : (shownByHistory ? change.changedBy : 'Unknown'),
     fullName: fullName || '',
     source: noteApplies ? SOURCE_APP : SOURCE_SAP,
     reason: noteApplies ? (context.reason || '') : '',
