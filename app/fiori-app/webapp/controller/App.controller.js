@@ -296,7 +296,7 @@ sap.ui.define([
         },
 
         /**
-         * Shows the Administrator item. This only hides UI; an admin API still needs its own server check.
+         * Shows the User Master group and its Administrator item. This only hides UI; an admin API still needs its own server check.
          */
         isAdmin: function () {
             return AuthService.hasAnyRole(["Admin"]);
@@ -306,7 +306,12 @@ sap.ui.define([
          * Sidebar item press (itemPress, so the highlighted item still returns from a screen to its section).
          */
         onSideNavItemPress: function (oEvent) {
-            var sKey = oEvent.getParameter("item").getKey();
+            var oItem = oEvent.getParameter("item");
+            // A group item also fires itemPress when it only expands or collapses
+            if (!oItem.getSelectable()) {
+                return;
+            }
+            var sKey = oItem.getKey();
             this.getOwnerComponent().getRouter().navTo("dashboard", sKey === "overview" ? {} : { section: sKey });
             // On a phone the open sidebar covers the page
             if (Device.system.phone) {

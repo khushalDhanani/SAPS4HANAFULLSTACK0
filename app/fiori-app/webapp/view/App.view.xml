@@ -23,7 +23,11 @@
                         <tnt:NavigationListItem id="sideNavMM" key="mm" icon="sap-icon://supplier" text="{i18n>tabMMTitle}" tooltip="{i18n>tabMMTooltip}" />
                         <tnt:NavigationListItem id="sideNavSD" key="sd" icon="sap-icon://sales-order" text="{i18n>tabSDTitle}" tooltip="{i18n>tabSDTooltip}" />
                         <tnt:NavigationListItem id="sideNavEWM" key="ewm" icon="sap-icon://inventory" text="{i18n>tabEWMTitle}" tooltip="{i18n>tabEWMTooltip}" />
-                        <tnt:NavigationListItem id="sideNavAdmin" key="admin" icon="sap-icon://action-settings" text="{i18n>tabAdminTitle}" tooltip="{i18n>tabAdminTooltip}" visible="{path: 'auth>/user/scopes', formatter: '.isAdmin'}" />
+                        <tnt:NavigationListItem id="sideNavUserMaster" icon="sap-icon://group" text="{i18n>tabUserMasterTitle}" tooltip="{i18n>tabUserMasterTooltip}" selectable="false" visible="{path: 'auth>/user/scopes', formatter: '.isAdmin'}">
+                            <tnt:items>
+                                <tnt:NavigationListItem id="sideNavAdmin" key="admin" text="{i18n>tabAdminTitle}" tooltip="{i18n>tabAdminTooltip}" />
+                            </tnt:items>
+                        </tnt:NavigationListItem>
                     </tnt:NavigationList>
                 </tnt:item>
             </tnt:SideNavigation>

@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 
 let AppController;
@@ -108,7 +109,7 @@ describe('App shell sidebar', () => {
   test('an item opens its dashboard section; Overview opens the plain dashboard URL', () => {
     const router = makeRouter();
     const controller = makeController(router);
-    const press = (key) => controller.onSideNavItemPress({ getParameter: () => ({ getKey: () => key }) });
+    const press = (key) => controller.onSideNavItemPress({ getParameter: () => ({ getKey: () => key, getSelectable: () => true }) });
 
     press('ewm');
     expect(router.navTo).toHaveBeenLastCalledWith('dashboard', { section: 'ewm' });
@@ -116,11 +117,40 @@ describe('App shell sidebar', () => {
     expect(router.navTo).toHaveBeenLastCalledWith('dashboard', {});
   });
 
+  test('the User Master group only expands: its press does not navigate or close the phone sidebar', () => {
+    const router = makeRouter();
+    const toolPage = { setSideExpanded: jest.fn() };
+    const controller = makeController(router);
+    controller.byId = () => toolPage;
+    mockDevice.system.phone = true;
+
+    controller.onSideNavItemPress({ getParameter: () => ({ getKey: () => null, getSelectable: () => false }) });
+
+    expect(router.navTo).not.toHaveBeenCalled();
+    expect(toolPage.setSideExpanded).not.toHaveBeenCalled();
+  });
+
+  test('User Master is an Admin-only group holding Administrator, with i18n texts', () => {
+    const webapp = path.join(__dirname, '../../../app/fiori-app/webapp');
+    const view = fs.readFileSync(path.join(webapp, 'view/App.view.xml'), 'utf8');
+    const group = view.match(/<tnt:NavigationListItem id="sideNavUserMaster"([^\n]*)>\s*<tnt:items>([\s\S]*?)<\/tnt:items>/);
+    expect(group).not.toBeNull();
+    expect(group[1]).toContain('selectable="false"');
+    expect(group[1]).toContain("visible=\"{path: 'auth>/user/scopes', formatter: '.isAdmin'}\"");
+    expect(group[2]).toContain('id="sideNavAdmin" key="admin"');
+    expect(view.split('id="sideNavAdmin"')).toHaveLength(2);
+    ['i18n.properties', 'i18n_en.properties'].forEach((file) => {
+      const bundle = fs.readFileSync(path.join(webapp, 'i18n', file), 'utf8');
+      expect(bundle).toContain('tabUserMasterTitle=User Master\n');
+      expect(bundle).toMatch(/^tabUserMasterTooltip=.+$/m);
+    });
+  });
+
   test('a phone closes the sidebar after a selection; other devices keep it open', () => {
     const toolPage = { setSideExpanded: jest.fn() };
     const controller = makeController();
     controller.byId = () => toolPage;
-    const event = { getParameter: () => ({ getKey: () => 'mm' }) };
+    const event = { getParameter: () => ({ getKey: () => 'mm', getSelectable: () => true }) };
 
     controller.onSideNavItemPress(event);
     expect(toolPage.setSideExpanded).not.toHaveBeenCalled();
