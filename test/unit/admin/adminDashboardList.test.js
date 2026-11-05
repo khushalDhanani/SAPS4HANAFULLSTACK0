@@ -57,7 +57,6 @@ beforeAll(() => {
                     mockODataClient,
                     mockMessageToast,
                     mockAuthService,
-                    { load: jest.fn() },
                     mockMessageBox,
                     MockFilter,
                     { EQ: 'EQ' },
@@ -109,6 +108,135 @@ describe('Admin dashboard user list', () => {
         expect(sView).not.toContain('adminView>validTo');
         expect(sView).toContain('detailsAvailable} &amp;&amp; !${adminView>isLocked}');
         expect(sView).toContain('detailsAvailable} &amp;&amp; ${adminView>isLocked} === true');
+    });
+
+    describe('user detail side pane', () => {
+        const rowEvent = (sUsername) => ({
+            getSource: () => ({ getBindingContext: () => ({ getProperty: () => sUsername }) })
+        });
+
+        test('opens from a row in a standard column layout, and the old dialog is gone', () => {
+            const webapp = path.join(__dirname, '../../../app/fiori-app/webapp');
+            const sView = fs.readFileSync(path.join(webapp, 'view/Dashboard.view.xml'), 'utf8');
+            expect(sView).toContain('<f:FlexibleColumnLayout');
+            expect(sView).toContain("layout=\"{= ${adminView>/selectedUser} ? 'TwoColumnsBeginExpanded' : 'OneColumn' }\"");
+            expect(sView).toContain('fragmentName="saps4hana.fiori.fragment.UserDetailPane"');
+            expect(fs.existsSync(path.join(webapp, 'fragment/UserDetailDialog.fragment.xml'))).toBe(false);
+        });
+
+        test('every pane text exists in both bundles', () => {
+            const webapp = path.join(__dirname, '../../../app/fiori-app/webapp');
+            const sFragment = fs.readFileSync(path.join(webapp, 'fragment/UserDetailPane.fragment.xml'), 'utf8');
+            const aKeys = [...new Set([...sFragment.matchAll(/i18n>(\w+)/g)].map((m) => m[1]))];
+            expect(aKeys.length).toBeGreaterThan(20);
+            ['i18n.properties', 'i18n_en.properties'].forEach((sFile) => {
+                const sBundle = fs.readFileSync(path.join(webapp, 'i18n', sFile), 'utf8');
+                expect(aKeys.filter((sKey) => !new RegExp(`^${sKey}=`, 'm').test(sBundle))).toEqual([]);
+            });
+        });
+
+        test('a press shows the row user at once, then the SAP detail, and updates the row', async () => {
+            const { controller, model } = makeController([{ username: 'ALICE', isLocked: false }]);
+            let fnAnswer;
+            mockODataClient.get.mockReturnValue(new Promise((resolve) => { fnAnswer = resolve; }));
+            model.setProperty('/selectedUser', { username: 'BOB', fullName: 'Bob Old', roles: [] });
+
+            const pLoad = controller.onSelectUser(rowEvent('ALICE'));
+
+            expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/user-management/getUserDetail(username='ALICE')");
+            expect(model.getProperty('/selectedUser')).toEqual({ username: 'ALICE' });
+            expect(model.getProperty('/detailBusy')).toBe(true);
+
+            fnAnswer({ username: 'ALICE', isLocked: true, roles: [{ name: 'Z' }] });
+            await pLoad;
+
+            expect(model.getProperty('/selectedUser/roles')).toEqual([{ name: 'Z' }]);
+            expect(model.getProperty('/users/0/isLocked')).toBe(true);
+            expect(model.getProperty('/detailBusy')).toBe(false);
+        });
+
+        test('a failed read shows the error in the pane, and no details or lock state', async () => {
+            const { controller, model } = makeController([{ username: 'ALICE', detailsAvailable: true, isLocked: false }]);
+            mockODataClient.get.mockRejectedValue(new Error('Read failed'));
+
+            await controller.onSelectUser(rowEvent('ALICE'));
+
+            expect(model.getProperty('/selectedUser')).toEqual({ username: 'ALICE' });
+            expect(model.getProperty('/detailError')).toBe('Read failed');
+            expect(model.getProperty('/detailBusy')).toBe(false);
+            expect(model.getProperty('/users/0/detailsAvailable')).toBe(false);
+        });
+
+        test('a slow answer for an earlier user does not replace the current pane', async () => {
+            const { controller, model } = makeController([{ username: 'ALICE' }, { username: 'BOB' }]);
+            const fnAnswers = {};
+            mockODataClient.get.mockImplementation((sUrl) => new Promise((resolve) => {
+                fnAnswers[sUrl.includes('ALICE') ? 'ALICE' : 'BOB'] = resolve;
+            }));
+
+            const pAlice = controller.onSelectUser(rowEvent('ALICE'));
+            const pBob = controller.onSelectUser(rowEvent('BOB'));
+            fnAnswers.BOB({ username: 'BOB', fullName: 'Bob', isLocked: false });
+            await pBob;
+            fnAnswers.ALICE({ username: 'ALICE', fullName: 'Alice', isLocked: false });
+            await pAlice;
+
+            expect(model.getProperty('/selectedUser/username')).toBe('BOB');
+        });
+
+        test('closing clears the pane, so the table returns to one column', () => {
+            const { controller, model } = makeController([]);
+            model.setProperty('/selectedUser', { username: 'ALICE' });
+            model.setProperty('/detailError', 'Read failed');
+
+            controller.onCloseUserDetail();
+
+            expect(model.getProperty('/selectedUser')).toBeNull();
+            expect(model.getProperty('/detailError')).toBe('');
+        });
+
+        test('a lock on another row leaves the open pane on its own user', async () => {
+            const { controller, model } = makeController([{ username: 'ALICE' }, { username: 'BOB' }]);
+            model.setProperty('/selectedUser', { username: 'ALICE', fullName: 'Alice' });
+            mockODataClient.post.mockResolvedValue({ message: 'ok' });
+            mockODataClient.get.mockResolvedValue({ username: 'BOB', isLocked: true });
+
+            await controller._executeUserAction('/odata/v4/user-management/lockUser', 'BOB', true);
+
+            expect(model.getProperty('/selectedUser/username')).toBe('ALICE');
+            expect(model.getProperty('/users/1/isLocked')).toBe(true);
+        });
+
+        test('an unconfirmed lock on the open user clears its details and action buttons', async () => {
+            const { controller, model } = makeController([{ username: 'ALICE' }]);
+            model.setProperty('/selectedUser', { username: 'ALICE', isLocked: false, roles: [] });
+            mockODataClient.post.mockResolvedValue({ message: 'ok' });
+            mockODataClient.get.mockRejectedValue(new Error('Read failed'));
+
+            await controller._executeUserAction('/odata/v4/user-management/lockUser', 'ALICE', true);
+
+            expect(model.getProperty('/selectedUser')).toEqual({ username: 'ALICE' });
+            expect(model.getProperty('/detailError')).toBe('Read failed');
+            expect(model.getProperty('/detailBusy')).toBe(false);
+        });
+
+        test('the lock button needs a known lock state', () => {
+            const sFragment = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/fragment/UserDetailPane.fragment.xml'), 'utf8');
+            expect(sFragment).toContain('visible="{= ${adminView>/selectedUser/isLocked} === false }"');
+            expect(sFragment).toContain('visible="{= ${adminView>/selectedUser/isLocked} === true }"');
+        });
+
+        test('formats SAP codes and date-times with the dictionary texts', () => {
+            const { controller } = makeController([]);
+
+            expect(controller.formatAdminDateTime('20261102', '101500')).toBe('02-11-2026 10:15:00');
+            expect(controller.formatAdminDateTime('00000000', '000000')).toBe('-');
+            expect(controller.formatAdminValidity('20250101', '99991231')).toBe('01-01-2025 - 31-12-9999');
+            expect(controller.formatAdminLockFlag('U')).toBe('Not Locked');
+            expect(controller.formatAdminLockFlag('L')).toBe('Locked');
+            expect(controller.formatAdminUserType('')).toBe('-');
+            expect(controller.formatAdminUserType('Q')).toBe('Q');
+        });
     });
 
     test('keeps search, filter and refresh in the table toolbar and removes the old section copies', () => {

@@ -10,7 +10,8 @@
  *   - BAPI_USER_GETLIST: import param MAX_ROWS; table USERLIST {USERNAME, FIRSTNAME, LASTNAME, FULLNAME}
  *     WITH_USERNAME range table rejected by node-rfc on this system → client-side filter used instead.
  *   - BAPI_USER_GET_DETAIL: import param USERNAME (confirmed; BNAME throws "field not found").
- *     Returns ADDRESS (FULLNAME, SMTP_ADDR), LOGONDATA, ISLOCKED, ACTIVITYGROUPS, PROFILES, LASTMODIFIED.
+ *     Returns ADDRESS (FULLNAME, E_MAIL), ADMINDATA, COMPANY, DEFAULTS, LOGONDATA, ISLOCKED, ACTIVITYGROUPS, PROFILES, LASTMODIFIED.
+ *     Field names and meanings verified against the DS4/220 dictionary (DDIF_FIELDINFO_GET, DD07T), 2026-11-05.
  *   - RFC connection user has S_USER_GRP (5 roles, blank ACTVT/CLASS), NO S_USR_ADM.
  *     Cross-user GET_DETAIL confirmed working (AAKANSHA PATEL, DS4/220).
  */
@@ -34,6 +35,7 @@ const LOCK_FLAGS_LOCKED = new Set(['L', 'X']);
 
 /**
  * Map a BAPI_USER_GET_DETAIL result to the CAP service contract.
+ * Named fields only: LOGONDATA also holds password hashes (BCODE, PASSCODE, PWDSALTEDHASH), which must never leave here.
  * @param {string} username
  * @param {object} raw - raw RFC result
  * @returns {object}
@@ -43,6 +45,9 @@ function mapDetail(username, raw) {
   const ld     = raw.LOGONDATA  || {};
   const lk     = raw.ISLOCKED   || {};
   const lm     = raw.LASTMODIFIED || {};
+  const adm    = raw.ADMINDATA  || {};
+  const dflt   = raw.DEFAULTS   || {};
+  const text   = (value) => String(value || '').trim();
 
   const lockedWrong  = String(lk.WRNG_LOGON  || 'U');
   const lockedNoPw   = String(lk.NO_USER_PW  || 'U');
@@ -55,7 +60,20 @@ function mapDetail(username, raw) {
     firstName:     String(addr.FIRSTNAME  || '').trim(),
     lastName:      String(addr.LASTNAME   || '').trim(),
     fullName:      String(addr.FULLNAME   || '').trim(),
-    email:         String(addr.SMTP_ADDR  || '').trim(),
+    email:         String(addr.E_MAIL     || '').trim(),
+    phone:         [text(addr.TEL1_NUMBR), text(addr.TEL1_EXT)].filter(Boolean).join(' '),
+    department:    text(addr.DEPARTMENT),
+    jobFunction:   text(addr.FUNCTION),
+    company:       text(raw.COMPANY?.COMPANY),
+    createdBy:     text(adm.ANAME),
+    createdOn:     text(adm.ERDAT),
+    lastLogonDate: text(adm.TRDAT),
+    lastLogonTime: text(ld.LTIME),
+    language:      text(dflt.LANGU),
+    dateFormat:    text(dflt.DATFM),
+    decimalFormat: text(dflt.DCPFM),
+    costCenter:    text(dflt.KOSTL),
+    timeZone:      text(ld.TZONE),
     userType:      String(ld.USTYP        || '').trim(),
     validFrom:     String(ld.GLTGV        || '').trim(),
     validTo:       String(ld.GLTGB        || '').trim(),
@@ -68,7 +86,12 @@ function mapDetail(username, raw) {
     roleCount:     (raw.ACTIVITYGROUPS || []).length,
     profileCount:  (raw.PROFILES       || []).length,
     lastChanged:   String(lm.MODDATE   || '').trim(),
+    lastChangedTime: text(lm.MODTIME),
     lastChangedBy: String(lm.MODIFIER  || '').trim(),
+    roles: (raw.ACTIVITYGROUPS || []).map((r) => ({
+      name: text(r.AGR_NAME), description: text(r.AGR_TEXT), validFrom: text(r.FROM_DAT), validTo: text(r.TO_DAT),
+    })),
+    profiles: (raw.PROFILES || []).map((r) => ({ name: text(r.BAPIPROF), description: text(r.BAPIPTEXT) })),
   };
 }
 

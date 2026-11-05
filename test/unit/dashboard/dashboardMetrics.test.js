@@ -150,7 +150,7 @@ describe('Unit: Dashboard Controller live figures', () => {
         global.sap = {
             ui: {
                 define: jest.fn((deps, factory) => {
-                    DashboardControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast, mockAuthService, undefined, undefined, undefined, undefined, undefined, { SortOrder: {} });
+                    DashboardControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast, mockAuthService, undefined, undefined, undefined, undefined, { SortOrder: {} });
                 })
             }
         };

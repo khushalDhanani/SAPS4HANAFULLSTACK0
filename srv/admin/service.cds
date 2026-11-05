@@ -43,6 +43,19 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         lastName     : String;
         fullName     : String;
         email        : String;
+        phone        : String;   // ADDRESS.TEL1_NUMBR + TEL1_EXT
+        department   : String;   // ADDRESS.DEPARTMENT
+        jobFunction  : String;   // ADDRESS.FUNCTION
+        company      : String;   // COMPANY.COMPANY
+        createdBy    : String;   // ADMINDATA.ANAME
+        createdOn    : String;   // ADMINDATA.ERDAT
+        lastLogonDate: String;   // ADMINDATA.TRDAT
+        lastLogonTime: String;   // LOGONDATA.LTIME
+        language     : String;   // DEFAULTS.LANGU
+        dateFormat   : String;   // DEFAULTS.DATFM
+        decimalFormat: String;   // DEFAULTS.DCPFM
+        costCenter   : String;   // DEFAULTS.KOSTL
+        timeZone     : String;   // LOGONDATA.TZONE
         userType     : String;   // LOGONDATA.USTYP: A=Dialog, B=System, C=Comm, S=Service, L=Reference
         validFrom    : String;   // LOGONDATA.GLTGV (00000000 = no restriction)
         validTo      : String;   // LOGONDATA.GLTGB (00000000 = no restriction)
@@ -55,7 +68,18 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         roleCount    : Integer;
         profileCount : Integer;
         lastChanged  : String;   // LASTMODIFIED.MODDATE
+        lastChangedTime: String; // LASTMODIFIED.MODTIME
         lastChangedBy: String;   // LASTMODIFIED.MODIFIER
+        roles        : array of {   // ACTIVITYGROUPS
+            name       : String;
+            description: String;
+            validFrom  : String;
+            validTo    : String;
+        };
+        profiles     : array of {   // PROFILES
+            name       : String;
+            description: String;
+        };
     };
 
     type ActionResult {

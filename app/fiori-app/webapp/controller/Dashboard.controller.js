@@ -4,7 +4,6 @@ sap.ui.define([
     "saps4hana/fiori/service/ODataClient",
     "sap/m/MessageToast",
     "saps4hana/fiori/service/AuthService",
-    "sap/ui/core/Fragment",
     "sap/m/MessageBox",
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
@@ -16,7 +15,6 @@ sap.ui.define([
     ODataClient,
     MessageToast,
     AuthService,
-    Fragment,
     MessageBox,
     Filter,
     FilterOperator,
@@ -71,7 +69,9 @@ sap.ui.define([
                 busy: false,
                 searchQuery: "",
                 noDataText: this._text("adminNoUsers", "No SAP users found."),
-                selectedUser: null
+                selectedUser: null,
+                detailBusy: false,
+                detailError: ""
             });
             this.getView().setModel(oAdminModel, "adminView");
 
@@ -257,6 +257,34 @@ sap.ui.define([
             return (typeof vCount === "number") ? String(vCount) : "";
         },
 
+        formatAdminDateTime: function (sDate, sTime) {
+            var sFormatted = this.formatAdminDate(sDate);
+            return sFormatted !== "-" && /^\d{6}$/.test(sTime || "")
+                ? sFormatted + " " + sTime.slice(0, 2) + ":" + sTime.slice(2, 4) + ":" + sTime.slice(4, 6)
+                : sFormatted;
+        },
+
+        formatAdminValidity: function (sFrom, sTo) {
+            return this.formatAdminDate(sFrom) + " - " + this.formatAdminDate(sTo);
+        },
+
+        // The texts below are the DS4/220 dictionary values of domains XUUSTYP, XUDATFM, XUDCPFM and BAPIUSLOCK.
+        formatAdminUserType: function (sCode) {
+            return this._text("adminUserType" + sCode, sCode || "-");
+        },
+
+        formatAdminDateFormat: function (sCode) {
+            return this._text("adminDateFormat" + sCode, sCode || "-");
+        },
+
+        formatAdminDecimalFormat: function (sCode) {
+            return this._text("adminDecimalFormat" + sCode, sCode || "-");
+        },
+
+        formatAdminLockFlag: function (sFlag) {
+            return sFlag === "U" ? this._text("adminStatusNotLocked", "Not Locked") : this._text("adminStatusLocked", "Locked");
+        },
+
         formatAdminDate: function (sDate) {
             if (!sDate || sDate === "00000000") {
                 return "-";
@@ -440,46 +468,40 @@ sap.ui.define([
 
             var oAdminModel = this.getView().getModel("adminView");
             var that = this;
-            var oView = this.getView();
+            var fnIsShown = function () {
+                return (oAdminModel.getProperty("/selectedUser") || {}).username === sUsername;
+            };
 
-            if (!this._pUserDetailDialog) {
-                this._pUserDetailDialog = Fragment.load({
-                    id: oView.getId(),
-                    name: "saps4hana.fiori.fragment.UserDetailDialog",
-                    controller: this
-                }).then(function (oDialog) {
-                    oView.addDependent(oDialog);
-                    return oDialog;
-                });
-            }
+            // Replaced at once, so a failed read never leaves the previous user's data on screen.
+            oAdminModel.setProperty("/selectedUser", { username: sUsername });
+            oAdminModel.setProperty("/detailError", "");
+            oAdminModel.setProperty("/detailBusy", true);
 
-            this._pUserDetailDialog.then(function (oDialog) {
-                oDialog.setBusy(true);
-                oDialog.open();
-
-                var sUrl = "/odata/v4/user-management/getUserDetail(username='" + encodeURIComponent(sUsername) + "')";
-                return ODataClient.get(sUrl)
-                    .then(function (res) {
-                        var oDetail = res && res.value ? res.value : res;
+            var sUrl = "/odata/v4/user-management/getUserDetail(username='" + encodeURIComponent(sUsername) + "')";
+            return ODataClient.get(sUrl)
+                .then(function (res) {
+                    var oDetail = res && res.value ? res.value : res;
+                    that._updateAdminUserListEntry(oDetail);
+                    // A slower answer for a user no longer selected must not replace the pane.
+                    if (fnIsShown()) {
                         oAdminModel.setProperty("/selectedUser", oDetail);
-                        that._updateAdminUserListEntry(oDetail);
-                        oDialog.setBusy(false);
-                    })
-                    .catch(function (err) {
-                        oDialog.setBusy(false);
-                        that._markAdminUserDetailsUnavailable(sUsername);
-                        var sMsg = (err && err.message) || that._text("adminDetailLoadFailed", "Failed to load user detail from SAP.");
-                        MessageToast.show(sMsg);
-                    });
-            });
+                        oAdminModel.setProperty("/detailBusy", false);
+                    }
+                })
+                .catch(function (err) {
+                    that._markAdminUserDetailsUnavailable(sUsername);
+                    if (fnIsShown()) {
+                        oAdminModel.setProperty("/detailError", (err && err.message) || that._text("adminDetailLoadFailed", "Failed to load user detail from SAP."));
+                        oAdminModel.setProperty("/detailBusy", false);
+                    }
+                });
         },
 
-        onCloseUserDetailDialog: function () {
-            if (this._pUserDetailDialog) {
-                this._pUserDetailDialog.then(function (oDialog) {
-                    oDialog.close();
-                });
-            }
+        onCloseUserDetail: function () {
+            var oAdminModel = this.getView().getModel("adminView");
+            oAdminModel.setProperty("/selectedUser", null);
+            oAdminModel.setProperty("/detailError", "");
+            oAdminModel.setProperty("/detailBusy", false);
         },
 
         _getAdminActionUsername: function (oEvent) {
@@ -581,12 +603,11 @@ sap.ui.define([
             var oAdminModel = this.getView().getModel("adminView");
             var bActionAccepted = false;
             var bDetailReceived = false;
+            var fnIsShown = function () {
+                return (oAdminModel.getProperty("/selectedUser") || {}).username === sUsername;
+            };
 
-            if (this._pUserDetailDialog) {
-                this._pUserDetailDialog.then(function (oDialog) {
-                    oDialog.setBusy(true);
-                });
-            }
+            oAdminModel.setProperty("/detailBusy", fnIsShown());
 
             return ODataClient.post(sUrl, { username: sUsername })
                 .then(function (res) {
@@ -599,7 +620,10 @@ sap.ui.define([
                                 throw new Error(that._text("adminDetailLoadFailed", "Failed to load user detail from SAP."));
                             }
                             bDetailReceived = true;
-                            oAdminModel.setProperty("/selectedUser", oDetail);
+                            // A row action on another user leaves the open pane alone.
+                            if (fnIsShown()) {
+                                oAdminModel.setProperty("/selectedUser", oDetail);
+                            }
                             that._updateAdminUserListEntry(oDetail);
                             if (oDetail.isLocked !== bExpectedLocked) {
                                 throw new Error(that._text(
@@ -615,16 +639,17 @@ sap.ui.define([
                 .catch(function (err) {
                     if (bActionAccepted && !bDetailReceived) {
                         that._markAdminUserDetailsUnavailable(sUsername);
+                        // The lock state is now unknown, so the pane must not show the old one or offer an action.
+                        if (fnIsShown()) {
+                            oAdminModel.setProperty("/selectedUser", { username: sUsername });
+                            oAdminModel.setProperty("/detailError", (err && err.message) || that._text("adminDetailLoadFailed", "Failed to load user detail from SAP."));
+                        }
                     }
                     var sError = (err && err.message) || that._text("adminActionFailed", "SAP user action failed.");
                     MessageBox.error(sError);
                 })
                 .finally(function () {
-                    if (that._pUserDetailDialog) {
-                        that._pUserDetailDialog.then(function (oDialog) {
-                            oDialog.setBusy(false);
-                        });
-                    }
+                    oAdminModel.setProperty("/detailBusy", false);
                 });
         },
 
@@ -632,12 +657,6 @@ sap.ui.define([
             if (this._oAuthBinding) {
                 this._oAuthBinding.detachChange(this._onAuthChanged, this);
                 this._oAuthBinding = null;
-            }
-            if (this._pUserDetailDialog) {
-                this._pUserDetailDialog.then(function (oDialog) {
-                    oDialog.destroy();
-                });
-                this._pUserDetailDialog = null;
             }
         }
     });

@@ -1,0 +1,134 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:f="sap.ui.layout.form">
+    <Page
+        id="userDetailPane"
+        busy="{adminView>/detailBusy}"
+        busyIndicatorDelay="0">
+        <customHeader>
+            <Bar>
+                <contentLeft>
+                    <Title id="userDetailTitle" text="{adminView>/selectedUser/username}" level="H3" />
+                </contentLeft>
+                <contentRight>
+                        <ObjectStatus
+                            text="{= ${adminView>/selectedUser/isLocked} ? ${i18n>adminStatusLocked} : ${i18n>adminStatusUnlocked} }"
+                            state="{= ${adminView>/selectedUser/isLocked} ? 'Error' : 'Success' }"
+                            icon="{= ${adminView>/selectedUser/isLocked} ? 'sap-icon://locked' : 'sap-icon://unlocked' }"
+                            visible="{= !!${adminView>/selectedUser/roles} }" />
+                        <Button
+                            id="btnCloseUserDetail"
+                            icon="sap-icon://decline"
+                            type="Transparent"
+                            tooltip="{i18n>adminDialogClose}"
+                            press=".onCloseUserDetail" />
+                </contentRight>
+            </Bar>
+        </customHeader>
+        <content>
+            <MessageStrip
+                id="userDetailError"
+                text="{adminView>/detailError}"
+                type="Error"
+                showIcon="true"
+                visible="{= !!${adminView>/detailError} }"
+                class="sapUiSmallMargin" />
+            <VBox visible="{= !!${adminView>/selectedUser/roles} }">
+                <f:Form id="userDetailForm" editable="false">
+                    <f:title>
+                        <core:Title text="{i18n>adminUserDetailTitle}" />
+                    </f:title>
+                    <f:layout>
+                        <f:ColumnLayout columnsM="1" columnsL="1" columnsXL="1" />
+                    </f:layout>
+                    <f:formContainers>
+                    <f:FormContainer title="{i18n>adminDetailSectionPerson}">
+                        <f:formElements>
+                            <f:FormElement label="{i18n>adminDetailFullName}"><Text text="{= ${adminView>/selectedUser/fullName} || '-' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailUsername}"><Text text="{adminView>/selectedUser/username}" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailEmail}"><Text text="{= ${adminView>/selectedUser/email} || '-' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailPhone}"><Text text="{= ${adminView>/selectedUser/phone} || '-' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailDepartment}"><Text text="{= ${adminView>/selectedUser/department} || '-' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailFunction}"><Text text="{= ${adminView>/selectedUser/jobFunction} || '-' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailCompany}"><Text text="{= ${adminView>/selectedUser/company} || '-' }" /></f:FormElement>
+                        </f:formElements>
+                    </f:FormContainer>
+                    <f:FormContainer title="{i18n>adminDetailSectionLogon}">
+                        <f:formElements>
+                            <f:FormElement label="{i18n>adminDetailUserType}"><Text text="{path: 'adminView>/selectedUser/userType', formatter: '.formatAdminUserType'}" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailUserGroup}"><Text text="{= ${adminView>/selectedUser/userGroup} || '-' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailValidFrom}"><Text text="{path: 'adminView>/selectedUser/validFrom', formatter: '.formatAdminDate'}" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailValidTo}"><Text text="{path: 'adminView>/selectedUser/validTo', formatter: '.formatAdminDate'}" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailLastLogon}"><Text text="{parts: ['adminView>/selectedUser/lastLogonDate', 'adminView>/selectedUser/lastLogonTime'], formatter: '.formatAdminDateTime'}" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailCreatedOn}"><Text text="{path: 'adminView>/selectedUser/createdOn', formatter: '.formatAdminDate'}" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailCreatedBy}"><Text text="{= ${adminView>/selectedUser/createdBy} || '-' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailLastChanged}"><Text text="{parts: ['adminView>/selectedUser/lastChanged', 'adminView>/selectedUser/lastChangedTime'], formatter: '.formatAdminDateTime'}" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailLastChangedBy}"><Text text="{= ${adminView>/selectedUser/lastChangedBy} || '-' }" /></f:FormElement>
+                        </f:formElements>
+                    </f:FormContainer>
+                    <f:FormContainer title="{i18n>adminDetailSectionLocks}">
+                        <f:formElements>
+                            <f:FormElement label="{i18n>adminDetailLockedGlobal}"><ObjectStatus text="{path: 'adminView>/selectedUser/lockedGlobal', formatter: '.formatAdminLockFlag'}" state="{= ${adminView>/selectedUser/lockedGlobal} === 'U' ? 'Success' : 'Error' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailLockedLocal}"><ObjectStatus text="{path: 'adminView>/selectedUser/lockedLocal', formatter: '.formatAdminLockFlag'}" state="{= ${adminView>/selectedUser/lockedLocal} === 'U' ? 'Success' : 'Error' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailLockedWrong}"><ObjectStatus text="{path: 'adminView>/selectedUser/lockedWrong', formatter: '.formatAdminLockFlag'}" state="{= ${adminView>/selectedUser/lockedWrong} === 'U' ? 'Success' : 'Error' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailLockedNoPw}"><ObjectStatus text="{path: 'adminView>/selectedUser/lockedNoPw', formatter: '.formatAdminLockFlag'}" state="{= ${adminView>/selectedUser/lockedNoPw} === 'U' ? 'Success' : 'Error' }" /></f:FormElement>
+                        </f:formElements>
+                    </f:FormContainer>
+                    <f:FormContainer title="{i18n>adminDetailSectionDefaults}">
+                        <f:formElements>
+                            <f:FormElement label="{i18n>adminDetailLanguage}"><Text text="{= ${adminView>/selectedUser/language} || '-' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailDateFormat}"><Text text="{path: 'adminView>/selectedUser/dateFormat', formatter: '.formatAdminDateFormat'}" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailDecimalFormat}"><Text text="{path: 'adminView>/selectedUser/decimalFormat', formatter: '.formatAdminDecimalFormat'}" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailTimeZone}"><Text text="{= ${adminView>/selectedUser/timeZone} || '-' }" /></f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailCostCenter}"><Text text="{= ${adminView>/selectedUser/costCenter} || '-' }" /></f:FormElement>
+                        </f:formElements>
+                    </f:FormContainer>
+                    </f:formContainers>
+                </f:Form>
+                <List
+                    id="userDetailRoles"
+                    headerText="{i18n>adminDetailRoles} ({adminView>/selectedUser/roleCount})"
+                    noDataText="{i18n>adminDetailNoRoles}"
+                    growing="true"
+                    growingThreshold="10"
+                    items="{adminView>/selectedUser/roles}">
+                    <StandardListItem
+                        title="{adminView>name}"
+                        description="{adminView>description}"
+                        info="{parts: ['adminView>validFrom', 'adminView>validTo'], formatter: '.formatAdminValidity'}" />
+                </List>
+                <List
+                    id="userDetailProfiles"
+                    headerText="{i18n>adminDetailProfiles} ({adminView>/selectedUser/profileCount})"
+                    noDataText="{i18n>adminDetailNoProfiles}"
+                    growing="true"
+                    growingThreshold="10"
+                    items="{adminView>/selectedUser/profiles}">
+                    <StandardListItem
+                        title="{adminView>name}"
+                        description="{adminView>description}" />
+                </List>
+            </VBox>
+        </content>
+        <footer>
+            <OverflowToolbar>
+                <ToolbarSpacer />
+                <Button
+                    id="btnLockUser"
+                    text="{i18n>adminBtnLockUser}"
+                    type="Negative"
+                    icon="sap-icon://locked"
+                    visible="{= ${adminView>/selectedUser/isLocked} === false }"
+                    press=".onLockUser" />
+                <Button
+                    id="btnUnlockUser"
+                    text="{i18n>adminBtnUnlockUser}"
+                    type="Emphasized"
+                    icon="sap-icon://unlocked"
+                    visible="{= ${adminView>/selectedUser/isLocked} === true }"
+                    press=".onUnlockUser" />
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</core:FragmentDefinition>

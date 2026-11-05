@@ -240,6 +240,140 @@ async function verifySidebar(baseUrl) {
     return { errors, details };
 }
 
+/** The Sub-User Master layout and the side pane as rendered. */
+const paneState = (page) => page.evaluate(() => {
+    const Element = window.sap.ui.require('sap/ui/core/Element');
+    const byId = (suffix) => Element.registry.filter((c) => c.getId().endsWith('--' + suffix))[0];
+    const shown = (control) => !!control && !!control.getDomRef() && control.getDomRef().getClientRects().length > 0;
+    const pane = byId('userDetailPane');
+    const table = byId('adminUsersTable');
+    return {
+        layout: byId('adminUserLayout').getLayout(),
+        listShown: shown(table),
+        paneShown: shown(pane),
+        title: byId('userDetailTitle').getText(),
+        text: shown(pane) ? pane.getDomRef().innerText : '',
+        error: shown(byId('userDetailError')) ? byId('userDetailError').getText() : '',
+        lockShown: shown(byId('btnLockUser')),
+        unlockShown: shown(byId('btnUnlockUser')),
+        navigated: table.getItems().filter((item) => item.getNavigated()).map((item) => item.getBindingContext('adminView').getProperty('username')),
+        dialogOpen: !!document.querySelector('.sapMDialog'),
+        actionInWindow: ['btnLockUser', 'btnUnlockUser'].some((id) => shown(byId(id)) && byId(id).getDomRef().getBoundingClientRect().bottom <= window.innerHeight)
+    };
+});
+
+const PANE_ROWS = [
+    { username: 'ALPHA', fullName: 'Alpha User', detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20261103', lastChangedBy: 'ADMIN' },
+    { username: 'BETA', fullName: 'Beta User', detailsAvailable: true, isLocked: true, userType: 'A', lastChanged: '20261104', lastChangedBy: 'ADMIN' },
+    { username: 'BROKEN', fullName: 'Broken User', detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20261104', lastChangedBy: 'ADMIN' }
+];
+const paneDetail = (username, isLocked) => ({
+    username, fullName: `${username} Full Name`, email: `${username}@example.test`, phone: '555 100', department: 'IT', jobFunction: 'Admin', company: 'ACME',
+    userType: 'A', userGroup: 'GRP', validFrom: '00000000', validTo: '99991231', lastLogonDate: '20261102', lastLogonTime: '101500', createdOn: '20250101', createdBy: 'CREATOR',
+    lockedGlobal: isLocked ? 'L' : 'U', lockedLocal: 'U', lockedWrong: 'U', lockedNoPw: 'U', isLocked,
+    language: 'E', dateFormat: '1', decimalFormat: 'X', timeZone: 'INDIA', costCenter: 'CC1',
+    roleCount: 1, profileCount: 1, lastChanged: '20261103', lastChangedTime: '091500', lastChangedBy: 'ADMIN',
+    roles: [{ name: 'Z_ROLE', description: 'Role text', validFrom: '20250101', validTo: '99991231' }],
+    profiles: [{ name: 'Z_PROFILE', description: 'Profile text' }]
+});
+
+async function verifyUserDetailPane(baseUrl) {
+    console.log('\n=== User detail side pane (controlled rows then one live read, write guard on) ===');
+    const errors = [];
+    const details = [];
+    const session = await openSession({ baseUrl });
+    const { page } = session;
+    const posts = [];
+    page.on('request', (req) => { if (req.method() === 'POST' && /lockUser|unlockUser/.test(req.url())) posts.push(req.url()); });
+
+    const expect = (state, wanted) => Object.keys(wanted)
+        .filter((key) => String(state[key]) !== String(wanted[key]))
+        .map((key) => `expected ${key} ${wanted[key]}, got ${state[key]}`);
+    const openRow = async (username) => {
+        await page.locator('[id$="--adminUsersTable"] tr', { hasText: username }).locator('td').nth(1).click();
+        await session.settle();
+        await page.waitForTimeout(600); // the column animation
+    };
+
+    try {
+        await page.route('**/odata/v4/user-management/listUsers*', (route) => route.fulfill({ json: { value: PANE_ROWS } }));
+        await page.route('**/odata/v4/user-management/getUserDetail*', (route) => {
+            const username = decodeURIComponent(route.request().url().match(/username='([^']*)'/)[1]);
+            if (username === 'BROKEN') return route.fulfill({ status: 502, json: { error: { code: '502', message: 'SAP read failed' } } });
+            return route.fulfill({ json: paneDetail(username, username === 'BETA') });
+        });
+        await openHash(session, 'dashboard/admin');
+
+        step(errors, details, 'The list starts alone, with no pane', expect(await paneState(page), { layout: 'OneColumn', listShown: true, paneShown: false }));
+
+        await openRow('ALPHA');
+        const opened = await paneState(page);
+        const openProblems = expect(opened, { layout: 'TwoColumnsBeginExpanded', listShown: true, paneShown: true, title: 'ALPHA', error: '', dialogOpen: false, lockShown: true, unlockShown: false, navigated: 'ALPHA', actionInWindow: true });
+        ['ALPHA Full Name', 'ALPHA@example.test', '555 100', 'IT', 'ACME', 'Dialog', 'GRP', '31-12-9999', '02-11-2026 10:15:00', 'CREATOR', 'Not Locked',
+            'DD.MM.YYYY (Gregorian Date)', '1,234,567.89', 'INDIA', 'CC1', 'Z_ROLE', 'Role text', 'Z_PROFILE', 'Profile text', '03-11-2026 09:15:00'].forEach((text) => {
+            if (!opened.text.includes(text)) openProblems.push(`pane does not show "${text}"`);
+        });
+        step(errors, details, 'A row opens the right pane beside the list, with the SAP details and no dialog', openProblems);
+
+        await openRow('BETA');
+        const locked = await paneState(page);
+        const lockedProblems = expect(locked, { title: 'BETA', lockShown: false, unlockShown: true, navigated: 'BETA' });
+        if (locked.text.includes('ALPHA')) lockedProblems.push('the previous user is still shown');
+        step(errors, details, 'Another row replaces the pane and offers Unlock for a locked user', lockedProblems);
+
+        await page.locator('[id$="--btnUnlockUser"]').click();
+        await page.locator('.sapMDialog').getByRole('button', { name: 'Cancel' }).click();
+        await session.settle();
+        step(errors, details, 'Unlock in the pane asks first, and Cancel sends nothing to SAP', posts.length ? [`sent ${posts}`] : []);
+
+        const consoleBefore = session.consoleErrors.length;
+        const networkBefore = session.networkErrors.length;
+        await openRow('BROKEN');
+        const failed = await paneState(page);
+        const failedProblems = expect(failed, { title: 'BROKEN', lockShown: false, unlockShown: false, paneShown: true });
+        if (!failed.error) failedProblems.push('no error is shown in the pane');
+        if (failed.text.includes('BETA')) failedProblems.push('the previous user is still shown');
+        step(errors, details, 'A failed SAP read shows the error, no old data and no lock action', failedProblems);
+        session.consoleErrors.splice(consoleBefore);
+        session.networkErrors.splice(networkBefore);
+
+        await page.click('[id$="--btnCloseUserDetail"]');
+        await page.waitForTimeout(600);
+        step(errors, details, 'Close returns the list to full width', expect(await paneState(page), { layout: 'OneColumn', paneShown: false, navigated: '' }));
+
+        const problems = session.consoleErrors.concat(session.networkErrors.map((e) => `HTTP ${e.status} ${e.url}`), session.blocked.map((b) => `write guard blocked ${b.reason}`));
+        step(errors, details, 'Side pane flow: no unexpected console error, failed request or blocked write', problems);
+    } catch (err) {
+        step(errors, details, 'Side pane flow', [`${err.name}: ${err.message.split('\n')[0]}`]);
+    } finally {
+        await session.close();
+    }
+
+    const live = await openSession({ baseUrl });
+    try {
+        await openHash(live, 'dashboard/admin');
+        const username = await live.page.evaluate(() => {
+            const Element = window.sap.ui.require('sap/ui/core/Element');
+            const table = Element.registry.filter((c) => c.getId().endsWith('--adminUsersTable'))[0];
+            return table.getItems()[0].getBindingContext('adminView').getProperty('username');
+        });
+        await live.page.locator('[id$="--adminUsersTable"] tr', { hasText: username }).first().locator('td').nth(1).click();
+        await live.settle();
+        await live.page.waitForTimeout(600);
+        const state = await paneState(live.page);
+        const problems = expect(state, { paneShown: true, title: username, error: '' });
+        if (!state.lockShown && !state.unlockShown) problems.push('no lock action for a loaded user');
+        if (!/Roles \(\d+\)/.test(state.text) || !/Profiles \(\d+\)/.test(state.text)) problems.push('the role and profile lists are missing');
+        problems.push(...live.consoleErrors, ...live.networkErrors.map((e) => `HTTP ${e.status} ${e.url}`), ...live.blocked.map((b) => `write guard blocked ${b.reason}`));
+        step(errors, details, 'READ-ONLY: a live row opens its BAPI_USER_GET_DETAIL details', problems);
+    } catch (err) {
+        step(errors, details, 'Live side pane', [`${err.name}: ${err.message.split('\n')[0]}`]);
+    } finally {
+        await live.close();
+    }
+    return { errors, details };
+}
+
 /** The User Master group as rendered: its expansion, the child's visibility and both highlights. */
 const groupState = (page) => page.evaluate(() => {
     const Element = window.sap.ui.require('sap/ui/core/Element');
@@ -571,8 +705,9 @@ async function verifyShellScreens(options = {}) {
     const d = await verifyThemeSwitcher(baseUrl);
     const e = await verifyAdminTable(baseUrl);
     const f = await verifyUserMasterGroup(baseUrl);
-    const errors = a.errors.concat(b.errors, c.errors, d.errors, e.errors, f.errors);
-    return { status: errors.length ? 'FAIL' : 'PASS', errors, details: a.details.concat(b.details, c.details, d.details, e.details, f.details) };
+    const g = await verifyUserDetailPane(baseUrl);
+    const errors = a.errors.concat(b.errors, c.errors, d.errors, e.errors, f.errors, g.errors);
+    return { status: errors.length ? 'FAIL' : 'PASS', errors, details: a.details.concat(b.details, c.details, d.details, e.details, f.details, g.details) };
 }
 
 if (require.main === module) {

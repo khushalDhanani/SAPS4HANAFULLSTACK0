@@ -130,6 +130,25 @@ describe('Integration: SU01 user management', () => {
             expect(res.data).toMatchObject({ username: 'ALICE', fullName: 'Alice Smith', userType: 'A', isLocked: false });
         });
 
+        it('getUserDetail returns the role and profile lists through OData, without password hashes', async () => {
+            stubRfc({
+                BAPI_USER_GET_DETAIL: {
+                    LOGONDATA: { USTYP: 'A', PWDSALTEDHASH: 'SECRET-H' },
+                    ISLOCKED: { GLOB_LOCK: 'U' },
+                    ACTIVITYGROUPS: [{ AGR_NAME: 'Z_ROLE', AGR_TEXT: 'Role', FROM_DAT: '20250101', TO_DAT: '99991231' }],
+                    PROFILES: [{ BAPIPROF: 'Z_PROF', BAPIPTEXT: 'Profile' }],
+                    RETURN: []
+                }
+            });
+
+            const res = await axios.get(`${BASE}/getUserDetail(username='ALICE')`, ADMIN);
+
+            expect(res.status).toBe(200);
+            expect(res.data.roles).toEqual([{ name: 'Z_ROLE', description: 'Role', validFrom: '20250101', validTo: '99991231' }]);
+            expect(res.data.profiles).toEqual([{ name: 'Z_PROF', description: 'Profile' }]);
+            expect(JSON.stringify(res.data)).not.toContain('SECRET');
+        });
+
         it('getUserDetail answers 502 with the adapter text when the RFC call fails', async () => {
             stubRfc({ BAPI_USER_GET_DETAIL: down });
             const res = await axios.get(`${BASE}/getUserDetail(username='ALICE')`, ADMIN);

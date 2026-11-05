@@ -27,12 +27,15 @@ const GETLIST_RESULT = {
 };
 
 const DETAIL_RESULT = {
-  ADDRESS:   { FIRSTNAME: 'Alice', LASTNAME: 'Smith', FULLNAME: 'Alice Smith', SMTP_ADDR: 'alice@test.com' },
-  LOGONDATA: { USTYP: 'A', GLTGV: '00000000', GLTGB: '00000000', CLASS: 'GRP1' },
+  ADDRESS:   { FIRSTNAME: 'Alice', LASTNAME: 'Smith', FULLNAME: 'Alice Smith', E_MAIL: 'alice@test.com', TEL1_NUMBR: '555 100', TEL1_EXT: '22', DEPARTMENT: 'IT', FUNCTION: 'Admin' },
+  ADMINDATA: { ANAME: 'CREATOR', ERDAT: '20250101', TRDAT: '20261102' },
+  COMPANY:   { COMPANY: 'ACME' },
+  DEFAULTS:  { LANGU: 'E', DATFM: '1', DCPFM: 'X', KOSTL: 'CC1' },
+  LOGONDATA: { USTYP: 'A', GLTGV: '00000000', GLTGB: '00000000', CLASS: 'GRP1', LTIME: '101500', TZONE: 'INDIA', BCODE: 'SECRET-B', PASSCODE: 'SECRET-P', PWDSALTEDHASH: 'SECRET-H' },
   ISLOCKED:  { WRNG_LOGON: 'U', NO_USER_PW: 'U', GLOB_LOCK: 'U', LOCAL_LOCK: 'U' },
-  ACTIVITYGROUPS: [{ AGR_NAME: 'Z_ROLE_1' }, { AGR_NAME: 'Z_ROLE_2' }],
-  PROFILES:       [{ BAPIPRNAM: 'SAP_ALL' }],
-  LASTMODIFIED:   { MODDATE: '20261001', MODIFIER: 'ADMIN' },
+  ACTIVITYGROUPS: [{ AGR_NAME: 'Z_ROLE_1', AGR_TEXT: 'Role one', FROM_DAT: '20250101', TO_DAT: '99991231' }, { AGR_NAME: 'Z_ROLE_2' }],
+  PROFILES:       [{ BAPIPROF: 'SAP_ALL', BAPIPTEXT: 'All authorizations' }],
+  LASTMODIFIED:   { MODDATE: '20261001', MODTIME: '091500', MODIFIER: 'ADMIN' },
   RETURN: [],
 };
 
@@ -198,6 +201,36 @@ describe('UserManagementAdapter.getUserDetail', () => {
       lastChanged:  '20261001',
       lastChangedBy: 'ADMIN',
     });
+  });
+
+  test('maps the SU01 detail fields from the real BAPI field names', async () => {
+    const { adapter } = makeAdapter();
+    expect(await adapter.getUserDetail('ALICE')).toMatchObject({
+      phone: '555 100 22',
+      department: 'IT',
+      jobFunction: 'Admin',
+      company: 'ACME',
+      createdBy: 'CREATOR',
+      createdOn: '20250101',
+      lastLogonDate: '20261102',
+      lastLogonTime: '101500',
+      language: 'E',
+      dateFormat: '1',
+      decimalFormat: 'X',
+      costCenter: 'CC1',
+      timeZone: 'INDIA',
+      lastChangedTime: '091500',
+      roles: [
+        { name: 'Z_ROLE_1', description: 'Role one', validFrom: '20250101', validTo: '99991231' },
+        { name: 'Z_ROLE_2', description: '', validFrom: '', validTo: '' },
+      ],
+      profiles: [{ name: 'SAP_ALL', description: 'All authorizations' }],
+    });
+  });
+
+  test('never returns the password hash fields of LOGONDATA', async () => {
+    const { adapter } = makeAdapter();
+    expect(JSON.stringify(await adapter.getUserDetail('ALICE'))).not.toContain('SECRET');
   });
 
   test('isLocked is true when GLOB_LOCK is L', async () => {
