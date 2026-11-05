@@ -90,6 +90,9 @@ async function verifySidebar(baseUrl) {
                 await click(ITEM[key]);
             }
             step(errors, details, `Sidebar item ${key} opens its section`, await expectSection(`dashboard/${key}`, key));
+            if (key === 'mm' && !(await page.locator('[id$="--btnMMCreatePO"]').isVisible() && await page.locator('[id$="--btnMMManagePOs"]').isVisible())) {
+                step(errors, details, 'Procurement keeps Create PO and Manage Orders', ['a button is not visible']);
+            }
             if (key === 'admin') {
                 const adminList = await page.evaluate(() => {
                     const Element = window.sap.ui.require('sap/ui/core/Element');
@@ -588,14 +591,16 @@ async function verifyAdminTable(baseUrl) {
         await session.settle();
         step(errors, details, 'The filter still applies after a refresh', expectRows(await adminTableState(page), 'Sub-User Master (1)', ['BETA']));
 
-        const header = await page.evaluate(() => ({
+        const card = await page.evaluate(() => ({
+            text: document.body.innerText.includes('Integrated S/4HANA business'),
             greeting: document.body.innerText.includes('Welcome back'),
-            kept: ['dashboardConnectionStatus', 'btnQuickCreatePO', 'btnQuickManagePOs', 'btnRefreshDashboard']
-                .filter((id) => !document.querySelector(`[id$="--${id}"]`))
+            controls: ['dashboardConnectionStatus', 'btnQuickCreatePO', 'btnQuickManagePOs', 'btnRefreshDashboard']
+                .filter((id) => document.querySelector(`[id$="--${id}"]`))
         }));
-        const headerProblems = header.kept.map((id) => `${id} is missing`);
-        if (header.greeting) headerProblems.push('the Welcome greeting is still shown');
-        step(errors, details, 'The dashboard header has no greeting and keeps its status and actions', headerProblems);
+        const cardProblems = card.controls.map((id) => `${id} is still rendered`);
+        if (card.text) cardProblems.push('the card text is still shown');
+        if (card.greeting) cardProblems.push('the Welcome greeting is still shown');
+        step(errors, details, 'The dashboard header card is gone', cardProblems);
 
         const failed = session.consoleErrors.concat(session.networkErrors.map((e) => `HTTP ${e.status} ${e.url}`), session.blocked.map((b) => `write guard blocked ${b.reason}`));
         step(errors, details, 'Sub-User Master flow: no console error, failed request or blocked write', failed);

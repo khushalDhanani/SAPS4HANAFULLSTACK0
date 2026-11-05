@@ -170,26 +170,12 @@ describe('Unit: Dashboard Controller live figures', () => {
         controller.onInit();
 
         expect(data.selectedTab).toBe('overview');
-        expect(data.connectionState).toBe('None');
-        expect(data.connectionText).toMatch(/Checking/);
         controller.METRIC_KEYS.forEach((key) => expect(data).not.toHaveProperty(key));
         ['systemHealth', 'totalSpend', 'completeRate', 'carLoanActiveCount', 'hcmHeadcount', 'tmRouteCount', 'ppCapacityUtilization']
             .forEach((key) => expect(data).not.toHaveProperty(key));
     });
 
-    test('shows when the figures were read from SAP (asOf) so cached answers are not mistaken for live ones', async () => {
-        const oViewModel = new MockJSONModel({});
-        const controller = makeController(oViewModel);
-        const payload = fullPayload({ totalCount: 1 });
-        mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: [], asOf: '2026-09-22T08:22:00.000Z' }));
-
-        await controller._loadMetrics();
-
-        expect(oViewModel.getProperty('/connectionState')).toBe('Success');
-        expect(oViewModel.getProperty('/connectionText')).toMatch(/figures as of \d/);
-    });
-
-    test('populates every figure SAP returned and reports S/4HANA connected', async () => {
+    test('populates every figure SAP returned', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
         const payload = fullPayload({ totalCount: 2729, openSalesOrderCount: 498, customerCount: 952 });
@@ -200,8 +186,6 @@ describe('Unit: Dashboard Controller live figures', () => {
         expect(mockODataClient.get).toHaveBeenCalledTimes(1);
         expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/purchase-order/getDashboardMetrics()');
         controller.METRIC_KEYS.forEach((key) => expect(oViewModel.getProperty('/' + key)).toBe(payload[key]));
-        expect(oViewModel.getProperty('/connectionState')).toBe('Success');
-        expect(oViewModel.getProperty('/connectionText')).toBe('S/4HANA connected');
         expect(oViewModel.getProperty('/metricsError')).toBe('');
     });
 
@@ -213,10 +197,9 @@ describe('Unit: Dashboard Controller live figures', () => {
         await controller._loadMetrics();
 
         expect(oViewModel.getProperty('/warehouseCount')).toBe(173386);
-        expect(oViewModel.getProperty('/connectionState')).toBe('Success');
     });
 
-    test('keeps a figure SAP did not return as null (never 0) and reports partial availability', async () => {
+    test('keeps a figure SAP did not return as null (never 0)', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
         const payload = fullPayload({ customerCount: null, warehouseCount: null });
@@ -229,8 +212,6 @@ describe('Unit: Dashboard Controller live figures', () => {
         expect(oViewModel.getProperty('/warehouseCount')).toBeNull();
         expect(oViewModel.getProperty('/ordersDueCount')).toBeNull();
         expect(oViewModel.getProperty('/totalCount')).toBe(payload.totalCount);
-        expect(oViewModel.getProperty('/connectionState')).toBe('Warning');
-        expect(oViewModel.getProperty('/connectionText')).toBe(`S/4HANA partially available (${controller.METRIC_KEYS.length - 3} of ${controller.METRIC_KEYS.length} figures)`);
     });
 
     test('rejects non-count values from the payload instead of displaying them', async () => {
@@ -255,8 +236,6 @@ describe('Unit: Dashboard Controller live figures', () => {
 
         expect(mockODataClient.get).toHaveBeenCalledTimes(1);
         controller.METRIC_KEYS.forEach((key) => expect(oViewModel.getProperty('/' + key)).toBeNull());
-        expect(oViewModel.getProperty('/connectionState')).toBe('Error');
-        expect(oViewModel.getProperty('/connectionText')).toBe('S/4HANA not reachable');
         expect(oViewModel.getProperty('/metricsError')).toContain('destination not found');
     });
 
@@ -271,9 +250,6 @@ describe('Unit: Dashboard Controller live figures', () => {
         mockODataClient.get.mockResolvedValue(JSON.stringify(payload));
 
         await controller._loadMetrics();
-
-        expect(oViewModel.getProperty('/connectionState')).toBe('Error');
-        expect(oViewModel.getProperty('/connectionText')).toBe('S/4HANA not reachable');
         expect(oViewModel.getProperty('/metricsError')).toContain('HTTP 401 Unauthorized');
     });
 
@@ -436,7 +412,6 @@ describe('Unit: Dashboard Controller live figures', () => {
             await controller._loadMetrics();
             controller.METRIC_KEYS.forEach((key) => expect(controller.formatTileState(oViewModel.getProperty('/' + key))).toBe('Failed'));
             expect(oViewModel.getProperty('/metricsError')).toContain('HTTP 502');
-            expect(oViewModel.getProperty('/connectionState')).toBe('Error');
         });
     });
 
@@ -447,7 +422,7 @@ describe('Unit: Dashboard view binds only live figures', () => {
     const controllerSource = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/controller/Dashboard.controller.js'), 'utf8');
     const metricKeys = [...controllerSource.match(/var METRIC_KEYS = \[([\s\S]*?)\];/)[1].matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1]);
     const nonMetricModelKeys = [
-        'selectedTab', 'connectionText', 'connectionState', 'metricsError'
+        'selectedTab', 'metricsError'
     ];
 
     test('every dashboardView binding is a live SAP metric or a status field', () => {
@@ -477,6 +452,18 @@ describe('Unit: Dashboard view binds only live figures', () => {
             return !state || !value || state[1] !== value[1];
         }).map(([, tile]) => tile.match(/\sid="(\w+)"/)[1]);
         expect(mismatched).toEqual([]);
+    });
+
+    test('the old header card is gone, and Create PO and Manage Orders stay in the Procurement section', () => {
+        const webapp = path.join(__dirname, '../../../app/fiori-app/webapp');
+        ['dashboardHero', 'dashboardSubtitle', 'dashboardConnectionStatus', 'btnRefreshDashboard'].forEach((text) => {
+            expect(viewXml).not.toContain(text);
+        });
+        expect(fs.readFileSync(path.join(webapp, 'css/style.css'), 'utf8')).not.toContain('dashboardHero');
+        expect(fs.readFileSync(path.join(webapp, 'i18n/i18n.properties'), 'utf8')).not.toContain('Integrated S/4HANA business');
+        expect(fs.readFileSync(path.join(webapp, 'i18n/i18n_en.properties'), 'utf8')).not.toContain('Integrated S/4HANA business');
+        expect(viewXml).toContain('id="btnMMCreatePO"');
+        expect(viewXml).toContain('id="btnMMManagePOs"');
     });
 
     test('the view shows no hard-coded "Client 220" status', () => {

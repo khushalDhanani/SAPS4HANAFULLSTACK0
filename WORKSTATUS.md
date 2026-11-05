@@ -15,6 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Dashboard header card removed (2026-11-05 11:58 IST) — PARTIAL, committed locally, not pushed, not deployed:** The "Integrated S/4HANA business modules and operational insights" card is gone from every `/dashboard` section, along with its Refresh button and connection status. Tests, lint, build, and the shell and accessibility browser suites passed. See the Changes Log.
 - **User detail side pane (2026-11-05 11:50 IST) — PARTIAL, committed locally, not pushed, not deployed:** Clicking a user on `/dashboard/admin` opens a right-side pane (`sap.f.FlexibleColumnLayout`) with SU01-style details from `BAPI_USER_GET_DETAIL`; it replaces the dialog. Tests, lint, build, and the shell and accessibility browser suites passed, including one live read. Lock/Unlock from the pane was not run against SAP. See the Changes Log.
 - **User Master sidebar group (2026-11-05 11:20 IST) — PARTIAL, committed by the user as `57ce427c`, not pushed, not deployed:** Administrator now sits under an expandable, Admin-only User Master group. Tests, lint, build and the shell and accessibility browser suites passed. The Statistics item the request named does not exist in this repo, so matching it could not be verified. See the Changes Log.
 - **Sub-User Master table and dashboard greeting (2026-11-05 11:04 IST) — PARTIAL, committed locally, not pushed, not deployed:** The Admin user table is now the Sub-User Master, with search, lock status filter, refresh and sortable columns. The dashboard greeting line is gone. Tests, lint, build, and the shell and accessibility browser suites passed; sort and filter were proven with controlled rows; lock/unlock was not run against SAP. See the Changes Log.
@@ -154,6 +155,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Dashboard header card removal (2026-11-05): the user decides whether to push. The dashboard no longer has a Refresh button or a "figures as of" time; `metrics.asOf` is still returned by `PurchaseOrderAdapter.js:349` and is now unused by this screen.
 - User detail side pane (2026-11-05): the user decides whether to push. A live Lock or Unlock from the pane needs a written go naming the test user.
 - Sub-User Master (2026-11-05): the user decides whether to push. `listUsers` is called with `maxRows=200` and the table shows 200 rows on DS4/220, so sort, filter and count cover only those rows; the user decides whether that cap is acceptable.
 - Movement 261 removal (2026-11-04): before deploying, check that no open 261 posting attempts are waiting in the attempt table, and check access logs for `/odata/v4/mvt261`. The read-only `npm run test:e2e` is done (2026-11-04 16:35 IST).
@@ -2635,3 +2637,22 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
 - **Next action:** The user decides whether to push.
 - **FINAL STATUS:** PARTIAL. Implemented, browser-tested with a live read and committed locally; not pushed, not deployed, no SAP write.
+
+### 2026-11-05 11:58 IST — Dashboard header card removed: PARTIAL
+
+- **Request:** "Integrated S/4HANA business modules and operational insights. Remove this Card Form Everywhere."
+- **Findings:** The card exists only in `Dashboard.view.xml`, and that one view serves every `/dashboard` section, so one removal covers everywhere. Its Create PO and Manage Orders buttons also exist in the Procurement section (`btnMMCreatePO`, `btnMMManagePOs`). Its Refresh button and connection status existed nowhere else.
+- **CHANGED:** `Dashboard.view.xml`: card removed; the Overview gets a `Title` using the existing `tabOverviewTitle`, the same pattern as the Procurement, Sales and Warehouse headings; the admin layout height is now `calc(100vh - 11.5rem)`. `Dashboard.controller.js`: removed `_setConnectionStatus`, `onRefresh` and the `connectionState`/`connectionText` model properties, which nothing used any more. `style.css`: 10 card rules removed. `i18n.properties`, `i18n_en.properties`: 7 keys removed (`dashboardSubtitle`, five `dashboardConnection*`, `dashboardActionRefreshDesc`). No API, route, service or other screen changed.
+- **Behaviour removed:** The dashboard Refresh button; figures now reload on arrival from another screen or on a browser reload. The connected, partial and not-reachable status, and the "figures as of" time that showed when cached figures were read from SAP. Failures still show: the red `dashboardMetricsError` strip and each tile's Failed state stay.
+- **Behaviour added:** The "Overview" heading, because the page would otherwise have no heading and the suite's page title check (`test/e2e/support/screenCheck.js:261`) fails without one. The user did not ask for this text.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED: `test/unit/dashboard/dashboardMetrics.test.js` (card gone and Procurement buttons kept; 12 connection assertions and the `asOf` test removed with the feature), `test/e2e/shell/verifyShellScreens.e2e.js`.
+- **TESTED before the change:** No separate run. The last run on this code, before commit `3e890143`, had `npx jest --runInBand --silent`: 188 suites, 3,074 tests passed; lint and build clean.
+- **TESTED after the change:** `npx jest --runInBand --silent`: 188 suites, 3,074 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. ESLint on the two changed test files: clean. `git diff --check`: clean. `TARGET_URL=http://localhost:4010 node test/e2e/shell/verifyShellScreens.e2e.js`: 55 PASS, 0 FAIL. `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
+- **SAP:** READ-ONLY only. The browser suites and screenshots read dashboard metrics and the admin list with the write guard on. No SAP write ran.
+- **VERIFIED:** In a browser: the card text, greeting and card controls are absent; Procurement shows Create PO and Manage Orders; the Overview and the admin list with the pane open render without the card, and the pane's action button is inside a 1440x900 window.
+- **NOT VERIFIED:** The tablet and phone layouts without the card (the suite's phone step only checks the sidebar). Full `npm run test:e2e` and GitHub Actions were not run.
+- **Warnings:** One Overview screenshot shows the focused collapsed-sidebar item overlapping the "O" of the new heading. The cause was not investigated; it was seen only with focus on that item. The accessibility suite still reports `aria-allowed-attr`×5 and `label-content-name-mismatch`×10 on the dashboard.
+- **ASSUMPTIONS:** "This card" means the whole card including its buttons and status, not only its text.
+- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
+- **Next action:** The user decides whether to push.
+- **FINAL STATUS:** PARTIAL. Implemented, browser-tested and committed locally; not pushed, not deployed, no SAP write.

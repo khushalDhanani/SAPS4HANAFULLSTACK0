@@ -17,43 +17,6 @@
         class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
-                <!-- Hero Header & Global Actions -->
-                <HBox class="sapUiSmallMarginBottom dashboardHeroHeader" justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap">
-                    <VBox class="sapUiTinyMarginBottom dashboardHeroTitleContainer">
-                        <HBox alignItems="Center" wrap="Wrap" class="dashboardUserGreetingRow">
-                            <Title text="{i18n>dashboardSubtitle}" level="H2" titleStyle="H5" wrapping="true" class="sapUiTinyMarginEnd" />
-                            <ObjectStatus
-                                id="dashboardConnectionStatus"
-                                text="{dashboardView>/connectionText}"
-                                state="{dashboardView>/connectionState}"
-                                inverted="false" />
-                        </HBox>
-                    </VBox>
-                    <HBox alignItems="Center" wrap="Wrap" class="sapUiTinyMarginBottom dashboardHeroActions">
-                        <Button
-                            id="btnQuickCreatePO"
-                            text="{i18n>dashboardModuleMMCreate}"
-                            icon="sap-icon://add"
-                            type="Emphasized"
-                            press=".onNavigateToCreatePO"
-                            class="sapUiTinyMarginEnd" />
-                        <Button
-                            id="btnQuickManagePOs"
-                            text="{i18n>dashboardModuleMMAction}"
-                            icon="sap-icon://open-folder"
-                            type="Default"
-                            press=".onNavigateToPurchaseOrders"
-                            class="sapUiTinyMarginEnd" />
-                        <Button
-                            id="btnRefreshDashboard"
-                            icon="sap-icon://refresh"
-                            text="{i18n>btnRefresh}"
-                            type="Transparent"
-                            tooltip="{i18n>btnRefresh}"
-                            press=".onRefresh" />
-                    </HBox>
-                </HBox>
-
                 <MessageStrip
                     id="dashboardMetricsError"
                     text="{dashboardView>/metricsError}"
@@ -67,7 +30,7 @@
                         <!-- OVERVIEW -->
                         <VBox id="sectionOverview" visible="{= ${dashboardView>/selectedTab} === 'overview' }">
                             <VBox class="sapUiSmallMarginTop">
-
+                                <Title text="{i18n>tabOverviewTitle}" level="H3" titleStyle="H4" class="sapUiSmallMarginBottom" />
 
                                 <!-- Supply Chain & Sales -->
                                 <Panel
@@ -326,7 +289,7 @@
                                     <Text text="{i18n>adminUserManagementDesc}" class="textMuted" />
                                 </VBox>
 
-                                <VBox height="calc(100vh - 19.5rem)" renderType="Bare">
+                                <VBox height="calc(100vh - 11.5rem)" renderType="Bare">
                                     <f:FlexibleColumnLayout
                                         id="adminUserLayout"
                                         layout="{= ${adminView>/selectedUser} ? 'TwoColumnsBeginExpanded' : 'OneColumn' }">

@@ -77,8 +77,6 @@ sap.ui.define([
 
             var oViewModel = new JSONModel({
                 selectedTab: "overview",
-                connectionState: "None",
-                connectionText: this._text("dashboardConnectionChecking", "Checking S/4HANA connection…"),
                 metricsError: ""
             });
             this.getView().setModel(oViewModel, "dashboardView");
@@ -182,8 +180,6 @@ sap.ui.define([
                 oViewModel.setProperty("/" + sKey, undefined);
             });
             oViewModel.setProperty("/metricsError", "");
-            oViewModel.setProperty("/connectionState", "None");
-            oViewModel.setProperty("/connectionText", this._text("dashboardConnectionChecking", "Checking S/4HANA connection…"));
 
             return ODataClient.get("/odata/v4/purchase-order/getDashboardMetrics()")
                 .then(function (res) {
@@ -209,7 +205,6 @@ sap.ui.define([
                     if (iAvailable === 0 && oMetrics.error) {
                         oViewModel.setProperty("/metricsError", oMetrics.error);
                     }
-                    that._setConnectionStatus(iAvailable, METRIC_KEYS.length, oMetrics.asOf);
                 })
                 .catch(function (err) {
                     METRIC_KEYS.forEach(function (sKey) {
@@ -220,34 +215,7 @@ sap.ui.define([
                         "Live figures could not be loaded from SAP S/4HANA: {0}",
                         [(err && err.message) || String(err || "")]
                     ));
-                    that._setConnectionStatus(0, METRIC_KEYS.length);
                 });
-        },
-
-        /**
-         * @private
-         */
-        _setConnectionStatus: function (iAvailable, iTotal, sAsOf) {
-            var oViewModel = this.getView().getModel("dashboardView");
-            // Figures may come from the server cache (30 s transactional / 5 min master data): show when SAP was actually read.
-            var dAsOf = sAsOf ? new Date(sAsOf) : null;
-            var sAsOfText = (dAsOf && !isNaN(dAsOf.getTime())) ? dAsOf.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-            if (iAvailable === iTotal) {
-                oViewModel.setProperty("/connectionState", "Success");
-                oViewModel.setProperty("/connectionText", sAsOfText
-                    ? this._text("dashboardConnectionOkAsOf", "S/4HANA connected \u00b7 figures as of {0}", [sAsOfText])
-                    : this._text("dashboardConnectionOk", "S/4HANA connected"));
-            } else if (iAvailable === 0) {
-                oViewModel.setProperty("/connectionState", "Error");
-                oViewModel.setProperty("/connectionText", this._text("dashboardConnectionDown", "S/4HANA not reachable"));
-            } else {
-                oViewModel.setProperty("/connectionState", "Warning");
-                oViewModel.setProperty("/connectionText", this._text(
-                    "dashboardConnectionPartial",
-                    "S/4HANA partially available ({0} of {1} figures)",
-                    [String(iAvailable), String(iTotal)]
-                ));
-            }
         },
 
         /**
@@ -303,13 +271,6 @@ sap.ui.define([
                 return "Loading";
             }
             return vCount === null ? "Failed" : "Loaded";
-        },
-
-        onRefresh: function () {
-            var that = this;
-            this._loadMetrics().then(function () {
-                MessageToast.show(that._text("dashboardActionRefreshDesc", "Fetch latest changes from SAP Gateway"));
-            });
         },
 
         onNavigateToPurchaseOrders: function () {
