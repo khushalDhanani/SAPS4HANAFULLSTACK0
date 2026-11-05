@@ -614,6 +614,7 @@
                 });
             } else {
                 var bMaterialRequired = oPoRule ? oPoRule.materialRequired !== false : true;
+                var bStorageLocationRequired = oPoRule ? oPoRule.storageLocationRequired !== false : true;
                 aItems.forEach(function (item, idx) {
                     var sItemNo = item.PurchaseOrderItem || "Item #" + (idx + 1);
                     item.errors = item.errors || {};
@@ -677,7 +678,7 @@
                         });
                     }
 
-                    if (!item.StorageLocation || !String(item.StorageLocation).trim()) {
+                    if (bStorageLocationRequired && (!item.StorageLocation || !String(item.StorageLocation).trim())) {
                         item.errors.StorageLocation = { state: "Error", text: fnResolve("poValItemStorageLocRequired", [""], "Storage Location is required.") };
                         aErrorList.push({
                             type: "Error",
@@ -1048,6 +1049,9 @@
                     item.errors.UnitOfMeasure = { state: "None", text: "" };
                     item.errors.NetPriceAmount = { state: "None", text: "" };
                     item.errors.TaxCode = { state: "None", text: "" };
+                    item.errors.PurchaseOrderItemText = { state: "None", text: "" };
+                    item.errors.PurchaseOrderItemCategory = { state: "None", text: "" };
+                    item.errors.AccountAssignmentCategory = { state: "None", text: "" };
                 }
             });
 

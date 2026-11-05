@@ -316,9 +316,15 @@ describe('PO Type-Wise Dynamic Business Rules - 16 Types Matrix', () => {
                 expect(validateCreatePurchaseOrderPayload(zserNoStorageLocation()).isValid).toBe(true);
             });
 
-            // Known defect: app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator.js:680 validateForm ignores storageLocationRequired, so onCreatePress (CreatePurchaseOrder.controller.js:1110) blocks a ZSER PO that validateUI:205 and the server (purchaseOrder.validation.js:140) accept.
-            it.failing('validateForm should report no error', () => {
+            it('validateForm should report no error, so Create is not blocked', () => {
                 expect(PurchaseOrderValidator.validateForm(zserNoStorageLocation()).errorList).toEqual([]);
+            });
+
+            it('validateForm should still require a storage location on a type that needs one', () => {
+                const payload = zserNoStorageLocation();
+                payload.header.PurchaseOrderType = 'ZDOM';
+                const { errorList } = PurchaseOrderValidator.validateForm(payload);
+                expect(errorList.map((e) => e.field)).toContain('10 / Storage Location');
             });
         });
     });

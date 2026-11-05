@@ -168,9 +168,7 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
         expect(sanitized.items[0]).toEqual({ Material: 'TG11', OrderQuantity: 1, OrderQuantityUnit: 'EA', Plant: '1110' });
     });
 
-    // Known defect: app/fiori-app/webapp/modules/sd/sales-inquiry/service/SalesInquiryService.js:87-104 whitelist omits fields that
-    // srv/sd/sales-inquiry/service.cds:142-145 declares and SalesInquiryModel.buildPayload sends, so they never reach CAP.
-    test.failing('createSalesInquiry posts the incompletion fields the CAP InquiryHeader declares', async () => {
+    test('createSalesInquiry posts the incompletion fields the CAP InquiryHeader declares', async () => {
         mockODataClient.post.mockResolvedValueOnce({ value: '1000529' });
 
         await SalesInquiryService.createSalesInquiry({

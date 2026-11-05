@@ -22,7 +22,7 @@ function fillAliasColumns(target, rows, select) {
     const columns = (target && ((target.projection && target.projection.columns) || (target.query && target.query.SELECT && target.query.SELECT.columns))) || [];
     const aliases = columns.filter((c) => c && c.as && Array.isArray(c.ref) && c.ref.length === 1 && c.ref[0] !== c.as).map((c) => [c.ref[0], c.as]);
     if (!aliases.length || !Array.isArray(rows)) return rows;
-    const wanted = Array.isArray(select) && select.length && !select.some((c) => c && c.ref && c.ref[0] === '*')
+    const wanted = Array.isArray(select) && select.length && !select.some((c) => c === '*' || (c && c.ref && c.ref[0] === '*'))
         ? new Set(select.map((c) => c && c.ref && c.ref[0]).filter(Boolean)) : null;
     for (const row of rows) {
         if (!row) continue;

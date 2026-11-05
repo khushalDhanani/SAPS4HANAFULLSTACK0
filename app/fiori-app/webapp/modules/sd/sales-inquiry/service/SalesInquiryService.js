@@ -100,7 +100,12 @@ sap.ui.define([
                 "BindingPeriodValidityStartDate",
                 "BindingPeriodValidityEndDate",
                 "TransactionCurrency",
-                "TotalNetAmount"
+                "TotalNetAmount",
+                // srv/sd/sales-inquiry/service.cds InquiryHeader. The server sends or refuses them; dropping them here would hide that.
+                "CustomerGroup2",
+                "PortOfLoading",
+                "PortOfDischarge",
+                "ContactPerson"
             ];
 
             var ALLOWED_ITEM_FIELDS = [

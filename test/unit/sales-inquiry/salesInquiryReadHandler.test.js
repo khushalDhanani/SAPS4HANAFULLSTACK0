@@ -37,13 +37,22 @@ describe('READ SalesInquiries by key', () => {
         expect(result.to_Items).toEqual([{ SalesInquiry: '100001', SalesInquiryItem: '10', NetPriceAmount: '5' }]);
     });
 
-    // Known defect: srv/sd/sales-inquiry/handlers/salesInquiry.handler.js:23-25 copies only the header and items, dropping the
-    // itemsUnavailable flag the adapter sets (SalesInquiryAdapter.js:830) and SalesInquiryDetail.view.xml:198 reads.
-    test.failing('tells the caller the items are unavailable when the factsheet items read fails', async () => {
-        connectSap(async () => { throw new Error('Item Service Timeout'); });
+    test('tells the caller the items are unavailable when the factsheet items read fails, and keeps the reason out', async () => {
+        connectSap(async () => { throw new Error('S/4HANA GET /sap/opu/odata/sap/SECRET_PATH failed'); });
 
         const result = await readHandler()(readRequest('100001'));
 
         expect(result.itemsUnavailable).toBe(true);
+        expect(result.to_Items).toEqual([]);
+        expect(JSON.stringify(result)).not.toContain('SECRET_PATH');
+    });
+
+    test('says the items are available when the read worked, even with no items', async () => {
+        connectSap(async () => []);
+
+        const result = await readHandler()(readRequest('100001'));
+
+        expect(result.itemsUnavailable).toBe(false);
+        expect(result.to_Items).toEqual([]);
     });
 });

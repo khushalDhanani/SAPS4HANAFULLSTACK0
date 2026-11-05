@@ -16,7 +16,17 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Admin dashboard user list (2026-11-04 18:12 IST) — PASS for requested display update; uncommitted, not deployed:** Removed Valid From/Valid To columns and fixed blank Full Name by falling back to `BAPI_USER_GET_DETAIL` data; the read-only browser flow passed. The earlier Lock/Unlock row actions remain untested as live SAP writes and need explicit authorization. See the Changes Log.
-- **Create forms block a second submit after a not-confirmed answer (2026-11-05 09:58 IST) — PARTIAL, uncommitted, not deployed, browser E2E passed READ-ONLY with mocked SAP answers:** Purchase order, sales inquiry, sales order, customer return, packing instruction, handling unit and delivery without reference turn Create off until the form is reset. Delivery from order refuses that order until the worklist is refreshed. This is a screen-level block only: the server does not enforce it, and a page reload clears it.
+- **Purchase order form: ZSER storage location (2026-11-05 10:41 IST) — PARTIAL, uncommitted, not deployed, browser E2E not run, not run against SAP:** The form no longer blocks a ZSER (service) order with no storage location; the server already accepted it.
+
+- **Sales inquiry form follows the BAPI route (2026-11-05 10:26 IST) — PARTIAL, uncommitted, not deployed, browser E2E passed READ-ONLY, not run against SAP for writes:** Customer Group 2 is now enabled and **mandatory** on the form. Port of Loading, Port of Discharge and Contact Person stay disabled with the "maintain in SAP" notice. No live inquiry has sent `CUST_GRP2` yet.
+
+- **Sales inquiry incompletion fields reach the server (2026-11-05 10:22 IST) — PARTIAL, uncommitted, not deployed, browser E2E not run, not run against SAP:** The screen no longer drops Customer Group 2, Port of Loading, Port of Discharge and Contact Person. The form now follows the BAPI route (see the 10:26 entry).
+
+- **Sales inquiry "items unavailable" flag (2026-11-05 10:18 IST) — PARTIAL, uncommitted, not deployed, browser E2E not run, not run against SAP:** When the line items can't be read, the detail response now says so, so the screen's warning can show instead of an empty table that looks like an inquiry with no items.
+
+- **Purchase order server rules (2026-11-05 10:14 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** The server now refuses, with 400, a document type without the Z prefix and a plant outside the type's allowed prefix. Before, only the screen checked these, so a direct API call could get past them.
+
+- **Create forms block a second submit after a not-confirmed answer (2026-11-05 09:58 IST) — PARTIAL, committed locally as `485c83dc`, not pushed, not deployed, browser E2E passed READ-ONLY with mocked SAP answers:** Purchase order, sales inquiry, sales order, customer return, packing instruction, handling unit and delivery without reference turn Create off until the form is reset. Delivery from order refuses that order until the worklist is refreshed. This is a screen-level block only: the server does not enforce it, and a page reload clears it.
 
 - **Unanswered writes and the sales order warning fixed (2026-11-05 09:48 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** A write that gets no answer from SAP now answers 504 with "NOT confirmed: it may have been saved. Check it in SAP before trying again", visible in production. The sales order warning now keeps its code and text in production, so the screen's protection against a second submit can fire. The next entry above blocks a second submit on the create screens.
 
@@ -145,7 +155,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Group 2 (2026-11-04): kept by the user's choice. `getVisualRack`, `checkATP`, `askAI`, `MaterialStorageLocations`, `MaterialBatches`, `DeliveryWithoutRefTypes` and `DeliveryWithoutRefShipToParties` have no screen; remove them only after access logs or owners rule out outside callers. `chat` is used by the Purchase Orders AI assistant and stays.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, check the deployed access logs for callers of the two removed paths. `npm run validate:mta` and the read-only `npm run test:e2e` are done.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
-- Test replacement (2026-11-04): the user answers the open decision: read-only `$metadata` checks for the assumed SAP shapes. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 10 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
+- Test replacement (2026-11-04): the user answers the open decision: read-only `$metadata` checks for the assumed SAP shapes. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 3 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Admin dashboard user list (2026-11-04): Removed the validity columns from the list only; validity data remains available in the user-detail dialog. Full Name now uses the detail response when the list response omits it. The shell browser E2E passed. SAP Lock/Unlock Tier C proof remains pending; do not run it without the user's written go for a specific test user/data scope. A refresh can issue up to 200 sequential `BAPI_USER_GET_DETAIL` reads; latency has not been separately measured.
@@ -193,6 +203,141 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-05 10:49 IST — Value help fills alias columns when no columns are selected: PARTIAL (uncommitted, not deployed, no browser or SAP run)
+
+**Why:** `fillAliasColumns` recognised only `{ ref: ['*'] }` as select-all, but CAP sends `columns: ['*']` when a request has no `$select`, so aliases such as `Material_Text` stayed empty. Recorded as a `test.failing` defect.
+
+**Changed:** `srv/handlers/valueHelp.handler.js`: also accepts `'*'`. The handler is shared by the purchase order, sales inquiry and sales order value helps.
+
+**Impact:** small. The screens read `MaterialName || Material_Text`, so a person saw the description already. A direct read with no `$select` now gets both names.
+
+**TEST DECISION:** TEST UPDATED: `it.failing` marker removed in `test/integration/purchase-order/valueHelps.test.js`. TEST ADDED: 3 cases (the alias filled the other way, no overwrite when SAP sent both, no alias when other columns were selected).
+
+**Executed validation:** `npm run test:coverage` exit 0, 188 suites, 3,051 passed, 0 failed. `test.failing` entries: 3. Mutations 3 of 3 caught; one first survived until a test was added. `npm run lint`, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3.
+
+**NOT RUN:** no browser or SAP run.
+
+**Next:** the 3 remaining `test.failing` defects.
+
+### 2026-11-05 10:44 IST — Purchase order clearErrors clears every item field: PARTIAL (uncommitted, not deployed, no effect on any screen)
+
+**Why:** `clearErrors` skipped `PurchaseOrderItemText`, `PurchaseOrderItemCategory` and `AccountAssignmentCategory`, which `validateForm` sets. Recorded as a `test.failing` defect.
+
+**Changed:** `PurchaseOrderValidator.js`: clears those three too.
+
+**Correction:** the agent told the user this could leave stale error marks on a corrected form. It cannot today: a search found no caller of `clearErrors` in `srv` or the webapp outside its own wrapper in `PurchaseOrderModel.js`. Only tests call it, and `validateForm` resets the same fields itself.
+
+**Finding, not changed:** `clearErrors` in `PurchaseOrderValidator.js`, `PurchaseOrderModel.js`, `SalesInquiryModel.js` and `SalesOrderModel.js` are unused-code candidates by text search. Dynamic use is not ruled out.
+
+**TEST DECISION:** TEST UPDATED: `it.failing.each` changed to `it.each` in `purchaseOrderValidator.test.js`.
+
+**Executed validation:** `npm run test:coverage` exit 0, 188 suites, 3,048 passed, 0 failed. `test.failing` entries: 4. Mutations 3 of 3 caught. `npm run lint`, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3.
+
+**NOT RUN:** a browser run, which has no use here because no screen calls this code. No SAP call.
+
+**Next:** the 4 remaining `test.failing` defects.
+
+### 2026-11-05 10:41 IST — Purchase order form applies storageLocationRequired: PARTIAL (uncommitted, not deployed, browser E2E not run, not run against SAP)
+
+**Why:** `validateForm` always required a storage location, while the config, `validateUI` and the server all exempt ZSER. So Create was blocked on a valid service order. Recorded as a `test.failing` defect.
+
+**Changed:** `PurchaseOrderValidator.js`: `validateForm` applies `storageLocationRequired`. ZSER is the only type that sets it to false.
+
+**TEST DECISION:** TEST UPDATED: the `it.failing` marker removed in `poTypeDynamicRules.test.js`. TEST ADDED: one case proving a type that needs a storage location still requires it.
+
+**Executed validation:** `npm run test:coverage` exit 0, 188 suites, 3,048 passed, 0 failed. `test.failing` entries: 5. Mutations 3 of 3 caught. `npm run lint`, ui5lint, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3.
+
+**NOT RUN / NOT VERIFIED:** no browser run; the browser suites do not drive a ZSER order. No SAP call, so whether SAP creates a ZSER order with no storage location is NOT verified.
+
+**Next:** the 5 remaining `test.failing` defects.
+
+### 2026-11-05 10:26 IST — Sales inquiry form follows the BAPI route: PARTIAL (uncommitted, not deployed, browser E2E not run, not run against SAP)
+
+**Why:** the form chose fields from `LORD_ODATA_ORDER_SRV` metadata, which lacks all four (`docs/sap-metadata-reference/LORD_ODATA_ORDER_SRV.edmx`, real capture), while inquiries are created through `BAPI_INQUIRY_CREATEFROMDATA2`. So Customer Group 2 stayed disabled though the BAPI route can carry it. The user approved aligning it.
+
+**Changed:**
+- `SalesInquiryAdapter.getInquiryCreationCapabilities`: answers from the creation route and no longer reads SAP. `UNSUPPORTED_HEADER_FIELDS` in `SalesInquiryRfcCreator.js` is the one list, so the form cannot require a field the server refuses.
+- No screen code changed: `SalesInquiryModel` already makes an accepted field mandatory and disables the others with a notice.
+- `test/e2e/sd/roundTripSalesInquiry.e2e.js`: fills Customer Group 2 with `SEA`, which `docs/sap-inquiry-service-extension-spec.md` gives as an example. Confirm it in TVV2 before a live run.
+
+**Consequence the user should know:** Customer Group 2 is now mandatory on every inquiry created from this form. This follows the existing rule that accepted fields are mandatory, and the spec records that SAP's incompletion procedure requires it. Plant was already accepted.
+
+**TEST DECISION:** TEST UPDATED: the capability tests in `salesOrderAdapter.test.js` now cover the route, and the metadata and caching checks moved to `_getLeanOrderFields`. TEST ADDED: 1 HTTP case in `salesInquiryIncompletionFields.test.js`.
+
+**Executed validation:** `npm run test:coverage` exit 0, 188 suites, 3,047 passed, 0 failed. `test.failing` entries: 6. Mutations 6 of 6 caught. `npm run lint`, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3.
+
+**NOT RUN / NOT VERIFIED:**
+- The browser suites, including the changed inquiry fill step. They need the user's go for a READ-ONLY run.
+- That SAP accepts `CUST_GRP2` through the BAPI: needs a TESTRUN, an RFC call needing the user's go.
+- A live inquiry create, which would be a write needing a written go per call.
+
+**Update, READ-ONLY run with the user's go, S4HANA_DEV client 220, `cap-e2e` on port 4010:** `TARGET_URL=http://localhost:4010 npm run test:e2e`: 17 of 17 suites passed, none skipped. This includes the purchase order rules, the items-unavailable flag code path through normal reads, and the changed inquiry fill step, with Customer Group 2 now required. The create actions were mocked and the write guard was on, so no write reached SAP. NOT RUN: `npm run test:e2e:sap`, including its dry-run payload check for `CustomerGroup2`; a forced items-read failure in the browser, so the warning strip is still unseen on screen; and any BAPI TESTRUN or live write.
+
+**Next:** the 6 remaining `test.failing` defects.
+
+### 2026-11-05 10:22 IST — Sales inquiry incompletion fields reach the server: PARTIAL (uncommitted, not deployed, browser E2E not run, not run against SAP)
+
+**Why:** the whitelist in `SalesInquiryService.js` dropped four fields that `service.cds` declares and `SalesInquiryModel.buildPayload` sends, so a value the user typed vanished with no message. Recorded as a `test.failing` defect.
+
+**Changed:**
+- `SalesInquiryService.js`: whitelist includes CustomerGroup2, PortOfLoading, PortOfDischarge and ContactPerson.
+- `salesInquiry.handler.js`: keeps the error's status. It always answered 500, which turned the server's 400 refusal into a 500 that production would hide.
+
+**Resulting behavior, with RFC doubled:** Customer Group 2 goes to the BAPI as `CUST_GRP2`. Port of Loading, Port of Discharge and Contact Person get 400 "cannot be sent to SAP by the inquiry BAPI route yet; nothing was created", from the existing rule in `SalesInquiryRfcCreator.js` ("refuse instead of dropping them silently").
+
+**TEST DECISION:** TEST UPDATED: `test.failing` marker removed in `salesInquiryCreationPayload.test.js`. TEST ADDED: `test/integration/salesInquiryIncompletionFields.test.js` (real CAP HTTP, RFC doubled).
+
+**Executed validation:** `npm run test:coverage` exit 0, 188 suites, 3,044 passed, 0 failed. `test.failing` entries: 6. Mutations 5 of 5 caught. `npm run lint`, ui5lint, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3.
+
+**NOT RUN / NOT VERIFIED:**
+- No SAP call, and no browser run for this change.
+- That SAP accepts `CUST_GRP2` this way is NOT verified; it needs a TESTRUN, which is an RFC call needing the user's go.
+
+**Open finding, not changed:** `getInquiryCreationCapabilities` reads `LORD_ODATA_ORDER_SRV` metadata, and the form enables and requires these fields from it, while inquiries are created through `BAPI_INQUIRY_CREATEFROMDATA2`.
+- If the metadata lacks a field, its input is disabled, even for Customer Group 2, which the BAPI route can carry. `docs/sap-inquiry-service-extension-spec.md` (2026-09) suggests that is the case today (INFERRED); not checked live.
+- If the metadata has Port of Loading, Port of Discharge or Contact Person, the form requires the field and the server refuses it, so that inquiry could not be created.
+
+**Next:** the user decides whether the form should follow the BAPI route.
+
+### 2026-11-05 10:18 IST — Sales inquiry detail reports unavailable line items: PARTIAL (uncommitted, not deployed, browser E2E not run, not run against SAP)
+
+**Why:** the adapter set `itemsUnavailable` when the items read failed, but `salesInquiry.handler.js` copied only the header and items. The detail screen therefore never showed its warning, and a failed read looked like an inquiry with no items. Recorded as a `test.failing` defect.
+
+**Changed:**
+- `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: passes the flag on.
+- `srv/sd/sales-inquiry/service.cds`: declares `itemsUnavailable` as a `null as` column, like the others in this projection, so the UI5 V4 model can read it. CAP guidance checked with cds-mcp, which also documents `virtual` for this.
+- `itemsUnavailableReason` is deliberately not sent, because it can hold SAP paths. It stays in the log, and the screen falls back to its own text.
+
+**TEST DECISION:** TEST UPDATED: `test.failing` marker removed in `salesInquiryReadHandler.test.js`. TEST ADDED: 1 more there and `test/integration/salesInquiryItemsUnavailable.test.js` (real CAP HTTP with the SAP services doubled).
+
+**Executed validation:** `npm run test:coverage` exit 0, 187 suites, 3,040 passed, 0 failed. `test.failing` entries: 7. Mutations 4 of 4 caught. `npm run lint`, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3.
+
+**NOT RUN / NOT VERIFIED:**
+- No browser run for this change, so the warning strip has not been seen on screen. It needs the user's go for a READ-ONLY run, and no suite yet forces this failure in the browser.
+- No SAP call. SAP's answers in the tests are hand-written.
+
+**Next:** the 7 remaining `test.failing` defects.
+
+### 2026-11-05 10:14 IST — Purchase order rules enforced on the server: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+**Why:** `header.PurchaseOrderType.prefix` and `poTypes.*.allowedPlantPrefix` in `config/schema/purchaseOrderRules.json` were applied only by the screen (`PurchaseOrderValidator.js:115`, `:666`), so a direct API call could bypass them. Two `test.failing` defects.
+
+**Changed:** `srv/mm/purchase-order/validation/purchaseOrder.validation.js`: both rules, read from the same config, answer 400 per the existing validation. Types with no plant prefix (`ZHSS`, `ZRTV`, `ZSTO`) are not limited.
+
+**TEST DECISION:** TEST UPDATED: 2 `it.failing` markers removed and new cases added in `test/unit/purchase-order/validation.test.js`. Fixtures `validPOPayload.json`, `createPurchaseOrder.test.js` and `payloadMapping.test.js` moved from type `NB`, which is now refused, to `ZTST`, keeping their other values and assertions. `ZTST` is a test value: a Z type with no rule in the config.
+
+**Executed validation:** `npm run test:coverage` exit 0, 186 suites, 3,036 passed, 0 failed. `test.failing` entries: 8. Mutations 7 of 7 caught. `npm run lint`, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3.
+
+**NOT RUN / NOT VERIFIED:**
+- No SAP call. The browser suites were not rerun; no screen changed, and the screen already applied both rules.
+- Whether any outside API caller sends a non-Z type or another plant is UNKNOWN. Those requests now get 400.
+
+**Known limit, not changed:** a Z type missing from the config, such as `ZTST`, still passes the server, because no rule exists for it.
+
+**Mistakes during the work:** a shell loop did not apply, and a too-broad replace changed three SAP response fixtures. Those were restored before validation.
+
+**Next:** the 8 remaining `test.failing` defects.
 
 ### 2026-11-05 09:58 IST — Create forms block a second submit after a not-confirmed answer: PARTIAL (uncommitted, not deployed, browser E2E not run)
 

@@ -16,7 +16,7 @@ const SVC = 'sales-inquiry';
 /** Header from the screen's own defaults function; sold-to must be maintained for that sales area (UI blocks it otherwise). */
 async function deriveData(read) {
     const caps = await read(`${SVC}/getInquiryCreationCapabilities()`);
-    const extra = ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'].filter((f) => caps[f]);
+    const extra = ['PortOfLoading', 'PortOfDischarge', 'ContactPerson'].filter((f) => caps[f]);
     if (extra.length) throw new Error(`SAP now requires ${extra.join(', ')} on the inquiry; extend this suite to derive them`);
     const d = await read(`${SVC}/getSalesInquiryDefaults()`);
     const area = { SalesOrganization: d.SalesOrganization, DistributionChannel: d.DistributionChannel, Division: d.OrganizationDivision };
@@ -37,7 +37,9 @@ async function deriveData(read) {
                 return {
                     header: {
                         SalesInquiryType: d.SalesInquiryType, SalesOrganization: d.SalesOrganization, DistributionChannel: d.DistributionChannel,
-                        OrganizationDivision: d.OrganizationDivision, SoldToParty: soldTo, TransactionCurrency: d.TransactionCurrency
+                        OrganizationDivision: d.OrganizationDivision, SoldToParty: soldTo, TransactionCurrency: d.TransactionCurrency,
+                        // 'By Sea' in docs/sap-inquiry-service-extension-spec.md; confirm it in TVV2 before a live run.
+                        CustomerGroup2: 'SEA'
                     },
                     item: { Material: m.Material, OrderQuantity: '1', OrderQuantityUnit: m.MaterialBaseUnit, Plant }
                 };
@@ -66,6 +68,7 @@ const SPEC = {
         await ui.enter('inDivision', h.OrganizationDivision);
         await ui.enter('inSoldToParty', h.SoldToParty);
         await ui.enter('inCurrency', h.TransactionCurrency);
+        await ui.enter('inCustomerGroup2', h.CustomerGroup2);
         const i = v.item;
         await ui.enterItem('inquiryItemsTable', 0, 'Material', i.Material);
         await ui.enterItem('inquiryItemsTable', 0, 'OrderQuantity', i.OrderQuantity);

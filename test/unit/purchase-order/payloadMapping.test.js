@@ -6,7 +6,7 @@ describe('Unit: Payload Mapping', () => {
     it('should map valid CAP header and item to S/4HANA OData structure', () => {
         const s4Payload = mapToS4Payload(validPayload.header, validPayload.items);
 
-        expect(s4Payload.PurchaseOrderType).toBe('NB');
+        expect(s4Payload.PurchaseOrderType).toBe('ZTST');
         expect(s4Payload.CompanyCode).toBe('1010');
         expect(s4Payload.PurchasingOrganization).toBe('1010');
         expect(s4Payload.PurchasingGroup).toBe('001');

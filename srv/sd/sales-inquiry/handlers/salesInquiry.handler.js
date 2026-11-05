@@ -23,6 +23,8 @@ function registerSalesInquiryHandlers(srv) {
                 if (doc) {
                     const header = { ...(doc.header || doc) };
                     header.to_Items = doc.items || [];
+                    // The reason stays in the log: it can hold SAP paths, and the screen has its own text.
+                    header.itemsUnavailable = Boolean(doc.itemsUnavailable);
                     return header;
                 }
                 return req.error(404, `Sales Inquiry ${sKey} not found`);
@@ -81,7 +83,7 @@ function registerSalesInquiryHandlers(srv) {
                 req.error(error.status || 502, error.message);
                 return;
             }
-            req.error(500, `Failed to create Sales Inquiry: ${error.message}`);
+            req.error(error.status || 500, `Failed to create Sales Inquiry: ${error.message}`);
         }
     });
 

@@ -606,25 +606,37 @@ describe('Unit: Sales Order Adapter Integration', () => {
             require('path').resolve(__dirname, '../../../docs/sap-metadata-reference/LORD_ODATA_ORDER_SRV.edmx'), 'utf8');
         const options = (executeHttpRequest) => ({ destination: { url: 'http://sap.mock' }, executeHttpRequest });
 
-        test('capabilities from the captured metadata: Plant on Item is accepted, the Header extension fields are not', async () => {
-            const caps = await adapter.getInquiryCreationCapabilities(options(jest.fn().mockResolvedValue({ data: lordMetadata })));
+        test('capabilities follow the BAPI that creates inquiries, not this metadata, and read nothing from SAP', async () => {
+            const mockExecute = jest.fn();
 
-            expect(caps.service).toBe('LORD_ODATA_ORDER_SRV');
-            expect(caps.Plant).toBe(true);
-            expect(caps.CustomerGroup2).toBe(false);
-            expect(caps.PortOfLoading).toBe(false);
-            expect(caps.PortOfDischarge).toBe(false);
-            expect(caps.ContactPerson).toBe(false);
+            const caps = await adapter.getInquiryCreationCapabilities(options(mockExecute));
+
+            expect(caps).toEqual({ service: 'BAPI_INQUIRY_CREATEFROMDATA2', Plant: true, CustomerGroup2: true, PortOfLoading: false, PortOfDischarge: false, ContactPerson: false });
+            expect(mockExecute).not.toHaveBeenCalled();
         });
 
-        test('capabilities report a Header property as accepted once the service exposes it', async () => {
+        test('every field the BAPI route refuses is reported as not accepted, so the form cannot require it', async () => {
+            const { UNSUPPORTED_HEADER_FIELDS } = require('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryRfcCreator');
+            const caps = await adapter.getInquiryCreationCapabilities();
+
+            for (const field of UNSUPPORTED_HEADER_FIELDS) expect(caps[field]).toBe(false);
+        });
+
+        test('the captured metadata: Plant on Item is accepted, the Header extension fields are not', async () => {
+            const fields = await adapter._getLeanOrderFields({ url: 'http://sap.mock' }, jest.fn().mockResolvedValue({ data: lordMetadata }));
+
+            expect(fields.item.has('Plant')).toBe(true);
+            for (const field of ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson']) expect(fields.header.has(field)).toBe(false);
+        });
+
+        test('a Header property is accepted once the service exposes it', async () => {
             const extended = '<EntityType Name="Header"><Property Name="ContactPerson"/></EntityType><EntityType Name="Item"></EntityType>';
 
-            const caps = await adapter.getInquiryCreationCapabilities(options(jest.fn().mockResolvedValue({ data: extended })));
+            const fields = await adapter._getLeanOrderFields({ url: 'http://sap.mock' }, jest.fn().mockResolvedValue({ data: extended }));
 
-            expect(caps.ContactPerson).toBe(true);
-            expect(caps.PortOfLoading).toBe(false);
-            expect(caps.Plant).toBe(false);
+            expect(fields.header.has('ContactPerson')).toBe(true);
+            expect(fields.header.has('PortOfLoading')).toBe(false);
+            expect(fields.item.has('Plant')).toBe(false);
         });
 
         test('a failed metadata read reports nothing as accepted and is retried on the next call', async () => {
@@ -632,19 +644,19 @@ describe('Unit: Sales Order Adapter Integration', () => {
                 .mockRejectedValueOnce(new Error('metadata 503'))
                 .mockResolvedValueOnce({ data: lordMetadata });
 
-            const first = await adapter.getInquiryCreationCapabilities(options(mockExecute));
-            const second = await adapter.getInquiryCreationCapabilities(options(mockExecute));
+            const first = await adapter._getLeanOrderFields({ url: 'http://sap.mock' }, mockExecute);
+            const second = await adapter._getLeanOrderFields({ url: 'http://sap.mock' }, mockExecute);
 
-            expect(first.Plant).toBe(false);
-            expect(second.Plant).toBe(true);
+            expect(first.item.has('Plant')).toBe(false);
+            expect(second.item.has('Plant')).toBe(true);
             expect(mockExecute).toHaveBeenCalledTimes(2);
         });
 
         test('successful metadata is read once and cached', async () => {
             const mockExecute = jest.fn().mockResolvedValue({ data: lordMetadata });
 
-            await adapter.getInquiryCreationCapabilities(options(mockExecute));
-            await adapter.getInquiryCreationCapabilities(options(mockExecute));
+            await adapter._getLeanOrderFields({ url: 'http://sap.mock' }, mockExecute);
+            await adapter._getLeanOrderFields({ url: 'http://sap.mock' }, mockExecute);
 
             expect(mockExecute).toHaveBeenCalledTimes(1);
             expect(mockExecute.mock.calls[0][1].url).toBe('/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV/$metadata');

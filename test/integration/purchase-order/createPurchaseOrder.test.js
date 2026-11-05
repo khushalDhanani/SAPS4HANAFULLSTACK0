@@ -56,7 +56,7 @@ describe('Integration: Create Purchase Order Action', () => {
             expect(s4Requests[0].method).toBe('post');
             expect(s4Requests[0].url).toBe('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchaseOrderTP');
             expect(s4Requests[0].data).toEqual({
-                PurchaseOrderType: 'NB',
+                PurchaseOrderType: 'ZTST',
                 CompanyCode: '1010',
                 PurchasingOrganization: '1010',
                 PurchasingGroup: '001',
@@ -163,7 +163,7 @@ describe('Integration: Create Purchase Order Action', () => {
     it('should reject with 400 Bad Request when payload is missing required header fields', async () => {
         const invalidPayload = {
             header: {
-                PurchaseOrderType: 'NB'
+                PurchaseOrderType: 'ZTST'
                 // Missing CompanyCode, PurchasingOrganization, PurchasingGroup, Supplier, etc.
             },
             items: validPayload.items

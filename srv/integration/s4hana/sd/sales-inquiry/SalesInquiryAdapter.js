@@ -2,7 +2,7 @@ const cds = require('@sap/cds');
 const LOG = require('../../../../common/logger')('sales-inquiry-adapter');
 const { S4HttpClient, unansweredWrite } = require('../../S4HttpClient');
 const { RfcClient } = require('../../RfcClient');
-const { SalesInquiryRfcCreator } = require('./SalesInquiryRfcCreator');
+const { SalesInquiryRfcCreator, BAPI: INQUIRY_BAPI, UNSUPPORTED_HEADER_FIELDS } = require('./SalesInquiryRfcCreator');
 const s4Config = require('../../s4Config');
 const businessConfigResolver = require('../../../../common/BusinessConfigResolver');
 const TtlCache = require('../../../../common/TtlCache');
@@ -2015,16 +2015,12 @@ class SalesInquiryAdapter {
   }
 
   /**
-   * Reports which extension fields the SAP inquiry creation service can accept right now.
+   * Reports which extension fields the inquiry creation route (the BAPI, see createSalesInquiryViaRfc) can carry.
    * The UI marks accepted fields as required and tells the user to maintain the others directly in SAP.
    */
-  async getInquiryCreationCapabilities(options = {}) {
-    const destination = options.destination || await this._getDestination(options);
-    const executeFn = options.executeHttpRequest || this.client._execute;
-    const fields = await this._getLeanOrderFields(destination, executeFn);
-    const caps = { service: 'LORD_ODATA_ORDER_SRV' };
-    for (const f of INQUIRY_EXTENSION_FIELDS) caps[f] = fields.header.has(f);
-    caps.Plant = fields.item.has('Plant');
+  async getInquiryCreationCapabilities() {
+    const caps = { service: INQUIRY_BAPI, Plant: true };
+    for (const f of ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson']) caps[f] = !UNSUPPORTED_HEADER_FIELDS.includes(f);
     return caps;
   }
 

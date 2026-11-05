@@ -67,13 +67,36 @@ describe('Integration: Value Helps through CAP to the remote S/4 services', () =
         expect(data.value[0].Material_Text).toBe('Trading Goods');
     });
 
-    // Known defect: srv/handlers/valueHelp.handler.js:25 recognises only { ref: ['*'] } as "select all", but real CAP sends columns: ['*'] without $select, so the alias is not filled although the comment at :19 says all names are filled when the client selected none.
-    it.failing('should fill Material_Text from MaterialName when the client selects no columns', async () => {
+    it('should fill Material_Text from MaterialName when the client selects no columns', async () => {
         maintRows = [{ Material: 'TG11', Plant: '1010', MaterialName: 'Trading Goods' }];
 
         const { data } = await GET('/odata/v4/purchase-order/MaterialVH');
 
         expect(data.value[0].Material_Text).toBe('Trading Goods');
+    });
+
+    it('should fill MaterialName from Material_Text when SAP filled only the alias', async () => {
+        maintRows = [{ Material: 'TG11', Plant: '1010', Material_Text: 'Trading Goods' }];
+
+        const { data } = await GET('/odata/v4/purchase-order/MaterialVH');
+
+        expect(data.value[0].MaterialName).toBe('Trading Goods');
+    });
+
+    it('should not add the alias when the client selected other columns', async () => {
+        maintRows = [{ Material: 'TG11', Plant: '1010', MaterialName: 'Trading Goods' }];
+
+        const { data } = await GET('/odata/v4/purchase-order/MaterialVH?$select=Material,Plant,MaterialName');
+
+        expect(data.value[0].Material_Text).toBeUndefined();
+    });
+
+    it('should not overwrite a value SAP sent under both names', async () => {
+        maintRows = [{ Material: 'TG11', Plant: '1010', MaterialName: 'Name', Material_Text: 'Text' }];
+
+        const { data } = await GET('/odata/v4/purchase-order/MaterialVH');
+
+        expect(data.value[0]).toMatchObject({ MaterialName: 'Name', Material_Text: 'Text' });
     });
 
     it('should remove duplicate currencies from CurrencyVH', async () => {
