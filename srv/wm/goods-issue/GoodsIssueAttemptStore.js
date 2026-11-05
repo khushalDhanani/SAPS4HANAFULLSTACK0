@@ -174,6 +174,15 @@ class GoodsIssueAttemptStore {
       const newRef = `${ref}${generation}`;
       try {
         const row = await this.create({ ...data, ReferenceDocument: newRef });
+        // Different client IDs give different references, so the unique key cannot stop two claims at once.
+        // Written first, then read: if both see each other both step back, and neither can post.
+        // A row newer than the check above counts even if already finished, because that claim ran at the same time.
+        const rival = (await this._attemptsByRequestHash(data.RequestHash)).find((a) => a.ReferenceDocument !== newRef
+          && (OPEN_STATUSES.includes(a.Status) || !priors.some((prior) => prior.ID === a.ID)));
+        if (rival) {
+          await this.setStatus(newRef, 'rejected', { LastError: `Stepped back for open attempt ${rival.ReferenceDocument}; not sent to SAP.` });
+          return { created: false, row: rival };
+        }
         return { created: true, row };
       } catch (insertErr) {
         const raced = await this.getByReference(newRef); // concurrent re-claim took this generation
@@ -389,7 +398,8 @@ class GoodsIssueAttemptStore {
           LastError: `SAP created outbound delivery ${delivery.DeliveryNumber} instead of a material document; goods issue requires PGI of that delivery.`
         });
         summary.DeliveryCreated++;
-      } else if (ageOf(attempt) >= GoodsIssueAttemptStore.notPostedAgeMs()) {
+      } else if (!attempt.MaterialDocument && ageOf(attempt) >= GoodsIssueAttemptStore.notPostedAgeMs()) {
+        // A row holding a document number is never "not posted": SAP gave that number. reconfirmUnconfirmed resolves it.
         const finding = `No material document with reference ${ref} exists in S/4HANA ${Math.round(ageOf(attempt) / 60000)} min after the attempt: not posted.`;
         await this.setStatus(ref, 'not_posted', { LastError: finding });
         summary.NotPosted++;

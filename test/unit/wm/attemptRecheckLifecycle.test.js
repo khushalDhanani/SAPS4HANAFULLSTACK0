@@ -133,6 +133,20 @@ describe('Phase 3: Background Re-Check & Orphan Transaction Reconciliation', () 
       expect(row.Status).toBe('not_posted');
       expect(row.LastError).toMatch(/not posted/i);
     });
+
+    test('never marks an attempt not_posted when SAP gave it a document number', async () => {
+      const now = Date.now();
+      await attempts.create({ ReferenceDocument: 'HU-WITH-DOC-0', MovementType: '311', IssueQty: 1, createdAt: new Date(now).toISOString() });
+      await attempts.setStatus('HU-WITH-DOC-0', 'unconfirmed', { MaterialDocument: '4900012345', MaterialDocYear: '2026' });
+      jest.spyOn(GoodsIssueAdapter, 'findPostedGoodsIssueByReference').mockResolvedValue(null);
+      jest.spyOn(GoodsIssueAdapter, 'readBackDocument').mockResolvedValue({ Confirmed: false });
+      jest.spyOn(attempts, '_findDeliveryForAttempt').mockResolvedValue(null);
+
+      const summary = await attempts.recheck(GoodsIssueAdapter, now + 16 * MIN);
+
+      expect(summary.NotPosted).toBe(0);
+      expect((await attempts.getByReference('HU-WITH-DOC-0')).Status).toBe('unconfirmed');
+    });
   });
 
   // =========================================================================

@@ -245,7 +245,7 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
       expect(history[1].Status).toBe('sending');
     });
 
-    test('HuStockTransferAdapter: repeated call with same ClientAttemptId hits idempotency cache', async () => {
+    test('HuStockTransferAdapter: posts with the BAPI and leaves repeat protection to the attempt claim', async () => {
       const mockRfc = {
         readTable: jest.fn().mockImplementation(async (table) => {
           if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'HS01', XHUPF: '' }];
@@ -289,23 +289,13 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
         ReservationNo: '520311',
         ReservationItem: '0001',
         UnitNumber: '1030311',
-        TransferQty: 10,
-        ClientAttemptId: 'hu-idempotent-key-999'
+        TransferQty: 10
       };
 
-      // 1st execution: calls SAP BAPI
       const res1 = await adapter.executeHuStockTransfer(transferPayload);
       expect(res1.Success).toBe(true);
       expect(res1.MaterialDocument).toBe('5000000311');
       expect(mockRfc.call).toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.any(Object));
-
-      mockRfc.call.mockClear();
-
-      // 2nd execution with identical ClientAttemptId: returns from idempotency cache WITHOUT BAPI call
-      const res2 = await adapter.executeHuStockTransfer(transferPayload);
-      expect(res2.Success).toBe(true);
-      expect(res2.MaterialDocument).toBe('5000000311');
-      expect(mockRfc.call).not.toHaveBeenCalled();
     });
 
     test('HuStockTransferAdapter: executes BAPI rollback when SAP does not generate Material Document', async () => {

@@ -199,7 +199,7 @@
                                 icon="sap-icon://paper-plane"
                                 type="Emphasized"
                                 press=".onPostSelectedHus"
-                                enabled="{= !!${cockpitView>/selectionValidation/Valid} &amp;&amp; ${cockpitView>/selectedHus}.length > 0 }"
+                                enabled="{= !!${cockpitView>/selectionValidation/Valid} &amp;&amp; ${cockpitView>/selectedHus}.length > 0 &amp;&amp; !${cockpitView>/submitBlocked} }"
                                 class="sapUiTinyMarginBottom" />
                         </HBox>
                     </VBox>
@@ -219,7 +219,7 @@
                     icon="sap-icon://paper-plane"
                     type="Emphasized"
                     press=".onPostTransfer"
-                    enabled="{= !!${cockpitView>/validatedUnit/Valid} &amp;&amp; ${cockpitView>/transferQty} > 0 }"
+                    enabled="{= !!${cockpitView>/validatedUnit/Valid} &amp;&amp; ${cockpitView>/transferQty} > 0 &amp;&amp; !${cockpitView>/submitBlocked} }"
                     busy="{cockpitView>/busy}" />
             </OverflowToolbar>
         </footer>

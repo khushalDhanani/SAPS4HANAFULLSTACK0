@@ -215,7 +215,7 @@ describe('Integration: a SAP write that reading it back does not confirm (produc
             });
 
             expect(res.status).toBe(502);
-            expect(res.data.error.message).toBe('Stock transfer outcome is unconfirmed in SAP (timeout). Do not post again; check the material document list first.');
+            expect(res.data.error.message).toBe('Stock transfer outcome is NOT confirmed in SAP (timeout). Check it in SAP before trying again.');
         });
 
         it('handling unit whose read-back fails after the commit: shows the number and the warning', async () => {

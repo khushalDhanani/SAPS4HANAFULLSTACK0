@@ -563,36 +563,34 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       expect(mockRfc.readTable).toHaveBeenCalledWith('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], ["MBLNR = '4900012345'", "AND MJAHR = '2026'"], 10);
     });
 
-    it('returns cached result on idempotent retry without re-calling SAP', async () => {
+    it('sends the attempt reference and date in the BAPI header, because the recheck finds the document by them', async () => {
       mockRfc.readTable.mockImplementation((table) => {
         if (table === 'MATDOC') return Promise.resolve([{ MBLNR: '4900012345', MJAHR: '2026', BWART: '311' }]);
         return Promise.resolve([{ WERKS: '1120', LGORT: 'CS02', XHUPF: '' }]);
       });
       mockRfc.call.mockResolvedValue({ GOODSMVT_HEADRET: { MAT_DOC: '4900012345', DOC_YEAR: '2026' } });
 
-      const res1 = await adapter.executeHuStockTransfer({
-        ReservationNo: '10042',
-        ReservationItem: '1',
-        UnitNumber: '2000019371',
-        TransferQty: 50,
-        ClientAttemptId: 'idempotent-key-42'
+      await adapter.executeHuStockTransfer({
+        ReservationNo: '10042', ReservationItem: '1', UnitNumber: '2000019371', TransferQty: 50,
+        ReferenceDocument: 'HUABC1234567890', PostingDate: '2026-11-05'
       });
 
-      expect(res1.MaterialDocument).toBe('4900012345');
-      expect(mockRfc.call).toHaveBeenCalledTimes(2); // BAPI + COMMIT
+      const [, bapiInput] = mockRfc.call.mock.calls.find(([fm]) => fm === 'BAPI_GOODSMVT_CREATE');
+      expect(bapiInput.GOODSMVT_HEADER).toMatchObject({ REF_DOC_NO: 'HUABC1234567890', PSTNG_DATE: '20261105', DOC_DATE: '20261105' });
+    });
 
-      // Re-submit with same attempt ID
-      const res2 = await adapter.executeHuStockTransfer({
-        ReservationNo: '10042',
-        ReservationItem: '1',
-        UnitNumber: '2000019371',
-        TransferQty: 50,
-        ClientAttemptId: 'idempotent-key-42'
+    it('never answers from memory: a success is not replayed without SAP, repeats are refused by the attempt claim', async () => {
+      mockRfc.readTable.mockImplementation((table) => {
+        if (table === 'MATDOC') return Promise.resolve([{ MBLNR: '4900012345', MJAHR: '2026', BWART: '311' }]);
+        return Promise.resolve([{ WERKS: '1120', LGORT: 'CS02', XHUPF: '' }]);
       });
+      mockRfc.call.mockResolvedValue({ GOODSMVT_HEADRET: { MAT_DOC: '4900012345', DOC_YEAR: '2026' } });
+      const transfer = { ReservationNo: '10042', ReservationItem: '1', UnitNumber: '2000019371', TransferQty: 50 };
 
-      // No new RFC calls made
-      expect(mockRfc.call).toHaveBeenCalledTimes(2);
-      expect(res2.MaterialDocument).toBe('4900012345');
+      await adapter.executeHuStockTransfer(transfer);
+      await adapter.executeHuStockTransfer(transfer);
+
+      expect(mockRfc.call.mock.calls.filter(([fm]) => fm === 'BAPI_GOODSMVT_CREATE')).toHaveLength(2);
     });
 
     it('propagates the SAP BAPI rejection text with status 422', async () => {
@@ -635,7 +633,6 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
         status: 502, sapWriteAttempted: true, materialDocument: '4900012345', message: expect.stringMatching(/could not be read back/)
       });
       expect(mockRfc.readTable).toHaveBeenCalledWith('MSEG', expect.any(Array), expect.any(Array), 10);
-      expect(adapter._attemptCache.size).toBe(0);
     });
 
     it('reports an unconfirmed outcome when the read-back shows a different movement type', async () => {
@@ -687,7 +684,6 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status, message, $sanitize: false });
       expect(mockRfc.call).not.toHaveBeenCalled();
       expect(mockRfc.session).not.toHaveBeenCalled();
-      expect(adapter._attemptCache.size).toBe(0);
     });
 
     it('sends HUM_EXIDV / HUM_DATA_MOVE_TO rows with the DD03L-confirmed field names', async () => {
@@ -728,7 +724,6 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status, message });
       expect(mockRfc.call.mock.calls.map(([fm]) => fm)).toEqual(['HU_CREATE_GOODS_MOVEMENT']);
       expect(mockRfc.session).not.toHaveBeenCalled();
-      expect(adapter._attemptCache.size).toBe(0);
     });
 
     it('keeps the not-callable text visible in production', async () => {
@@ -755,7 +750,6 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 503, $sanitize: false, message: expect.stringContaining('Nothing was posted') });
       expect(mockRfc.call).not.toHaveBeenCalled();
       expect(mockRfc.session).not.toHaveBeenCalled();
-      expect(adapter._attemptCache.size).toBe(0);
     });
 
     it('requires explicit plant and warehouse without querying default locations', async () => {

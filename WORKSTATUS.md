@@ -2843,3 +2843,31 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **NOT VERIFIED:** The lock monitor's own path: lock detection, `buildLockEmail`, and the notification record. Whether `LOCK_POLL_INTERVAL_MS` in `.env.local` is ignored remains INFERRED.
 - **Next action:** The user decides whether to test a real lock alert from the running monitor. Locking an SAP user for that test needs a written go for that call.
 - **FINAL STATUS:** PASS for test email delivery. PARTIAL for the lock monitor email feature.
+
+### 2026-11-05 14:40 IST — Whole-repo audit: findings only, no code changed
+
+- **Request:** Report what needs fixing, ranked, read-only.
+- **CHANGED:** No code. This entry only.
+- **TEST DECISION:** TEST NOT POSSIBLE for the findings themselves: nothing was fixed, and each fix needs its own test.
+- **TESTED:** `git diff --check` clean. `npm run lint`: 0 errors, 2 warnings (unused eslint-disable in `test/unit/controller/blockSubmitIfNotConfirmed.test.js:71`, `test/unit/helpers/realBlockSubmit.js:12`). UI5 lint: clean. `npm run scan:secrets`: 0 findings (HEAD only, it cannot see Git history). `npm run scan:dependencies`: 0 findings. `npm run validate:mta`: passed. Jest with SAP mocked: 193 suites, 3,238 passed, 0 failed, including 3 `failing` markers. `npm run test:e2e:sap-free`: 3 of 3 passed. `npx cds build --production` into a scratch folder outside the repo: completed. One local `getUserInfo` call to the running dev server, which makes no SAP call. Anonymous GitHub API reads of repository visibility and CI status.
+- **NOT RUN:** `npm run test:e2e`, `test:e2e:sap`, `check:connectivity`, `preflight:rfc`, `validate:sap:sandbox` (they contact SAP); `test:coverage`; UI5 build and `build:mta` (they write build output). No SAP call, deployment or email.
+- **Ranked findings (fuller report in the final message of this audit):**
+  1. CONFIRMED: the SAP password now in `.env.local` is in the history of the public `origin/feature01` (`2256822d`, `5f655727`). The Next Step at line 205 of this file is still open.
+  2. CONFIRMED: the HU transfer double-post guard does not work (`huStockTransfer.handler.js:148,157`, `GoodsIssueAttemptStore.js:174`, `HuStockTransferAdapter.js:1456,1573`, `HuStockTransferDetail.controller.js:462`).
+  3. CONFIRMED locally: the dev server accepts any password for the mocked Admin and listens on all interfaces (`package.json:79`). Reach from another machine is INFERRED.
+  4. CONFIRMED: the production build omits `config/schema/purchaseOrderRules.json`, which `purchaseOrder.validation.js:7` requires.
+  5. CONFIRMED: `mta.yaml` and the extensions do not set the destination names `productionGuard.js` requires. INFERRED: node-rfc will not work on BTP.
+  6. Goods receipt with no delivery skips the plant check and the claim (`goodsReceipt.handler.js:24,42`).
+  7. RFC table-read injection (`GoodsReceiptAdapter.js:541,576,1358`, `SalesInquiryAdapter.js:2207`).
+  8. Commit-then-read failures answer as plain failures (`SalesInquiryAdapter.js:1966`, `CustomerInvoiceAdapter.js:248,291`).
+  9. Other write screens can resend after no answer (`goodsReceipt.handler.js:62`).
+  10. Success without read-back (`SalesInquiryAdapter.js:1617`, `UserManagementAdapter.js:334,351`, `ODataClient.js:267`).
+  11. Values dropped or invented (`CustomerReturnAdapter.js:526`, `DeliveryNoRefAdapter.js:116-121`).
+  12. Plant scope gaps; 13. lock email can name the wrong person (`lockNotifier.js:105`); 14. approuter gaps (`app/router/xs-app.json`); 15. AI prompt set by the client (`srv/ai/service.js:46`); 16. posting recheck runs on every instance; 17. Sub-User Master stops at 200 of 278 users; 18. label data wrong or missing; 19. UTC dates and float quantities; 20. RFC trace files keep growing (`RfcClient.js:99`).
+- **Answered:** `LOCK_POLL_INTERVAL_MS` is ignored. `lockNotifier.js:39` reads only `LOCK_POLL_INTERVAL_SEC`, so the monitor uses its 60-second default.
+- **Stale entries found, not rewritten here:** line 20 "uncommitted" (`ed0b3aac` is pushed); the "not pushed" lines (`origin/feature01` is at `ed0b3aac`, and only `57bbb677` is ahead); line 163 (`SMTP_PASS` is now quoted); line 165 "no lock tables" (they exist, with 278 snapshot rows and a monitor row with status ok); lines 22 and 82 on `S_USR_ADM` (superseded by line 21); lines 189-199 and 210-212 on removed screens and services.
+- **Observed:** the lock monitor is running on the local server on port 4004, so a real lock in SAP would now send a real email.
+- **Corrected reviewer claim:** production does get a database: `cds env` resolves `@cap-js/hana`, and the scratch build produced HDI output.
+- **NOT VERIFIED:** Whether SAP accepts the duplicate, injected or out-of-scope requests described. Whether the SAP host can be reached from the internet. BTP behaviour, because nothing was deployed. Parts of the warehouse, sales and UI code were read only along write, catch and auth paths.
+- **Next action:** The user changes the SAP password and makes the repository private, then chooses which findings to fix.
+- **FINAL STATUS:** PARTIAL. Audit delivered; no finding is fixed.

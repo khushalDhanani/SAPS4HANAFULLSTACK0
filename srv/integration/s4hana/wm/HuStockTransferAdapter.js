@@ -52,7 +52,6 @@ class HuStockTransferAdapter {
     this.businessConfigResolver = bcr || businessConfigResolver;
     this._injectedStorageTypeRules = storageTypeRules || null;
     this._storageTypeRules = new Map(); // plant|warehouse -> resolved rules
-    this._attemptCache = new Map(); // In-memory idempotency cache
   }
 
   /**
@@ -1444,7 +1443,8 @@ class HuStockTransferAdapter {
       UnitNumber,
       TransferQty,
       _IsFullUnit = true,
-      ClientAttemptId
+      ReferenceDocument,
+      PostingDate
     } = payload;
 
     if (!ReservationNo) throw httpError(400, 'Reservation number is required');
@@ -1452,14 +1452,7 @@ class HuStockTransferAdapter {
     const transferQtyNum = parseFloat(TransferQty || 0);
     if (transferQtyNum <= 0) throw httpError(400, 'Transfer quantity must be greater than 0');
 
-    // 1. Idempotency Check
-    const attemptKey = ClientAttemptId || `${ReservationNo}-${ReservationItem}-${UnitNumber}-${transferQtyNum}`;
-    if (this._attemptCache.has(attemptKey)) {
-      LOG.info(`Idempotent hit for attempt key ${attemptKey}; returning cached result.`);
-      return this._attemptCache.get(attemptKey);
-    }
-
-    // 2. Authoritative Unit Re-Validation
+    // 1. Authoritative Unit Re-Validation (repeats are refused by the attempt claim in the handler)
     const v = await this.validateUnit(ReservationNo, ReservationItem, UnitNumber);
     if (!v.Valid) {
       throw httpError(422, v.StatusMessage);
@@ -1570,10 +1563,13 @@ class HuStockTransferAdapter {
       const headerText = `ST:${this._unpad(ReservationNo)} ${UnitNumber}`.slice(0, 25);
       const isComplete = transferQtyNum >= cockpit.OpenQty;
 
+      // The attempt's date and reference, because the recheck looks the document up in SAP by exactly these two.
+      const postingDate = (PostingDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
       const gmHeader = {
-        PSTNG_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-        DOC_DATE: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-        HEADER_TXT: headerText
+        PSTNG_DATE: postingDate,
+        DOC_DATE: postingDate,
+        HEADER_TXT: headerText,
+        ...(ReferenceDocument ? { REF_DOC_NO: ReferenceDocument } : {})
       };
 
       const gmCode = { GM_CODE: '06' };
@@ -1625,7 +1621,7 @@ class HuStockTransferAdapter {
     const updatedOpenQty = Math.max(0, cockpit.OpenQty - transferQtyNum);
     const isFinal = updatedOpenQty === 0;
 
-    const result = {
+    return {
       Success: true,
       ReservationNo: this._unpad(ReservationNo),
       ReservationItem: this._unpad(ReservationItem),
@@ -1642,11 +1638,6 @@ class HuStockTransferAdapter {
       RequesterAlertSent: false, // no notification is sent by this service
       Message: `Stock transfer posted and read back from SAP. Material Document: ${matDoc} / ${matDocYear}.`
     };
-
-    // Store in idempotency cache
-    this._attemptCache.set(attemptKey, result);
-
-    return result;
   }
 
   /** Refuses (501) before any call when TFDIR does not mark the function remote-enabled (FMODE 'R'); nothing is posted. */
@@ -1669,7 +1660,7 @@ class HuStockTransferAdapter {
 
   /** Error for a write whose SAP outcome is unknown; the handler records it as 'unconfirmed', not 'rejected'. */
   _unconfirmedError(detail, matDoc = '', matDocYear = '') {
-    const err = httpError(502, `Stock transfer outcome is unconfirmed in SAP (${detail}). Do not post again; check the material document list first.`);
+    const err = httpError(502, `Stock transfer outcome is NOT confirmed in SAP (${detail}). Check it in SAP before trying again.`);
     err.sapWriteAttempted = true;
     err.$sanitize = false; // see srv/common/visibleError.js
     if (matDoc) {

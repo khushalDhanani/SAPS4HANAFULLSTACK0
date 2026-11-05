@@ -111,7 +111,9 @@ const HuStockTransferHandler = {
 
       await assertReservationInScope(req, resv, item);
 
-      const keyHash = crypto.createHash('sha1').update(`311|HU|${resv}|${item}|${unit}|${qty}`).digest('hex');
+      // Zero padding or case must not make the same unit look like a different request.
+      const idOf = (value) => value.toUpperCase().replace(/^0+/, '');
+      const keyHash = crypto.createHash('sha1').update(`311|HU|${idOf(resv)}|${idOf(item)}|${idOf(unit)}|${qty}`).digest('hex');
       const baseRef = clientAttemptId
         ? `HU${crypto.createHash('sha1').update(clientAttemptId).digest('hex').slice(0, 12)}`.toUpperCase()
         : `HU${keyHash.slice(0, 12)}`.toUpperCase();
@@ -127,7 +129,12 @@ const HuStockTransferHandler = {
           IssueQty: qty,
           User: req.user?.id || 'anonymous',
           PostingDate: new Date().toISOString().slice(0, 10)
-        }, { reclaimableStatuses: ['rejected', 'not_posted'] });
+        }, {
+          // shortcut: not_posted stays blocked until a live 311 proves the recheck finds REF_DOC_NO (the HUM path sends none); add it back then.
+          reclaimableStatuses: ['rejected'],
+          // After a confirmed posting, a new ClientAttemptId is a further transfer and the same one is a repeat.
+          isReclaimable: (latest) => latest.Status === 'posted' && !String(latest.ReferenceDocument).startsWith(baseRef)
+        });
       } catch (attemptErr) {
         LOG.error('HU transfer posting attempt could not be recorded; SAP write blocked:', attemptErr.message || attemptErr);
         const err = new Error(`HU stock transfer was NOT sent to SAP: production transaction logging is unavailable (${attemptErr.message || 'database unavailable'}). Check the document list before retrying.`);
@@ -137,27 +144,34 @@ const HuStockTransferHandler = {
       }
 
       if (!claim.created) {
-        const err = new Error(`An HU stock transfer for reservation ${resv}/${item} unit ${unit} is already in progress.`);
+        const { Status, MaterialDocument, MaterialDocYear } = claim.row;
+        const target = `reservation ${resv}/${item} unit ${unit}`;
+        const document = MaterialDocument ? ` (material document ${MaterialDocument}/${MaterialDocYear})` : '';
+        const err = new Error(Status === 'posted'
+          ? `The HU stock transfer for ${target} was already posted${document}. Nothing was sent to SAP.`
+          : `The last HU stock transfer for ${target} is NOT confirmed${document}. Check it in SAP before trying again. Nothing was sent to SAP for this request.`);
         err.status = 409;
         throw err;
       }
 
+      // The claimed row's reference carries a generation suffix, so it is not baseRef.
+      const reference = claim.row.ReferenceDocument;
       try {
-        const result = await adapter.executeHuStockTransfer(data);
+        const result = await adapter.executeHuStockTransfer({ ...data, ReferenceDocument: reference, PostingDate: claim.row.PostingDate });
         if (result && result.MaterialDocument) {
-          await GoodsIssueAttemptStore.setStatus(baseRef, 'posted', {
+          await GoodsIssueAttemptStore.setStatus(reference, 'posted', {
             MaterialDocument: result.MaterialDocument,
             MaterialDocYear: result.MaterialDocYear || String(new Date().getFullYear())
-          }).catch((e) => LOG.error(`Failed to record posted status for ${baseRef}:`, e));
+          }).catch((e) => LOG.error(`Failed to record posted status for ${reference}:`, e));
         }
         return result;
       } catch (err) {
         // A write whose SAP outcome is unknown stays 'unconfirmed' so recheck can find the document; it is not a rejection.
         const status = err.sapWriteAttempted ? 'unconfirmed' : 'rejected';
-        await GoodsIssueAttemptStore.setStatus(baseRef, status, {
+        await GoodsIssueAttemptStore.setStatus(reference, status, {
           LastError: err.message || '',
           ...(err.materialDocument ? { MaterialDocument: err.materialDocument, MaterialDocYear: err.materialDocYear || '' } : {})
-        }).catch((e) => LOG.error(`Failed to record ${status} status for ${baseRef}:`, e));
+        }).catch((e) => LOG.error(`Failed to record ${status} status for ${reference}:`, e));
         LOG.error('executeHuStockTransfer failed:', err.message);
         throw err;
       }

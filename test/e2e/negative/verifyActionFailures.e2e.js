@@ -10,7 +10,7 @@
  * screen like the flow's round-trip suite up to and including the click that triggers the single write.
  * Reload while pending: for the flows whose write goes through interceptAction the answer is held back, the page is
  * reloaded, and the suite expects no second write, no success and no stuck busy indicator.
- * Open (docs/e2e-coverage-matrix.md): HU stock transfer (its dry-run fails on missing config), double click while pending.
+ * Open (docs/e2e-coverage-matrix.md): double click while pending.
  */
 
 const { openSession, waitForRoute } = require('../support/screenCheck');
@@ -20,6 +20,7 @@ const ordersDue = require('../le/roundTripOrdersDue.e2e');
 const goodsReceipt = require('../wm/roundTripGoodsReceipt.e2e');
 const packing = require('../wm/roundTripPackingInstruction.e2e');
 const huRt = require('../wm/roundTripHandlingUnit.e2e');
+const huTransfer = require('../wm/roundTripHuTransfer.e2e');
 const kit = require('../wm/wmRoundTripKit');
 
 const JSON_TYPE = 'application/json;odata.metadata=minimal';
@@ -38,6 +39,7 @@ const FAILURES = [
 const SUBMIT_BUTTON = {
     'Packing instruction: create': 'piCreateSubmit',
     'Handling unit: create': 'huCreateSubmit',
+    'HU stock transfer: post': 'btnPostTransfer',
     'Orders due: createDelivery': 'btnConfirmDelivery',
     'Orders due: deliveryWithoutRef': 'btnConfirmDeliveryNoRef'
 };
@@ -103,6 +105,24 @@ const ordersDueFlows = Object.keys(ordersDue.SUBCASES).map((name) => {
     };
 });
 
+/** HU stock transfer: no HU in the current SAP data validates, so the two reads that enable Post are mocked for a synthetic reservation and unit. */
+const MOCK_HU = { reservationNo: '9000001', reservationItem: '1', unitNumber: '9000000001' };
+const MOCK_HU_READS = [
+    [/getCockpitDetail\(/, {
+        ReservationNo: MOCK_HU.reservationNo, ReservationItem: MOCK_HU.reservationItem, Plant: '1120', Material: 'DRYRUNMAT', StorageLocation: 'CS02',
+        ReceivingStorageLocation: 'CS01', BaseUnit: 'NOS', OpenQty: 5, TransferPath: 'B', OversizeHuSelectionBehavior: 'BLOCK'
+    }],
+    [/validateUnit\(/, {
+        Valid: true, UnitNumber: MOCK_HU.unitNumber, UnitType: 'Handling Unit (HU)', AvailableQuantity: 5, BaseUnit: 'NOS', StatusState: 'Success', StatusMessage: 'Valid',
+        Blockers: [], BlockerDetails: [], Warnings: [], WarningDetails: []
+    }]
+];
+const mockHuReads = (page) => page.route((url) => url.pathname.startsWith(huTransfer.ACTION.slice(0, huTransfer.ACTION.lastIndexOf('/'))), (route) => {
+    const read = route.request().method() === 'GET' && MOCK_HU_READS.find(([re]) => re.test(decodeURIComponent(new URL(route.request().url()).pathname)));
+    if (!read) return route.fallback();
+    return route.fulfill({ status: 200, contentType: JSON_TYPE, headers: { 'OData-Version': '4.0' }, body: JSON.stringify(read[1]) });
+});
+
 const WAIT_MS = 8000; // the mocked failure answers at once; do not wait the round-trip suites' 2-3 minutes for a success toast
 const split = (action) => ({ service: action.slice(0, action.lastIndexOf('/')), action: action.slice(action.lastIndexOf('/') + 1) });
 
@@ -111,6 +131,12 @@ const split = (action) => ({ service: action.slice(0, action.lastIndexOf('/')), 
  * after a failed write into { type, text } the way rt.resultBox does for MessageBox-based screens.
  */
 const wmFlows = [
+    {
+        label: 'HU stock transfer: post', ...split(huTransfer.ACTION), respond: huTransfer.stubResult, hash: 'wm/hu-stock-transfer',
+        before: (session) => mockHuReads(session.page),
+        run: (session) => huTransfer.driveUi(session, { ...MOCK_HU, transferQty: 1, waitMs: WAIT_MS }),
+        observe: async (session, ui) => ({ type: ui.success ? 'success' : 'error', text: ui.dialog })
+    },
     {
         label: 'Goods receipt: post with storage unit', ...split(goodsReceipt.ACTION), respond: goodsReceipt.stubResult, hash: 'wm/goods-receipt',
         run: (session) => goodsReceipt.driveUi(session, { waitMs: WAIT_MS }),
@@ -409,7 +435,7 @@ if (require.main === module) {
 
 // Kit flows share the kit's module-level failure mode, so they stay together and serial; the others run in their own shard
 const SHARDS = [
-    { name: 'Action failures: invoice, orders due, goods receipt, packing, quarantine (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Quarantine labels)' },
+    { name: 'Action failures: invoice, orders due, goods receipt, HU transfer, packing, quarantine (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Quarantine labels|HU stock transfer)' },
     { name: 'Action failures: handling unit (mocked)', only: '^Handling unit' }
 ];
 

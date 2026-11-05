@@ -26,7 +26,8 @@ sap.ui.define([
                 selectionSummary: "",
                 statusMessage: "",
                 statusStateType: "None",
-                storageBins: []
+                storageBins: [],
+                submitBlocked: false
             });
             this.setModel(oViewModel, "cockpitView");
 
@@ -49,6 +50,7 @@ sap.ui.define([
             oViewModel.setProperty("/selectionSummary", "");
             oViewModel.setProperty("/statusMessage", "");
             oViewModel.setProperty("/statusStateType", "None");
+            oViewModel.setProperty("/submitBlocked", false);
 
             this.loadCockpitDetail(sRes, sItem);
 
@@ -432,6 +434,9 @@ sap.ui.define([
             var oCockpit = oViewModel.getProperty("/cockpit") || {};
             var that = this;
 
+            if (oViewModel.getProperty("/submitBlocked")) {
+                return;
+            }
             // Only a selection that the server validated read-only (and unchanged since) can be posted.
             if (!aSelected.length || !oValidation || !oValidation.Valid) {
                 MessageBox.error(this.getText("huSelectionValidateBeforePost", null, "Validate the selection before posting."));
@@ -451,15 +456,26 @@ sap.ui.define([
             });
         },
 
+        /** The same ID until SAP's answer is known, so that the server sees a resend after no answer as a repeat, not a new transfer. */
+        _attemptIdFor: function (sPrefix, sKey) {
+            if (!this._oAttempt || this._oAttempt.key !== sKey) {
+                this._oAttempt = { key: sKey, id: sPrefix + Date.now() + "-" + Math.random().toString(36).slice(2, 8) };
+            }
+            return this._oAttempt.id;
+        },
+
         _executePostSelection: function (aSelected) {
             var oViewModel = this.getModel("cockpitView");
             var that = this;
+            var aSelections = aSelected.map(function (item) { return { UnitNumber: item.UnitNumber, TransferQty: Number(item.TransferQty) }; });
+            var sReservationNo = oViewModel.getProperty("/reservationNo");
+            var sReservationItem = oViewModel.getProperty("/reservationItem");
             oViewModel.setProperty("/busy", true);
             ODataClient.post("/odata/v4/hu-stock-transfer/executeHuStockTransferSelection", {
-                ReservationNo: oViewModel.getProperty("/reservationNo"),
-                ReservationItem: oViewModel.getProperty("/reservationItem"),
-                Selections: aSelected.map(function (item) { return { UnitNumber: item.UnitNumber, TransferQty: Number(item.TransferQty) }; }),
-                ClientAttemptId: "mvt311s-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8)
+                ReservationNo: sReservationNo,
+                ReservationItem: sReservationItem,
+                Selections: aSelections,
+                ClientAttemptId: this._attemptIdFor("mvt311s-", JSON.stringify([sReservationNo, sReservationItem, aSelections]))
             }).then(function (data) {
                 oViewModel.setProperty("/busy", false);
                 var oResult = (data && data.value) || data || {};
@@ -468,19 +484,25 @@ sap.ui.define([
                 }).join("\n");
                 oViewModel.setProperty("/selectionValidation", null);
                 if (oResult.Success) {
+                    that._oAttempt = null;
                     MessageBox.success((oResult.Message || "") + "\n" + sLines, {
                         title: that.getText("huSelectionPostedTitle", null, "Stock Transfers Posted"),
                         onClose: function () { that.getRouter().navTo("wmHuStockTransfer"); }
                     });
                 } else {
                     // Documents listed with a number are real SAP documents; do not post those HUs again.
-                    MessageBox.error((oResult.Message || "") + "\n" + sLines, { title: that.getText("huSelectionPostFailedTitle", null, "Posting stopped") });
-                    that.loadCockpitDetail(oViewModel.getProperty("/reservationNo"), oViewModel.getProperty("/reservationItem"));
+                    MessageBox.error((oResult.Message || "") + "\n" + (that.blockSubmitIfNotConfirmed(oViewModel, sLines) || sLines), { title: that.getText("huSelectionPostFailedTitle", null, "Posting stopped") });
+                    that.loadCockpitDetail(sReservationNo, sReservationItem);
                 }
             }).catch(function (err) {
                 oViewModel.setProperty("/busy", false);
-                MessageBox.error("Goods Movement Posting Failed:\n" + (err && err.message ? err.message : String(err)));
+                that._showPostError(oViewModel, err);
             });
+        },
+
+        _showPostError: function (oViewModel, err) {
+            var sMessage = err && err.message ? err.message : String(err);
+            MessageBox.error(this.blockSubmitIfNotConfirmed(oViewModel, sMessage) || ("Goods Movement Posting Failed:\n" + sMessage));
         },
 
         onPostTransfer: function () {
@@ -494,6 +516,9 @@ sap.ui.define([
             var oValidated = oViewModel.getProperty("/validatedUnit");
             var that = this;
 
+            if (oViewModel.getProperty("/submitBlocked")) {
+                return;
+            }
             // Post only the unit that was validated; a re-typed input must be validated again first.
             if (!sUnit || !oValidated || !oValidated.Valid || String(sUnit).trim() !== String(oValidated.UnitNumber)) {
                 MessageBox.error("Please scan and validate a unit first");
@@ -534,16 +559,13 @@ sap.ui.define([
             oViewModel.setProperty("/busy", true);
             var that = this;
 
-            // Generate unique client attempt ID for idempotency protection
-            var sAttemptId = "mvt311-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-
             var oPayload = {
                 ReservationNo: sRes,
                 ReservationItem: sItem,
                 UnitNumber: sUnit,
                 TransferQty: nQty,
                 IsFullUnit: bFull,
-                ClientAttemptId: sAttemptId
+                ClientAttemptId: this._attemptIdFor("mvt311-", JSON.stringify([sRes, sItem, sUnit, nQty]))
             };
 
             ODataClient.post("/odata/v4/hu-stock-transfer/executeHuStockTransfer", oPayload)
@@ -553,6 +575,7 @@ sap.ui.define([
                     var sDoc = (oData && oData.MaterialDocument) || "";
                     var sYear = (oData && oData.MaterialDocYear) || "";
 
+                    that._oAttempt = null;
                     MessageBox.success("Stock transfer posted and read back from SAP.\nMaterial Document: " + sDoc + " / " + sYear, {
                         title: "Stock Transfer Posted",
                         onClose: function () {
@@ -562,7 +585,7 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     oViewModel.setProperty("/busy", false);
-                    MessageBox.error("Goods Movement Posting Failed:\n" + (err && err.message ? err.message : String(err)));
+                    that._showPostError(oViewModel, err);
                 });
         },
 

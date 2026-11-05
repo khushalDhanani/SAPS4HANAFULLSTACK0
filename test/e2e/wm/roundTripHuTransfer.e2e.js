@@ -128,7 +128,7 @@ async function driveUi(session, data) {
     await page.click('[id$="--btnPostTransfer"]');
     await page.locator('.sapMMessageBoxConfirm button, .sapMMessageBoxQuestion button', { hasText: 'OK' }).click();
     const box = page.locator(RESULT_BOX).first();
-    await box.waitFor({ state: 'visible', timeout: 180000 });
+    await box.waitFor({ state: 'visible', timeout: data.waitMs || 180000 });
     const cls = await box.getAttribute('class');
     return { cockpit, validated: true, success: /sapMMessageBoxSuccess/.test(cls), dialog: (await box.innerText()).trim() };
 }
@@ -230,4 +230,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { roundTripHuTransfer };
+module.exports = { roundTripHuTransfer, driveUi, stubResult, ACTION };
