@@ -30,6 +30,10 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         lastChanged     : String;
         lastChangedBy   : String;
         protectedReason : String;   // why the user cannot be locked: self, connection, type, or empty
+        pwdLastChanged  : String;
+        pwdExpiresAt    : String;
+        pwdDaysRemaining: Integer;
+        pwdStatus       : String;   // valid | expiring_soon | expired | initial | exempt
     };
 
     /**
@@ -71,6 +75,10 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         protectedReason: String; // why the user cannot be locked: self, connection, type, or empty
         lastChangedTime: String; // LASTMODIFIED.MODTIME
         lastChangedBy: String;   // LASTMODIFIED.MODIFIER
+        pwdLastChanged : String;
+        pwdExpiresAt   : String;
+        pwdDaysRemaining: Integer;
+        pwdStatus      : String; // valid | expiring_soon | expired | initial | exempt
         roles        : array of {   // ACTIVITYGROUPS
             name       : String;
             description: String;
@@ -133,5 +141,57 @@ service UserManagementService @(path: '/odata/v4/user-management') {
      */
     function getBulkLockEmailStatus(bulkRunId: String) returns {
         status: String;
+    };
+
+    /**
+     * Aggregated password expiry metrics for dashboard KPI cards.
+     */
+    function getPasswordExpirySummary() returns {
+        totalMonitored   : Integer;
+        valid            : Integer;
+        expiringSoon     : Integer;   // <= 14 days
+        criticalExpiring : Integer;   // <= 3 days
+        expired          : Integer;   // < 0 days or GLTGB past
+        initialPassword  : Integer;   // never changed / 00000000
+        exempt           : Integer;   // System / Service types
+        policyDays       : Integer;   // configured expiration period in days
+        warningDays      : Integer;   // configured warning threshold in days
+    };
+
+    /**
+     * Filtered list of users with password expiry details.
+     */
+    function getPasswordExpiryList(search: String, status: String, maxRows: Integer) returns array of {
+        username        : String;
+        fullName        : String;
+        userType        : String;
+        isLocked        : Boolean;
+        validFrom       : String;
+        validTo         : String;
+        lastLogonDate   : String;
+        lastLogonTime   : String;
+        pwdLastChanged  : String;
+        pwdExpiresAt    : String;
+        pwdDaysRemaining: Integer;
+        pwdStatus       : String;
+    };
+
+    /**
+     * Operational health of the password expiry monitor daemon.
+     */
+    function getPasswordExpiryMonitor() returns {
+        state                       : String;       // ok | failed | stale | off
+        lastRunAt                   : Timestamp;
+        lastStatus                  : String;
+        lastRunDurationMs           : Integer;
+        totalMonitoredUsers         : Integer;
+        expiringSoonCount           : Integer;
+        expiredCount                : Integer;
+        initialPasswordCount        : Integer;
+        exemptCount                 : Integer;
+        lastNotificationDispatchedAt: Timestamp;
+        pendingNotificationCount    : Integer;
+        failedNotificationCount     : Integer;
+        errorMessage                : String;
     };
 }

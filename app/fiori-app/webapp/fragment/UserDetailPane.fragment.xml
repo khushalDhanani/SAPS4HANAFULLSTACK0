@@ -75,6 +75,25 @@
                             <f:FormElement label="{i18n>adminDetailLockedNoPw}"><ObjectStatus text="{path: 'adminView>/selectedUser/lockedNoPw', formatter: '.formatAdminLockFlag'}" state="{= ${adminView>/selectedUser/lockedNoPw} === 'U' ? 'Success' : 'Error' }" /></f:FormElement>
                         </f:formElements>
                     </f:FormContainer>
+                    <f:FormContainer title="{i18n>adminDetailSectionPassword}">
+                        <f:formElements>
+                            <f:FormElement label="{i18n>adminDetailPwdStatus}">
+                                <ObjectStatus
+                                    text="{parts: ['adminView>/selectedUser/pwdStatus', 'adminView>/selectedUser/pwdDaysRemaining'], formatter: '.formatAdminPwdStatusText'}"
+                                    state="{path: 'adminView>/selectedUser/pwdStatus', formatter: '.formatAdminPwdStatusState'}"
+                                    icon="{path: 'adminView>/selectedUser/pwdStatus', formatter: '.formatAdminPwdStatusIcon'}" />
+                            </f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailPwdLastChanged}">
+                                <Text text="{path: 'adminView>/selectedUser/pwdLastChanged', formatter: '.formatAdminDate'}" />
+                            </f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailPwdExpiresAt}">
+                                <Text text="{path: 'adminView>/selectedUser/pwdExpiresAt', formatter: '.formatAdminDate'}" />
+                            </f:FormElement>
+                            <f:FormElement label="{i18n>adminDetailPwdDaysRemaining}">
+                                <Text text="{= ${adminView>/selectedUser/pwdDaysRemaining} !== null &amp;&amp; ${adminView>/selectedUser/pwdDaysRemaining} !== undefined ? String(${adminView>/selectedUser/pwdDaysRemaining}) : '-' }" />
+                            </f:FormElement>
+                        </f:formElements>
+                    </f:FormContainer>
                     <f:FormContainer title="{i18n>adminDetailSectionDefaults}">
                         <f:formElements>
                             <f:FormElement label="{i18n>adminDetailLanguage}"><Text text="{= ${adminView>/selectedUser/language} || '-' }" /></f:FormElement>

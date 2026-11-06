@@ -101,7 +101,8 @@ async function verifySidebar(baseUrl) {
                     const row = table.getItems().find((item) => item.getBindingContext('adminView'));
                     const cells = row ? row.getCells() : [];
                     const context = row && row.getBindingContext('adminView');
-                    const actions = cells[7] && cells[7].getItems ? cells[7].getItems() : [];
+                    const actionsCell = cells.find((c) => c.isA && c.isA('sap.m.HBox')) || cells[cells.length - 1];
+                    const actions = actionsCell && actionsCell.getItems ? actionsCell.getItems() : [];
                     return {
                         headers: table.getColumns().map((column) => column.getHeader().getText()),
                         detailsAvailable: context ? context.getProperty('detailsAvailable') : null,
@@ -422,7 +423,11 @@ const bulkState = (page) => page.evaluate(() => {
         canLock: byId('btnBulkLock').getEnabled(),
         canUnlock: byId('btnBulkUnlock').getEnabled(),
         protectedBoxes: ['SVC', 'ME', 'ALPHA'].map((name) => { const box = rowFor(name) && rowFor(name).getCells()[0]; return box ? `${name}:${box.getEnabled()}:${box.getTooltip_AsString()}` : `${name}:none`; }),
-        rowLock: ['SVC', 'ALPHA'].map((name) => { const row = rowFor(name); return row ? `${name}:${row.getCells()[7].getItems().filter((c) => c.getVisible()).map((c) => c.getText()).join('+')}` : `${name}:none`; }),
+        rowLock: ['SVC', 'ALPHA'].map((name) => {
+            const row = rowFor(name);
+            const actionsCell = row && row.getCells().find((c) => c.isA && c.isA('sap.m.HBox'));
+            return row && actionsCell ? `${name}:${actionsCell.getItems().filter((c) => c.getVisible()).map((c) => c.getText()).join('+')}` : `${name}:none`;
+        }),
         confirmOpen: byId('userBulkConfirmDialog').isOpen(),
         preview: byId('userBulkPreview').getText(),
         progressOpen: byId('userBulkProgressDialog').isOpen(),

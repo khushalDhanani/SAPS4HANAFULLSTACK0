@@ -129,10 +129,14 @@ describe('Admin dashboard user list', () => {
         [
             'adminColFullName',
             'adminColLockStatus',
+            'adminColPwdStatus',
             'adminColUserType',
             'adminColLastChanged',
             'adminDetailLastChangedBy',
             'adminDetailsUnavailable',
+            'adminKpiExpiringSoon',
+            'adminKpiExpired',
+            'adminPwdStatusFilter',
             'press=".onLockUser"',
             'press=".onUnlockUser"'
         ].forEach((sBinding) => expect(sView).toContain(sBinding));
@@ -203,6 +207,23 @@ describe('Admin dashboard user list', () => {
 
             expect(model.getProperty('/filters/search')).toBe('ALICE');
             expect(controller._confirmUnlockUser).toHaveBeenCalledWith('ALICE');
+        });
+
+        test('a link with ?filter=expiring or ?filter=expired sets pwdStatus filter', () => {
+            const { controller, model } = makeController([]);
+            const dashboardModel = new MockJSONModel({ selectedTab: '' });
+            controller.getView = () => ({ getModel: (name) => (name === 'dashboardView' ? dashboardModel : model) });
+            controller._bFiguresLoaded = true;
+            controller._bAdminUsersLoaded = true;
+            controller._watchLockMonitor = jest.fn();
+            const matched = (section, query) => ({ getParameter: () => ({ section, '?query': query }) });
+
+            mockAuthService.hasAnyRole.mockReturnValue(true);
+            controller._onDashboardMatched(matched('admin', { filter: 'expiring' }));
+            expect(model.getProperty('/filters/pwdStatus')).toBe('expiring_soon');
+
+            controller._onDashboardMatched(matched('admin', { filter: 'expired' }));
+            expect(model.getProperty('/filters/pwdStatus')).toBe('expired');
         });
 
         test.each([
@@ -332,6 +353,11 @@ describe('Admin dashboard user list', () => {
             const sFragment = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/fragment/UserDetailPane.fragment.xml'), 'utf8');
             expect(sFragment).toContain('visible="{= ${adminView>/selectedUser/isLocked} === false &amp;&amp; !${adminView>/selectedUser/protectedReason} }"');
             expect(sFragment).toContain('visible="{= ${adminView>/selectedUser/isLocked} === true }"');
+            expect(sFragment).toContain('adminDetailSectionPassword');
+            expect(sFragment).toContain('adminDetailPwdStatus');
+            expect(sFragment).toContain('adminDetailPwdLastChanged');
+            expect(sFragment).toContain('adminDetailPwdExpiresAt');
+            expect(sFragment).toContain('adminDetailPwdDaysRemaining');
         });
 
         test('formats SAP codes and date-times with the dictionary texts', () => {
@@ -344,6 +370,37 @@ describe('Admin dashboard user list', () => {
             expect(controller.formatAdminLockFlag('L')).toBe('Locked');
             expect(controller.formatAdminUserType('')).toBe('-');
             expect(controller.formatAdminUserType('Q')).toBe('Q');
+        });
+
+        test('formats password status codes, states, and icons', () => {
+            const { controller } = makeController([]);
+
+            expect(controller.formatAdminPwdStatusText('expired')).toBe('Expired');
+            expect(controller.formatAdminPwdStatusText('expiring_soon', 5)).toBe('Expires in 5 days');
+            expect(controller.formatAdminPwdStatusText('expiring_soon')).toBe('Expiring Soon');
+            expect(controller.formatAdminPwdStatusText('initial')).toBe('Initial Password');
+            expect(controller.formatAdminPwdStatusText('exempt')).toBe('Exempt (System)');
+            expect(controller.formatAdminPwdStatusText('valid')).toBe('Active');
+            expect(controller.formatAdminPwdStatusText(null)).toBe('-');
+
+            expect(controller.formatAdminPwdStatusState('expired')).toBe('Error');
+            expect(controller.formatAdminPwdStatusState('expiring_soon')).toBe('Warning');
+            expect(controller.formatAdminPwdStatusState('initial')).toBe('Information');
+            expect(controller.formatAdminPwdStatusState('valid')).toBe('Success');
+            expect(controller.formatAdminPwdStatusState('exempt')).toBe('None');
+
+            expect(controller.formatAdminPwdStatusIcon('expired')).toBe('sap-icon://error');
+            expect(controller.formatAdminPwdStatusIcon('expiring_soon')).toBe('sap-icon://alert');
+            expect(controller.formatAdminPwdStatusIcon('initial')).toBe('sap-icon://user-edit');
+            expect(controller.formatAdminPwdStatusIcon('valid')).toBe('sap-icon://sys-enter-2');
+            expect(controller.formatAdminPwdStatusIcon('exempt')).toBe('sap-icon://inspect');
+        });
+
+        test('onPwdStatusFilterChange sets pwdStatus filter', () => {
+            const { controller, model } = makeController([]);
+            const event = { getSource: () => ({ getSelectedKey: () => 'expiring_soon' }) };
+            controller.onPwdStatusFilterChange(event);
+            expect(model.getProperty('/filters/pwdStatus')).toBe('expiring_soon');
         });
     });
 

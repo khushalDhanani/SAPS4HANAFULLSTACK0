@@ -12,7 +12,7 @@ sap.ui.define([
     var BULK_CONCURRENCY = 5; // parallel lock or unlock calls; each one is its own SAP LUW
     var LIST_LIMIT = 1000; // the most rows listUsers accepts
 
-    var EMPTY_FILTERS = { lockStatus: "", userTypes: [], changedBy: [], changedFrom: "", changedTo: "", search: "" };
+    var EMPTY_FILTERS = { lockStatus: "", pwdStatus: "", userTypes: [], changedBy: [], changedFrom: "", changedTo: "", search: "" };
 
     function pad(n) {
         return (n < 10 ? "0" : "") + n;
@@ -49,8 +49,10 @@ sap.ui.define([
             oKpis.locked += sStatus === "locked" ? 1 : 0;
             oKpis.changedToday += oUser.lastChanged === sToday ? 1 : 0;
             oKpis.changedLast7 += (oUser.lastChanged >= sWeekStart && oUser.lastChanged <= sToday) ? 1 : 0;
+            oKpis.expiringSoon += oUser.pwdStatus === "expiring_soon" ? 1 : 0;
+            oKpis.expired += oUser.pwdStatus === "expired" ? 1 : 0;
             return oKpis;
-        }, { total: 0, active: 0, locked: 0, changedToday: 0, changedLast7: 0 });
+        }, { total: 0, active: 0, locked: 0, changedToday: 0, changedLast7: 0, expiringSoon: 0, expired: 0 });
     }
 
     function matchesSearch(oUser, sSearch) {
@@ -64,6 +66,7 @@ sap.ui.define([
     function filterUsers(aUsers, oFilters) {
         return aUsers.filter(function (oUser) {
             return (!oFilters.lockStatus || lockStatusOf(oUser) === oFilters.lockStatus)
+                && (!oFilters.pwdStatus || oUser.pwdStatus === oFilters.pwdStatus)
                 && (!oFilters.userTypes.length || oFilters.userTypes.indexOf(oUser.userType) !== -1)
                 && (!oFilters.changedBy.length || oFilters.changedBy.indexOf(oUser.lastChangedBy) !== -1)
                 && (!oFilters.changedFrom || oUser.lastChanged >= oFilters.changedFrom)
@@ -78,7 +81,9 @@ sap.ui.define([
             active: { lockStatus: "active" },
             locked: { lockStatus: "locked" },
             changedToday: { changedFrom: dayKey(dToday), changedTo: dayKey(dToday) },
-            changedLast7: { changedFrom: daysBefore(dToday, 6), changedTo: dayKey(dToday) }
+            changedLast7: { changedFrom: daysBefore(dToday, 6), changedTo: dayKey(dToday) },
+            expiringSoon: { pwdStatus: "expiring_soon" },
+            expired: { pwdStatus: "expired" }
         }[sKpi] || null;
     }
 
@@ -113,7 +118,7 @@ sap.ui.define([
     }
 
     function hasActiveFilters(oFilters) {
-        return !!(oFilters.lockStatus || oFilters.userTypes.length || oFilters.changedBy.length
+        return !!(oFilters.lockStatus || oFilters.pwdStatus || oFilters.userTypes.length || oFilters.changedBy.length
             || oFilters.changedFrom || oFilters.changedTo || String(oFilters.search || "").trim());
     }
 

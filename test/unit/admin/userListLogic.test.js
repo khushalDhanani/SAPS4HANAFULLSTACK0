@@ -9,23 +9,23 @@ beforeAll(() => {
 });
 
 const TODAY = new Date(2026, 10, 5);
-const user = (username, extra = {}) => ({ username, fullName: `${username} Name`, detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20260101', lastChangedBy: 'ADMIN', protectedReason: '', ...extra });
+const user = (username, extra = {}) => ({ username, fullName: `${username} Name`, detailsAvailable: true, isLocked: false, userType: 'A', lastChanged: '20260101', lastChangedBy: 'ADMIN', protectedReason: '', pwdStatus: 'valid', ...extra });
 const USERS = [
-    user('ALPHA', { lastChanged: '20261105', lastChangedBy: 'DRATHOD' }),
-    user('BETA', { isLocked: true, lastChanged: '20261030' }),
-    user('GAMMA', { isLocked: true, userType: 'S', lastChanged: '20261029', protectedReason: 'type' }),
-    user('DELTA', { detailsAvailable: false, isLocked: null, userType: null, lastChanged: null, lastChangedBy: null })
+    user('ALPHA', { lastChanged: '20261105', lastChangedBy: 'DRATHOD', pwdStatus: 'expiring_soon' }),
+    user('BETA', { isLocked: true, lastChanged: '20261030', pwdStatus: 'expired' }),
+    user('GAMMA', { isLocked: true, userType: 'S', lastChanged: '20261029', protectedReason: 'type', pwdStatus: 'exempt' }),
+    user('DELTA', { detailsAvailable: false, isLocked: null, userType: null, lastChanged: null, lastChangedBy: null, pwdStatus: 'valid' })
 ];
 const filters = (extra = {}) => ({ ...Logic.emptyFilters(), ...extra });
 const names = (rows) => rows.map((row) => row.username);
 
 describe('KPI counts', () => {
     test('count the whole list, with today and the last 7 days inclusive', () => {
-        expect(Logic.computeKpis(USERS, TODAY)).toEqual({ total: 4, active: 1, locked: 2, changedToday: 1, changedLast7: 2 });
+        expect(Logic.computeKpis(USERS, TODAY)).toEqual({ total: 4, active: 1, locked: 2, changedToday: 1, changedLast7: 2, expiringSoon: 1, expired: 1 });
     });
 
     test('a user with unavailable details is neither active nor locked', () => {
-        expect(Logic.computeKpis([USERS[3]], TODAY)).toEqual({ total: 1, active: 0, locked: 0, changedToday: 0, changedLast7: 0 });
+        expect(Logic.computeKpis([USERS[3]], TODAY)).toEqual({ total: 1, active: 0, locked: 0, changedToday: 0, changedLast7: 0, expiringSoon: 0, expired: 0 });
     });
 
     test('are all zero for an empty list', () => {
@@ -37,6 +37,8 @@ describe('filter combination', () => {
     test.each([
         ['lock status', { lockStatus: 'locked' }, ['BETA', 'GAMMA']],
         ['unavailable status', { lockStatus: 'unavailable' }, ['DELTA']],
+        ['password status expiring_soon', { pwdStatus: 'expiring_soon' }, ['ALPHA']],
+        ['password status expired', { pwdStatus: 'expired' }, ['BETA']],
         ['user types', { userTypes: ['S', 'L'] }, ['GAMMA']],
         ['changed by', { changedBy: ['DRATHOD'] }, ['ALPHA']],
         ['date range', { changedFrom: '20261029', changedTo: '20261030' }, ['BETA', 'GAMMA']],
@@ -68,6 +70,20 @@ describe('KPI cards and filters stay in sync', () => {
         expect(Logic.isKpiSelected('locked', off, TODAY)).toBe(false);
     });
 
+    test('expiringSoon and expired KPI cards toggle their filters', () => {
+        const onExpiring = Logic.toggleKpi('expiringSoon', filters(), TODAY);
+        expect(onExpiring).toMatchObject({ pwdStatus: 'expiring_soon' });
+        expect(Logic.isKpiSelected('expiringSoon', onExpiring, TODAY)).toBe(true);
+
+        const offExpiring = Logic.toggleKpi('expiringSoon', onExpiring, TODAY);
+        expect(offExpiring).toMatchObject({ pwdStatus: '' });
+        expect(Logic.isKpiSelected('expiringSoon', offExpiring, TODAY)).toBe(false);
+
+        const onExpired = Logic.toggleKpi('expired', filters(), TODAY);
+        expect(onExpired).toMatchObject({ pwdStatus: 'expired' });
+        expect(Logic.isKpiSelected('expired', onExpired, TODAY)).toBe(true);
+    });
+
     test('a card shows selected when the same value is set through the filter controls', () => {
         expect(Logic.isKpiSelected('active', filters({ lockStatus: 'active' }), TODAY)).toBe(true);
         expect(Logic.isKpiSelected('changedToday', filters({ changedFrom: '20261105', changedTo: '20261105' }), TODAY)).toBe(true);
@@ -85,11 +101,12 @@ describe('KPI cards and filters stay in sync', () => {
 
 describe('chips', () => {
     test('removing one chip keeps the others', () => {
-        const start = filters({ userTypes: ['A', 'S'], changedBy: ['X'], changedFrom: '1', changedTo: '2', search: 'q', lockStatus: 'locked' });
+        const start = filters({ userTypes: ['A', 'S'], changedBy: ['X'], changedFrom: '1', changedTo: '2', search: 'q', lockStatus: 'locked', pwdStatus: 'expiring_soon' });
         expect(Logic.removeChip(start, 'userTypes:A').userTypes).toEqual(['S']);
         expect(Logic.removeChip(start, 'changedBy:X').changedBy).toEqual([]);
         expect(Logic.removeChip(start, 'changed:')).toMatchObject({ changedFrom: '', changedTo: '', search: 'q' });
         expect(Logic.removeChip(start, 'lockStatus:')).toMatchObject({ lockStatus: '', search: 'q' });
+        expect(Logic.removeChip(start, 'pwdStatus:')).toMatchObject({ pwdStatus: '', search: 'q' });
     });
 
     test('a value holding a colon is removed whole', () => {

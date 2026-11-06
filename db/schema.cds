@@ -23,3 +23,6 @@ using from './wm/goods-issue-attempt';
 
 // Lock notifications (dedupe and last seen lock state), until an SAP table replaces them
 using from './admin/user-lock';
+
+// Password expiry monitoring (snapshots, milestone tracking, health monitor)
+using from './admin/password-expiry';

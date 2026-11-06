@@ -5,7 +5,16 @@
  * All RFC calls are mocked; no live SAP connection.
  */
 
-const { UserManagementAdapter } = require('../../../srv/integration/s4hana/admin/UserManagementAdapter');
+const {
+  UserManagementAdapter,
+  calculatePasswordStatus,
+  parseSapDate,
+  formatSapDate,
+  addDays,
+  diffCalendarDays,
+  PWD_POLICY_DEFAULT_DAYS,
+  PWD_WARNING_DEFAULT_DAYS
+} = require('../../../srv/integration/s4hana/admin/UserManagementAdapter');
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -649,5 +658,235 @@ describe('UserManagementAdapter.lockUser self-lock guard with a real RfcClient',
 
     await expect(adapter.lockUser('ALICE')).rejects.toMatchObject({ status: 503 });
     expect(called).toEqual([]);
+  });
+});
+
+// ── Password Expiry Helpers & readPasswordExpiryData ─────────────────────────
+
+describe('UserManagementAdapter - Password Expiry Helpers', () => {
+  test('parseSapDate parses valid DATS to UTC Date at midnight', () => {
+    const d = parseSapDate('20261106');
+    expect(d).not.toBeNull();
+    expect(d.toISOString()).toBe('2026-11-06T00:00:00.000Z');
+  });
+
+  test('parseSapDate returns null for empty, zero, or invalid strings', () => {
+    expect(parseSapDate('00000000')).toBeNull();
+    expect(parseSapDate('')).toBeNull();
+    expect(parseSapDate(null)).toBeNull();
+    expect(parseSapDate('not-a-date')).toBeNull();
+  });
+
+  test('formatSapDate formats a Date into YYYYMMDD in UTC', () => {
+    const d = new Date(Date.UTC(2026, 10, 6)); // November 6, 2026
+    expect(formatSapDate(d)).toBe('20261106');
+    expect(formatSapDate(null)).toBe('');
+  });
+
+  test('addDays adds calendar days in UTC across month and leap year boundaries', () => {
+    const start = new Date(Date.UTC(2024, 1, 28)); // Feb 28, 2024 (leap year)
+    const nextDay = addDays(start, 1);
+    expect(formatSapDate(nextDay)).toBe('20240229');
+    const dayAfter = addDays(start, 2);
+    expect(formatSapDate(dayAfter)).toBe('20240301');
+  });
+
+  test('diffCalendarDays accurately counts day differences', () => {
+    const d1 = new Date(Date.UTC(2026, 10, 20));
+    const d2 = new Date(Date.UTC(2026, 10, 6));
+    expect(diffCalendarDays(d1, d2)).toBe(14);
+    expect(diffCalendarDays(d2, d1)).toBe(-14);
+  });
+
+  test('exports default policy constants', () => {
+    expect(PWD_POLICY_DEFAULT_DAYS).toBe(90);
+    expect(PWD_WARNING_DEFAULT_DAYS).toBe(14);
+  });
+});
+
+describe('UserManagementAdapter - calculatePasswordStatus', () => {
+  const REF_DATE = '20261106'; // Nov 6, 2026
+
+  test('classifies non-Dialog users (B, C, S, L) as exempt', () => {
+    const sysUser = { BNAME: 'RFC_TECH', USTYP: 'B', UFLAG: '0', PWDCHGDATE: '20250101' };
+    const res = calculatePasswordStatus(sysUser, { referenceDate: REF_DATE });
+    expect(res).toMatchObject({
+      username: 'RFC_TECH',
+      userType: 'B',
+      pwdStatus: 'exempt',
+      pwdExpiresAt: null,
+      pwdDaysRemaining: null
+    });
+  });
+
+  test('classifies initial password (00000000 or empty) with initial status', () => {
+    const initUser = { BNAME: 'NEWBIE', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '00000000' };
+    const res = calculatePasswordStatus(initUser, { referenceDate: REF_DATE });
+    expect(res).toMatchObject({
+      username: 'NEWBIE',
+      userType: 'A',
+      pwdStatus: 'initial',
+      pwdExpiresAt: null,
+      pwdDaysRemaining: 0
+    });
+  });
+
+  test('classifies active user with > 14 days remaining as valid', () => {
+    // Changed 10 days ago, 90 day policy -> expires in 80 days
+    const activeUser = { BNAME: 'ALICE', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '20261027' };
+    const res = calculatePasswordStatus(activeUser, { expirationDays: 90, warningDays: 14, referenceDate: REF_DATE });
+    expect(res).toMatchObject({
+      username: 'ALICE',
+      pwdStatus: 'valid',
+      pwdDaysRemaining: 80,
+      pwdExpiresAt: '20270125'
+    });
+  });
+
+  test('classifies user expiring in <= 14 days as expiring_soon', () => {
+    // Changed 80 days ago, 90 day policy -> expires in 10 days (<= 14)
+    const expiringUser = { BNAME: 'BOB', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '20260818' };
+    const res = calculatePasswordStatus(expiringUser, { expirationDays: 90, warningDays: 14, referenceDate: REF_DATE });
+    expect(res).toMatchObject({
+      username: 'BOB',
+      pwdStatus: 'expiring_soon',
+      pwdDaysRemaining: 10,
+      pwdExpiresAt: '20261116'
+    });
+  });
+
+  test('classifies boundary at exactly 14 days as expiring_soon', () => {
+    // Aug 22, 2026 + 90 days = Nov 20, 2026 -> exactly 14 days from Nov 6, 2026
+    const boundary14 = { BNAME: 'CHARLIE', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '20260822' };
+    const res = calculatePasswordStatus(boundary14, { expirationDays: 90, warningDays: 14, referenceDate: REF_DATE });
+    expect(res.pwdDaysRemaining).toBe(14);
+    expect(res.pwdStatus).toBe('expiring_soon');
+  });
+
+  test('classifies boundary at 15 days as valid', () => {
+    // Aug 23, 2026 + 90 days = Nov 21, 2026 -> exactly 15 days from Nov 6, 2026
+    const boundary15 = { BNAME: 'DAVID', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '20260823' };
+    const res = calculatePasswordStatus(boundary15, { expirationDays: 90, warningDays: 14, referenceDate: REF_DATE });
+    expect(res.pwdDaysRemaining).toBe(15);
+    expect(res.pwdStatus).toBe('valid');
+  });
+
+  test('classifies user with expired password (< 0 days remaining) as expired', () => {
+    // Changed 95 days ago -> expired 5 days ago (-5 days)
+    const expiredUser = { BNAME: 'EVE', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '20260803' };
+    const res = calculatePasswordStatus(expiredUser, { expirationDays: 90, warningDays: 14, referenceDate: REF_DATE });
+    expect(res.pwdDaysRemaining).toBe(-5);
+    expect(res.pwdStatus).toBe('expired');
+  });
+
+  test('classifies user with expired account validity (GLTGB < today) as expired', () => {
+    // Password change is fresh (yesterday), but GLTGB is in the past
+    const expiredAccount = { BNAME: 'FRANK', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '20261105', GLTGB: '20261101' };
+    const res = calculatePasswordStatus(expiredAccount, { expirationDays: 90, warningDays: 14, referenceDate: REF_DATE });
+    expect(res.pwdStatus).toBe('expired');
+  });
+
+  test('marks user as valid when expirationDays <= 0 (policy disabled)', () => {
+    const user = { BNAME: 'GEORGE', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '20200101' };
+    const res = calculatePasswordStatus(user, { expirationDays: 0, referenceDate: REF_DATE });
+    expect(res.pwdStatus).toBe('valid');
+    expect(res.pwdExpiresAt).toBeNull();
+    expect(res.pwdDaysRemaining).toBeNull();
+  });
+
+  test('detects locked status when UFLAG is non-zero', () => {
+    const lockedUser = { BNAME: 'HELEN', USTYP: 'A', UFLAG: '64', PWDCHGDATE: '20261101' };
+    const res = calculatePasswordStatus(lockedUser, { referenceDate: REF_DATE });
+    expect(res.isLocked).toBe(true);
+    expect(res.uflag).toBe(64);
+  });
+});
+
+describe('UserManagementAdapter.readPasswordExpiryData', () => {
+  test('queries USR02 without hash columns and enriches with USER_ADDR full names', async () => {
+    const mockUsr02Rows = [
+      { BNAME: 'ALICE', USTYP: 'A', UFLAG: '0', GLTGV: '00000000', GLTGB: '00000000', PWDCHGDATE: '20261027', TRDAT: '20261106', LTIME: '090000' },
+      { BNAME: 'BOB', USTYP: 'A', UFLAG: '128', GLTGV: '00000000', GLTGB: '00000000', PWDCHGDATE: '20260818', TRDAT: '20261105', LTIME: '100000' },
+      { BNAME: 'TECH_RFC', USTYP: 'B', UFLAG: '0', GLTGV: '00000000', GLTGB: '00000000', PWDCHGDATE: '20250101', TRDAT: '20261106', LTIME: '120000' }
+    ];
+    const mockUserAddrRows = [
+      { BNAME: 'ALICE', NAME_TEXTC: 'Alice Smith' },
+      { BNAME: 'BOB', NAME_TEXTC: 'Bob Jones' }
+    ];
+
+    const mockRfc = {
+      readTable: jest.fn().mockImplementation(async (table, _fields, _where) => {
+        if (table === 'USR02') return mockUsr02Rows;
+        if (table === 'USER_ADDR') return mockUserAddrRows;
+        return [];
+      })
+    };
+
+    const adapter = new UserManagementAdapter({ rfcClient: mockRfc });
+    const results = await adapter.readPasswordExpiryData({ referenceDate: '20261106' });
+
+    expect(mockRfc.readTable).toHaveBeenCalledWith(
+      'USR02',
+      ['BNAME', 'USTYP', 'UFLAG', 'GLTGV', 'GLTGB', 'PWDCHGDATE', 'TRDAT', 'LTIME'],
+      []
+    );
+    // Explicitly verify hash fields were NOT requested
+    const requestedFields = mockRfc.readTable.mock.calls.find((c) => c[0] === 'USR02')[1];
+    expect(requestedFields.some((f) => /bcode|passcode|hash/i.test(f))).toBe(false);
+
+    expect(results).toHaveLength(3);
+    expect(results[0]).toMatchObject({
+      username: 'ALICE',
+      fullName: 'Alice Smith',
+      pwdStatus: 'valid',
+      pwdDaysRemaining: 80
+    });
+    expect(results[1]).toMatchObject({
+      username: 'BOB',
+      fullName: 'Bob Jones',
+      pwdStatus: 'expiring_soon',
+      isLocked: true
+    });
+    expect(results[2]).toMatchObject({
+      username: 'TECH_RFC',
+      fullName: '',
+      pwdStatus: 'exempt'
+    });
+  });
+
+  test('applies single username filter safely when provided', async () => {
+    const mockRfc = {
+      readTable: jest.fn().mockImplementation(async (table) => {
+        if (table === 'USR02') return [{ BNAME: 'DIPEN', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '20261105' }];
+        return [{ BNAME: 'DIPEN', NAME_TEXTC: 'Dipen Asoriya' }];
+      })
+    };
+
+    const adapter = new UserManagementAdapter({ rfcClient: mockRfc });
+    const results = await adapter.readPasswordExpiryData({ username: "dipen's", referenceDate: '20261106' });
+
+    expect(mockRfc.readTable).toHaveBeenCalledWith(
+      'USR02',
+      expect.any(Array),
+      ["BNAME = 'DIPEN''S'"]
+    );
+    expect(results[0].fullName).toBe('Dipen Asoriya');
+  });
+
+  test('continues gracefully without full names if USER_ADDR read fails', async () => {
+    const mockRfc = {
+      readTable: jest.fn().mockImplementation(async (table) => {
+        if (table === 'USR02') return [{ BNAME: 'ALICE', USTYP: 'A', UFLAG: '0', PWDCHGDATE: '20261105' }];
+        if (table === 'USER_ADDR') throw new Error('USER_ADDR unavailable');
+        return [];
+      })
+    };
+
+    const adapter = new UserManagementAdapter({ rfcClient: mockRfc });
+    const results = await adapter.readPasswordExpiryData({ referenceDate: '20261106' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].username).toBe('ALICE');
+    expect(results[0].fullName).toBe('');
   });
 });

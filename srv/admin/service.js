@@ -5,6 +5,7 @@ const { UserManagementAdapter } = require('../integration/s4hana/admin/UserManag
 const { protectionReason } = require('./protectedUsers');
 const { resolveUserIdentity } = require('../auth/userIdentity');
 const lockNotifier = require('./lockNotifier');
+const passwordExpiryNotifier = require('./passwordExpiryNotifier');
 const { audit } = require('./audit');
 const LOG = require('../common/logger')('user-management-service');
 
@@ -36,8 +37,12 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     this.on('unlockUser',   this._handleUnlockUser.bind(this));
     this.on('getLockMonitor', () => lockNotifier.monitorStatus());
     this.on('getBulkLockEmailStatus', this._handleBulkLockEmailStatus.bind(this));
+    this.on('getPasswordExpirySummary', this._handleGetPasswordExpirySummary.bind(this));
+    this.on('getPasswordExpiryList', this._handleGetPasswordExpiryList.bind(this));
+    this.on('getPasswordExpiryMonitor', this._handleGetPasswordExpiryMonitor.bind(this));
 
     lockNotifier.startJob(() => this._getAdapter());
+    passwordExpiryNotifier.startJob(() => this._getAdapter());
 
     await super.init();
   }
@@ -60,12 +65,27 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     }
 
     try {
-      const [users, context] = await Promise.all([
+      const [users, context, expiryData] = await Promise.all([
         this._getAdapter().listUsers({ search, maxRows }),
-        this._protectionContext(req)
+        this._protectionContext(req),
+        this._getAdapter().readPasswordExpiryData().catch((err) => {
+          LOG.warn('readPasswordExpiryData failed, continuing without expiry fields:', err.message);
+          return [];
+        })
       ]);
+      const expiryMap = new Map((expiryData || []).map((e) => [e.username, e]));
       LOG.info('listUsers returned', users.length, 'users');
-      return users.map((user) => ({ ...user, protectedReason: protectionReason(user, context) }));
+      return users.map((user) => {
+        const exp = expiryMap.get(user.username);
+        return {
+          ...user,
+          protectedReason: protectionReason(user, context),
+          pwdLastChanged: exp?.pwdLastChanged || '',
+          pwdExpiresAt: exp?.pwdExpiresAt || '',
+          pwdDaysRemaining: exp?.pwdDaysRemaining ?? null,
+          pwdStatus: exp?.pwdStatus || 'valid'
+        };
+      });
     } catch (e) {
       LOG.error('listUsers error:', e.message);
       return req.reject(e.status || 502, e.message || 'Failed to list SAP users');
@@ -85,9 +105,23 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     }
 
     try {
-      const detail = await this._getAdapter().getUserDetail(username);
+      const [detail, context, [expiryItem]] = await Promise.all([
+        this._getAdapter().getUserDetail(username),
+        this._protectionContext(req),
+        this._getAdapter().readPasswordExpiryData({ username }).catch((err) => {
+          LOG.warn('readPasswordExpiryData for user detail failed:', err.message);
+          return [];
+        })
+      ]);
       LOG.info('getUserDetail returned for:', username);
-      return { ...detail, protectedReason: protectionReason(detail, await this._protectionContext(req)) };
+      return {
+        ...detail,
+        protectedReason: protectionReason(detail, context),
+        pwdLastChanged: expiryItem?.pwdLastChanged || '',
+        pwdExpiresAt: expiryItem?.pwdExpiresAt || '',
+        pwdDaysRemaining: expiryItem?.pwdDaysRemaining ?? null,
+        pwdStatus: expiryItem?.pwdStatus || 'valid'
+      };
     } catch (e) {
       LOG.error('getUserDetail error:', e.message);
       return req.reject(e.status || 502, e.message || 'Failed to get user detail from SAP');
@@ -236,5 +270,146 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     const bulkRunId = String(req.data.bulkRunId ?? '').trim();
     if (!RUN_ID.test(bulkRunId)) return req.reject(400, 'bulkRunId is required');
     return lockNotifier.bulkEmailStatus(bulkRunId);
+  }
+
+  /**
+   * getPasswordExpirySummary() — aggregated counts for dashboard tiles.
+   */
+  async _handleGetPasswordExpirySummary(req) {
+    try {
+      const users = await this._getAdapter().readPasswordExpiryData();
+      const expirationDays = parseInt(process.env.SAP_PASSWORD_EXPIRATION_DAYS, 10) || 90;
+      const warningDays = parseInt(process.env.SAP_PASSWORD_WARNING_DAYS, 10) || 14;
+
+      let valid = 0;
+      let expiringSoon = 0;
+      let criticalExpiring = 0;
+      let expired = 0;
+      let initialPassword = 0;
+      let exempt = 0;
+
+      for (const u of users) {
+        if (u.pwdStatus === 'exempt') exempt++;
+        else if (u.pwdStatus === 'initial') initialPassword++;
+        else if (u.pwdStatus === 'expired') expired++;
+        else if (u.pwdStatus === 'expiring_soon') {
+          expiringSoon++;
+          if (u.pwdDaysRemaining !== null && u.pwdDaysRemaining <= 3) criticalExpiring++;
+        } else {
+          valid++;
+        }
+      }
+
+      return {
+        totalMonitored: users.length,
+        valid,
+        expiringSoon,
+        criticalExpiring,
+        expired,
+        initialPassword,
+        exempt,
+        policyDays: expirationDays,
+        warningDays
+      };
+    } catch (e) {
+      LOG.error('getPasswordExpirySummary error:', e.message);
+      return req.reject(e.status || 502, e.message || 'Failed to calculate password expiry summary');
+    }
+  }
+
+  /**
+   * getPasswordExpiryList(search?, status?, maxRows?) — filtered list of users with password expiry attributes.
+   */
+  async _handleGetPasswordExpiryList(req) {
+    const search = (req.data.search || '').trim().toLowerCase();
+    const status = (req.data.status || '').trim().toLowerCase();
+    const rawMax = req.data.maxRows;
+    const maxRows = (rawMax === undefined || rawMax === null || rawMax === '') ? 200 : Number(rawMax);
+
+    if (!Number.isFinite(maxRows) || maxRows < 1 || maxRows > 1000) {
+      return req.reject(400, 'maxRows must be between 1 and 1000');
+    }
+
+    try {
+      let users = await this._getAdapter().readPasswordExpiryData();
+
+      if (status) {
+        users = users.filter((u) => u.pwdStatus === status);
+      }
+      if (search) {
+        users = users.filter((u) =>
+          (u.username && u.username.toLowerCase().includes(search)) ||
+          (u.fullName && u.fullName.toLowerCase().includes(search))
+        );
+      }
+
+      return users.slice(0, maxRows);
+    } catch (e) {
+      LOG.error('getPasswordExpiryList error:', e.message);
+      return req.reject(e.status || 502, e.message || 'Failed to list password expiry data');
+    }
+  }
+
+  /**
+   * getPasswordExpiryMonitor() — daemon run health status.
+   */
+  async _handleGetPasswordExpiryMonitor(req) {
+    try {
+      if (!cds.db) {
+        return {
+          state: 'off',
+          lastRunAt: null,
+          lastStatus: 'off',
+          lastRunDurationMs: 0,
+          totalMonitoredUsers: 0,
+          expiringSoonCount: 0,
+          expiredCount: 0,
+          initialPasswordCount: 0,
+          exemptCount: 0,
+          lastNotificationDispatchedAt: null,
+          pendingNotificationCount: 0,
+          failedNotificationCount: 0,
+          errorMessage: ''
+        };
+      }
+
+      const monitor = await cds.db.run(cds.ql.SELECT.one.from('saps4hana.admin.PasswordExpiryMonitor').where({ id: 'main' }));
+      if (!monitor) {
+        return {
+          state: 'off',
+          lastRunAt: null,
+          lastStatus: 'off',
+          lastRunDurationMs: 0,
+          totalMonitoredUsers: 0,
+          expiringSoonCount: 0,
+          expiredCount: 0,
+          initialPasswordCount: 0,
+          exemptCount: 0,
+          lastNotificationDispatchedAt: null,
+          pendingNotificationCount: 0,
+          failedNotificationCount: 0,
+          errorMessage: ''
+        };
+      }
+
+      return {
+        state: monitor.lastStatus === 'ok' ? 'ok' : 'failed',
+        lastRunAt: monitor.lastRunAt,
+        lastStatus: monitor.lastStatus,
+        lastRunDurationMs: monitor.lastRunDurationMs || 0,
+        totalMonitoredUsers: monitor.totalMonitoredUsers || 0,
+        expiringSoonCount: monitor.expiringSoonCount || 0,
+        expiredCount: monitor.expiredCount || 0,
+        initialPasswordCount: monitor.initialPasswordCount || 0,
+        exemptCount: monitor.exemptCount || 0,
+        lastNotificationDispatchedAt: monitor.lastNotificationDispatchedAt,
+        pendingNotificationCount: monitor.pendingNotificationCount || 0,
+        failedNotificationCount: monitor.failedNotificationCount || 0,
+        errorMessage: monitor.errorMessage || ''
+      };
+    } catch (e) {
+      LOG.error('getPasswordExpiryMonitor error:', e.message);
+      return req.reject(e.status || 502, e.message || 'Failed to retrieve password expiry monitor status');
+    }
   }
 };

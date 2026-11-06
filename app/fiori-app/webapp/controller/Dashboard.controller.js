@@ -88,7 +88,7 @@ sap.ui.define([
                 filters: oSaved.filters,
                 searchInput: oSaved.filters.search,
                 kpis: {},
-                kpiSelected: { total: "false", active: "false", locked: "false", changedToday: "false", changedLast7: "false" },
+                kpiSelected: { total: "false", active: "false", locked: "false", changedToday: "false", changedLast7: "false", expiringSoon: "false", expired: "false" },
                 chips: [],
                 changedByOptions: [],
                 showingText: "",
@@ -167,6 +167,14 @@ sap.ui.define([
                 if (oQuery && oQuery.search) {
                     // A link from a lock alert: the list opens with that username searched.
                     this._mergeAdminFilters({ search: String(oQuery.search) });
+                }
+                if (oQuery && oQuery.filter) {
+                    var sFilter = String(oQuery.filter);
+                    if (sFilter === "expiring" || sFilter === "expiring_soon") {
+                        this._mergeAdminFilters({ pwdStatus: "expiring_soon" });
+                    } else if (sFilter === "expired") {
+                        this._mergeAdminFilters({ pwdStatus: "expired" });
+                    }
                 }
                 if (oQuery && oQuery.action === "unlock" && oQuery.search) {
                     this._confirmUnlockUser(String(oQuery.search).trim().toUpperCase());
@@ -302,6 +310,58 @@ sap.ui.define([
                 return sDate;
             }
             return sDate.slice(6, 8) + "-" + sDate.slice(4, 6) + "-" + sDate.slice(0, 4);
+        },
+
+        formatAdminPwdStatusText: function (sStatus, iDaysRemaining) {
+            switch (sStatus) {
+                case "expired":
+                    return this._text("adminPwdStatusExpired", "Expired");
+                case "expiring_soon":
+                    if (typeof iDaysRemaining === "number") {
+                        return this._text("adminPwdStatusExpiringDays", "Expires in {0} days", [String(iDaysRemaining)]);
+                    }
+                    return this._text("adminPwdStatusExpiringSoon", "Expiring Soon");
+                case "initial":
+                    return this._text("adminPwdStatusInitial", "Initial Password");
+                case "exempt":
+                    return this._text("adminPwdStatusExempt", "Exempt (System)");
+                case "valid":
+                    return this._text("adminPwdStatusValid", "Active");
+                default:
+                    return "-";
+            }
+        },
+
+        formatAdminPwdStatusState: function (sStatus) {
+            switch (sStatus) {
+                case "expired":
+                    return "Error";
+                case "expiring_soon":
+                    return "Warning";
+                case "initial":
+                    return "Information";
+                case "valid":
+                    return "Success";
+                default:
+                    return "None";
+            }
+        },
+
+        formatAdminPwdStatusIcon: function (sStatus) {
+            switch (sStatus) {
+                case "expired":
+                    return "sap-icon://error";
+                case "expiring_soon":
+                    return "sap-icon://alert";
+                case "initial":
+                    return "sap-icon://user-edit";
+                case "valid":
+                    return "sap-icon://sys-enter-2";
+                case "exempt":
+                    return "sap-icon://inspect";
+                default:
+                    return "sap-icon://question-mark";
+            }
         },
 
         /**
@@ -503,6 +563,16 @@ sap.ui.define([
                 var mStatus = { active: "adminStatusUnlocked", locked: "adminStatusLocked", unavailable: "adminDetailsUnavailable" };
                 fnAdd("lockStatus:", "adminChipLockStatus", [this._text(mStatus[oFilters.lockStatus], oFilters.lockStatus)]);
             }
+            if (oFilters.pwdStatus) {
+                var mPwdStatus = {
+                    valid: "adminPwdStatusValid",
+                    expiring_soon: "adminPwdStatusExpiringSoon",
+                    expired: "adminPwdStatusExpired",
+                    initial: "adminPwdStatusInitial",
+                    exempt: "adminPwdStatusExempt"
+                };
+                fnAdd("pwdStatus:" + oFilters.pwdStatus, "adminChipPwdStatus", [this._text(mPwdStatus[oFilters.pwdStatus] || oFilters.pwdStatus, oFilters.pwdStatus)]);
+            }
             oFilters.userTypes.forEach(function (sType) {
                 fnAdd("userTypes:" + sType, "adminChipUserType", [that.formatAdminUserType(sType)]);
             });
@@ -543,7 +613,7 @@ sap.ui.define([
             }));
 
             var oSelected = {};
-            ["total", "active", "locked", "changedToday", "changedLast7"].forEach(function (sKpi) {
+            ["total", "active", "locked", "changedToday", "changedLast7", "expiringSoon", "expired"].forEach(function (sKpi) {
                 oSelected[sKpi] = String(UserListLogic.isKpiSelected(sKpi, oFilters, dToday));
             });
             var mChangedBy = {};
@@ -627,6 +697,10 @@ sap.ui.define([
             this._mergeAdminFilters({ lockStatus: oEvent.getSource().getSelectedKey() });
         },
 
+        onPwdStatusFilterChange: function (oEvent) {
+            this._mergeAdminFilters({ pwdStatus: oEvent.getSource().getSelectedKey() });
+        },
+
         onUserTypeFilterChange: function (oEvent) {
             this._mergeAdminFilters({ userTypes: oEvent.getSource().getSelectedKeys() });
         },
@@ -698,6 +772,7 @@ sap.ui.define([
                 { label: fnLabel("adminColUsername", "Username"), value: function (o) { return o.username; } },
                 { label: fnLabel("adminColFullName", "Full Name"), value: function (o) { return o.fullName; } },
                 { label: fnLabel("adminColLockStatus", "Lock Status"), value: function (o) { return that._lockStatusText(o); } },
+                { label: fnLabel("adminColPwdStatus", "Password Status"), value: function (o) { return that.formatAdminPwdStatusText(o.pwdStatus, o.pwdDaysRemaining); } },
                 { label: fnLabel("adminColUserType", "User Type"), value: function (o) { return o.userType; } },
                 { label: fnLabel("adminColLastChanged", "Last Changed"), value: function (o) { return that.formatAdminDate(o.lastChanged); } },
                 { label: fnLabel("adminDetailLastChangedBy", "Changed By"), value: function (o) { return o.lastChangedBy; } }

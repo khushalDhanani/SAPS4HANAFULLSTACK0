@@ -15,6 +15,98 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Password Expiry Monitoring — Phase 5: Regression Verification, Playwright E2E & Final Sign-Off (2026-11-06 13:38 IST) — PASS:**
+  - Milestone Completion: All 5 phases of the SAP S/4HANA Password Expiry Monitoring system are fully implemented, tested, and validated with zero live SAP writes and zero hash leakage.
+  - End-to-End Regression Verification:
+    - Full Admin Unit Test Suite: 10 suites passed, 297 passed, 0 failed in 2.32s (`test/unit/admin/`).
+    - Full Lock Notification Integration Suite: 2 suites passed, 66 passed, 0 failed in 2.40s (`test/integration/lockNotification*.test.js`).
+    - Playwright SAP-Free Browser Suite: 3/3 passed (Negative UI paths, Write authorization, Quarantine labels) in 15.8s (`npm run test:e2e:sap-free`).
+    - Playwright Shell Verification Suite: All suites passed (Shell screens, Shell login, Shell sidebar, Admin user list, Theme switcher, Sub-User Master table, User Master group in sidebar, User detail side pane, Sub-User Master KPIs & bulk actions) in 95s (`node test/e2e/shell/verifyShellScreens.e2e.js`).
+  - Standards & Code Quality Gates:
+    - UI5 Linter: 0 findings across `app/fiori-app/` (`npm --prefix app/fiori-app run lint`).
+    - ESLint: 0 errors, 0 warnings across all modified and new test and server files.
+    - CDS Compilation: Native SAP HANA and SQLite DDL generation compiles with 0 errors (`cds compile --to sql`).
+    - MTA Validation: MTA descriptor validated cleanly (`mbt validate -x paths`).
+    - Secrets Scan: 0 secrets detected across 893 tracked files (`npm run scan:secrets`).
+    - Dependencies Scan: 0 critical/high vulnerabilities across root and Fiori app packages (`npm run scan:dependencies`).
+    - Formatting & Diffs: `git diff --check` clean (0 whitespace/formatting errors).
+    - Security Assertion: Strictly excluded password hash columns (`BCODE`, `PASSCODE`, `PWDSALTEDHASH`, `OCOD1`, `BCDA1`, `CODV1`); zero passwords or credentials exposed. Zero live SAP writes executed (READ-ONLY compliance).
+
+- **Password Expiry Monitoring — Phase 4: SAPUI5 Sub-User Master Frontend Integration (2026-11-06 13:31 IST) — PASS:**
+  - KPI Tiles on `#/dashboard/admin` (`app/fiori-app/webapp/view/Dashboard.view.xml`):
+    - Added `adminKpiExpiringSoon` GenericTile with `Critical` (Amber) status badge counting accounts expiring within $\le 14$ days.
+    - Added `adminKpiExpired` GenericTile with `Error` (Red) status badge counting accounts with passwords older than 90 days.
+    - Interactive toggle: clicking tiles immediately filters the user list and updates selection states.
+  - Sub-User Master Table & Columns (`Dashboard.view.xml`):
+    - Added sortable **Password Status** column (`adminColPwdStatus`, `sortProperty="pwdStatus"`).
+    - Added responsive `ObjectStatus` column cell displaying semantic status badges (`Success`/Active, `Warning`/Expiring in X days, `Error`/Expired, `Information`/Initial Password, `None`/Exempt) and icons.
+  - Filter Bar & Chips (`Dashboard.view.xml`, `UserListLogic.js`):
+    - Added Password Status dropdown selector (`adminPwdStatusFilter`) supporting all statuses (`All`, `Expiring Soon`, `Expired`, `Initial Password`, `Active`, `Exempt`).
+    - Extended `UserListLogic` pure module: `EMPTY_FILTERS` with `pwdStatus`, `computeKpis` with `expiringSoon` and `expired`, `filterUsers` with `pwdStatus`, `kpiFilter`, and `hasActiveFilters`.
+    - Added active token chip `Password: <status>` with one-click deletion (`adminChipPwdStatus`).
+  - Side Pane Details (`app/fiori-app/webapp/fragment/UserDetailPane.fragment.xml`):
+    - Added **Password & Security** `FormContainer` (`adminDetailSectionPassword`) displaying `Password Status`, `Last Password Change` (`formatAdminDate`), `Effective Expiration` (`formatAdminDate`), and `Days Remaining`.
+  - Deep Link Handling (`Dashboard.controller.js`):
+    - Handled URL query parameter `?filter=expiring` or `?filter=expired` in `_onDashboardMatched()`, allowing alert emails to deep-link directly into pre-filtered administrator views.
+    - Extended CSV user export (`onExportUsers`) to include the Password Status column.
+  - Tests (`test/unit/admin/`):
+    - `userListLogic.test.js`: 37 passed, 0 failed (KPI counts, multi-filter combinations with `pwdStatus`, KPI toggle synchronization, and chip deletion).
+    - `adminDashboardList.test.js`: 62 passed, 0 failed (view bindings, side pane fragment elements, deep link query parameter routing, status text/state/icon formatters, and filter handlers).
+    - Full admin suite: 10 suites passed, 297 passed, 0 failed. Full lock notification integration suite: 2 suites passed, 66 passed, 0 failed.
+    - Code quality: UI5 linter clean (`ui5lint`: 0 findings). ESLint clean (0 errors, 0 warnings). `git diff --check` clean. Zero live SAP writes made.
+
+- **Password Expiry Monitoring — Phase 3: Notification Engine & Daily Poller Daemon (2026-11-06 13:21 IST) — PASS:**
+  - Notification Engine (`srv/admin/passwordExpiryEmail.js`):
+    - Created responsive, Aether-branded email template for password expiry advisories with official header logo, status metric badges (`Expired`, `Expiring Soon`, `Initial Password`), styled user table, action button linking to `#/dashboard/admin?filter=expiring`, and complete plain-text fallback.
+    - Added `resolveUserStatus` helper reconciling both live user records and persisted queue events (`pwdStatus` or `milestone`).
+    - Enforced strict HTML escaping (`escapeHtml`) on all user attributes to prevent script/markup injection.
+  - Milestone Deduplication & Event Store (`srv/admin/passwordExpiryStore.js`):
+    - Added `resolveMilestone(user)` categorizing accounts into milestone notification buckets (`14_days`, `7_days`, `3_days`, `1_day`, `expired`, `initial`).
+    - Added `commitCycle`: upserts operational tracking snapshots into `UserPasswordSnapshot` and deduplicates milestone events per `(username, milestone, cycleDate)` into `UserPasswordNotification`.
+    - Added atomic database claiming (`claimPendingEvents` with lease duration, `claimOwner`, `claimedAt`, `claimExpiresAt`) and automatic lease recovery for crashed workers.
+    - Added lifecycle transitions (`completeEvents` marking `sent`, `releaseOrFailEvents` handling backoff retries and capping at `maxAttempts` before marking `failed`).
+    - Added `recordMonitorHealth` updating `PasswordExpiryMonitor` with live cycle metrics, durations, status, and pending/failed queue counts.
+  - Background Poller Daemon (`srv/admin/passwordExpiryNotifier.js`):
+    - Implemented `pollOnce(getAdapter, now)` with non-overlapping cycle concurrency protection (`running` lock).
+    - Multi-worker safety: Cloud Foundry instance 0 check (`CF_INSTANCE_INDEX === '0'`) ensures only one instance runs scheduled polls.
+    - Configurable cadence: `PWD_POLL_INTERVAL_SEC` (default 86400s / 24h), `SAP_PASSWORD_EXPIRATION_DAYS` (default 90), `SAP_PASSWORD_WARNING_DAYS` (default 14), with fallback to `LOCK_NOTIFY_TO`.
+    - Wired `passwordExpiryNotifier.startJob(() => this._getAdapter())` into `srv/admin/service.js` `init()`.
+  - Tests (`test/unit/admin/`):
+    - `passwordExpiryEmail.test.js`: 12 unit tests passed (date formatting, badge styles, HTML escaping, admin link generation, single and multiple user outputs, metrics pills, XSS sanitization, and 50-user overflow truncation).
+    - `passwordExpiryStore.test.js`: 17 tests passed (milestone classification, worker ID generation, snapshot persistence, milestone deduplication, multi-worker atomic claiming, expired lease recovery, completion, backoff release, and monitor health tracking).
+    - `passwordExpiryNotifier.test.js`: 12 tests passed (recipients parsing, UTC cycle date formatting, successful poll cycle with SMTP dispatch, email disabled queueing, SMTP failure backoff retention, adapter error recording, and daemon lifecycle).
+    - Full admin suite: 10 suites passed, 291 tests passed, 0 failed. Full lock notification integration suite: 2 suites passed, 66 tests passed, 0 failed.
+    - Code quality: ESLint clean (0 errors, 0 warnings). `git diff --check` clean. Zero live SAP writes made.
+
+- **Password Expiry Monitoring — Phase 2: CAP Domain Models & Service APIs (2026-11-06 13:12 IST) — PASS:**
+  - Database Persistence (`db/admin/password-expiry.cds`): Created operational tracking entities `UserPasswordSnapshot`, `UserPasswordNotification` (milestone deduplication), and `PasswordExpiryMonitor` (daemon run health). Wired into `db/schema.cds`. Compiles cleanly to native HANA and SQLite SQL (`cds compile --to sql`).
+  - CAP Service Contract (`srv/admin/service.cds`):
+    - Extended `listUsers` and `getUserDetail` return signatures with `pwdLastChanged`, `pwdExpiresAt`, `pwdDaysRemaining`, and `pwdStatus`.
+    - Added dedicated admin functions:
+      1. `getPasswordExpirySummary()`: Returns aggregated counts (`totalMonitored`, `valid`, `expiringSoon`, `criticalExpiring`, `expired`, `initialPassword`, `exempt`, `policyDays`, `warningDays`).
+      2. `getPasswordExpiryList(search, status, maxRows)`: Provides filtered and searched password expiry user lists.
+      3. `getPasswordExpiryMonitor()`: Returns daemon health status (`ok`, `failed`, `stale`, `off`).
+  - Service Handlers (`srv/admin/service.js`):
+    - Concurrently enriches `listUsers` and `getUserDetail` with `adapter.readPasswordExpiryData()`.
+    - Implemented `_handleGetPasswordExpirySummary`, `_handleGetPasswordExpiryList` (with regex search & bounds validation), and `_handleGetPasswordExpiryMonitor` (querying `PasswordExpiryMonitor` with fallback to `off` when DB uninitialized).
+  - Tests (`test/unit/admin/UserManagementService.test.js`):
+    - Added unit test coverage for `listUsers` enrichment, graceful fallback on adapter read error, `getUserDetail` password expiry enrichment, summary aggregation across all status categories, filtered expiry lists, `maxRows` bounds validation, and monitor state reporting.
+    - Test Suite: 24 passed, 0 failed in `UserManagementService.test.js`. Full admin unit suite: 250 passed, 0 failed across 7 suites. Full lock notification integration suite: 66 passed, 0 failed.
+    - Code quality: ESLint clean (0 errors, 0 warnings). `git diff --check` clean. CDS model compilation clean. Zero live SAP writes made.
+
+- **Password Expiry Monitoring — Phase 1: SAP Discovery & UserManagementAdapter implementation (2026-11-06 13:05 IST) — PASS:**
+  - Live SAP Discovery on DS4/220: Verified table `USR02` field structure via `DDIF_FIELDINFO_GET` (45 fields total). Confirmed `PWDCHGDATE` (`DATS 8`: Date of Last Password Change), `GLTGV` (`DATS 8`), `GLTGB` (`DATS 8`), `USTYP` (`CHAR 1`), `UFLAG` (`INT1 3`), `TRDAT` (`DATS 8`), and `LTIME` (`TIMS 6`).
+  - Read-Only Query Verification: Read all 278 users from `USR02` in 730 ms. Password status breakdown: 77 valid, 19 expiring soon, 173 expired, 9 exempt (System/Service types `B` and `S`).
+  - Security Compliance: All password hash columns (`BCODE`, `PASSCODE`, `PWDSALTEDHASH`, `OCOD1`, `BCDA1`, `CODV1`) are strictly excluded from RFC queries; zero credentials or hashes leave the adapter.
+  - Adapter Implementation (`srv/integration/s4hana/admin/UserManagementAdapter.js`):
+    - Added pure helpers: `parseSapDate`, `formatSapDate`, `addDays`, `diffCalendarDays`.
+    - Added `calculatePasswordStatus(row, options)` with configurable `expirationDays` (default 90) and `warningDays` (default 14), classifying users into `valid`, `expiring_soon`, `expired`, `initial`, and `exempt`.
+    - Added `readPasswordExpiryData(options)` which executes single batch query on `USR02` and enriches with full display names from `USER_ADDR` (`readFullNames()`), with fallback handling if `USER_ADDR` fails.
+  - Tests (`test/unit/admin/UserManagementAdapter.test.js`):
+    - Added 18 unit tests covering date parsing, UTC leap year day math, user type exemption, initial password detection, boundary conditions ($R=14, 15, 0, -1$), expired account validity (`GLTGB < today`), hash column exclusion, and username filtering.
+    - Test Suite results: 58 passed, 0 failed in `UserManagementAdapter.test.js`. Full admin unit and lock integration suites passed (9 suites, 306 passed, 0 failed).
+    - Code quality: ESLint clean (0 errors, 0 warnings on modified files). `git diff --check` clean. Zero live SAP writes made.
+
 - **SAP Lock Alert email template: "Unlock User" action button added & verified (2026-11-06 12:45 IST) — PASS:**
   - Implemented direct "Unlock User &rarr;" action button in `srv/admin/lockEmail.js` alongside "Open in App &rarr;".
   - Link format: `${base}#/dashboard/admin?search=${encodeURIComponent(username)}&action=unlock`. Plain-text fallback: `Unlock in app: ...`.
@@ -336,6 +428,180 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-06 13:38 IST — Password Expiry Monitoring: Phase 5 Regression Verification, Playwright E2E & Final Sign-Off: PASS
+
+- **Request:** The user requested "Phase 5" of the Password Expiry Monitoring plan.
+- **Scope:** Complete Phase 5:
+  1. Full regression testing across admin, user management, and lock notification integration test suites.
+  2. Full Playwright E2E browser verification (`npm run test:e2e:sap-free` and `node test/e2e/shell/verifyShellScreens.e2e.js`).
+  3. Generalize actions column discovery in `test/e2e/shell/verifyShellScreens.e2e.js` to dynamically resolve the `HBox` actions cell.
+  4. Repository-wide standards compliance: CDS compilation, MTA descriptor validation, secrets scan, and dependencies audit.
+  5. Update `WORKSTATUS.md` and report completion.
+- **Changes:**
+  - `test/e2e/shell/verifyShellScreens.e2e.js`:
+    - Updated lines 104 and 425 to locate the Actions container dynamically using `cells.find((c) => c.isA && c.isA('sap.m.HBox'))` rather than hardcoding column index 7, accommodating the new Password Status column seamlessly.
+- **Test Impact Decision:** `TEST UPDATED`
+  - `test/e2e/shell/verifyShellScreens.e2e.js`: Dynamic actions cell resolution verified across all shell flows, list screens, and bulk user action tests.
+- **Executed Validations:**
+  - `npx jest test/unit/admin/`: 10 suites passed, 297 tests passed, 0 failed in 2.32s.
+  - `npx jest test/integration/lockNotification*.test.js`: 2 suites passed, 66 tests passed, 0 failed in 2.40s.
+  - `npm run test:e2e:sap-free`: 3/3 passed (Negative UI paths, Write authorization, Quarantine labels) in 15.8s.
+  - `node test/e2e/shell/verifyShellScreens.e2e.js`: All suites passed (Shell screens, Shell login, Shell sidebar, Admin user list, Theme switcher, Sub-User Master table, User Master group in sidebar, User detail side pane, Sub-User Master KPIs & bulk actions) in 95s.
+  - `npx cds compile db/schema.cds --to sql` & `npx cds compile srv/ --to sql`: Exit code 0, compiles cleanly to native SAP HANA and SQLite SQL.
+  - `npx mbt validate -x paths`: Exit code 0, MTA project structure validated.
+  - `npm run scan:secrets`: Clean (0 secrets detected across 893 tracked files).
+  - `npm run scan:dependencies`: Clean (0 critical or high vulnerabilities).
+  - `npm --prefix app/fiori-app run lint`: Clean (`ui5lint`: 0 findings).
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - Security Assertions: Strictly excluded password hash columns (`BCODE`, `PASSCODE`, `PWDSALTEDHASH`, `OCOD1`, `BCDA1`, `CODV1`); zero passwords or credentials exposed. Zero live SAP writes made (READ-ONLY compliance).
+- **Next Action:** Password Expiry Monitoring milestone is 100% COMPLETE. Ready for review or next user task.
+
+### 2026-11-06 13:31 IST — Password Expiry Monitoring: Phase 4 SAPUI5 Sub-User Master Frontend Integration: PASS
+
+- **Request:** The user requested "Phase 4" of the Password Expiry Monitoring plan.
+- **Scope:** Complete Phase 4:
+  1. Add KPI tiles (`adminKpiExpiringSoon`, `adminKpiExpired`) to `app/fiori-app/webapp/view/Dashboard.view.xml`.
+  2. Add `adminColPwdStatus` column in the user table with `ObjectStatus` semantic badges.
+  3. Add Password Status dropdown selector (`adminPwdStatusFilter`) in `adminFilterBar`.
+  4. Extend `app/fiori-app/webapp/modules/admin/user-management/util/UserListLogic.js` with `pwdStatus` filtering, KPI counting, and token chip removal.
+  5. Add **Password & Security** `FormContainer` in `app/fiori-app/webapp/fragment/UserDetailPane.fragment.xml`.
+  6. Add formatters and deep link handling in `app/fiori-app/webapp/controller/Dashboard.controller.js`.
+  7. Add i18n keys to `app/fiori-app/webapp/i18n/i18n.properties` and `i18n_en.properties`.
+  8. Update unit test suites in `test/unit/admin/userListLogic.test.js` and `test/unit/admin/adminDashboardList.test.js`.
+- **Changes:**
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added translations for `adminKpiExpiringSoon`, `adminKpiExpired`, `adminColPwdStatus`, status values (`adminPwdStatusValid`, `adminPwdStatusExpiringSoon`, `adminPwdStatusExpiringDays`, `adminPwdStatusExpired`, `adminPwdStatusInitial`, `adminPwdStatusExempt`), chip text `adminChipPwdStatus`, and detail form section `adminDetailSectionPassword` and field labels.
+  - `app/fiori-app/webapp/modules/admin/user-management/util/UserListLogic.js`:
+    - Extended `EMPTY_FILTERS` with `pwdStatus: ""`.
+    - Extended `computeKpis` to count `expiringSoon` ($R \le 14$ days) and `expired`.
+    - Extended `filterUsers` with `!oFilters.pwdStatus || oUser.pwdStatus === oFilters.pwdStatus`.
+    - Extended `kpiFilter` with `expiringSoon` and `expired` mappings.
+    - Extended `hasActiveFilters` to check `oFilters.pwdStatus`.
+  - `app/fiori-app/webapp/view/Dashboard.view.xml`:
+    - Added `adminKpiExpiringSoon` GenericTile (`Critical` / Amber) and `adminKpiExpired` GenericTile (`Error` / Red) with press handler `.onKpiPress`.
+    - Added `adminPwdStatusFilter` Select in `adminFilterBar` with items for all status filters.
+    - Added sortable `adminColPwdStatus` Column in `adminUsersTable`.
+    - Added `ObjectStatus` in table rows with text, state, and icon bindings via controller formatters.
+  - `app/fiori-app/webapp/fragment/UserDetailPane.fragment.xml`:
+    - Added `adminDetailSectionPassword` FormContainer displaying Password Status (`ObjectStatus`), Last Password Change (`formatAdminDate`), Effective Expiration (`formatAdminDate`), and Days Remaining.
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`:
+    - Initialized `kpiSelected` with `expiringSoon` and `expired`.
+    - Added formatters `formatAdminPwdStatusText`, `formatAdminPwdStatusState`, `formatAdminPwdStatusIcon`.
+    - Added `onPwdStatusFilterChange` event handler.
+    - Handled URL query parameter `?filter=expiring` or `?filter=expired` in `_onDashboardMatched()`.
+    - Included Password Status in CSV user export (`onExportUsers`).
+- **Test Impact Decision:** `TEST ADDED & TEST UPDATED`
+  - `test/unit/admin/userListLogic.test.js`: Added tests for `computeKpis` with `expiringSoon` and `expired`, `filterUsers` with `pwdStatus`, KPI toggle synchronization, and chip deletion (37 tests passed, 0 failed).
+  - `test/unit/admin/adminDashboardList.test.js`: Added tests for view bindings, fragment elements, deep link query parameter routing, formatters, and filter change handlers (62 tests passed, 0 failed).
+- **Executed Validations:**
+  - `npm --prefix app/fiori-app run lint`: Clean (`ui5lint`: 0 findings).
+  - `npx jest test/unit/admin/`: 10 suites passed, 297 tests passed, 0 failed.
+  - `npx jest test/integration/lockNotification*.test.js`: 2 suites passed, 66 tests passed, 0 failed.
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - Zero live SAP writes made.
+- **Next Action:** Proceed with Phase 5 (Full Regression verification, Playwright E2E suite verification, and final sign-off).
+
+### 2026-11-06 13:21 IST — Password Expiry Monitoring: Phase 3 Notification Engine & Daily Poller Daemon: PASS
+
+- **Request:** The user requested "PHASE 3" of the Password Expiry Monitoring plan.
+- **Scope:** Complete Phase 3:
+  1. Implement Aether-branded responsive notification email in `srv/admin/passwordExpiryEmail.js`.
+  2. Implement database-backed event store, atomic claiming, milestone deduplication, and lease recovery in `srv/admin/passwordExpiryStore.js`.
+  3. Implement scheduled daily poller daemon in `srv/admin/passwordExpiryNotifier.js` and wire it into `srv/admin/service.js` `init()`.
+  4. Write comprehensive unit tests for all 3 modules in `test/unit/admin/`.
+- **Changes:**
+  - `srv/admin/passwordExpiryEmail.js`:
+    - Responsive HTML email builder with official Aether logo, security advisory strip, status summary metric badges (`Expired`, `Expiring Soon`, `Initial Password`), styled table with key attributes (username, full name, user type, last changed, expires, days remaining, status badge), CTA button linking to `#/dashboard/admin?filter=expiring`, and plain-text fallback.
+    - Added `resolveUserStatus` helper to handle both live adapter objects and database event records (`pwdStatus` or `milestone`).
+    - Enforced strict HTML escaping on all dynamic fields via `escapeHtml`.
+  - `srv/admin/passwordExpiryStore.js`:
+    - Added `resolveMilestone` classifying accounts into `expired`, `initial`, `14_days`, `7_days`, `3_days`, `1_day`.
+    - Added `commitCycle` which upserts snapshots into `UserPasswordSnapshot` and inserts pending events into `UserPasswordNotification` with unique deduplication on `(username, milestone, cycleDate)`.
+    - Added atomic DB claiming with lease expiry (`claimPendingEvents`), completion (`completeEvents`), retry backoff with capped attempts before failure (`releaseOrFailEvents`), and health tracking (`recordMonitorHealth`).
+  - `srv/admin/passwordExpiryNotifier.js`:
+    - Implemented `pollOnce` with non-overlapping cycle execution (`running` lock), multi-worker CF instance 0 check (`CF_INSTANCE_INDEX === '0'`), configurable interval (`PWD_POLL_INTERVAL_SEC`), and SMTP dispatch.
+    - Wired `passwordExpiryNotifier.startJob(() => this._getAdapter())` into `init()` in `srv/admin/service.js`.
+- **Test Impact Decision:** `TEST ADDED`
+  - `test/unit/admin/passwordExpiryEmail.test.js`: 12 tests covering helpers, single/multiple users, mixed statuses, XSS sanitization, overflow truncation, and CTA link formatting.
+  - `test/unit/admin/passwordExpiryStore.test.js`: 17 tests covering milestone resolution, worker ID generation, snapshot persistence, milestone deduplication, atomic claiming, expired lease recovery, and monitor health tracking.
+  - `test/unit/admin/passwordExpiryNotifier.test.js`: 12 tests covering recipients parsing, UTC cycle date formatting, successful poll cycle with SMTP dispatch, email disabled queueing, SMTP failure backoff retention, adapter error recording, and daemon lifecycle.
+- **Executed Validations:**
+  - `npx jest test/unit/admin/`: 10 suites passed, 291 tests passed, 0 failed.
+  - `npx jest test/integration/lockNotification*.test.js`: 2 suites passed, 66 tests passed, 0 failed.
+  - ESLint: Clean (0 errors, 0 warnings on modified files).
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - Zero live SAP writes made.
+- **Next Action:** Proceed with Phase 4 (SAPUI5 Sub-User Master dashboard integration on `#/dashboard/admin`: KPI tiles, status filters, table column with badges, and side pane security section).
+
+### 2026-11-06 13:12 IST — Password Expiry Monitoring: Phase 2 CAP Domain Models & Service APIs: PASS
+
+- **Request:** The user requested "PHASE 2" of the Password Expiry Monitoring plan.
+- **Scope:** Complete Phase 2:
+  1. Define CAP CDS models in `db/admin/password-expiry.cds` (`UserPasswordSnapshot`, `UserPasswordNotification`, `PasswordExpiryMonitor`) and wire into `db/schema.cds`.
+  2. Extend `UserManagementService` in `srv/admin/service.cds` with password expiry fields on `listUsers` and `getUserDetail`, plus new dedicated functions: `getPasswordExpirySummary`, `getPasswordExpiryList`, and `getPasswordExpiryMonitor`.
+  3. Implement service handlers in `srv/admin/service.js`.
+  4. Add unit test coverage in `test/unit/admin/UserManagementService.test.js`.
+- **Changes:**
+  - `db/admin/password-expiry.cds`: Added entities `UserPasswordSnapshot`, `UserPasswordNotification` (milestone deduplication), and `PasswordExpiryMonitor` (daemon run health).
+  - `db/schema.cds`: Added `using from './admin/password-expiry';`.
+  - `srv/admin/service.cds`:
+    - Added `pwdLastChanged`, `pwdExpiresAt`, `pwdDaysRemaining`, and `pwdStatus` to `listUsers` and `getUserDetail` returns.
+    - Added `function getPasswordExpirySummary() returns { totalMonitored, valid, expiringSoon, criticalExpiring, expired, initialPassword, exempt, policyDays, warningDays }`.
+    - Added `function getPasswordExpiryList(search: String, status: String, maxRows: Integer) returns array of { ... }`.
+    - Added `function getPasswordExpiryMonitor() returns { state, lastRunAt, lastStatus, lastRunDurationMs, totalMonitoredUsers, expiringSoonCount, expiredCount, initialPasswordCount, exemptCount, lastNotificationDispatchedAt, pendingNotificationCount, failedNotificationCount, errorMessage }`.
+  - `srv/admin/service.js`:
+    - Registered new functions in `init()`.
+    - Enriched `_handleListUsers` and `_handleGetUserDetail` concurrently with `adapter.readPasswordExpiryData()`.
+    - Implemented `_handleGetPasswordExpirySummary`, `_handleGetPasswordExpiryList` (with case-insensitive regex search and `maxRows` 1..1000 validation), and `_handleGetPasswordExpiryMonitor` (querying `PasswordExpiryMonitor` via `cds.db.run` with fallback to `off` when DB is uninitialized).
+- **Test Impact Decision:** `TEST ADDED`
+  - `test/unit/admin/UserManagementService.test.js`: Added 9 unit tests covering `listUsers` password expiry enrichment, fallback when adapter fails, `getUserDetail` password expiry enrichment, `getPasswordExpirySummary` metric counts across all statuses and 502 error handling, `getPasswordExpiryList` search/status filters and `maxRows` bounds, and `getPasswordExpiryMonitor` off/recorded states.
+- **Executed Validations:**
+  - `npx cds compile db/schema.cds --to sql` & `npx cds compile srv/ --to sql`: Exit 0, valid SQL generated for both SQLite and SAP HANA.
+  - `npx cds compile srv/admin/service.cds --to json`: Exit 0.
+  - `npx jest test/unit/admin/UserManagementService.test.js`: 24 tests passed, 0 failed.
+  - `npx jest test/unit/admin/`: 7 suites passed, 250 tests passed, 0 failed.
+  - `npx jest test/integration/lockNotification.test.js test/integration/lockNotificationQueue.test.js`: 2 suites passed, 66 tests passed, 0 failed.
+  - ESLint: Clean (0 errors, 0 warnings on modified files).
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - Zero live SAP writes made.
+- **Next Action:** Proceed with Phase 3 (Notification Engine & Daily Poller in `srv/admin/passwordExpiryStore.js`, `passwordExpiryNotifier.js`, and `passwordExpiryEmail.js`).
+
+### 2026-11-06 13:05 IST — Password Expiry Monitoring: Phase 1 SAP Discovery & Adapter implementation: PASS
+
+- **Request:** The user requested "PHASE 1" of the Password Expiry Monitoring plan.
+- **Scope:** Complete Phase 1 of the implementation:
+  1. SAP S/4HANA Discovery on DS4/220: Inspect `USR02` dictionary metadata and confirm existence of password expiry and account validity fields.
+  2. Implement `readPasswordExpiryData(options)` and pure calculation helpers in `srv/integration/s4hana/admin/UserManagementAdapter.js`.
+  3. Ensure zero password hash columns are queried or exposed.
+  4. Add unit test coverage in `test/unit/admin/UserManagementAdapter.test.js`.
+- **Changes:**
+  - `srv/integration/s4hana/admin/UserManagementAdapter.js`:
+    - Added pure date helpers: `parseSapDate(sDate)` (converts DATS to UTC Date), `formatSapDate(date)`, `addDays(date, days)`, and `diffCalendarDays(d1, d2)`.
+    - Added `calculatePasswordStatus(row, options)` with configurable `expirationDays` (default: `process.env.SAP_PASSWORD_EXPIRATION_DAYS || 90`) and `warningDays` (default: `process.env.SAP_PASSWORD_WARNING_DAYS || 14`).
+    - Handled classification rules:
+      - System / Communication / Service / Reference accounts (`USTYP !== 'A'`): `exempt`
+      - Initial / unconfigured password (`PWDCHGDATE == '00000000'` or empty): `initial`
+      - Expiration disabled policy (`expirationDays <= 0`): `valid`
+      - Expired password ($R < 0$) or expired account validity (`GLTGB < today`): `expired`
+      - Expiring soon ($0 \le R \le \text{warningDays}$): `expiring_soon`
+      - Healthy password ($R > \text{warningDays}$): `valid`
+    - Added `readPasswordExpiryData(options)` method: Executes single batch `RFC_READ_TABLE` on `USR02` with fields `['BNAME', 'USTYP', 'UFLAG', 'GLTGV', 'GLTGB', 'PWDCHGDATE', 'TRDAT', 'LTIME']` and joins with `readFullNames()` from `USER_ADDR`.
+    - Exported `calculatePasswordStatus`, `parseSapDate`, `formatSapDate`, `addDays`, `diffCalendarDays`, `PWD_POLICY_DEFAULT_DAYS`, `PWD_WARNING_DEFAULT_DAYS`.
+- **Test Impact Decision:** `TEST ADDED`
+  - `test/unit/admin/UserManagementAdapter.test.js`: Added 18 unit tests across two new suites:
+    1. `UserManagementAdapter - Password Expiry Helpers` (5 tests): date parsing, formatting, UTC leap year boundary calculations, day diffs, constants.
+    2. `UserManagementAdapter - calculatePasswordStatus` (10 tests): non-dialog exemption, initial passwords, active/valid calculation, expiring_soon threshold, exact boundaries ($R=14, 15$), expired passwords, expired `GLTGB` dates, disabled policies, locked flags.
+    3. `UserManagementAdapter.readPasswordExpiryData` (3 tests): verifies hash fields are strictly absent, verifies enrichment with full names, single user filtering with SQL escaping, graceful degradation if `USER_ADDR` is unavailable.
+- **Executed Validations:**
+  - `npx jest test/unit/admin/UserManagementAdapter.test.js`: 58 tests passed, 0 failed.
+  - `npx jest test/unit/admin/ test/integration/lockNotification.test.js test/integration/lockNotificationQueue.test.js`: 9 suites passed, 306 tests passed, 0 failed.
+  - ESLint: Clean (0 errors, 0 warnings on modified files).
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - Live SAP Discovery (READ-ONLY) on DS4/220:
+    - `DDIF_FIELDINFO_GET`: Confirmed `PWDCHGDATE` (`DATS 8`), `GLTGV`, `GLTGB`, `USTYP`, `UFLAG`, `TRDAT`, `LTIME`.
+    - `readPasswordExpiryData()` on live DS4/220: Loaded all 278 users in 730 ms (77 valid, 19 expiring soon, 173 expired, 9 exempt).
+    - Zero live SAP writes made.
+- **Next Action:** Proceed with Phase 2 (CAP CDS persistence models in `db/admin/password-expiry.cds` and service endpoints in `srv/admin/service.cds`).
 
 ### 2026-11-06 12:45 IST — SAP Lock Alert email: "Unlock User" action button and deep link confirmation: PASS
 

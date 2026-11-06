@@ -358,6 +358,36 @@
                                                         </customData>
                                                     </GenericTile>
                                                     <GenericTile
+                                                        id="adminKpiExpiringSoon"
+                                                        header="{i18n>adminKpiExpiringSoon}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/expiringSoon', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/expiringSoon', formatter: '.formatMetricValue'}" valueColor="Critical" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="expiringSoon" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/expiringSoon}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiExpired"
+                                                        header="{i18n>adminKpiExpired}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/expired', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/expired', formatter: '.formatMetricValue'}" valueColor="Error" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="expired" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/expired}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
                                                         id="adminKpiChangedToday"
                                                         header="{i18n>adminKpiChangedToday}"
                                                         frameType="OneByHalf"
@@ -420,6 +450,22 @@
                                                                 <core:Item key="active" text="{i18n>adminStatusUnlocked}" />
                                                                 <core:Item key="locked" text="{i18n>adminStatusLocked}" />
                                                                 <core:Item key="unavailable" text="{i18n>adminDetailsUnavailable}" />
+                                                            </items>
+                                                        </Select>
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminColPwdStatus}" labelFor="adminPwdStatusFilter" />
+                                                        <Select
+                                                            id="adminPwdStatusFilter"
+                                                            selectedKey="{adminView>/filters/pwdStatus}"
+                                                            change=".onPwdStatusFilterChange">
+                                                            <items>
+                                                                <core:Item key="" text="{i18n>adminFilterAll}" />
+                                                                <core:Item key="expiring_soon" text="{i18n>adminPwdStatusExpiringSoon}" />
+                                                                <core:Item key="expired" text="{i18n>adminPwdStatusExpired}" />
+                                                                <core:Item key="initial" text="{i18n>adminPwdStatusInitial}" />
+                                                                <core:Item key="valid" text="{i18n>adminPwdStatusValid}" />
+                                                                <core:Item key="exempt" text="{i18n>adminPwdStatusExempt}" />
                                                             </items>
                                                         </Select>
                                                     </VBox>
@@ -582,6 +628,15 @@
                                                                 </Link>
                                                             </header>
                                                         </Column>
+                                                        <Column minScreenWidth="Tablet" demandPopin="true" width="9rem">
+                                                            <header>
+                                                                <Link text="{i18n>adminColPwdStatus}" press=".onSortUsers">
+                                                                    <customData>
+                                                                        <core:CustomData key="sortProperty" value="pwdStatus" />
+                                                                    </customData>
+                                                                </Link>
+                                                            </header>
+                                                        </Column>
                                                         <Column minScreenWidth="Desktop" width="7rem">
                                                             <header>
                                                                 <Link text="{i18n>adminColUserType}" press=".onSortUsers">
@@ -630,6 +685,10 @@
                                                                     text="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? ${i18n>adminStatusLocked} : ${i18n>adminStatusUnlocked}) : ${i18n>adminDetailsUnavailable} }"
                                                                     state="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? 'Error' : 'Success') : 'Warning' }"
                                                                     icon="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? 'sap-icon://locked' : 'sap-icon://unlocked') : 'sap-icon://alert' }" />
+                                                                <ObjectStatus
+                                                                    text="{parts: ['adminView>pwdStatus', 'adminView>pwdDaysRemaining'], formatter: '.formatAdminPwdStatusText'}"
+                                                                    state="{path: 'adminView>pwdStatus', formatter: '.formatAdminPwdStatusState'}"
+                                                                    icon="{path: 'adminView>pwdStatus', formatter: '.formatAdminPwdStatusIcon'}" />
                                                                 <Text text="{= ${adminView>userType} || '-' }" />
                                                                 <Text text="{path: 'adminView>lastChanged', formatter: '.formatAdminDate'}" />
                                                                 <Text text="{= ${adminView>lastChangedBy} || '-' }" />
