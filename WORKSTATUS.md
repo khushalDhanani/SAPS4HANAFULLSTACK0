@@ -15,6 +15,36 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **SAP Lock Alert live test email sent (2026-11-06 12:27 IST) — PASS on SMTP transmission; inbox arrival pending user verification:**
+  - Dispatched live test email featuring the new SAP Lock Alert responsive HTML template via configured Microsoft 365 Exchange SMTP (`srv/common/mailer.js`).
+  - Payload: Username `DIPEN`, Full Name `DIPEN ASORIYA`, Lock Type `Locked by administrator`, Lock Timestamp (SAP) `2026-11-06 11:45:30`, Locked By `KHUSHAL`, Source `Fiori app`, Reason `-`, CTA `Open in App →` linking to `/dashboard/admin?search=DIPEN`.
+  - Delivery: Accepted by SMTP server (`SEND_ACCEPTED`, duration 617ms, exit code 0) for the single recipient in `LOCK_NOTIFY_TO`. Zero secrets exposed. Zero SAP writes made.
+
+- **SAP Lock Alert HTML email template implemented & verified (2026-11-06 12:20 IST) — PASS:**
+  - Implemented the official SAP Lock Alert responsive HTML email template in `srv/admin/lockEmail.js`.
+  - Design & Structure:
+    1. Header: Header strip featuring uppercase `User Account Locked (Internal)` and official Aether Industries logo image (`https://myapp.airis.co.in/src/app/ClientResources/Airis/AeElementally.png`, height 60).
+    2. Intro: Formal security alert notice addressed to `Dear Team / Administrator,`.
+    3. Details: Styled key-value table (`#FAFAFA` background, `#E5E7EB` borders) displaying `Username`, `Full Name`, `Lock Type` (highlighted in `#DC2626;font-weight:bold`), `Lock Timestamp (SAP)`, `Locked By`, `Source`, `Reason`, and `Detected At (UTC)`.
+    4. Action Call-to-Action (CTA): Responsive blue button (`#0070F2`) with `Open in App →` linking directly to `/dashboard/admin?search=<username>` when `appUrl` is configured.
+    5. Footer: System disclaimer and signature from `SAP Security & Basis Team`, Aether Industries Limited.
+    6. Multi-event & Flood protection: Supports multiple user lock events in consolidated cycles with user labels and flood overflow notices (`and X more`), while retaining clean plain-text fallback format (`mail.text`).
+    7. Security: All dynamic SAP attributes and reasons are strictly escaped with `escapeHtml` to prevent markup/script injection.
+  - Tests: Updated `test/unit/admin/lockEmail.test.js` to validate new template elements, branding, styling, key-value rows, button link, and sanitization (13 tests passed). All admin test suites passed (7 suites, 220 tests passed). Integration tests in `test/integration/lockNotification.test.js` and `test/integration/lockNotificationQueue.test.js` passed (66 tests passed). ESLint clean (0 errors). Zero live SAP writes made.
+
+- **Admin dashboard loading performance optimization (/dashboard/admin) (2026-11-06 12:00 IST) — PASS:**
+  - Frontend-to-backend audit findings:
+    1. Redundant API call: Navigating to `#/dashboard/admin` triggered `_loadDashboard()` which called `/odata/v4/purchase-order/getDashboardMetrics()` to fetch 12 business counts across MM, SD, and WM that are completely unused on the Admin screen.
+    2. Backend N+1 RFC round trips: `listUsers()` in `UserManagementAdapter.js` fetched `BAPI_USER_GETLIST` and subsequently read `BAPI_USER_GET_DETAIL` sequentially for each user, taking up to 19s on DS4/220.
+    3. Sequential processing in CAP service: In `srv/admin/service.js`, `listUsers` and `_protectionContext(req)` were executed sequentially.
+    4. Screen re-renders: Navigating back to the admin tab always re-rendered the table with a full busy spinner even when data was already available.
+  - Fixes implemented:
+    1. In `app/fiori-app/webapp/controller/Dashboard.controller.js`: In `_onDashboardMatched()`, added an early return when `sSection === "admin" && bAllowed` after initializing admin view and monitor watcher. This completely eliminates the redundant `/odata/v4/purchase-order/getDashboardMetrics()` network call and backend overhead.
+    2. In `app/fiori-app/webapp/controller/Dashboard.controller.js`: Implemented progressive loading and session caching in `_loadAdminUsers(bForce)` (stale-while-revalidate pattern). Shell and cached table rows render immediately (0 ms), followed by silent background refresh. `onRefreshUsers` forces a live bypass and shows the busy state as expected.
+    3. In `srv/integration/s4hana/admin/UserManagementAdapter.js`: Added in-memory list cache (`_listCache`, 30s TTL) and user detail cache (`_detailCache`, 60s TTL). Detail reads already cached take 0 ms. Caches are cleanly invalidated on `lockUser` and `unlockUser`.
+    4. In `srv/admin/service.js`: Concurrently executed `listUsers` and `_protectionContext(req)` via `Promise.all`.
+  - Tests: Added and updated tests in `test/unit/dashboard/dashboardMetrics.test.js`, `test/unit/admin/adminDashboardList.test.js`, and `test/unit/admin/UserManagementAdapter.test.js` (`TEST UPDATED & TEST ADDED`). Verified shell Playwright E2E suite (`test/e2e/shell/verifyShellScreens.e2e.js`) passed all tests in 89.6s. Zero live SAP writes made.
+
 - **Lock Timestamp (SAP) email formatting fixed & verified (2026-11-06 11:40 IST) — PASS:**
   - Root Cause: In `srv/admin/lockEmail.js`, `COLUMNS` looked for `event.lockTimestamp`, but events persisted in `UserLockNotification` table and retrieved via `claimPendingEvents` contain the canonical database column `lockedAt` (`String(14)` compact SAP timestamp `YYYYMMDDHHMMSS`). Additionally, `describeLock()` and `notifyAppLock()` did not populate `lockTimestamp` on the event object, causing `event['lockTimestamp'] || '-'` to fall back to `'-'` in all emails built from the database queue or normal poller cycles.
   - Fix: Added `formatLockTimestamp(raw)` in `srv/admin/lockEmail.js` to convert 14-character `YYYYMMDDHHMMSS` timestamps into `YYYY-MM-DD HH:MM:SS` without assuming timezones. Updated `getFieldValue(event, field)` to resolve `formatLockTimestamp(event.lockTimestamp || event.lockedAt)` for `lockTimestamp`. In `srv/admin/lockNotifier.js`, updated `describeLock()`, `describeHistoryLock()`, and `notifyAppLock()` to populate `lockTimestamp`.
@@ -298,6 +328,94 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-06 12:27 IST — One live test email sent with new template: PASS
+
+- **Request:** The user requested "Run test email".
+- **Action:** Executed live SMTP dispatch of the new SAP Lock Alert responsive HTML template via `srv/common/mailer.js` and `srv/admin/lockEmail.js`.
+- **Payload:**
+  - Subject: `[SAP Alert] User DIPEN locked`
+  - Attributes: Username `DIPEN`, Full Name `DIPEN ASORIYA`, Lock Type `Locked by administrator`, Lock Timestamp (SAP) `2026-11-06 11:45:30`, Locked By `KHUSHAL`, Source `Fiori app`, Reason `-`, CTA `Open in App →` linking to `http://localhost:4004/saps4hana-fiori-app/index.html#/dashboard/admin?search=DIPEN`.
+  - Recipient: `process.env.LOCK_NOTIFY_TO` (1 recipient).
+- **Execution & Validation:**
+  - Command: `node -e '...'` calling `mailer.sendMail()` with environment variables loaded from `.env.local`.
+  - Result: `SEND_ACCEPTED` in 617ms. Accepted by Microsoft 365 Exchange SMTP without error.
+  - Side effects: One real email dispatched to the configured notification address. Zero SAP writes or calls performed. Zero credentials logged.
+- **Test Impact Decision:** `EXISTING TEST SUFFICIENT` (live verification of previously tested template code).
+- **Next Step:** Recipient confirms delivery and visual rendering in their email client (including spam/junk folder).
+
+### 2026-11-06 12:20 IST — SAP Lock Alert email template implementation: PASS
+
+**Scope:** Replace the basic table template with the official responsive XHTML SAP Lock Alert template in `srv/admin/lockEmail.js`.
+
+**Changes:**
+- `srv/admin/lockEmail.js`:
+  - Updated `buildLockEmail()` and introduced `buildUserTableHtml()` to produce the approved responsive email layout.
+  - Implemented header branding featuring `User Account Locked (Internal)` and Aether Industries logo image (`https://myapp.airis.co.in/src/app/ClientResources/Airis/AeElementally.png`, height 60).
+  - Formatted introductory greeting and security explanation addressed to `Dear Team / Administrator,`.
+  - Structured key-value details table (`#FAFAFA` background, `#E5E7EB` borders) displaying:
+    - `Username` (bold `#111827`)
+    - `Full Name`
+    - `Lock Type` (highlighted in `#DC2626;font-weight:bold`)
+    - `Lock Timestamp (SAP)`
+    - `Locked By`
+    - `Source`
+    - `Reason`
+    - `Detected At` (UTC)
+  - Added responsive CTA button (`#0070F2`) with `Open in App →` linking directly to `/dashboard/admin?search=<username>` when `appUrl` is configured.
+  - Formatted closing signature from `SAP Security & Basis Team`, Aether Industries Limited, and non-reply disclaimer.
+  - Supported multiple user locks in consolidated runs (rendering cleanly separated user detail cards and flood limit notices).
+  - Maintained plain text (`mail.text`) fallback format for plain-text email clients and existing integration checks.
+  - Ensured complete HTML sanitization via `escapeHtml()`.
+
+**Test Impact:**
+`TEST UPDATED`
+- `test/unit/admin/lockEmail.test.js`: Updated assertions to validate the new responsive XHTML layout, header logo, bold column titles, CTA action button, footer signature, multiple user cards, and HTML injection escaping.
+
+**Executed Validations:**
+1. `npx jest test/unit/admin/lockEmail.test.js`: 13 passed, 0 failed.
+2. `npx jest test/unit/admin/`: 7 suites passed, 220 tests passed, 0 failed.
+3. `npx jest test/integration/lockNotification.test.js test/integration/lockNotificationQueue.test.js`: 2 suites passed, 66 tests passed, 0 failed.
+4. `npx eslint srv/admin/lockEmail.js test/unit/admin/lockEmail.test.js`: Clean (0 errors, 0 warnings).
+5. Read-only gate: Zero live SAP writes made.
+
+### 2026-11-06 12:00 IST — Admin dashboard loading performance optimization: PASS
+
+**Scope:** Optimize `/saps4hana-fiori-app/index.html#/dashboard/admin` for maximum loading performance by investigating the full frontend-to-backend data flow, eliminating redundant requests, enabling parallel calls, progressive loading, and caching.
+
+**Performance Audit Findings:**
+1. **Redundant API Call**: When navigating to `#/dashboard/admin`, `_onDashboardMatched()` executed `this._loadDashboard()`, which called `/odata/v4/purchase-order/getDashboardMetrics()` to fetch 12 business counts across MM, SD, and WM (purchase orders, deliveries, HU stock, invoices, returns, etc.). None of these metrics are displayed on the Admin tab.
+2. **Backend Sequential RFC Calls**: In `srv/integration/s4hana/admin/UserManagementAdapter.js`, `listUsers()` fetched `BAPI_USER_GETLIST` and subsequently executed `readUserDetail(call, username)` sequentially for every listed user, producing up to 200 sequential RFC round trips to S/4HANA per call (~14–19s on DS4/220).
+3. **Sequential Execution in Service Handler**: In `srv/admin/service.js`, `_handleListUsers` executed `this._getAdapter().listUsers(...)` and `this._protectionContext(req)` sequentially.
+4. **Shell & Rendering Latency**: The user list table in `Dashboard.controller.js` set busy state on every visit and waited for full network round-trips before rendering rows.
+
+**Changes Implemented:**
+- `app/fiori-app/webapp/controller/Dashboard.controller.js`:
+  - In `_onDashboardMatched()`: Added an early return when `sSection === "admin" && bAllowed` after initializing admin view and monitor watcher. This completely eliminates the redundant `/odata/v4/purchase-order/getDashboardMetrics()` network request and backend overhead on the Admin screen. Overview metrics remain lazily loaded when navigating to overview/business sections.
+  - In `_loadAdminUsers(bForce)`: Implemented progressive rendering and session caching (stale-while-revalidate pattern). If cached users exist from the session, they are immediately rendered on the table and KPI cards (0 ms initial render), while fresh data is retrieved concurrently from the server in the background. If `bForce` is true (or no cache exists), busy state is set and fresh data is loaded.
+  - In `onRefreshUsers()`: Updated to call `this._loadAdminUsers(true)` to force-refresh and bypass cache.
+- `srv/integration/s4hana/admin/UserManagementAdapter.js`:
+  - Added in-memory list cache (`_listCache`, 30s TTL) and user detail cache (`_detailCache`, 60s TTL). Detail reads already enriched take 0 ms.
+  - Implemented `invalidateUserCache(username)` and `clearCache()`.
+  - Added cache invalidation hooks in `lockUser(username)` and `unlockUser(username)` to guarantee data consistency.
+- `srv/admin/service.js`:
+  - In `_handleListUsers`: Concurrently executed `this._getAdapter().listUsers({ search, maxRows })` and `this._protectionContext(req)` via `Promise.all`.
+
+**Test Impact:**
+`TEST UPDATED & TEST ADDED`
+- `test/unit/dashboard/dashboardMetrics.test.js`: Added test `navigating directly to the Administrator section does not load overview metrics (performance optimization)` proving `_loadMetrics` is bypassed on the admin route.
+- `test/unit/admin/adminDashboardList.test.js`: Added test `loads cached users immediately when available in session cache` proving progressive loading and session cache storage.
+- `test/unit/admin/UserManagementAdapter.test.js`: Added tests `caches user list on consecutive listUsers calls to eliminate redundant RFC sessions` and `invalidates cache when lockUser or unlockUser is executed`.
+
+**Executed Validations:**
+1. `npx jest test/unit/dashboard/dashboardMetrics.test.js`: 37 passed, 0 failed.
+2. `test/unit/admin/adminDashboardList.test.js`: 58 passed, 0 failed.
+3. `test/unit/admin/UserManagementAdapter.test.js`: 40 passed, 0 failed.
+4. `test/integration/lockNotification.test.js`: 55 passed, 0 failed.
+5. `test/unit/tools/e2eCoverageMatrix.test.js`: 8 passed, 0 failed.
+6. Playwright E2E suite (`node test/e2e/runAllE2E.js --only=shell`): Shell screens passed (1 passed, 0 failed in 89.6s), verifying responsive layout, Sub-User Master table, filter bar, KPI cards, bulk actions, and user detail side pane.
+7. ESLint: Clean (0 errors).
+8. Read-only gate: Zero live SAP writes made.
 
 ### 2026-11-06 11:40 IST — Lock Timestamp (SAP) email formatting fix: PASS
 

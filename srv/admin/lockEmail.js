@@ -40,7 +40,96 @@ function getFieldValue(event, field) {
 /** Opens the SU01 screen with the username search filled in. */
 function userLink(username, appUrl) {
   const base = String(appUrl || '').trim().replace(/#.*$/, '');
-  return base ? `${base}#/dashboard/admin?search=${encodeURIComponent(username)}` : '';
+  if (!base) return '';
+  return username ? `${base}#/dashboard/admin?search=${encodeURIComponent(username)}` : `${base}#/dashboard/admin`;
+}
+
+function buildUserTableHtml(event) {
+  const username = escapeHtml(event.username || '-');
+  const fullName = escapeHtml(event.fullName || '-');
+  const lockType = escapeHtml(event.lockType || '-');
+  const lockTimestamp = escapeHtml(getFieldValue(event, 'lockTimestamp') || '-');
+  const lockedBy = escapeHtml(event.lockedBy || '-');
+  const source = escapeHtml(event.source || '-');
+  const reason = escapeHtml(event.reason || '-');
+  const detectedAt = escapeHtml(formatDetectedAt(event.detectedAt) || '-');
+
+  return `                            <table role="presentation" width="100%" cellpadding="6" cellspacing="0"
+                                style="background-color:#FAFAFA;border-top:1px solid #E5E7EB;border-bottom:1px solid #E5E7EB;">
+
+                                <tr>
+                                    <td width="40%" style="font-size:12px;color:#6B7280;">
+                                        <strong>Username</strong>
+                                    </td>
+                                    <td width="60%" style="font-size:12px;color:#111827;font-weight:bold;">
+                                        ${username}
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td style="font-size:12px;color:#6B7280;">
+                                        <strong>Full Name</strong>
+                                    </td>
+                                    <td style="font-size:12px;color:#111827;">
+                                        ${fullName}
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td style="font-size:12px;color:#6B7280;">
+                                        <strong>Lock Type</strong>
+                                    </td>
+                                    <td style="font-size:12px;color:#DC2626;font-weight:bold;">
+                                        ${lockType}
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td style="font-size:12px;color:#6B7280;">
+                                        <strong>Lock Timestamp (SAP)</strong>
+                                    </td>
+                                    <td style="font-size:12px;color:#111827;">
+                                        ${lockTimestamp}
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td style="font-size:12px;color:#6B7280;">
+                                        <strong>Locked By</strong>
+                                    </td>
+                                    <td style="font-size:12px;color:#111827;">
+                                        ${lockedBy}
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td style="font-size:12px;color:#6B7280;">
+                                        <strong>Source</strong>
+                                    </td>
+                                    <td style="font-size:12px;color:#111827;">
+                                        ${source}
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td style="font-size:12px;color:#6B7280;">
+                                        <strong>Reason</strong>
+                                    </td>
+                                    <td style="font-size:12px;color:#111827;">
+                                        ${reason}
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td style="font-size:12px;color:#6B7280;">
+                                        <strong>Detected At</strong>
+                                    </td>
+                                    <td style="font-size:12px;color:#111827;">
+                                        ${detectedAt}
+                                    </td>
+                                </tr>
+
+                            </table>`;
 }
 
 /**
@@ -67,19 +156,138 @@ function buildLockEmail(events, { appUrl, maxListed = 50 } = {}) {
     ].join('\n');
   }).join('\n\n') + (more ? `\n\nand ${more} more` : '');
 
-  const headers = [...COLUMNS.map(([label]) => label), 'Detected At', ...(appUrl ? ['Link'] : [])];
-  const rows = listed.map((event) => {
-    const link = userLink(event.username, appUrl);
-    const cells = [
-      ...COLUMNS.map(([, field]) => escapeHtml(getFieldValue(event, field) || '-')),
-      escapeHtml(formatDetectedAt(event.detectedAt)),
-      ...(appUrl ? [link ? `<a href="${escapeHtml(link)}">Open in app</a>` : ''] : []),
-    ];
-    return `<tr>${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`;
-  }).join('');
-  const html = `<p>${escapeHtml(subject)}</p><table border="1" cellpadding="4" cellspacing="0">`
-    + `<tr>${headers.map((header) => `<th align="left">${escapeHtml(header)}</th>`).join('')}</tr>${rows}</table>`
-    + (more ? `<p>and ${more} more</p>` : '');
+  const primaryLink = appUrl ? userLink(listed.length === 1 ? listed[0].username : '', appUrl) : '';
+  const actionButtonHtml = primaryLink ? `
+                    <!-- Action Link / Button -->
+                    <tr>
+                        <td style="padding:18px 0 10px 0;font-size:13px;color:#111827;line-height:20px;">
+                            Kindly review the user status in the SAP Fiori Administrator Dashboard:
+                            <br /><br />
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td align="center" style="border-radius:4px;background-color:#0070F2;">
+                                        <a href="${escapeHtml(primaryLink)}"
+                                            target="_blank"
+                                            style="display:inline-block;padding:9px 24px;font-size:13px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:4px;background-color:#0070F2;">
+                                            Open in App &rarr;
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>` : '';
+
+  const usersDetailsHtml = listed.map((event, idx) => `
+                    <!-- Section Title -->
+                    <tr>
+                        <td style="padding:${idx > 0 ? '20px' : '14px'} 0 8px 0;font-size:13px;color:#111827;font-weight:bold;">
+                            User Lock Details${listed.length > 1 ? ` (${escapeHtml(event.username || '')})` : ''}
+                        </td>
+                    </tr>
+
+                    <!-- Key-Value Table -->
+                    <tr>
+                        <td>
+${buildUserTableHtml(event)}
+                        </td>
+                    </tr>`).join('\n');
+
+  const moreHtml = more ? `
+                    <tr>
+                        <td style="padding:12px 0;font-size:13px;color:#6B7280;">
+                            and ${more} more
+                        </td>
+                    </tr>` : '';
+
+  const introEventText = listed.length === 1
+    ? 'A user account lock event has been detected with the following details:'
+    : 'User account lock events have been detected with the following details:';
+
+  const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(subject)}</title>
+</head>
+
+<body style="margin:0;padding:0;background-color:#ffffff;font-family:Helvetica, Arial, sans-serif;">
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+            <td align="center">
+
+                <!-- Main Container -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                    style="max-width:660px;margin:0 auto;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding:20px 0;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td width="70%" style="font-size:22px;color:#878787;text-transform:uppercase;">
+                                        User Account Locked (Internal)
+                                    </td>
+                                    <td width="30%" align="right">
+                                        <img src="https://myapp.airis.co.in/src/app/ClientResources/Airis/AeElementally.png"
+                                            height="60" alt="Aether Industries Limited Logo"
+                                            style="display:block;border:0;outline:none;" />
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Intro -->
+                    <tr>
+                        <td style="padding:10px 0 14px 0;font-size:13px;color:#111827;line-height:20px;">
+                            Dear Team / Administrator,<br /><br />
+                            This is an automated security notification from SAP. ${introEventText}
+                        </td>
+                    </tr>
+
+                    <!-- Divider -->
+                    <tr>
+                        <td>
+                            <hr style="border-color:#c0dbff;" />
+                        </td>
+                    </tr>
+${usersDetailsHtml}
+${moreHtml}
+${actionButtonHtml}
+                    <!-- Divider -->
+                    <tr>
+                        <td>
+                            <hr style="border-color:#c0dbff;" />
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding:20px 0;font-size:13px;color:#111827;line-height:20px;">
+                            Thanks &amp; Regards,<br /><br />
+
+                            <strong>SAP Security &amp; Basis Team</strong><br />
+                            Aether Industries Limited<br /><br />
+
+                            <span style="font-size:12px;color:#6B7280;">
+                                This is a system-generated email from SAP. Please do not reply to this email.
+                            </span>
+                        </td>
+                    </tr>
+
+                </table>
+                <!-- End Main Container -->
+
+            </td>
+        </tr>
+    </table>
+
+</body>
+
+</html>`;
 
   return { subject, text, html };
 }

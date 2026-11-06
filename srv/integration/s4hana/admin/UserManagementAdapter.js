@@ -269,25 +269,74 @@ class UserManagementAdapter {
   /**
    * @param {object} [options]
    * @param {RfcClient} [options.rfcClient] - injected for tests
+   * @param {number} [options.detailCacheTtlMs] - TTL for user details cache (default 60s)
+   * @param {number} [options.listCacheTtlMs] - TTL for user list cache (default 30s)
    */
   constructor(options = {}) {
     this._rfc = options.rfcClient || new RfcClient();
+    this._detailCache = new Map(); // username.toUpperCase() -> { detail, expiresAt }
+    this._listCache = new Map();   // `${search}|${maxRows}` -> { data, expiresAt }
+    this._detailCacheTtlMs = options.detailCacheTtlMs || 60000;
+    this._listCacheTtlMs = options.listCacheTtlMs || 30000;
+  }
+
+  _getCachedDetail(username) {
+    const key = String(username || '').trim().toUpperCase();
+    const hit = this._detailCache.get(key);
+    if (hit && hit.expiresAt > Date.now()) {
+      return hit.detail;
+    }
+    this._detailCache.delete(key);
+    return null;
+  }
+
+  _setCachedDetail(username, detail) {
+    const key = String(username || '').trim().toUpperCase();
+    this._detailCache.set(key, {
+      detail,
+      expiresAt: Date.now() + this._detailCacheTtlMs,
+    });
+  }
+
+  invalidateUserCache(username) {
+    this._listCache.clear();
+    if (username) {
+      this._detailCache.delete(String(username).trim().toUpperCase());
+    } else {
+      this._detailCache.clear();
+    }
+  }
+
+  clearCache() {
+    this._detailCache.clear();
+    this._listCache.clear();
   }
 
   /**
    * List SAP users via BAPI_USER_GETLIST.
-   * Returns up to maxRows users, enriched with sequential BAPI_USER_GET_DETAIL reads in the same RFC session.
+   * Returns up to maxRows users, enriched with BAPI_USER_GET_DETAIL reads in the same RFC session.
+   * Leverages in-memory caching to avoid redundant round-trips on subsequent calls.
    * A failed detail read leaves its base user row visible with detailsAvailable=false.
    * Client-side search filter applied when provided.
    * WITH_USERNAME range table is not used (node-rfc struct-packing incompatibility on DS4).
    *
    * @param {object} [params]
-   * @param {string} [params.search]   - substring filter on USERNAME (case-insensitive)
-   * @param {number} [params.maxRows]  - max rows to fetch from SAP (default 200)
+   * @param {string} [params.search]        - substring filter on USERNAME (case-insensitive)
+   * @param {number} [params.maxRows]       - max rows to fetch from SAP (default 200)
+   * @param {boolean} [params.forceRefresh] - bypass cache and fetch fresh from SAP
    * @returns {Promise<Array<{username, firstName, lastName, fullName, detailsAvailable, isLocked, userType, validFrom, validTo, lastChanged, lastChangedBy}>>}
    */
-  async listUsers({ search = '', maxRows = 200 } = {}) {
-    LOG.info('listUsers', { search: search || '(none)', maxRows });
+  async listUsers({ search = '', maxRows = 200, forceRefresh = false } = {}) {
+    LOG.info('listUsers', { search: search || '(none)', maxRows, forceRefresh });
+
+    const cacheKey = `${search.trim().toLowerCase()}|${maxRows}`;
+    if (!forceRefresh) {
+      const cached = this._listCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        LOG.info('listUsers served from cache', { search, maxRows, count: cached.data.length });
+        return cached.data;
+      }
+    }
 
     try {
       return await this._rfc.session(async (call) => {
@@ -324,7 +373,11 @@ class UserManagementAdapter {
           };
 
           try {
-            const detail = await readUserDetail(call, username.toUpperCase());
+            let detail = !forceRefresh ? this._getCachedDetail(username) : null;
+            if (!detail) {
+              detail = await readUserDetail(call, username.toUpperCase());
+              this._setCachedDetail(username, detail);
+            }
             const fullName = detail.fullName
               || listedUser.fullName
               || [detail.firstName || listedUser.firstName, detail.lastName || listedUser.lastName].filter(Boolean).join(' ');
@@ -353,6 +406,10 @@ class UserManagementAdapter {
             });
           }
         }
+        this._listCache.set(cacheKey, {
+          data: enriched,
+          expiresAt: Date.now() + this._listCacheTtlMs,
+        });
         return enriched;
       });
     } catch (e) {
@@ -365,19 +422,32 @@ class UserManagementAdapter {
   /**
    * Get full detail for a single user via BAPI_USER_GET_DETAIL.
    * CONFIRMED: import param is USERNAME (not BNAME).
+   * Reuses cached detail if available from list enrichment.
    *
    * @param {string} username
+   * @param {object} [options]
+   * @param {boolean} [options.forceRefresh] - bypass cache
    * @returns {Promise<object>}
    */
-  async getUserDetail(username) {
+  async getUserDetail(username, { forceRefresh = false } = {}) {
     if (!username || typeof username !== 'string' || !username.trim()) {
       throw Object.assign(new Error('username is required'), { status: 400 });
     }
     const bname = username.trim().toUpperCase();
-    LOG.info('getUserDetail', { username: bname });
+    LOG.info('getUserDetail', { username: bname, forceRefresh });
+
+    if (!forceRefresh) {
+      const cached = this._getCachedDetail(bname);
+      if (cached) {
+        LOG.info('getUserDetail served from cache for:', bname);
+        return cached;
+      }
+    }
 
     try {
-      return await this._rfc.session((call) => readUserDetail(call, bname));
+      const detail = await this._rfc.session((call) => readUserDetail(call, bname));
+      this._setCachedDetail(bname, detail);
+      return detail;
     } catch (e) {
       if (e.status === 404 || e.status === 502) throw e;
       LOG.error('BAPI_USER_GET_DETAIL session failed:', e.message);
@@ -461,7 +531,9 @@ class UserManagementAdapter {
     }
     LOG.info('lockUser', { username: bname });
 
-    return this._rfc.session((call) => changeLock(call, 'BAPI_USER_LOCK', 'lock', bname));
+    const result = await this._rfc.session((call) => changeLock(call, 'BAPI_USER_LOCK', 'lock', bname));
+    this.invalidateUserCache(bname);
+    return result;
   }
 
   /**
@@ -478,7 +550,9 @@ class UserManagementAdapter {
     const bname = username.trim().toUpperCase();
     LOG.info('unlockUser', { username: bname });
 
-    return this._rfc.session((call) => changeLock(call, 'BAPI_USER_UNLOCK', 'unlock', bname));
+    const result = await this._rfc.session((call) => changeLock(call, 'BAPI_USER_UNLOCK', 'unlock', bname));
+    this.invalidateUserCache(bname);
+    return result;
   }
 }
 

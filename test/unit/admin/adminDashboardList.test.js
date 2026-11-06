@@ -49,6 +49,16 @@ let DashboardController;
 let Logic;
 const mockFile = { save: jest.fn() };
 
+if (typeof global.sessionStorage === 'undefined') {
+    const store = new Map();
+    global.sessionStorage = {
+        getItem: (k) => store.get(k) || null,
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k),
+        clear: () => store.clear(),
+    };
+}
+
 beforeAll(() => {
     const encodeXML = (value) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     global.sap = { ui: { define: jest.fn((dependencies, factory) => { Logic = factory(encodeXML); }) } };
@@ -388,6 +398,18 @@ describe('Admin dashboard user list', () => {
             await controller._loadAdminUsers();
 
             expect(model.getProperty('/users').map((user) => user.selected)).toEqual([true, false]);
+        });
+
+        test('loads cached users immediately when available in session cache', async () => {
+            const { controller, model } = makeController([]);
+            const cachedUsers = [row('CACHED_USER', { isLocked: false })];
+            sessionStorage.setItem('admin.userList.cache', JSON.stringify({ users: cachedUsers, timestamp: Date.now() }));
+            mockODataClient.get.mockResolvedValue({ value: [row('LIVE_USER')] });
+
+            await controller._loadAdminUsers();
+
+            expect(model.getProperty('/users').map((u) => u.username)).toEqual(['LIVE_USER']);
+            expect(JSON.parse(sessionStorage.getItem('admin.userList.cache')).users[0].username).toBe('LIVE_USER');
         });
 
         test('a filter deselects rows it hides, so a bulk action only reaches rows on screen', () => {

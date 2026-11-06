@@ -168,6 +168,7 @@ sap.ui.define([
                     // A link from a lock alert: the list opens with that username searched.
                     this._mergeAdminFilters({ search: String(oQuery.search) });
                 }
+                return;
             }
             // A sidebar click only changes the section; the figures reload on arrival from another screen.
             if (this._bFiguresLoaded) {
@@ -377,21 +378,45 @@ sap.ui.define([
 
         /**
          * Loads SAP users from UserManagementService.listUsers.
+         * Renders progressive shell and cached users immediately if available,
+         * followed by live SAP refresh.
          *
-         * @param {string} [sSearch]
+         * @param {boolean} [bForce]
          * @returns {Promise<void>}
          */
-        _loadAdminUsers: function () {
+        _loadAdminUsers: function (bForce) {
             var oAdminModel = this.getView().getModel("adminView");
             if (!oAdminModel) {
                 return Promise.resolve();
             }
 
-            oAdminModel.setProperty("/busy", true);
-            oAdminModel.setProperty("/kpis", {}); // a card shows Loading until its count arrives
+            var that = this;
+            var aCurrentUsers = oAdminModel.getProperty("/users") || [];
+
+            // If we don't have users in model, check session cache for progressive rendering
+            if (!bForce && (!aCurrentUsers || aCurrentUsers.length === 0)) {
+                try {
+                    var sCached = sessionStorage.getItem("admin.userList.cache");
+                    if (sCached) {
+                        var oParsed = JSON.parse(sCached);
+                        if (oParsed && Array.isArray(oParsed.users) && oParsed.users.length > 0) {
+                            aCurrentUsers = oParsed.users;
+                            oAdminModel.setProperty("/users", aCurrentUsers);
+                            that._applyAdminSort();
+                            that._applyAdminFilters();
+                        }
+                    }
+                } catch (e) {
+                    // sessionStorage unavailable or parse error; continue normal flow
+                }
+            }
+
+            if (bForce || (!aCurrentUsers || aCurrentUsers.length === 0)) {
+                oAdminModel.setProperty("/busy", true);
+                oAdminModel.setProperty("/kpis", {}); // a card shows Loading until its count arrives
+            }
 
             var sUrl = "/odata/v4/user-management/listUsers(search='',maxRows=" + UserListLogic.LIST_LIMIT + ")";
-            var that = this;
 
             return ODataClient.get(sUrl)
                 .then(function (res) {
@@ -413,6 +438,11 @@ sap.ui.define([
                     that._bAdminUsersLoaded = true;
                     that._applyAdminSort();
                     that._applyAdminFilters();
+                    try {
+                        sessionStorage.setItem("admin.userList.cache", JSON.stringify({ users: aUsers, timestamp: Date.now() }));
+                    } catch (e) {
+                        // storage quota or disabled
+                    }
                 })
                 .catch(function (err) {
                     oAdminModel.setProperty("/users", []);
@@ -420,6 +450,9 @@ sap.ui.define([
                     oAdminModel.setProperty("/kpis", { total: null, active: null, locked: null, changedToday: null, changedLast7: null });
                     oAdminModel.setProperty("/noDataText", that._text("adminLoadFailed", "Failed to load SAP users."));
                     oAdminModel.setProperty("/busy", false);
+                    try {
+                        sessionStorage.removeItem("admin.userList.cache");
+                    } catch (e) {}
                     var sMsg = (err && err.message) || that._text("adminLoadFailed", "Failed to load SAP users.");
                     MessageToast.show(sMsg);
                 });
@@ -627,7 +660,7 @@ sap.ui.define([
         },
 
         onRefreshUsers: function () {
-            this._loadAdminUsers();
+            this._loadAdminUsers(true);
         },
 
         _applyAdminSort: function () {

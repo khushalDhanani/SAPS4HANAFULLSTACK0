@@ -60,9 +60,11 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     }
 
     try {
-      const users = await this._getAdapter().listUsers({ search, maxRows });
+      const [users, context] = await Promise.all([
+        this._getAdapter().listUsers({ search, maxRows }),
+        this._protectionContext(req)
+      ]);
       LOG.info('listUsers returned', users.length, 'users');
-      const context = await this._protectionContext(req);
       return users.map((user) => ({ ...user, protectedReason: protectionReason(user, context) }));
     } catch (e) {
       LOG.error('listUsers error:', e.message);

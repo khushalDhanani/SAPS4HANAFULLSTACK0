@@ -177,6 +177,46 @@ describe('UserManagementAdapter.listUsers', () => {
     });
     await expect(adapter.listUsers()).rejects.toMatchObject({ status: 502 });
   });
+
+  test('caches user list on consecutive listUsers calls to eliminate redundant RFC sessions', async () => {
+    const { adapter, mockCall } = makeAdapter({
+      BAPI_USER_GETLIST: { USERLIST: [{ USERNAME: 'ALICE' }] },
+      BAPI_USER_GET_DETAIL: {
+        ADDRESS: { FIRSTNAME: 'Alice', LASTNAME: 'Smith', FULLNAME: 'Alice Smith' },
+        LOGONDATA: { GLTGV: '20260101', GLTGB: '20261231', USTYP: 'A' },
+        ISLOCKED: { GLOB_LOCK: ' ' },
+        LASTMODIFIED: { MODDATE: '20261101', MODTIME: '120000', MODIFIER: 'ADMIN' },
+      },
+    });
+
+    const first = await adapter.listUsers({ maxRows: 200 });
+    const second = await adapter.listUsers({ maxRows: 200 });
+
+    expect(first).toEqual(second);
+    expect(mockCall.mock.calls.filter((c) => c[0] === 'BAPI_USER_GETLIST')).toHaveLength(1);
+  });
+
+  test('invalidates cache when lockUser or unlockUser is executed', async () => {
+    const { adapter, mockCall } = makeAdapter({
+      BAPI_USER_GETLIST: { USERLIST: [{ USERNAME: 'ALICE' }] },
+      BAPI_USER_GET_DETAIL: {
+        ADDRESS: { FIRSTNAME: 'Alice', LASTNAME: 'Smith', FULLNAME: 'Alice Smith' },
+        LOGONDATA: { GLTGV: '20260101', GLTGB: '20261231', USTYP: 'A' },
+        ISLOCKED: { GLOB_LOCK: ' ' },
+        LASTMODIFIED: { MODDATE: '20261101', MODTIME: '120000', MODIFIER: 'ADMIN' },
+      },
+      BAPI_USER_LOCK: { RETURN: [] },
+      BAPI_TRANSACTION_COMMIT: {},
+    });
+
+    await adapter.listUsers({ maxRows: 200 });
+    expect(mockCall.mock.calls.filter((c) => c[0] === 'BAPI_USER_GETLIST')).toHaveLength(1);
+
+    await adapter.lockUser('ALICE');
+    await adapter.listUsers({ maxRows: 200 });
+
+    expect(mockCall.mock.calls.filter((c) => c[0] === 'BAPI_USER_GETLIST')).toHaveLength(2);
+  });
 });
 
 describe('UserManagementAdapter.readLockHistory', () => {

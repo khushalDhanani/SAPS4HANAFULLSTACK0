@@ -363,6 +363,18 @@ describe('Unit: Dashboard Controller live figures', () => {
                 expect(oViewModel.getProperty('/selectedTab')).toBe('admin');
             });
 
+            test('navigating directly to the Administrator section does not load overview metrics (performance optimization)', () => {
+                const controller = setup(makeAuthModel(true));
+                mockAuthService.hasAnyRole.mockReturnValueOnce(true);
+                controller._watchLockMonitor = jest.fn();
+                controller._loadAdminUsers = jest.fn();
+
+                controller._onDashboardMatched(matched('admin'));
+
+                expect(controller._loadMetrics).not.toHaveBeenCalled();
+                expect(controller._loadAdminUsers).toHaveBeenCalledTimes(1);
+            });
+
             test('switching section does not reload the figures; returning from another screen does', () => {
                 const controller = setup(makeAuthModel(true));
 

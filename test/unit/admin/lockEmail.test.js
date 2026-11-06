@@ -24,20 +24,23 @@ describe('buildLockEmail', () => {
         expect(mail.html).toContain(text);
       });
     ['Username', 'Full Name', 'Lock Type', 'Lock Timestamp (SAP)', 'Locked By', 'Source', 'Reason', 'Detected At'].forEach((header) => {
-      expect(mail.html).toContain(`<th align="left">${header}</th>`);
+      expect(mail.html).toContain(`<strong>${header}</strong>`);
     });
+    expect(mail.html).toContain('User Account Locked (Internal)');
+    expect(mail.html).toContain('Aether Industries Limited Logo');
+    expect(mail.html).toContain('Open in App &rarr;');
   });
 
   test('shows a history timestamp without assigning a timezone', () => {
     const mail = buildLockEmail([event('ALICE', { lockTimestamp: '2026-11-05 10:15:00' })]);
     expect(mail.text).toContain('Lock Timestamp (SAP): 2026-11-05 10:15:00');
-    expect(mail.html).toContain('<td>2026-11-05 10:15:00</td>');
+    expect(mail.html).toContain('2026-11-05 10:15:00');
   });
 
   test('formats 14-digit lockedAt timestamp from database queue without timezone assumption', () => {
     const mail = buildLockEmail([event('ALICE', { lockedAt: '20261105165702' })]);
     expect(mail.text).toContain('Lock Timestamp (SAP): 2026-11-05 16:57:02');
-    expect(mail.html).toContain('<td>2026-11-05 16:57:02</td>');
+    expect(mail.html).toContain('2026-11-05 16:57:02');
   });
 
   test('formatLockTimestamp helper formats 14-digit compact timestamp or passes through', () => {
@@ -48,12 +51,14 @@ describe('buildLockEmail', () => {
     expect(formatLockTimestamp(undefined)).toBe('');
   });
 
-  test('several users: one table, subject with the count', () => {
+  test('several users: one table per user, subject with the count', () => {
     const mail = buildLockEmail([event('ALICE'), event('BOB')]);
 
     expect(mail.subject).toBe('[SAP Alert] 2 users locked');
-    expect(mail.html.match(/<table/g)).toHaveLength(1);
-    expect(mail.html.match(/<tr>/g)).toHaveLength(3);
+    expect(mail.html).toContain('ALICE');
+    expect(mail.html).toContain('BOB');
+    expect(mail.html).toContain('User Lock Details (ALICE)');
+    expect(mail.html).toContain('User Lock Details (BOB)');
     expect(mail.text).toContain('Username: ALICE');
     expect(mail.text).toContain('Username: BOB');
   });
@@ -77,8 +82,8 @@ describe('buildLockEmail', () => {
     expect(mail.text).toContain('Username: U49');
     expect(mail.text).not.toContain('Username: U50');
     expect(mail.text).toContain('and 3 more');
-    expect(mail.html).toContain('<td>U49</td>');
-    expect(mail.html).not.toContain('<td>U50</td>');
+    expect(mail.html).toContain('U49');
+    expect(mail.html).not.toContain('U50');
     expect(mail.html).toContain('and 3 more');
   });
 
@@ -89,7 +94,7 @@ describe('buildLockEmail', () => {
   test('escapes HTML from SAP values and the reason, in the HTML version only', () => {
     const mail = buildLockEmail([event('ALICE', { fullName: '<img src=x onerror=1>', reason: '"><script>alert(1)</script>' })]);
 
-    expect(mail.html).not.toContain('<img');
+    expect(mail.html).not.toContain('<img src=x');
     expect(mail.html).not.toContain('<script>');
     expect(mail.html).toContain('&lt;img src=x onerror=1&gt;');
     expect(mail.text).toContain('<img src=x onerror=1>');
@@ -105,7 +110,7 @@ describe('buildLockEmail', () => {
     expect(mail.text).toContain('Reason: -');
     expect(mail.text).not.toContain('Open in app');
     expect(mail.html).not.toContain('<a ');
-    expect(mail.html).not.toContain('Link</th>');
+    expect(mail.html).not.toContain('Open in App &rarr;');
   });
 
   test('the link encodes the username and replaces any fragment in the base URL', () => {
