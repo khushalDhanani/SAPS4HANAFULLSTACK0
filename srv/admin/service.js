@@ -154,7 +154,11 @@ module.exports = class UserManagementService extends cds.ApplicationService {
         const context = await this._protectionContext(req);
         // Only the type needs an SAP read, and the adapter itself refuses the connection user.
         const nameReason = protectionReason({ username: input.username }, context);
-        const blocked = nameReason || protectionReason(await adapter.getUserDetail(input.username), context);
+        let userDetail = null;
+        if (!nameReason) {
+          userDetail = await adapter.getUserDetail(input.username);
+        }
+        const blocked = nameReason || protectionReason(userDetail, context);
         if (blocked && blocked !== 'connection') {
           throw Object.assign(new Error(PROTECTED_MESSAGES[blocked](input.username)), { status: 403 });
         }
@@ -173,14 +177,32 @@ module.exports = class UserManagementService extends cds.ApplicationService {
         await lockNotifier.recordAppLock({ ...input, actor: context.actor });
         const res = await adapter.lockUser(input.username);
         locked = true;
-        if (lockNotifier.isEnabled() && historyBaselineRead) {
-          try {
-            const change = await adapter.readLastLockChange(input.username);
-            if (change && change.uflag && change.historyKey !== priorHistoryKey) {
+        if (lockNotifier.isEnabled()) {
+          let change = null;
+          if (historyBaselineRead) {
+            try {
+              const latestChange = await adapter.readLastLockChange(input.username);
+              if (latestChange && latestChange.uflag && latestChange.historyKey !== priorHistoryKey) {
+                change = latestChange;
+              }
+            } catch (e) {
+              LOG.warn('Could not link the app lock audit to SAP history for', input.username, e.message);
+            }
+          }
+
+          if (input.bulkRunId) {
+            if (change) {
               await lockNotifier.recordAppLockHistory(input.username, change.historyKey);
             }
-          } catch (e) {
-            LOG.warn('Could not link the app lock audit to SAP history for', input.username, e.message);
+          } else {
+            const fullName = userDetail?.fullName || '';
+            await lockNotifier.notifyAppLock({
+              username: input.username,
+              actor: context.actor,
+              reason: input.reason,
+              fullName,
+              change,
+            });
           }
         }
         return res;

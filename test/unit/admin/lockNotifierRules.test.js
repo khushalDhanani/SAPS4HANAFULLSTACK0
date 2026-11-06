@@ -4,7 +4,7 @@ jest.mock('../../../srv/common/mailer', () => ({ isConfigured: jest.fn(() => tru
 
 const {
   diffLockState, splitSettled, describeLock, describeHistoryLock, addedHistoryLocks,
-  lockLabel, pollIntervalSec, maxPerEmail, recipients, startJob,
+  lockLabel, pollIntervalSec, maxPerEmail, recipients, startJob, calculateNextRetry,
 } = require('../../../srv/admin/lockNotifier');
 
 const NOW = new Date('2026-11-05T10:00:00.000Z');
@@ -276,11 +276,11 @@ describe('addedHistoryLocks', () => {
 });
 
 describe('settings', () => {
-  test('the interval defaults to 60 seconds, and 0 turns it off', () => {
-    expect(pollIntervalSec({})).toBe(60);
+  test('the interval defaults to 5 seconds, and 0 turns it off', () => {
+    expect(pollIntervalSec({})).toBe(5);
     expect(pollIntervalSec({ LOCK_POLL_INTERVAL_SEC: '30' })).toBe(30);
     expect(pollIntervalSec({ LOCK_POLL_INTERVAL_SEC: '0' })).toBe(0);
-    expect(pollIntervalSec({ LOCK_POLL_INTERVAL_SEC: 'x' })).toBe(60);
+    expect(pollIntervalSec({ LOCK_POLL_INTERVAL_SEC: 'x' })).toBe(5);
   });
 
   test('the email limit defaults to 50', () => {
@@ -320,5 +320,24 @@ describe('job start conditions', () => {
     expect(startJob(jest.fn(), { ...env, NODE_ENV: 'test' })).toBeNull();
     delete process.env.LOCK_NOTIFY_TO;
     expect(startJob(jest.fn(), env)).toBeNull();
+  });
+});
+
+describe('calculateNextRetry backoff', () => {
+  const baseTime = new Date('2026-11-06T10:00:00.000Z');
+
+  test.each([
+    [0, 5],
+    [1, 5],
+    [4, 5],
+    [8, 10],
+    [12, 20],
+    [16, 40],
+    [20, 60],
+    [32, 60],
+  ])('%i attempts yields +%i seconds backoff', (attempts, expectedSec) => {
+    const nextRetry = calculateNextRetry(attempts, baseTime);
+    const expectedTime = new Date(baseTime.getTime() + expectedSec * 1000).toISOString();
+    expect(nextRetry).toBe(expectedTime);
   });
 });

@@ -113,13 +113,19 @@ service UserManagementService @(path: '/odata/v4/user-management') {
      * The lock monitor, for the SU01 header. State is off, starting, ok, failed, or stale.
      */
     function getLockMonitor() returns {
-        state        : String;
-        lastCheckedAt: Timestamp;
-        errorMessage : String;
-        recipient    : String;
-        pollIntervalSec: Integer;
-        maxPerEmail  : Integer;
-        pendingEmails: Integer;
+        state                       : String;
+        lastCheckedAt               : Timestamp;
+        errorMessage                : String;
+        recipient                   : String;
+        pollIntervalSec             : Integer;
+        maxPerEmail                 : Integer;
+        pendingEmails               : Integer;
+        lastSuccessfulPollAt        : Timestamp;
+        lastFailedPollAt            : Timestamp;
+        pollDurationMs              : Integer;
+        lastNotificationDispatchedAt: Timestamp;
+        pendingNotificationCount    : Integer;
+        failedNotificationCount     : Integer;
     };
 
     /**

@@ -33,21 +33,30 @@ entity UserLockNotification {
     source         : String(30);
     reason         : String(500);
     bulkRunId      : String(64);
-    status         : String(20);   // pending | sent
+    status         : String(20);   // pending | processing | sent | failed
     attempts       : Integer;
     failureAudited : Boolean;
     detectedAt     : Timestamp;
     sentAt         : Timestamp;
     lastError      : String(60);   // an error code only, never message text that could hold SMTP details
+    historyKey     : String(255);  // stable USH02 history key for event identity and reconciliation
+    claimOwner     : String(120);  // worker ID holding the current processing lease
+    claimedAt      : Timestamp;    // lease start timestamp
+    claimExpiresAt : Timestamp;    // lease expiration timestamp (enables recovery if worker crashes)
+    nextRetryAt    : Timestamp;    // backoff timestamp to prevent infinite immediate retry loops
 }
 
 /** The last check, shared by all instances: only one runs the monitor, but any may answer the screen. */
 entity UserLockMonitor {
-    key id              : String(20);
-    lastCheckedAt       : Timestamp;
-    lastStatus          : String(10);    // ok | failed
-    ush02At             : String(14);
-    ush02Key            : String(255);
-    cursorStallCount    : Integer;
-    errorMessage        : String(255);
+    key id                          : String(20);
+    lastCheckedAt                   : Timestamp;
+    lastStatus                      : String(10);    // ok | failed
+    lastSuccessfulPollAt            : Timestamp;
+    lastFailedPollAt                : Timestamp;
+    pollDurationMs                  : Integer;
+    lastNotificationDispatchedAt    : Timestamp;
+    ush02At                         : String(14);
+    ush02Key                        : String(255);
+    cursorStallCount                : Integer;
+    errorMessage                    : String(255);
 }

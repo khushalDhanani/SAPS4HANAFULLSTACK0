@@ -2,7 +2,7 @@
 
 const mailer = require('../common/mailer');
 const store = require('./lockEventStore');
-const { buildLockEmail } = require('./lockEmail');
+const { buildLockEmail, formatLockTimestamp } = require('./lockEmail');
 const { audit } = require('./audit');
 const LOG = require('../common/logger')('lock-monitor');
 
@@ -11,11 +11,14 @@ const LOG = require('../common/logger')('lock-monitor');
  * The app only leaves a note of who is locking and why; the email always comes from a poll cycle.
  */
 
-const DEFAULT_INTERVAL_SEC = 60;
+const DEFAULT_INTERVAL_SEC = 5;
 const DEFAULT_MAX_PER_EMAIL = 50;
 const CONTEXT_WINDOW_MS = 5 * 60 * 1000; // how long an app note can explain a lock
 const RUN_SETTLE_MS = 20 * 1000; // a bulk run still locking is held back, so that it stays in one email
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
+const defaultRetryDelays = () => (process.env.NODE_ENV === 'test' ? [0, 0, 0] : RETRY_DELAYS_MS);
+const DEFAULT_LEASE_MS = 60 * 1000;
+const DEFAULT_MAX_ATTEMPTS = 30;
 const STALE_AFTER_INTERVALS = 3;
 const SOURCE_APP = 'Fiori app';
 const SOURCE_SAP = 'SAP / automatic';
@@ -128,17 +131,21 @@ function describeLock({ username, uflag }, { context, change, fullName, previous
       : (shownByHistory
         ? (serviceAccountActor(change, serviceUser) ? SERVICE_ACCOUNT : change.changedBy)
         : 'Unknown'));
+  const historyKey = change?.historyKey || (contextApplies && context?.historyKey) || '';
+  const lockedAt = shownByHistory ? change.lockedAt : (detected > previousLockedAt ? detected : String(Number(previousLockedAt) + 1));
   return {
     username,
     uflag,
-    lockedAt: shownByHistory ? change.lockedAt : (detected > previousLockedAt ? detected : String(Number(previousLockedAt) + 1)),
+    lockedAt,
     lockType: lockLabel(uflag),
     lockedBy,
     fullName: fullName || '',
     source: noteApplies ? SOURCE_APP : SOURCE_SAP,
     reason: noteApplies ? (context.reason || '') : '',
     bulkRunId: noteApplies ? (context.bulkRunId || '') : '',
+    lockTimestamp: formatLockTimestamp(lockedAt),
     detectedAt: now.toISOString(),
+    historyKey,
   };
 }
 
@@ -162,8 +169,9 @@ function describeHistoryLock(change, { context, fullName, serviceUser, now }) {
     source: appAudit ? SOURCE_APP : SOURCE_SAP,
     reason: shortReason,
     bulkRunId: appAudit ? (context.bulkRunId || '') : '',
-    lockTimestamp: `${change.lockedAt.slice(0, 4)}-${change.lockedAt.slice(4, 6)}-${change.lockedAt.slice(6, 8)} ${change.lockedAt.slice(8, 10)}:${change.lockedAt.slice(10, 12)}:${change.lockedAt.slice(12, 14)}`,
+    lockTimestamp: formatLockTimestamp(change.lockedAt),
     detectedAt: now.toISOString(),
+    historyKey: change.historyKey || '',
   };
 }
 
@@ -187,7 +195,7 @@ function sameHistoryCursor(left, right) {
   return Boolean(left && right && left.at === right.at && left.key === right.key);
 }
 
-const errorCode = (e) => String((e && (e.responseCode || e.code)) || 'send-failed').slice(0, 60);
+const errorCode = (e) => String((e && (e.responseCode || e.code || e.message)) || 'send-failed').slice(0, 60);
 const wait = (ms) => new Promise((resolve) => {
   const timer = setTimeout(resolve, ms);
   if (timer.unref) timer.unref();
@@ -203,13 +211,32 @@ function auditLocks(events, result) {
   }));
 }
 
+function calculateNextRetry(attempts, now = new Date()) {
+  const backoffSec = Math.min(60, 5 * Math.pow(2, Math.max(0, Math.floor(attempts / 4) - 1)));
+  return new Date(now.getTime() + backoffSec * 1000).toISOString();
+}
+
 /**
  * Sends everything waiting in one email: a first attempt and 3 retries, then the events stay queued for the next
- * cycle. Never throws, so a mail failure cannot affect the poller, and it cannot reach a lock at all.
+ * cycle. Uses atomic database-backed claiming to ensure that two workers or instances never send the same email concurrently.
+ * Never throws, so a mail failure cannot affect the poller, and it cannot reach a lock at all.
  */
-async function sendPending({ retryDelays = RETRY_DELAYS_MS } = {}) {
-  const events = await store.pendingEvents();
+async function sendPending({
+  retryDelays = defaultRetryDelays(),
+  workerId,
+  now = new Date(),
+  leaseDurationMs = DEFAULT_LEASE_MS,
+  maxAttempts = DEFAULT_MAX_ATTEMPTS,
+  limit = 1000,
+} = {}) {
+  const events = await store.claimPendingEvents({
+    workerId: workerId || store.generateWorkerId(),
+    now,
+    leaseDurationMs,
+    limit,
+  });
   if (!events.length) return 'none';
+
   const mail = {
     to: recipients().join(', '),
     ...buildLockEmail(events, { appUrl: process.env.LOCK_NOTIFY_APP_URL, maxListed: maxPerEmail() }),
@@ -222,9 +249,13 @@ async function sendPending({ retryDelays = RETRY_DELAYS_MS } = {}) {
     tries++;
     try {
       await mailer.sendMail(mail);
-      await store.updateEvents(events, (event) => ({
-        status: 'sent', attempts: event.attempts + tries, sentAt: new Date().toISOString(), lastError: '',
-      }));
+      const sentAt = new Date().toISOString();
+      await store.completeEvents(events, {
+        attempts: (event) => (event.attempts || 0) + tries,
+        sentAt,
+        lastError: '',
+      });
+      await store.saveMonitor({ lastNotificationDispatchedAt: sentAt });
       auditLocks(events, 'notification sent');
       return 'sent';
     } catch (e) {
@@ -232,9 +263,17 @@ async function sendPending({ retryDelays = RETRY_DELAYS_MS } = {}) {
       LOG.warn('Lock email attempt failed:', lastError);
     }
   }
+
   // Audited once per lock, not once per minute for as long as the mail server is down.
   auditLocks(events.filter((event) => !event.failureAudited), 'notification failed');
-  await store.updateEvents(events, (event) => ({ attempts: event.attempts + tries, failureAudited: true, lastError }));
+  const nextRetryAt = calculateNextRetry((events[0]?.attempts || 0) + tries, now);
+  await store.releaseOrFailEvents(events, {
+    attempts: (event) => (event.attempts || 0) + tries,
+    failureAudited: true,
+    lastError,
+    nextRetryAt,
+    maxAttempts,
+  });
   LOG.error('Lock email failed after retries:', lastError, '-', events.length, 'lock(s) stay queued');
   return 'queued';
 }
@@ -244,13 +283,21 @@ async function sendPending({ retryDelays = RETRY_DELAYS_MS } = {}) {
  * If SAP cannot be read, the snapshot stays as it was and nothing is sent.
  */
 async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
+  const startMs = Date.now();
   let current;
   try {
     current = await adapter.readLockFlags();
     if (!current.length) throw new Error('USR02 returned no users');
   } catch (e) {
+    const pollDurationMs = Date.now() - startMs;
     LOG.error('Lock check failed, snapshot kept:', e.message);
-    await store.saveMonitor({ lastCheckedAt: now.toISOString(), lastStatus: 'failed', errorMessage: 'USR02 lock-state read failed' });
+    await store.saveMonitor({
+      lastCheckedAt: now.toISOString(),
+      lastFailedPollAt: now.toISOString(),
+      pollDurationMs,
+      lastStatus: 'failed',
+      errorMessage: 'USR02 lock-state read failed',
+    });
     return { failed: true, newlyLocked: 0, email: 'none' };
   }
 
@@ -284,12 +331,18 @@ async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
   };
 
   if (!snapshots.size) {
+    const pollDurationMs = Date.now() - startMs;
     await store.commitCycle({
       states: current,
       usedContexts: current.filter(({ uflag }) => uflag).map(({ username }) => username),
       ...(historyReadSucceeded ? { historyCursor: latestHistoryCursor(historyRows, historyCursor) } : {}),
     }, nowIso);
-    await store.saveMonitor({ lastCheckedAt: nowIso, ...monitorHealth });
+    await store.saveMonitor({
+      lastCheckedAt: nowIso,
+      lastSuccessfulPollAt: nowIso,
+      pollDurationMs,
+      ...monitorHealth,
+    });
     return { baseline: current.length, newlyLocked: 0, email: 'none' };
   }
 
@@ -364,6 +417,7 @@ async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
   const nextHistoryCursor = historyReadSucceeded && !heldHistoryLocks.length
     ? latestHistoryCursor(historyRows, historyCursor)
     : null;
+  const pollDurationMs = Date.now() - startMs;
   await store.commitCycle({
     states: [...diff.states, ...settled],
     removed: diff.removed,
@@ -375,9 +429,14 @@ async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
     expiredBefore: new Date(now.getTime() - CONTEXT_WINDOW_MS).toISOString(),
     ...(nextHistoryCursor ? { historyCursor: nextHistoryCursor } : {}),
   }, nowIso);
-  await store.saveMonitor({ lastCheckedAt: nowIso, ...monitorHealth });
+  await store.saveMonitor({
+    lastCheckedAt: nowIso,
+    lastSuccessfulPollAt: nowIso,
+    pollDurationMs,
+    ...monitorHealth,
+  });
 
-  const email = await sendPending({ retryDelays });
+  const email = await sendPending({ retryDelays, now });
   const heldUsers = new Set([...held, ...heldHistoryLocks].map(({ username }) => username));
   return { newlyLocked: events.length, held: heldUsers.size, email };
 }
@@ -439,6 +498,65 @@ async function discardAppLock(username) {
   }
 }
 
+/**
+ * Immediately queues a durable notification event and dispatches it for an individual Fiori lock.
+ * Never throws: notification errors must never fail the completed SAP lock operation.
+ */
+async function notifyAppLock({
+  username,
+  actor,
+  reason = '',
+  fullName = '',
+  change = null,
+  now = new Date(),
+  retryDelays = defaultRetryDelays(),
+} = {}) {
+  if (!isEnabled()) return 'off';
+
+  const nowIso = now.toISOString();
+  const detected = nowIso.replace(/\D/g, '').slice(0, 14);
+  const previousLockedAt = await store.lastLockedAt(username);
+  const lockedAt = change && change.lockedAt
+    ? change.lockedAt
+    : (detected > previousLockedAt ? detected : String(Number(previousLockedAt) + 1));
+  const historyKey = change?.historyKey || '';
+
+  const event = {
+    username,
+    uflag: 64,
+    lockedAt,
+    lockType: lockLabel(64),
+    lockedBy: actor,
+    fullName: fullName || '',
+    source: SOURCE_APP,
+    reason: reason || '',
+    bulkRunId: '',
+    lockTimestamp: formatLockTimestamp(lockedAt),
+    detectedAt: nowIso,
+    historyKey,
+  };
+
+  try {
+    await store.recordAppLockEvent(event);
+  } catch (e) {
+    LOG.error('Could not persist app lock notification event for', username, e.message);
+    return 'failed';
+  }
+
+  try {
+    await store.discardContext(username);
+  } catch (e) {
+    LOG.warn('Could not clear the app lock note of', username, e.message);
+  }
+
+  try {
+    return await sendPending({ retryDelays, now });
+  } catch (e) {
+    LOG.error('Immediate lock notification dispatch failed for', username, e.message);
+    return 'queued';
+  }
+}
+
 /** What the SU01 header shows. Read from the database, because the instance answering may not run the job. */
 async function monitorStatus(now = new Date()) {
   const settings = {
@@ -446,13 +564,36 @@ async function monitorStatus(now = new Date()) {
     pollIntervalSec: pollIntervalSec(),
     maxPerEmail: maxPerEmail(),
   };
+  const baseHealth = {
+    lastSuccessfulPollAt: null,
+    lastFailedPollAt: null,
+    pollDurationMs: null,
+    lastNotificationDispatchedAt: null,
+    pendingNotificationCount: 0,
+    failedNotificationCount: 0,
+  };
   if (!isEnabled() || settings.pollIntervalSec <= 0) {
-    return { state: 'off', lastCheckedAt: null, pendingEmails: 0, ...settings };
+    return { state: 'off', lastCheckedAt: null, pendingEmails: 0, ...settings, ...baseHealth };
   }
   try {
     const monitor = await store.readMonitor();
     const pending = await store.pendingEvents();
-    const base = { lastCheckedAt: monitor ? monitor.lastCheckedAt : null, pendingEmails: pending.length, ...settings };
+    const failed = await store.failedEvents();
+    const lastSent = monitor?.lastNotificationDispatchedAt || (await store.lastDispatchedAt()) || null;
+    const healthInfo = {
+      lastSuccessfulPollAt: monitor ? monitor.lastSuccessfulPollAt || null : null,
+      lastFailedPollAt: monitor ? monitor.lastFailedPollAt || null : null,
+      pollDurationMs: monitor?.pollDurationMs ?? null,
+      lastNotificationDispatchedAt: lastSent,
+      pendingNotificationCount: pending.length,
+      failedNotificationCount: failed.length,
+    };
+    const base = {
+      lastCheckedAt: monitor ? monitor.lastCheckedAt : null,
+      pendingEmails: pending.length,
+      ...settings,
+      ...healthInfo,
+    };
     if (!monitor) return { state: 'starting', ...base };
     if (monitor.lastStatus !== 'ok') return { state: 'failed', errorMessage: monitor.errorMessage || '', ...base };
     const age = now.getTime() - new Date(monitor.lastCheckedAt).getTime();
@@ -463,7 +604,14 @@ async function monitorStatus(now = new Date()) {
     };
   } catch (e) {
     LOG.error('Could not read the lock monitor state:', e.message);
-    return { state: 'failed', errorMessage: 'Lock monitor status could not be read', lastCheckedAt: null, pendingEmails: 0, ...settings };
+    return {
+      state: 'failed',
+      errorMessage: 'Lock monitor status could not be read',
+      lastCheckedAt: null,
+      pendingEmails: 0,
+      ...settings,
+      ...baseHealth,
+    };
   }
 }
 
@@ -479,5 +627,6 @@ async function bulkEmailStatus(bulkRunId) {
 module.exports = {
   isEnabled, pollIntervalSec, maxPerEmail, recipients, lockLabel, diffLockState, splitSettled, describeLock,
   describeHistoryLock, addedHistoryLocks, pollOnce, runCycle, sendPending, startJob, recordAppLock,
-  recordAppLockHistory, discardAppLock, monitorStatus, bulkEmailStatus,
+  recordAppLockHistory, discardAppLock, notifyAppLock, monitorStatus, bulkEmailStatus, calculateNextRetry,
+  DEFAULT_INTERVAL_SEC, DEFAULT_LEASE_MS, DEFAULT_MAX_ATTEMPTS,
 };

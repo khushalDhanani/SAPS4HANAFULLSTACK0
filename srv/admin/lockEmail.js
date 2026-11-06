@@ -20,6 +20,23 @@ const oneLine = (value) => String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
 
 const formatDetectedAt = (iso) => (iso ? `${String(iso).slice(0, 19).replace('T', ' ')} UTC` : '');
 
+/** Formats a 14-digit compact timestamp YYYYMMDDHHMMSS into YYYY-MM-DD HH:MM:SS without timezone assumption. */
+function formatLockTimestamp(raw) {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  if (/^\d{14}$/.test(s)) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}`;
+  }
+  return s;
+}
+
+function getFieldValue(event, field) {
+  if (field === 'lockTimestamp') {
+    return formatLockTimestamp(event.lockTimestamp || event.lockedAt);
+  }
+  return event[field] || '';
+}
+
 /** Opens the SU01 screen with the username search filled in. */
 function userLink(username, appUrl) {
   const base = String(appUrl || '').trim().replace(/#.*$/, '');
@@ -44,7 +61,7 @@ function buildLockEmail(events, { appUrl, maxListed = 50 } = {}) {
   const text = listed.map((event) => {
     const link = userLink(event.username, appUrl);
     return [
-      ...COLUMNS.map(([label, field]) => `${label}: ${event[field] || '-'}`),
+      ...COLUMNS.map(([label, field]) => `${label}: ${getFieldValue(event, field) || '-'}`),
       `Detected At: ${formatDetectedAt(event.detectedAt)}`,
       ...(link ? [`Open in app: ${link}`] : []),
     ].join('\n');
@@ -54,7 +71,7 @@ function buildLockEmail(events, { appUrl, maxListed = 50 } = {}) {
   const rows = listed.map((event) => {
     const link = userLink(event.username, appUrl);
     const cells = [
-      ...COLUMNS.map(([, field]) => escapeHtml(event[field] || '-')),
+      ...COLUMNS.map(([, field]) => escapeHtml(getFieldValue(event, field) || '-')),
       escapeHtml(formatDetectedAt(event.detectedAt)),
       ...(appUrl ? [link ? `<a href="${escapeHtml(link)}">Open in app</a>` : ''] : []),
     ];
@@ -67,4 +84,4 @@ function buildLockEmail(events, { appUrl, maxListed = 50 } = {}) {
   return { subject, text, html };
 }
 
-module.exports = { buildLockEmail, formatDetectedAt, userLink };
+module.exports = { buildLockEmail, formatDetectedAt, formatLockTimestamp, userLink };

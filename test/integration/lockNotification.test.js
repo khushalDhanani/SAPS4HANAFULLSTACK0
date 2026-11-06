@@ -260,7 +260,7 @@ describe('Integration: lock monitor', () => {
 
       expect(mailed()).toHaveLength(1);
       expect(mailed()[0].text).toContain('Short-lived lock (cleared before detection)');
-      expect(mailed()[0].text).toContain('Lock Timestamp (SAP):');
+      expect(mailed()[0].text).toMatch(/Lock Timestamp \(SAP\): \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
       expect((await events())[0]).toMatchObject({
         username: 'ALICE',
         lockType: expect.stringContaining('Short-lived lock (cleared before detection)'),
@@ -561,19 +561,26 @@ describe('Integration: lock monitor', () => {
   });
 
   describe('context from the app', () => {
-    test('an app lock sends no email itself: the next cycle reports it with who and why', async () => {
+    test('an app lock immediately queues and dispatches notification, and next poll does not duplicate', async () => {
       await poll();
 
       const res = await lock('alice', { reason: 'Left the company' });
 
       expect(res.status).toBe(200);
-      expect(mailer.sendMail).not.toHaveBeenCalled();
-
-      await poll();
+      expect(mailer.sendMail).toHaveBeenCalledTimes(1);
       expect(mailed()).toHaveLength(1);
       expect(mailed()[0].text).toContain('Left the company');
-      expect((await events())[0]).toMatchObject({ source: 'Fiori app', lockedBy: 'khushal', reason: 'Left the company' });
+      expect((await events())[0]).toMatchObject({
+        source: 'Fiori app',
+        lockedBy: 'khushal',
+        reason: 'Left the company',
+        status: 'sent',
+      });
       expect(await cds.db.run(SELECT.from(CONTEXT))).toEqual([]);
+
+      await poll();
+      expect(mailer.sendMail).toHaveBeenCalledTimes(1);
+      expect(mailed()).toHaveLength(1);
     });
 
     test('five users locked together give one email, even if a check lands mid-run', async () => {
@@ -620,7 +627,7 @@ describe('Integration: lock monitor', () => {
       expect((await events())[0]).toMatchObject({ source: 'SAP / automatic', lockedBy: 'SAPADMIN', reason: '' });
     });
 
-    test('an app lock then unlock before the next check is attributed to the app actor', async () => {
+    test('an app lock then unlock sends immediate notification for lock, and poll does not duplicate', async () => {
       await poll();
       await lock('ALICE', { reason: 'Mistake' });
       await axios.post(`${BASE}/unlockUser`, { username: 'ALICE' }, ADMIN);
@@ -628,11 +635,12 @@ describe('Integration: lock monitor', () => {
       await poll();
 
       expect(mailed()).toHaveLength(1);
-      expect(mailed()[0].text).toContain('Short-lived lock (cleared before detection)');
+      expect(mailed()[0].text).toContain('Mistake');
       expect((await events())[0]).toMatchObject({
         source: 'Fiori app',
         lockedBy: 'khushal',
-        reason: 'Short-lived lock (cleared before detection): Mistake',
+        reason: 'Mistake',
+        status: 'sent',
       });
       expect(await cds.db.run(SELECT.from(CONTEXT))).toEqual([]);
     });
@@ -655,6 +663,143 @@ describe('Integration: lock monitor', () => {
 
       expect(JSON.stringify(mailed())).not.toContain('SECRET');
       expect(logs()).not.toContain('SECRET');
+    });
+  });
+
+  describe('immediate Fiori lock notifications', () => {
+    test('successful Fiori lock queues and triggers immediate dispatch', async () => {
+      await poll();
+      const res = await lock('ALICE', { reason: 'Immediate test' });
+      expect(res.status).toBe(200);
+      expect(mailed()).toHaveLength(1);
+      expect(mailed()[0]).toMatchObject({
+        to: 'khushal@example.test',
+        subject: '[SAP Alert] User ALICE locked',
+      });
+      expect(mailed()[0].text).toContain('Immediate test');
+      expect(mailed()[0].text).toContain('Locked By: khushal');
+      expect(mailed()[0].text).toMatch(/Lock Timestamp \(SAP\): \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+      expect((await events())[0]).toMatchObject({
+        username: 'ALICE',
+        source: 'Fiori app',
+        lockedBy: 'khushal',
+        reason: 'Immediate test',
+        status: 'sent',
+      });
+    });
+
+    test('failed SAP lock does not send an email', async () => {
+      await poll();
+      sap.lockFails = ['BOB'];
+      const res = await lock('BOB', { reason: 'Should fail' });
+      expect(res.status).toBe(502);
+      expect(mailed()).toHaveLength(0);
+      expect(await events()).toHaveLength(0);
+      expect(await cds.db.run(SELECT.from(CONTEXT))).toEqual([]);
+    });
+
+    test('successful SAP lock with SMTP failure retains a pending event', async () => {
+      await poll();
+      mailer.sendMail.mockRejectedValue(new Error('SMTP down'));
+      const res = await lock('CAROL', { reason: 'Audit lock' });
+      expect(res.status).toBe(200);
+      expect(sap.uflag.CAROL).toBe(64);
+      const carolEvents = await events();
+      expect(carolEvents).toHaveLength(1);
+      expect(carolEvents[0]).toMatchObject({
+        username: 'CAROL',
+        source: 'Fiori app',
+        lockedBy: 'khushal',
+        reason: 'Audit lock',
+        status: 'pending',
+        lastError: 'SMTP down',
+      });
+      expect(carolEvents[0].attempts).toBeGreaterThanOrEqual(1);
+    });
+
+    test('restart recovers unsent notifications', async () => {
+      await poll();
+      mailer.sendMail.mockRejectedValue(new Error('SMTP down'));
+      await lock('CAROL', { reason: 'Queued before restart' });
+
+      mailer.sendMail.mockReset();
+      mailer.sendMail.mockResolvedValue({});
+
+      const freshNotifier = restarted();
+      const res = await freshNotifier.sendPending({ now: new Date(Date.now() + 60000) });
+      expect(res).toBe('sent');
+      expect(mailed()).toHaveLength(1);
+      expect(mailed()[0].text).toContain('Queued before restart');
+      const carolEvents = await events();
+      expect(carolEvents[0].status).toBe('sent');
+    });
+
+    test('polling does not duplicate the immediate notification', async () => {
+      await poll();
+      await lock('ALICE', { reason: 'No duplicate' });
+      expect(mailed()).toHaveLength(1);
+
+      await poll();
+      expect(mailed()).toHaveLength(1);
+      expect(await events()).toHaveLength(1);
+    });
+
+    test('actor and reason appear correctly in the email and event record', async () => {
+      await poll();
+      await lock('DAVE', { reason: 'Specific policy breach' });
+      expect(mailed()).toHaveLength(1);
+      expect(mailed()[0].text).toContain('Locked By: khushal');
+      expect(mailed()[0].text).toContain('Reason: Specific policy breach');
+      expect((await events())[0]).toMatchObject({
+        username: 'DAVE',
+        lockedBy: 'khushal',
+        reason: 'Specific policy breach',
+        source: 'Fiori app',
+      });
+    });
+
+    test('bulk locking still produces consolidated notifications after settlement', async () => {
+      await poll();
+      await lock('ALICE', { bulkRunId: 'bulk-run-agent3' });
+      await lock('BOB', { bulkRunId: 'bulk-run-agent3' });
+
+      expect(mailed()).toHaveLength(0);
+
+      await backdateContexts(30);
+      await monitor.pollOnce(adapter(), { now: clock, retryDelays: NO_WAIT });
+
+      expect(mailed()).toHaveLength(1);
+      expect(mailed()[0].subject).toBe('[SAP Alert] 2 users locked');
+      expect(mailed()[0].text).toContain('ALICE');
+      expect(mailed()[0].text).toContain('BOB');
+    });
+
+    test('if SAP lock succeeds but reading SAP lock history fails, event is queued and reconciled later', async () => {
+      await poll();
+      const originalReadLastLock = UserManagementAdapter.prototype.readLastLockChange;
+      let calls = 0;
+      jest.spyOn(UserManagementAdapter.prototype, 'readLastLockChange').mockImplementation(async function (...args) {
+        calls++;
+        if (calls > 1) throw new Error('USH02 read failed');
+        return originalReadLastLock.apply(this, args);
+      });
+
+      const res = await lock('ALICE', { reason: 'Resilience test' });
+      expect(res.status).toBe(200);
+      expect(sap.uflag.ALICE).toBe(64);
+      expect(mailed()).toHaveLength(1);
+      expect((await events())[0]).toMatchObject({
+        username: 'ALICE',
+        source: 'Fiori app',
+        reason: 'Resilience test',
+        status: 'sent',
+      });
+
+      jest.restoreAllMocks();
+      stubSap();
+      await poll();
+      expect(mailed()).toHaveLength(1);
+      expect(await events()).toHaveLength(1);
     });
   });
 
@@ -708,6 +853,50 @@ describe('Integration: lock monitor', () => {
       sap.down = false;
       await poll();
       expect(await monitor.monitorStatus(clock)).toMatchObject({ state: 'ok' });
+    });
+
+    test('reports complete health information and metrics', async () => {
+      await poll();
+      let res = await status();
+      expect(res.data).toMatchObject({
+        state: 'ok',
+        pollIntervalSec: 5,
+        pendingEmails: 0,
+        pendingNotificationCount: 0,
+        failedNotificationCount: 0,
+      });
+      expect(res.data.lastSuccessfulPollAt).toBe(clock.toISOString());
+      expect(typeof res.data.pollDurationMs).toBe('number');
+      expect(res.data.pollDurationMs).toBeGreaterThanOrEqual(0);
+
+      setLock('ALICE', 64);
+      await poll();
+      res = await status();
+      expect(res.data.lastNotificationDispatchedAt).toBeTruthy();
+
+      sap.down = true;
+      await poll();
+      res = await status();
+      expect(res.data.state).toBe('failed');
+      expect(res.data.lastFailedPollAt).toBe(clock.toISOString());
+    });
+
+    test('concurrent polling protection skips overlapping execution', async () => {
+      const adapterInstance = adapter();
+      let resolveFirst;
+      const blockingPromise = new Promise((resolve) => { resolveFirst = resolve; });
+      jest.spyOn(adapterInstance, 'readLockFlags').mockImplementationOnce(async () => {
+        await blockingPromise;
+        return [{ username: 'ALICE', uflag: 0 }];
+      });
+
+      const firstCycle = monitor.runCycle(adapterInstance, { now: tick(), retryDelays: NO_WAIT });
+      const secondCycle = await monitor.runCycle(adapterInstance, { now: tick(), retryDelays: NO_WAIT });
+      expect(secondCycle).toEqual({ skipped: true });
+
+      resolveFirst();
+      const firstResult = await firstCycle;
+      expect(firstResult).not.toEqual({ skipped: true });
     });
 
     test('is off when email is not configured, and no SAP read happens on a lock', async () => {

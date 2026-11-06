@@ -1,6 +1,6 @@
 'use strict';
 
-const { buildLockEmail, formatDetectedAt, userLink } = require('../../../srv/admin/lockEmail');
+const { buildLockEmail, formatDetectedAt, formatLockTimestamp, userLink } = require('../../../srv/admin/lockEmail');
 
 const event = (username, extra = {}) => ({
   username,
@@ -32,6 +32,20 @@ describe('buildLockEmail', () => {
     const mail = buildLockEmail([event('ALICE', { lockTimestamp: '2026-11-05 10:15:00' })]);
     expect(mail.text).toContain('Lock Timestamp (SAP): 2026-11-05 10:15:00');
     expect(mail.html).toContain('<td>2026-11-05 10:15:00</td>');
+  });
+
+  test('formats 14-digit lockedAt timestamp from database queue without timezone assumption', () => {
+    const mail = buildLockEmail([event('ALICE', { lockedAt: '20261105165702' })]);
+    expect(mail.text).toContain('Lock Timestamp (SAP): 2026-11-05 16:57:02');
+    expect(mail.html).toContain('<td>2026-11-05 16:57:02</td>');
+  });
+
+  test('formatLockTimestamp helper formats 14-digit compact timestamp or passes through', () => {
+    expect(formatLockTimestamp('20261105165702')).toBe('2026-11-05 16:57:02');
+    expect(formatLockTimestamp('2026-11-05 16:57:02')).toBe('2026-11-05 16:57:02');
+    expect(formatLockTimestamp('')).toBe('');
+    expect(formatLockTimestamp(null)).toBe('');
+    expect(formatLockTimestamp(undefined)).toBe('');
   });
 
   test('several users: one table, subject with the count', () => {
