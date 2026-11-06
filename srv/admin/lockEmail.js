@@ -37,11 +37,13 @@ function getFieldValue(event, field) {
   return event[field] || '';
 }
 
-/** Opens the SU01 screen with the username search filled in. */
-function userLink(username, appUrl) {
+/** Opens the SU01 screen with the username search filled in, and optional action. */
+function userLink(username, appUrl, action = '') {
   const base = String(appUrl || '').trim().replace(/#.*$/, '');
   if (!base) return '';
-  return username ? `${base}#/dashboard/admin?search=${encodeURIComponent(username)}` : `${base}#/dashboard/admin`;
+  if (!username) return `${base}#/dashboard/admin`;
+  const actionParam = action ? `&action=${encodeURIComponent(action)}` : '';
+  return `${base}#/dashboard/admin?search=${encodeURIComponent(username)}${actionParam}`;
 }
 
 function buildUserTableHtml(event) {
@@ -149,15 +151,19 @@ function buildLockEmail(events, { appUrl, maxListed = 50 } = {}) {
 
   const text = listed.map((event) => {
     const link = userLink(event.username, appUrl);
+    const unlock = userLink(event.username, appUrl, 'unlock');
     return [
       ...COLUMNS.map(([label, field]) => `${label}: ${getFieldValue(event, field) || '-'}`),
       `Detected At: ${formatDetectedAt(event.detectedAt)}`,
       ...(link ? [`Open in app: ${link}`] : []),
+      ...(unlock ? [`Unlock in app: ${unlock}`] : []),
     ].join('\n');
   }).join('\n\n') + (more ? `\n\nand ${more} more` : '');
 
-  const primaryLink = appUrl ? userLink(listed.length === 1 ? listed[0].username : '', appUrl) : '';
-  const actionButtonHtml = primaryLink ? `
+  const primaryViewLink = appUrl ? userLink(listed.length === 1 ? listed[0].username : '', appUrl) : '';
+  const primaryUnlockLink = appUrl && listed.length === 1 ? userLink(listed[0].username, appUrl, 'unlock') : '';
+
+  const actionButtonHtml = primaryViewLink ? `
                     <!-- Action Link / Button -->
                     <tr>
                         <td style="padding:18px 0 10px 0;font-size:13px;color:#111827;line-height:20px;">
@@ -166,12 +172,20 @@ function buildLockEmail(events, { appUrl, maxListed = 50 } = {}) {
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                                 <tr>
                                     <td align="center" style="border-radius:4px;background-color:#0070F2;">
-                                        <a href="${escapeHtml(primaryLink)}"
+                                        <a href="${escapeHtml(primaryViewLink)}"
                                             target="_blank"
                                             style="display:inline-block;padding:9px 24px;font-size:13px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:4px;background-color:#0070F2;">
                                             Open in App &rarr;
                                         </a>
                                     </td>
+${primaryUnlockLink ? `                                    <td width="12" style="width:12px;">&nbsp;</td>
+                                    <td align="center" style="border-radius:4px;background-color:#16A34A;">
+                                        <a href="${escapeHtml(primaryUnlockLink)}"
+                                            target="_blank"
+                                            style="display:inline-block;padding:9px 24px;font-size:13px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:4px;background-color:#16A34A;">
+                                            Unlock User &rarr;
+                                        </a>
+                                    </td>` : ''}
                                 </tr>
                             </table>
                         </td>

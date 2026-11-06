@@ -188,6 +188,23 @@ describe('Admin dashboard user list', () => {
             expect(model.getProperty('/filters/search')).toBe('');
         });
 
+        test('a link with ?search=ALICE&action=unlock prompts for unlock confirmation', () => {
+            const { controller, model } = makeController([]);
+            const dashboardModel = new MockJSONModel({ selectedTab: '' });
+            controller.getView = () => ({ getModel: (name) => (name === 'dashboardView' ? dashboardModel : model) });
+            controller._bFiguresLoaded = true;
+            controller._bAdminUsersLoaded = true;
+            controller._watchLockMonitor = jest.fn();
+            controller._confirmUnlockUser = jest.fn();
+            const matched = (section, query) => ({ getParameter: () => ({ section, '?query': query }) });
+
+            mockAuthService.hasAnyRole.mockReturnValue(true);
+            controller._onDashboardMatched(matched('admin', { search: 'ALICE', action: 'unlock' }));
+
+            expect(model.getProperty('/filters/search')).toBe('ALICE');
+            expect(controller._confirmUnlockUser).toHaveBeenCalledWith('ALICE');
+        });
+
         test.each([
             [{ state: 'ok', lastCheckedAt: '2026-11-05T10:15:00.000Z' }, /^Lock monitor: Active · Last checked \d{2}:\d{2}$/, 'Success'],
             [{ state: 'starting' }, /^Lock monitor: Active · First check pending$/, 'Success'],

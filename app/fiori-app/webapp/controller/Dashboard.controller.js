@@ -168,6 +168,9 @@ sap.ui.define([
                     // A link from a lock alert: the list opens with that username searched.
                     this._mergeAdminFilters({ search: String(oQuery.search) });
                 }
+                if (oQuery && oQuery.action === "unlock" && oQuery.search) {
+                    this._confirmUnlockUser(String(oQuery.search).trim().toUpperCase());
+                }
                 return;
             }
             // A sidebar click only changes the section; the figures reload on arrival from another screen.
@@ -1169,7 +1172,10 @@ sap.ui.define([
             if (!sUsername) {
                 return;
             }
+            this._confirmUnlockUser(sUsername);
+        },
 
+        _confirmUnlockUser: function (sUsername) {
             var that = this;
             var sMsg = this._text("adminConfirmUnlockMsg", "Are you sure you want to unlock SAP user {0}?", [sUsername]);
             var sTitle = this._text("adminConfirmUnlockTitle", "Unlock SAP User");

@@ -15,6 +15,14 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **SAP Lock Alert email template: "Unlock User" action button added & verified (2026-11-06 12:45 IST) — PASS:**
+  - Implemented direct "Unlock User &rarr;" action button in `srv/admin/lockEmail.js` alongside "Open in App &rarr;".
+  - Link format: `${base}#/dashboard/admin?search=${encodeURIComponent(username)}&action=unlock`. Plain-text fallback: `Unlock in app: ...`.
+  - In `app/fiori-app/webapp/controller/Dashboard.controller.js`: Handled deep link `oQuery.action === "unlock" && oQuery.search` in `_onDashboardMatched()`. Sets user filter and immediately prompts the administrator with an explicit confirmation dialog (`_confirmUnlockUser(sUsername)`).
+  - Security architecture: Prevented unauthenticated external HTTP write endpoints. Unlock action strictly requires user authentication in the Fiori Administrator portal, loads the SAP admin context, and mandates administrator confirmation (`MessageBox.confirm`) before triggering `/odata/v4/user-management/unlockUser`.
+  - Dispatched live test email via Microsoft 365 Exchange Online (`SEND_ACCEPTED`, duration 745ms, exit code 0).
+  - Tests: Updated `test/unit/admin/lockEmail.test.js` and added confirmation test in `test/unit/admin/adminDashboardList.test.js`. 9 suites passed, 287 tests passed, 0 failed. ESLint clean (0 errors). Zero live SAP writes made.
+
 - **SAP Lock Alert live test email sent (2026-11-06 12:27 IST) — PASS on SMTP transmission; inbox arrival pending user verification:**
   - Dispatched live test email featuring the new SAP Lock Alert responsive HTML template via configured Microsoft 365 Exchange SMTP (`srv/common/mailer.js`).
   - Payload: Username `DIPEN`, Full Name `DIPEN ASORIYA`, Lock Type `Locked by administrator`, Lock Timestamp (SAP) `2026-11-06 11:45:30`, Locked By `KHUSHAL`, Source `Fiori app`, Reason `-`, CTA `Open in App →` linking to `/dashboard/admin?search=DIPEN`.
@@ -328,6 +336,31 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-06 12:45 IST — SAP Lock Alert email: "Unlock User" action button and deep link confirmation: PASS
+
+- **Request:** The user requested "in Email Give me option of Unlock button also."
+- **Scope:** Add an "Unlock User &rarr;" call-to-action button to the SAP Lock Alert email template that deep-links into the Fiori Administrator dashboard with secure confirmation.
+- **Changes:**
+  - `srv/admin/lockEmail.js`:
+    - Updated `userLink(username, appUrl, action = '')` helper to append `&action=${encodeURIComponent(action)}` when an action parameter is supplied.
+    - Updated `buildLockEmail()`:
+      - Rendered green (`#16A34A`) "Unlock User &rarr;" action button side-by-side with the blue (`#0070F2`) "Open in App &rarr;" button when an individual user lock is alerted.
+      - Appended `Unlock in app: <link>` in plain-text fallback (`mail.text`).
+      - All links properly HTML-escaped.
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`:
+    - In `_onDashboardMatched()`: Checked for `oQuery && oQuery.action === "unlock" && oQuery.search`, and invoked `this._confirmUnlockUser(String(oQuery.search).trim().toUpperCase())`.
+    - Added `_confirmUnlockUser(sUsername)` helper and refactored `onUnlockUser` to reuse it, presenting an explicit `MessageBox.confirm` dialog (`adminConfirmUnlockMsg`: "Are you sure you want to unlock SAP user {0}?") before invoking `/odata/v4/user-management/unlockUser`.
+  - Security Compliance:
+    - Adheres to `AGENTS.md` write-gate and authentication policies. Rather than exposing an unauthenticated or insecure raw HTTP POST endpoint in an email (which email clients block and which lacks XSUAA / CSRF protection), the button securely navigates an authenticated administrator to the Fiori app and prompts for explicit confirmation before executing the SAP BAPI unlock.
+- **Test Impact Decision:** `TEST UPDATED & TEST ADDED`
+  - `test/unit/admin/lockEmail.test.js`: Updated assertions to verify `Unlock User &rarr;` button presence, `#16A34A` styling, `action=unlock` query parameter, and plain-text output.
+  - `test/unit/admin/adminDashboardList.test.js`: Added test case verifying that navigating with `?search=ALICE&action=unlock` sets search filter and prompts for unlock confirmation via `MessageBox.confirm`.
+- **Executed Validations:**
+  - `npx jest test/unit/admin/ test/integration/lockNotification.test.js test/integration/lockNotificationQueue.test.js`: 9 suites passed, 287 tests passed, 0 failed.
+  - `npm run lint`: Clean (0 errors, 2 pre-existing warnings in unrelated files).
+  - Live SMTP dispatch: Dispatched second live test email via configured Microsoft 365 Exchange Online (`SEND_ACCEPTED`, duration 745ms, exit code 0) for recipient in `LOCK_NOTIFY_TO`.
+  - Zero live SAP writes made.
 
 ### 2026-11-06 12:27 IST — One live test email sent with new template: PASS
 
