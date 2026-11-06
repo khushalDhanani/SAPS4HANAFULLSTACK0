@@ -19,7 +19,11 @@ const RETRY_DELAYS_MS = [1000, 2000, 4000];
 const STALE_AFTER_INTERVALS = 3;
 const SOURCE_APP = 'Fiori app';
 const SOURCE_SAP = 'SAP / automatic';
+const SERVICE_ACCOUNT = 'Service account (app or integration)';
+const SHORT_LIVED_LOCK = 'Short-lived lock (cleared before detection)';
 const INCORRECT_LOGONS = 128;
+const MAX_CURSOR_STALL_CYCLES = 5;
+const CURSOR_STALL_ERROR = `USH02 cursor did not advance for ${MAX_CURSOR_STALL_CYCLES} consecutive polls`;
 
 // USR02.UFLAG bits (domain XUUFLAG, DS4/220).
 const LOCK_LABELS = [
@@ -40,8 +44,13 @@ const pollIntervalSec = (env = process.env) => positiveInt(env.LOCK_POLL_INTERVA
 const maxPerEmail = (env = process.env) => positiveInt(env.LOCK_MAX_PER_EMAIL, DEFAULT_MAX_PER_EMAIL);
 
 function lockLabel(uflag) {
-  const labels = LOCK_LABELS.filter(([bit]) => uflag & bit).map(([, label]) => label);
-  return labels.length ? labels.join(' + ') : `Lock status ${uflag}`;
+  const hasAdministratorLock = Boolean(uflag & 64);
+  const hasIncorrectLogonLock = Boolean(uflag & INCORRECT_LOGONS);
+  const labels = LOCK_LABELS
+    .filter(([bit]) => (uflag & bit) && !(hasAdministratorLock && hasIncorrectLogonLock && (bit === 64 || bit === INCORRECT_LOGONS)))
+    .map(([, label]) => label);
+  if (hasAdministratorLock && hasIncorrectLogonLock) labels.push('Locked by administrator and incorrect logon attempts');
+  return labels.length ? labels.join(' and ') : `Lock status ${uflag}`;
 }
 
 /**
@@ -89,26 +98,93 @@ function splitSettled(newlyLocked, contexts, now) {
 
 /**
  * Merges the app's note into a detected lock. Pure.
- * A note explains the lock only if it is recent, and never an incorrect-logon lock, which no admin made.
+ * A recent note explains non-automatic locks; only an exact history-key match can attribute an automatic lock.
  */
-function describeLock({ username, uflag }, { context, change, fullName, previousLockedAt, now }) {
-  const noteApplies = context
-    && now.getTime() - new Date(context.at).getTime() <= CONTEXT_WINDOW_MS
-    && uflag !== INCORRECT_LOGONS;
+function contextMatchesChange(context, change) {
+  return Boolean(context && change && context.historyKey && change.historyKey === context.historyKey);
+}
+
+function isRecentContext(context, now) {
+  return Boolean(context && now.getTime() - new Date(context.at).getTime() <= CONTEXT_WINDOW_MS);
+}
+
+function serviceAccountActor(change, serviceUser) {
+  return Boolean(change && change.changedBy && serviceUser
+    && change.changedBy.trim().toUpperCase() === serviceUser.trim().toUpperCase());
+}
+
+function describeLock({ username, uflag }, { context, change, fullName, previousLockedAt, now, serviceUser }) {
+  const incorrectLogonLock = Boolean(uflag & INCORRECT_LOGONS);
+  const exactAppAudit = contextMatchesChange(context, change);
+  const contextApplies = exactAppAudit
+    || (isRecentContext(context, now) && !context?.historyKey && !incorrectLogonLock);
+  const noteApplies = contextApplies;
   const shownByHistory = change && change.uflag === uflag && change.lockedAt > previousLockedAt;
   const detected = now.toISOString().replace(/\D/g, '').slice(0, 14);
+  const lockedBy = noteApplies
+    ? context.actor
+    : (incorrectLogonLock
+      ? 'Incorrect logon attempts (automatic)'
+      : (shownByHistory
+        ? (serviceAccountActor(change, serviceUser) ? SERVICE_ACCOUNT : change.changedBy)
+        : 'Unknown'));
   return {
     username,
     uflag,
     lockedAt: shownByHistory ? change.lockedAt : (detected > previousLockedAt ? detected : String(Number(previousLockedAt) + 1)),
     lockType: lockLabel(uflag),
-    lockedBy: noteApplies ? context.actor : (shownByHistory ? change.changedBy : 'Unknown'),
+    lockedBy,
     fullName: fullName || '',
     source: noteApplies ? SOURCE_APP : SOURCE_SAP,
     reason: noteApplies ? (context.reason || '') : '',
     bulkRunId: noteApplies ? (context.bulkRunId || '') : '',
     detectedAt: now.toISOString(),
   };
+}
+
+function describeHistoryLock(change, { context, fullName, serviceUser, now }) {
+  const uflag = change.addedUflag ?? change.uflag;
+  const incorrectLogonLock = Boolean(uflag & INCORRECT_LOGONS);
+  const appAudit = contextMatchesChange(context, change)
+    || (!incorrectLogonLock && !context?.historyKey && isRecentContext(context, now));
+  const shortReason = appAudit && context.reason ? `${SHORT_LIVED_LOCK}: ${context.reason}` : SHORT_LIVED_LOCK;
+  return {
+    username: change.username,
+    uflag,
+    lockedAt: change.lockedAt,
+    lockType: `${SHORT_LIVED_LOCK} - ${lockLabel(uflag)}`,
+    lockedBy: appAudit
+      ? context.actor
+      : (incorrectLogonLock
+        ? 'Incorrect logon attempts (automatic)'
+        : (serviceAccountActor(change, serviceUser) ? SERVICE_ACCOUNT : (change.changedBy || 'Unknown'))),
+    fullName: fullName || '',
+    source: appAudit ? SOURCE_APP : SOURCE_SAP,
+    reason: shortReason,
+    bulkRunId: appAudit ? (context.bulkRunId || '') : '',
+    lockTimestamp: `${change.lockedAt.slice(0, 4)}-${change.lockedAt.slice(4, 6)}-${change.lockedAt.slice(6, 8)} ${change.lockedAt.slice(8, 10)}:${change.lockedAt.slice(10, 12)}:${change.lockedAt.slice(12, 14)}`,
+    detectedAt: now.toISOString(),
+  };
+}
+
+function addedHistoryLocks(history, snapshots = new Map()) {
+  return history.reduce((locks, row) => {
+    const previousUflag = row.previousUflag ?? snapshots.get(row.username)?.uflag;
+    if (previousUflag === null || previousUflag === undefined) return locks;
+    const addedUflag = (Number(row.uflag) || 0) & ~(Number(previousUflag) || 0);
+    if (addedUflag) locks.push({ ...row, addedUflag });
+    return locks;
+  }, []);
+}
+
+function latestHistoryCursor(rows, previous) {
+  if (!rows.length) return previous || { at: '00000000000000', key: '[]' };
+  const latest = rows[rows.length - 1];
+  return { at: latest.lockedAt, key: latest.historyKey };
+}
+
+function sameHistoryCursor(left, right) {
+  return Boolean(left && right && left.at === right.at && left.key === right.key);
 }
 
 const errorCode = (e) => String((e && (e.responseCode || e.code)) || 'send-failed').slice(0, 60);
@@ -174,15 +250,46 @@ async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
     if (!current.length) throw new Error('USR02 returned no users');
   } catch (e) {
     LOG.error('Lock check failed, snapshot kept:', e.message);
-    await store.saveMonitor({ lastCheckedAt: now.toISOString(), lastStatus: 'failed' });
+    await store.saveMonitor({ lastCheckedAt: now.toISOString(), lastStatus: 'failed', errorMessage: 'USR02 lock-state read failed' });
     return { failed: true, newlyLocked: 0, email: 'none' };
   }
 
   const nowIso = now.toISOString();
   const snapshots = await store.readSnapshots();
+  const savedMonitor = await store.readMonitor();
+  let cursorStallCount = Number(savedMonitor?.cursorStallCount) || 0;
+  let historyRows = [];
+  let historyCursor = null;
+  let historyReadSucceeded = false;
+  try {
+    historyCursor = await store.readHistoryCursor();
+    historyRows = await adapter.readLockHistory(historyCursor);
+    const nextCursor = latestHistoryCursor(historyRows, historyCursor);
+    if (historyRows.length && historyCursor && sameHistoryCursor(nextCursor, historyCursor)) {
+      cursorStallCount++;
+      LOG.error('Lock history catch-up failed; watermark kept: cursor did not advance');
+    } else {
+      historyReadSucceeded = true;
+      cursorStallCount = 0;
+    }
+  } catch (e) {
+    cursorStallCount++;
+    LOG.error('Lock history catch-up failed; watermark kept:', e.message);
+  }
+  const historyNeedsBaseline = historyCursor === null;
+  const monitorHealth = {
+    lastStatus: cursorStallCount >= MAX_CURSOR_STALL_CYCLES ? 'failed' : 'ok',
+    cursorStallCount,
+    errorMessage: cursorStallCount >= MAX_CURSOR_STALL_CYCLES ? CURSOR_STALL_ERROR : '',
+  };
+
   if (!snapshots.size) {
-    await store.commitCycle({ states: current }, nowIso);
-    await store.saveMonitor({ lastCheckedAt: nowIso, lastStatus: 'ok' });
+    await store.commitCycle({
+      states: current,
+      usedContexts: current.filter(({ uflag }) => uflag).map(({ username }) => username),
+      ...(historyReadSucceeded ? { historyCursor: latestHistoryCursor(historyRows, historyCursor) } : {}),
+    }, nowIso);
+    await store.saveMonitor({ lastCheckedAt: nowIso, ...monitorHealth });
     return { baseline: current.length, newlyLocked: 0, email: 'none' };
   }
 
@@ -190,14 +297,25 @@ async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
   const contexts = await store.readContexts();
   const { settled, held } = splitSettled(diff.newlyLocked, contexts, now);
   const contextOf = new Map(contexts.map((context) => [context.username, context]));
+  const historyLocks = historyReadSucceeded && !historyNeedsBaseline
+    ? addedHistoryLocks(historyRows, snapshots)
+    : [];
+  const { settled: settledHistoryLocks, held: heldHistoryLocks } = splitSettled(historyLocks, contexts, now);
 
   const events = [];
+  const eventKeys = new Set();
   if (settled.length) {
     let names = new Map();
     try {
       names = await adapter.readFullNames();
     } catch (e) {
       LOG.warn('Full names not readable:', e.message);
+    }
+    let serviceUser = '';
+    try {
+      serviceUser = await adapter.getConnectionUser();
+    } catch (e) {
+      LOG.warn('RFC service account identity not readable:', e.message);
     }
     for (const lock of settled) {
       let change = null;
@@ -206,27 +324,62 @@ async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
       } catch (e) {
         LOG.warn('Lock history not readable for', lock.username, e.message);
       }
-      events.push(describeLock(lock, {
+      const event = describeLock(lock, {
         context: contextOf.get(lock.username),
         change,
         fullName: names.get(lock.username),
         previousLockedAt: await store.lastLockedAt(lock.username),
         now,
-      }));
+        serviceUser,
+      });
+      events.push(event);
+      eventKeys.add(`${event.username}|${event.lockedAt}`);
     }
   }
 
+  const reportableHistoryLocks = settledHistoryLocks.filter(
+    (change) => !eventKeys.has(`${change.username}|${change.lockedAt}`)
+  );
+  if (reportableHistoryLocks.length) {
+    let names = new Map();
+    try {
+      names = await adapter.readFullNames();
+    } catch (e) {
+      LOG.warn('Full names not readable:', e.message);
+    }
+    let serviceUser = '';
+    try {
+      serviceUser = await adapter.getConnectionUser();
+    } catch (e) {
+      LOG.warn('RFC service account identity not readable:', e.message);
+    }
+    for (const change of reportableHistoryLocks) {
+      const eventKey = `${change.username}|${change.lockedAt}`;
+      const context = contextOf.get(change.username);
+      events.push(describeHistoryLock(change, { context, fullName: names.get(change.username), serviceUser, now }));
+      eventKeys.add(eventKey);
+    }
+  }
+
+  const nextHistoryCursor = historyReadSucceeded && !heldHistoryLocks.length
+    ? latestHistoryCursor(historyRows, historyCursor)
+    : null;
   await store.commitCycle({
     states: [...diff.states, ...settled],
     removed: diff.removed,
     events,
-    usedContexts: settled.map(({ username }) => username),
+    usedContexts: [...new Set([
+      ...settled.map(({ username }) => username),
+      ...events.filter((event) => event.source === SOURCE_APP).map(({ username }) => username),
+    ])],
     expiredBefore: new Date(now.getTime() - CONTEXT_WINDOW_MS).toISOString(),
+    ...(nextHistoryCursor ? { historyCursor: nextHistoryCursor } : {}),
   }, nowIso);
-  await store.saveMonitor({ lastCheckedAt: nowIso, lastStatus: 'ok' });
+  await store.saveMonitor({ lastCheckedAt: nowIso, ...monitorHealth });
 
   const email = await sendPending({ retryDelays });
-  return { newlyLocked: events.length, held: held.length, email };
+  const heldUsers = new Set([...held, ...heldHistoryLocks].map(({ username }) => username));
+  return { newlyLocked: events.length, held: heldUsers.size, email };
 }
 
 let running = false;
@@ -261,13 +414,22 @@ function startJob(getAdapter, env = process.env) {
 async function recordAppLock({ username, actor, reason, bulkRunId }) {
   if (!isEnabled()) return;
   try {
-    await store.writeContext({ username, actor, reason, bulkRunId, at: new Date().toISOString() });
+    await store.writeContext({ username, actor, reason, bulkRunId, at: new Date().toISOString(), historyKey: '' });
   } catch (e) {
     LOG.warn('Could not note the app lock of', username, e.message);
   }
 }
 
-/** The lock failed or was undone, so the note must not explain a later lock by someone else. */
+async function recordAppLockHistory(username, historyKey) {
+  if (!isEnabled() || !historyKey) return;
+  try {
+    await store.setContextHistoryKey(username, historyKey);
+  } catch (e) {
+    LOG.warn('Could not link the app lock history for', username, e.message);
+  }
+}
+
+/** A failed app lock must not leave a note that can explain a later lock by someone else. */
 async function discardAppLock(username) {
   if (!isEnabled()) return;
   try {
@@ -292,12 +454,16 @@ async function monitorStatus(now = new Date()) {
     const pending = await store.pendingEvents();
     const base = { lastCheckedAt: monitor ? monitor.lastCheckedAt : null, pendingEmails: pending.length, ...settings };
     if (!monitor) return { state: 'starting', ...base };
-    if (monitor.lastStatus !== 'ok') return { state: 'failed', ...base };
+    if (monitor.lastStatus !== 'ok') return { state: 'failed', errorMessage: monitor.errorMessage || '', ...base };
     const age = now.getTime() - new Date(monitor.lastCheckedAt).getTime();
-    return { state: age > settings.pollIntervalSec * 1000 * STALE_AFTER_INTERVALS ? 'stale' : 'ok', ...base };
+    return {
+      state: age > settings.pollIntervalSec * 1000 * STALE_AFTER_INTERVALS ? 'stale' : 'ok',
+      errorMessage: monitor.errorMessage || '',
+      ...base,
+    };
   } catch (e) {
     LOG.error('Could not read the lock monitor state:', e.message);
-    return { state: 'failed', lastCheckedAt: null, pendingEmails: 0, ...settings };
+    return { state: 'failed', errorMessage: 'Lock monitor status could not be read', lastCheckedAt: null, pendingEmails: 0, ...settings };
   }
 }
 
@@ -312,5 +478,6 @@ async function bulkEmailStatus(bulkRunId) {
 
 module.exports = {
   isEnabled, pollIntervalSec, maxPerEmail, recipients, lockLabel, diffLockState, splitSettled, describeLock,
-  pollOnce, runCycle, sendPending, startJob, recordAppLock, discardAppLock, monitorStatus, bulkEmailStatus,
+  describeHistoryLock, addedHistoryLocks, pollOnce, runCycle, sendPending, startJob, recordAppLock,
+  recordAppLockHistory, discardAppLock, monitorStatus, bulkEmailStatus,
 };

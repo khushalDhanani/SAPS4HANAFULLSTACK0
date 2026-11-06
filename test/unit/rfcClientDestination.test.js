@@ -35,3 +35,22 @@ describe('RfcClient.resolveConnectionParams — BTP RFC destination first, local
       .rejects.toMatchObject({ status: 503, message: expect.stringContaining('S4_RFC_DESTINATION_NAME') });
   });
 });
+
+describe('RfcClient.readTable sorted paging', () => {
+  test('requests GET_SORTED when capped reads need stable ROWSKIPS paging', async () => {
+    const rfc = new RfcClient();
+    jest.spyOn(rfc, 'call').mockResolvedValue({ DATA: [] });
+
+    await rfc.readTable('USH02', ['BNAME'], ["MODDA >= '20261105'"], 500, 500, true);
+
+    expect(rfc.call).toHaveBeenCalledWith('RFC_READ_TABLE', {
+      QUERY_TABLE: 'USH02',
+      DELIMITER: '|',
+      FIELDS: [{ FIELDNAME: 'BNAME' }],
+      OPTIONS: [{ TEXT: "MODDA >= '20261105'" }],
+      ROWCOUNT: 500,
+      GET_SORTED: 'X',
+      ROWSKIPS: 500,
+    });
+  });
+});

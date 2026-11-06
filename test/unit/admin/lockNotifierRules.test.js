@@ -3,7 +3,8 @@
 jest.mock('../../../srv/common/mailer', () => ({ isConfigured: jest.fn(() => true), sendMail: jest.fn() }));
 
 const {
-  diffLockState, splitSettled, describeLock, lockLabel, pollIntervalSec, maxPerEmail, recipients, startJob,
+  diffLockState, splitSettled, describeLock, describeHistoryLock, addedHistoryLocks,
+  lockLabel, pollIntervalSec, maxPerEmail, recipients, startJob,
 } = require('../../../srv/admin/lockNotifier');
 
 const NOW = new Date('2026-11-05T10:00:00.000Z');
@@ -12,10 +13,12 @@ const snapshots = (rows) => new Map(rows.map((row) => [row.username, row]));
 
 describe('lockLabel', () => {
   test.each([
+    [0, 'Lock status 0'],
     [32, 'Global lock (CUA)'],
     [64, 'Locked by administrator'],
     [128, 'Locked due to incorrect logon attempts'],
-    [192, 'Locked by administrator + Locked due to incorrect logon attempts'],
+    [192, 'Locked by administrator and incorrect logon attempts'],
+    [224, 'Global lock (CUA) and Locked by administrator and incorrect logon attempts'],
     [8, 'Lock status 8'],
   ])('UFLAG %i is "%s"', (uflag, label) => {
     expect(lockLabel(uflag)).toBe(label);
@@ -99,7 +102,7 @@ describe('describeLock', () => {
 
   test('history for a different lock does not identify who locked the user', () => {
     const event = describeLock({ username: 'A', uflag: 128 }, { ...base, change });
-    expect(event).toMatchObject({ source: 'SAP / automatic', lockedBy: 'Unknown' });
+    expect(event).toMatchObject({ source: 'SAP / automatic', lockedBy: 'Incorrect logon attempts (automatic)' });
   });
 
   test('an old note is ignored', () => {
@@ -109,7 +112,35 @@ describe('describeLock', () => {
 
   test('a note never explains an incorrect-logon lock', () => {
     const event = describeLock({ username: 'A', uflag: 128 }, { ...base, change: null, context: { actor: 'khushal', reason: 'Left', at: secondsAgo(5) } });
-    expect(event).toMatchObject({ source: 'SAP / automatic', lockType: 'Locked due to incorrect logon attempts' });
+    expect(event).toMatchObject({
+      source: 'SAP / automatic',
+      lockType: 'Locked due to incorrect logon attempts',
+      lockedBy: 'Incorrect logon attempts (automatic)',
+    });
+  });
+
+  test('a combined flag containing incorrect-logon lock is not attributed to the app', () => {
+    const event = describeLock(
+      { username: 'A', uflag: 192 },
+      { ...base, change: { ...change, uflag: 192 }, context: { actor: 'khushal', reason: 'Left', at: secondsAgo(5) } },
+    );
+    expect(event).toMatchObject({
+      source: 'SAP / automatic',
+      lockType: 'Locked by administrator and incorrect logon attempts',
+      lockedBy: 'Incorrect logon attempts (automatic)',
+    });
+  });
+
+  test('an exact app audit record overrides automatic flag-128 attribution', () => {
+    const event = describeLock(
+      { username: 'A', uflag: 128 },
+      {
+        ...base,
+        change: { ...change, uflag: 128, historyKey: 'app-lock' },
+        context: { actor: 'khushal', reason: 'Admin action', historyKey: 'app-lock' },
+      },
+    );
+    expect(event).toMatchObject({ source: 'Fiori app', lockedBy: 'khushal', reason: 'Admin action' });
   });
 
   test('uses the detection time when history is older, or does not show this lock', () => {
@@ -120,6 +151,127 @@ describe('describeLock', () => {
 
   test('a detection time never collides with the last one reported', () => {
     expect(describeLock(lock, { ...base, change: null, previousLockedAt: '20261105100000' }).lockedAt).toBe('20261105100001');
+  });
+
+  test('a matching app audit history key wins over the shared SAP actor', () => {
+    const changeWithKey = { ...change, historyKey: 'app-lock' };
+    const event = describeHistoryLock(
+      { ...changeWithKey, username: 'A' },
+      {
+        context: { actor: 'khushal', reason: 'Reason', historyKey: 'app-lock' },
+        serviceUser: 'RFC_SHARED',
+        now: NOW,
+      },
+    );
+    expect(event).toMatchObject({
+      source: 'Fiori app',
+      lockedBy: 'khushal',
+      reason: 'Short-lived lock (cleared before detection): Reason',
+      lockType: expect.stringContaining('Locked by administrator'),
+      lockTimestamp: '2026-11-05 09:59:00',
+    });
+  });
+
+  test('an exact app audit remains valid after the short context window', () => {
+    const event = describeLock(lock, {
+      ...base,
+      change: { ...change, historyKey: 'app-lock' },
+      context: { actor: 'khushal', reason: 'Left', historyKey: 'app-lock', at: secondsAgo(301) },
+    });
+    expect(event).toMatchObject({ source: 'Fiori app', lockedBy: 'khushal' });
+  });
+
+  test('an unmatched shared RFC actor is not presented as a person', () => {
+    const event = describeHistoryLock(
+      { ...change, username: 'A', historyKey: 'other' },
+      { context: null, serviceUser: 'SAPADMIN', now: NOW },
+    );
+    expect(event).toMatchObject({ source: 'SAP / automatic', lockedBy: 'Service account (app or integration)' });
+  });
+
+  test('an unmatched flag-128 history event never exposes its USH02 actor', () => {
+    const event = describeHistoryLock(
+      { ...change, username: 'A', uflag: 128, historyKey: 'other' },
+      {
+        context: { actor: 'khushal', reason: 'Unrelated', historyKey: 'not-this-lock', at: secondsAgo(1) },
+        serviceUser: 'SAPADMIN',
+        now: NOW,
+      },
+    );
+    expect(event).toMatchObject({
+      source: 'SAP / automatic',
+      lockedBy: 'Incorrect logon attempts (automatic)',
+      reason: 'Short-lived lock (cleared before detection)',
+    });
+  });
+
+  test('an exact app audit record takes precedence for a short-lived flag-128 lock', () => {
+    const event = describeHistoryLock(
+      { ...change, username: 'A', uflag: 128, historyKey: 'app-lock' },
+      {
+        context: { actor: 'khushal', reason: 'Admin action', historyKey: 'app-lock' },
+        serviceUser: 'SAPADMIN',
+        now: NOW,
+      },
+    );
+    expect(event).toMatchObject({
+      source: 'Fiori app',
+      lockedBy: 'khushal',
+      reason: 'Short-lived lock (cleared before detection): Admin action',
+    });
+  });
+
+  test('an unrelated context does not leak its reason into a SAP history alert', () => {
+    const event = describeHistoryLock(
+      { ...change, username: 'A', historyKey: 'other' },
+      { context: { actor: 'khushal', reason: 'Unrelated', historyKey: 'not-this-lock', at: secondsAgo(1) }, serviceUser: 'SAPADMIN', now: NOW },
+    );
+    expect(event).toMatchObject({ source: 'SAP / automatic', reason: 'Short-lived lock (cleared before detection)' });
+  });
+});
+
+describe('addedHistoryLocks', () => {
+  test('ignores unchanged lock flags and unlock transitions, and reports newly added bits', () => {
+    const history = [
+      { username: 'A', previousUflag: 128, uflag: 128, lockedAt: '20261105090000' },
+      { username: 'B', previousUflag: 0, uflag: 64, lockedAt: '20261105090100' },
+      { username: 'C', previousUflag: 64, uflag: 192, lockedAt: '20261105090200' },
+      { username: 'D', previousUflag: 192, uflag: 0, lockedAt: '20261105090300' },
+      { username: 'E', previousUflag: null, uflag: 64, lockedAt: '20261105090400' },
+    ];
+    expect(addedHistoryLocks(history))
+      .toEqual([
+        { ...history[1], addedUflag: 64 },
+        { ...history[2], addedUflag: 128 },
+      ]);
+  });
+
+  test('labels a transition from 64 to 192 as the newly added 128 bit', () => {
+    const change = {
+      username: 'A',
+      previousUflag: 64,
+      uflag: 192,
+      lockedAt: '20261105090200',
+      changedBy: 'SAPADMIN',
+    };
+    const [lock] = addedHistoryLocks([change]);
+
+    expect(describeHistoryLock(lock, { context: null, serviceUser: 'SAPADMIN', now: NOW }))
+      .toMatchObject({
+        uflag: 128,
+        lockType: 'Short-lived lock (cleared before detection) - Locked due to incorrect logon attempts',
+        lockedBy: 'Incorrect logon attempts (automatic)',
+      });
+  });
+
+  test('uses the saved UFLAG only when USH02 has no preceding row', () => {
+    const history = [
+      { username: 'A', previousUflag: null, uflag: 64, lockedAt: '20261105090000' },
+      { username: 'B', previousUflag: null, uflag: 64, lockedAt: '20261105090100' },
+    ];
+
+    expect(addedHistoryLocks(history, new Map([['A', { uflag: 0 }]])))
+      .toEqual([{ ...history[0], addedUflag: 64 }]);
   });
 });
 

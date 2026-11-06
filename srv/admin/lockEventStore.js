@@ -32,6 +32,10 @@ async function writeContext(context) {
   await inTx((tx) => tx.run(UPSERT.into(CONTEXT).entries(context)));
 }
 
+async function setContextHistoryKey(username, historyKey) {
+  await inTx((tx) => tx.run(UPDATE(CONTEXT).set({ historyKey }).where({ username })));
+}
+
 async function discardContext(username) {
   await inTx((tx) => tx.run(DELETE.from(CONTEXT).where({ username })));
 }
@@ -45,7 +49,7 @@ async function lastLockedAt(username) {
  * Stores one cycle's outcome in one transaction, so a crash cannot record a lock without its email or the reverse.
  * A key that already exists is the same lock again: it is not inserted, so it is not emailed twice.
  */
-async function commitCycle({ states = [], removed = [], events = [], usedContexts = [], expiredBefore }, nowIso) {
+async function commitCycle({ states = [], removed = [], events = [], usedContexts = [], expiredBefore, historyCursor }, nowIso) {
   await inTx(async (tx) => {
     if (states.length) {
       await tx.run(UPSERT.into(SNAPSHOT).entries(states.map(({ username, uflag }) => ({ username, uflag, seenAt: nowIso }))));
@@ -58,7 +62,19 @@ async function commitCycle({ states = [], removed = [], events = [], usedContext
       }
     }
     if (usedContexts.length) await tx.run(DELETE.from(CONTEXT).where({ username: { in: usedContexts } }));
-    if (expiredBefore) await tx.run(DELETE.from(CONTEXT).where({ at: { '<': expiredBefore } }));
+    if (expiredBefore) {
+      await tx.run(DELETE.from(CONTEXT).where({
+        at: { '<': expiredBefore },
+        historyKey: '',
+      }));
+      await tx.run(DELETE.from(CONTEXT).where({ at: { '<': expiredBefore }, historyKey: null }));
+    }
+    if (historyCursor) {
+      const fields = { ush02At: historyCursor.at, ush02Key: historyCursor.key };
+      const monitor = await tx.run(SELECT.one.from(MONITOR).columns('id').where({ id: MONITOR_ID }));
+      if (monitor) await tx.run(UPDATE(MONITOR).set(fields).where({ id: MONITOR_ID }));
+      else await tx.run(INSERT.into(MONITOR).entries({ id: MONITOR_ID, ...fields }));
+    }
   });
 }
 
@@ -87,7 +103,12 @@ async function readMonitor() {
   return row || null;
 }
 
+async function readHistoryCursor() {
+  const row = await inTx((tx) => tx.run(SELECT.one.from(MONITOR).columns('ush02At', 'ush02Key').where({ id: MONITOR_ID })));
+  return row && row.ush02At && row.ush02Key ? { at: row.ush02At, key: row.ush02Key } : null;
+}
+
 module.exports = {
-  readSnapshots, readContexts, writeContext, discardContext, lastLockedAt, commitCycle,
-  pendingEvents, updateEvents, eventsOfRun, saveMonitor, readMonitor,
+  readSnapshots, readContexts, writeContext, setContextHistoryKey, discardContext, lastLockedAt, commitCycle,
+  pendingEvents, updateEvents, eventsOfRun, saveMonitor, readMonitor, readHistoryCursor,
 };

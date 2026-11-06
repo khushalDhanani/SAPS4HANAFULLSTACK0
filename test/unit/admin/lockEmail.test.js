@@ -23,9 +23,15 @@ describe('buildLockEmail', () => {
         expect(mail.text).toContain(text);
         expect(mail.html).toContain(text);
       });
-    ['Username', 'Full Name', 'Lock Type', 'Locked By', 'Source', 'Reason', 'Detected At'].forEach((header) => {
+    ['Username', 'Full Name', 'Lock Type', 'Lock Timestamp (SAP)', 'Locked By', 'Source', 'Reason', 'Detected At'].forEach((header) => {
       expect(mail.html).toContain(`<th align="left">${header}</th>`);
     });
+  });
+
+  test('shows a history timestamp without assigning a timezone', () => {
+    const mail = buildLockEmail([event('ALICE', { lockTimestamp: '2026-11-05 10:15:00' })]);
+    expect(mail.text).toContain('Lock Timestamp (SAP): 2026-11-05 10:15:00');
+    expect(mail.html).toContain('<td>2026-11-05 10:15:00</td>');
   });
 
   test('several users: one table, subject with the count', () => {
@@ -36,6 +42,16 @@ describe('buildLockEmail', () => {
     expect(mail.html.match(/<tr>/g)).toHaveLength(3);
     expect(mail.text).toContain('Username: ALICE');
     expect(mail.text).toContain('Username: BOB');
+  });
+
+  test('subject counts distinct usernames when a user has multiple lock events', () => {
+    const mail = buildLockEmail([
+      event('DIPEN', { lockedAt: '20261105165702' }),
+      event('dipen', { lockedAt: '20261105165704' }),
+    ]);
+
+    expect(mail.subject).toBe('[SAP Alert] User DIPEN locked');
+    expect(mail.text.match(/Username: /g)).toHaveLength(2);
   });
 
   test('flood guard: lists the first ones and says how many more', () => {

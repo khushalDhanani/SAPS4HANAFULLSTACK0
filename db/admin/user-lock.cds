@@ -19,6 +19,7 @@ entity UserLockContext {
     reason       : String(500);
     bulkRunId    : String(64);
     at           : Timestamp;
+    historyKey   : String(255);
 }
 
 /** One detected lock. The key stops the same lock being emailed twice, even after a restart. */
@@ -42,7 +43,11 @@ entity UserLockNotification {
 
 /** The last check, shared by all instances: only one runs the monitor, but any may answer the screen. */
 entity UserLockMonitor {
-    key id        : String(20);
-    lastCheckedAt : Timestamp;
-    lastStatus    : String(10);    // ok | failed
+    key id              : String(20);
+    lastCheckedAt       : Timestamp;
+    lastStatus          : String(10);    // ok | failed
+    ush02At             : String(14);
+    ush02Key            : String(255);
+    cursorStallCount    : Integer;
+    errorMessage        : String(255);
 }

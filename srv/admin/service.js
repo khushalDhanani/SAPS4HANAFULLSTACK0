@@ -158,10 +158,31 @@ module.exports = class UserManagementService extends cds.ApplicationService {
         if (blocked && blocked !== 'connection') {
           throw Object.assign(new Error(PROTECTED_MESSAGES[blocked](input.username)), { status: 403 });
         }
+        let priorHistoryKey = '';
+        let historyBaselineRead = false;
+        if (lockNotifier.isEnabled()) {
+          try {
+            const previousChange = await adapter.readLastLockChange(input.username);
+            priorHistoryKey = previousChange ? previousChange.historyKey : '';
+            historyBaselineRead = true;
+          } catch (e) {
+            LOG.warn('Could not read the previous lock history for', input.username, e.message);
+          }
+        }
         // Written first: the monitor may see the lock before this request ends.
         await lockNotifier.recordAppLock({ ...input, actor: context.actor });
         const res = await adapter.lockUser(input.username);
         locked = true;
+        if (lockNotifier.isEnabled() && historyBaselineRead) {
+          try {
+            const change = await adapter.readLastLockChange(input.username);
+            if (change && change.uflag && change.historyKey !== priorHistoryKey) {
+              await lockNotifier.recordAppLockHistory(input.username, change.historyKey);
+            }
+          } catch (e) {
+            LOG.warn('Could not link the app lock audit to SAP history for', input.username, e.message);
+          }
+        }
         return res;
       }, input);
     } finally {
@@ -177,13 +198,10 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     const input = this._lockInput(req);
     if (!input) return undefined;
 
-    let unlocked = false;
     const result = await this._changeLock(req, 'unlock', async () => {
       const res = await this._getAdapter().unlockUser(input.username);
-      unlocked = true;
       return res;
     }, input);
-    if (unlocked) await lockNotifier.discardAppLock(input.username);
     return result;
   }
 
@@ -196,4 +214,3 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     return lockNotifier.bulkEmailStatus(bulkRunId);
   }
 };
-

@@ -179,6 +179,153 @@ describe('UserManagementAdapter.listUsers', () => {
   });
 });
 
+describe('UserManagementAdapter.readLockHistory', () => {
+  const row = (date, time, actor, flag, repid = 'SAPMSYST') => ({
+    MANDT: '220',
+    BNAME: 'ALICE',
+    MODDA: date,
+    MODTI: time,
+    MODBE: actor,
+    TCODE: 'SU01',
+    REPID: repid,
+    UFLAG: String(flag),
+  });
+
+  test('reads and maps globally ordered history rows after a timestamp and key cursor', async () => {
+    const rfcClient = {
+      readTable: jest.fn().mockResolvedValue([
+        row('20261105', '090000', 'ADMIN', 64),
+        row('20261105', '090100', 'ADMIN', 0),
+      ]),
+    };
+    const adapter = new UserManagementAdapter({ rfcClient });
+    const cursor = { at: '20261105090000', key: JSON.stringify(['220', 'ALICE', 'ADMIN', 'SU01', 'SAPMSYST']) };
+
+    await expect(adapter.readLockHistory(cursor)).resolves.toEqual([{
+      username: 'ALICE',
+      uflag: 0,
+      previousUflag: 64,
+      lockedAt: '20261105090100',
+      changedBy: 'ADMIN',
+      historyKey: JSON.stringify(['220', 'ALICE', 'ADMIN', 'SU01', 'SAPMSYST']),
+    }]);
+
+    expect(rfcClient.readTable).toHaveBeenCalledWith(
+      'USH02',
+      ['MANDT', 'BNAME', 'MODDA', 'MODTI', 'MODBE', 'TCODE', 'REPID', 'UFLAG'],
+      ["MODDA >= '20261105'", "AND MODDA <= '99991231'"],
+      500,
+      0,
+      true,
+    );
+  });
+
+  test("resolves the first post-cursor row against the same user's prior-date history", async () => {
+    const rfcClient = {
+      readTable: jest.fn(async (_table, _fields, where) => {
+        if (where[0] === "MODDA >= '20261105'") return [row('20261105', '093000', 'ADMIN', 64)];
+        if (where[0] === "BNAME = 'ALICE'") {
+          return [row('20261104', '230000', 'ADMIN', 0), row('20261105', '093000', 'ADMIN', 64)];
+        }
+        return [];
+      }),
+    };
+    const adapter = new UserManagementAdapter({ rfcClient });
+    const cursor = { at: '20261105090000', key: JSON.stringify(['220', 'ALICE', 'OLD', 'SU01', 'SAPMSYST']) };
+
+    await expect(adapter.readLockHistory(cursor)).resolves.toEqual([{
+      username: 'ALICE',
+      uflag: 64,
+      previousUflag: 0,
+      lockedAt: '20261105093000',
+      changedBy: 'ADMIN',
+      historyKey: JSON.stringify(['220', 'ALICE', 'ADMIN', 'SU01', 'SAPMSYST']),
+    }]);
+    expect(rfcClient.readTable).toHaveBeenLastCalledWith(
+      'USH02',
+      ['MANDT', 'BNAME', 'MODDA', 'MODTI', 'MODBE', 'TCODE', 'REPID', 'UFLAG'],
+      ["BNAME = 'ALICE'"],
+      500,
+      0,
+      true,
+    );
+  });
+
+  test('the initial cursor reads both initial-date and calendar-date rows', async () => {
+    const rfcClient = {
+      readTable: jest.fn()
+        .mockResolvedValueOnce([row('00000000', '000000', 'ADMIN', 0)])
+        .mockResolvedValueOnce([row('20261105', '090000', 'ADMIN', 64)]),
+    };
+    const adapter = new UserManagementAdapter({ rfcClient });
+
+    await expect(adapter.readLockHistory()).resolves.toHaveLength(2);
+    expect(rfcClient.readTable).toHaveBeenNthCalledWith(
+      1,
+      'USH02',
+      expect.any(Array),
+      ["MODDA = '00000000'"],
+      500,
+      0,
+      true,
+    );
+    expect(rfcClient.readTable).toHaveBeenNthCalledWith(
+      2,
+      'USH02',
+      expect.any(Array),
+      ["MODDA >= '00010101'", "AND MODDA <= '99991231'"],
+      500,
+      0,
+      true,
+    );
+  });
+
+  test('pages through a date partition containing more than 500 rows', async () => {
+    const rows = Array.from({ length: 501 }, (_, i) => ({
+      ...row('20261105', String(i).padStart(6, '0'), 'ADMIN', 64),
+      BNAME: `USER${String(i).padStart(4, '0')}`,
+    }));
+    const calls = [];
+    const rfcClient = {
+      readTable: jest.fn(async (_table, _fields, where, pageSize, rowSkips, getSorted) => {
+        calls.push({ where, pageSize, rowSkips, getSorted });
+        if (where[0] === "MODDA = '00000000'") return [];
+        return rows.slice(rowSkips, rowSkips + pageSize);
+      }),
+    };
+    const adapter = new UserManagementAdapter({ rfcClient });
+
+    const result = await adapter.readLockHistory();
+
+    expect(result).toHaveLength(501);
+    expect(calls.map(({ where, pageSize, rowSkips, getSorted }) => ({
+      where: where[0],
+      pageSize,
+      rowSkips,
+      getSorted,
+    }))).toEqual([
+      { where: "MODDA = '00000000'", pageSize: 500, rowSkips: 0, getSorted: true },
+      { where: "MODDA >= '00010101'", pageSize: 500, rowSkips: 0, getSorted: true },
+      { where: "MODDA >= '00010101'", pageSize: 500, rowSkips: 500, getSorted: true },
+    ]);
+  });
+
+  test('fails explicitly when a capped USH02 page repeats instead of advancing', async () => {
+    const fullPage = Array.from({ length: 500 }, (_, i) => ({
+      ...row('20261105', String(i).padStart(6, '0'), 'ADMIN', 64),
+      BNAME: `USER${String(i).padStart(4, '0')}`,
+    }));
+    const rfcClient = {
+      readTable: jest.fn(async (_table, _fields, where) => (
+        where[0] === "MODDA = '00000000'" ? [] : fullPage
+      )),
+    };
+    const adapter = new UserManagementAdapter({ rfcClient });
+
+    await expect(adapter.readLockHistory()).rejects.toThrow('USH02 paging did not advance');
+  });
+});
+
 // ── getUserDetail ─────────────────────────────────────────────────────────────
 
 describe('UserManagementAdapter.getUserDetail', () => {

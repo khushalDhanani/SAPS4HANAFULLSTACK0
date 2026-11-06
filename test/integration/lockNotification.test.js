@@ -33,7 +33,7 @@ const stamp = () => tick().toISOString().replace(/\D/g, '').slice(0, 14);
 /** A stub SAP: a lock changes USR02 and adds a USH02 row, as SU01 was seen to on DS4/220. */
 function setLock(username, uflag, by = 'SAPADMIN') {
   sap.uflag[username] = uflag;
-  (sap.history[username] = sap.history[username] || []).push({ stamp: stamp(), by, uflag });
+  (sap.history[username] = sap.history[username] || []).push({ stamp: stamp(), by, uflag, tcode: 'SU01', repid: 'SAPMSYST' });
 }
 
 function stubSap() {
@@ -64,8 +64,22 @@ function stubSap() {
       return { DATA: Object.keys(sap.uflag).map((u) => ({ WA: `${u}|${u} Name` })) };
     }
     if (fm === 'RFC_READ_TABLE' && params.QUERY_TABLE === 'USH02') {
-      const name = /'(.*)'/.exec(params.OPTIONS[0].TEXT)[1];
-      return { DATA: (sap.history[name] || []).map((h) => ({ WA: `${h.stamp.slice(0, 8)}|${h.stamp.slice(8)}|${h.by}|${h.uflag}` })) };
+      const options = params.OPTIONS.map(({ TEXT }) => TEXT);
+      let rows = Object.entries(sap.history).flatMap(([username, changes]) => changes.map((h) => ({
+        MANDT: '220', BNAME: username, MODDA: h.stamp.slice(0, 8), MODTI: h.stamp.slice(8),
+        MODBE: h.by, TCODE: h.tcode, REPID: h.repid, UFLAG: String(h.uflag),
+      })));
+      const byName = /BNAME = '([^']+)'/.exec(options.join(' '));
+      const exactDate = /MODDA = '(\d{8})'/.exec(options.join(' '));
+      const fromDate = /MODDA >= '(\d{8})'/.exec(options.join(' '));
+      const toDate = /MODDA <= '(\d{8})'/.exec(options.join(' '));
+      if (byName) rows = rows.filter((row) => row.BNAME === byName[1]);
+      if (exactDate) rows = rows.filter((row) => row.MODDA === exactDate[1]);
+      if (fromDate) rows = rows.filter((row) => row.MODDA >= fromDate[1]);
+      if (toDate) rows = rows.filter((row) => row.MODDA <= toDate[1]);
+      const fields = params.FIELDS.map(({ FIELDNAME }) => FIELDNAME);
+      if (params.ROWCOUNT) rows = rows.slice(0, params.ROWCOUNT);
+      return { DATA: rows.map((row) => ({ WA: fields.map((field) => row[field]).join('|') })) };
     }
     throw new Error(`Unexpected call ${fm}`);
   }));
@@ -79,6 +93,17 @@ const snapshotOf = async (username) => (await cds.db.run(SELECT.one.from(SNAPSHO
 const lock = (username, extra = {}) => axios.post(`${BASE}/lockUser`, { username, ...extra }, ADMIN);
 const mailed = () => mailer.sendMail.mock.calls.map(([mail]) => mail);
 const backdateContexts = (seconds) => cds.db.run(UPDATE(CONTEXT).set({ at: new Date(clock.getTime() - seconds * 1000).toISOString() }));
+
+/** A restart: every notifier module and its memory is gone. Only the database remains. */
+function restarted() {
+  let fresh;
+  jest.isolateModules(() => {
+    jest.doMock('@sap/cds', () => cds);
+    jest.doMock('../../srv/common/mailer', () => mailer);
+    fresh = require('../../srv/admin/lockNotifier');
+  });
+  return fresh;
+}
 
 function spyLogs() {
   const spies = ['info', 'log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
@@ -106,6 +131,7 @@ describe('Integration: lock monitor', () => {
     test('the baseline run sends nothing, even with users already locked', async () => {
       sap.uflag.ALICE = 64;
       sap.uflag.BOB = 128;
+      setLock('ALICE', 64);
 
       expect(await poll()).toMatchObject({ baseline: 6, newlyLocked: 0, email: 'none' });
       expect(await poll()).toMatchObject({ newlyLocked: 0, email: 'none' });
@@ -154,14 +180,18 @@ describe('Integration: lock monitor', () => {
       expect(await events()).toHaveLength(2);
     });
 
-    test('a change of lock type on a locked user stays silent', async () => {
-      sap.uflag.ALICE = 128;
+    test('adding the incorrect-logon bit to an administrator lock sends that new lock type', async () => {
+      sap.uflag.ALICE = 64;
       await poll();
       setLock('ALICE', 192);
 
       await poll();
 
-      expect(mailer.sendMail).not.toHaveBeenCalled();
+      expect(mailed()).toHaveLength(1);
+      expect((await events())[0]).toMatchObject({
+        uflag: 128,
+        lockType: expect.stringContaining('Locked due to incorrect logon attempts'),
+      });
       expect(await snapshotOf('ALICE')).toBe(192);
     });
 
@@ -181,7 +211,11 @@ describe('Integration: lock monitor', () => {
 
       await poll();
 
-      expect((await events())[0]).toMatchObject({ lockType: 'Locked due to incorrect logon attempts', source: 'SAP / automatic', lockedBy: 'BOB' });
+      expect((await events())[0]).toMatchObject({
+        lockType: 'Locked due to incorrect logon attempts',
+        source: 'SAP / automatic',
+        lockedBy: 'Incorrect logon attempts (automatic)',
+      });
     });
 
     test('reads all users in one call, and never calls BAPI_USER_GET_DETAIL', async () => {
@@ -197,16 +231,16 @@ describe('Integration: lock monitor', () => {
       expect(sap.calls.find((c) => c.params.QUERY_TABLE === 'USR02').params.FIELDS).toEqual([{ FIELDNAME: 'BNAME' }, { FIELDNAME: 'UFLAG' }]);
     });
 
-    test('a quiet cycle reads only USR02', async () => {
+    test('a quiet cycle reads USR02 and the USH02 catch-up window', async () => {
       await poll();
       sap.calls = [];
 
       await poll();
 
-      expect(sap.calls.map((c) => c.params.QUERY_TABLE)).toEqual(['USR02']);
+      expect(sap.calls.map((c) => c.params.QUERY_TABLE)).toEqual(['USR02', 'USH02', 'USH02']);
     });
 
-    test('still alerts when names or history cannot be read', async () => {
+    test('still alerts when names or per-user history cannot be read', async () => {
       await poll();
       sap.namesDown = true;
       sap.uflag.ALICE = 64; // no USH02 row
@@ -216,9 +250,128 @@ describe('Integration: lock monitor', () => {
       expect((await events())[0]).toMatchObject({ username: 'ALICE', fullName: '', lockedBy: 'Unknown' });
       expect(mailed()).toHaveLength(1);
     });
+
+    test('a lock and unlock between polls sends one short-lived-lock email with SAP timestamp and actor', async () => {
+      await poll();
+      setLock('ALICE', 64);
+      setLock('ALICE', 0);
+
+      expect(await poll()).toMatchObject({ newlyLocked: 1, email: 'sent' });
+
+      expect(mailed()).toHaveLength(1);
+      expect(mailed()[0].text).toContain('Short-lived lock (cleared before detection)');
+      expect(mailed()[0].text).toContain('Lock Timestamp (SAP):');
+      expect((await events())[0]).toMatchObject({
+        username: 'ALICE',
+        lockType: expect.stringContaining('Short-lived lock (cleared before detection)'),
+        lockedBy: 'SAPADMIN',
+        source: 'SAP / automatic',
+      });
+    });
+
+    test('an unchanged flag-128 history row does not send an email', async () => {
+      sap.uflag.ALICE = 128;
+      setLock('ALICE', 128);
+      await poll();
+      const testAdapter = adapter();
+      jest.spyOn(testAdapter, 'readLockHistory').mockResolvedValue([{
+        username: 'ALICE',
+        previousUflag: 128,
+        uflag: 128,
+        lockedAt: stamp(),
+        changedBy: 'SAPADMIN',
+        historyKey: 'unchanged-128',
+      }]);
+
+      expect(await monitor.pollOnce(testAdapter, { now: tick(), retryDelays: NO_WAIT }))
+        .toMatchObject({ newlyLocked: 0, email: 'none' });
+      expect(mailer.sendMail).not.toHaveBeenCalled();
+      expect(await events()).toEqual([]);
+    });
+
+    test('the UFLAG and history paths dedupe a lock with the same SAP timestamp', async () => {
+      await poll();
+      setLock('ALICE', 64);
+      const lockRow = sap.history.ALICE.at(-1);
+      setLock('ALICE', 0);
+      const unlockRow = sap.history.ALICE.at(-1);
+      sap.uflag.ALICE = 64;
+      const testAdapter = adapter();
+      jest.spyOn(testAdapter, 'readLockHistory').mockResolvedValue([
+        { username: 'ALICE', previousUflag: 0, uflag: 64, lockedAt: lockRow.stamp, changedBy: lockRow.by, historyKey: 'lock-row' },
+        { username: 'ALICE', previousUflag: 64, uflag: 0, lockedAt: unlockRow.stamp, changedBy: unlockRow.by, historyKey: 'unlock-row' },
+      ]);
+      jest.spyOn(testAdapter, 'readLastLockChange').mockResolvedValue({
+        uflag: 64, lockedAt: lockRow.stamp, changedBy: lockRow.by, historyKey: 'lock-row',
+      });
+
+      expect(await monitor.pollOnce(testAdapter, { now: tick(), retryDelays: NO_WAIT })).toMatchObject({ newlyLocked: 1, email: 'sent' });
+
+      expect(mailed()).toHaveLength(1);
+      expect(await events()).toHaveLength(1);
+    });
+
+  });
+
+  describe('dedupe across a restart', () => {
+    test('history watermark survives a notifier restart', async () => {
+      await poll();
+      setLock('ALICE', 64);
+      setLock('ALICE', 0);
+      await poll();
+      const saved = await cds.db.run(SELECT.one.from(MONITOR));
+      expect(saved.ush02At).toBeTruthy();
+      expect(saved.ush02Key).toBeTruthy();
+
+      await restarted().pollOnce(adapter(), { now: tick(), retryDelays: NO_WAIT });
+
+      expect(mailed()).toHaveLength(1);
+      expect(await cds.db.run(SELECT.one.from(MONITOR))).toMatchObject({ ush02At: saved.ush02At, ush02Key: saved.ush02Key });
+    });
   });
 
   describe('SAP read failure', () => {
+    test('USH02 failure holds its watermark while the UFLAG path still emails', async () => {
+      await poll();
+      const before = await cds.db.run(SELECT.one.from(MONITOR));
+      setLock('ALICE', 64);
+      const testAdapter = adapter();
+      jest.spyOn(testAdapter, 'readLockHistory').mockRejectedValue(new Error('USH02 unavailable'));
+
+      expect(await monitor.pollOnce(testAdapter, { now: tick(), retryDelays: NO_WAIT })).toMatchObject({ newlyLocked: 1, email: 'sent' });
+
+      const after = await cds.db.run(SELECT.one.from(MONITOR));
+      expect(after).toMatchObject({ ush02At: before.ush02At, ush02Key: before.ush02Key });
+      expect(await events()).toHaveLength(1);
+      expect(mailed()).toHaveLength(1);
+    });
+
+    test('five consecutive USH02 stalls set red status with an error and recover on a successful read', async () => {
+      await poll();
+      const testAdapter = adapter();
+      const historyRead = jest.spyOn(testAdapter, 'readLockHistory').mockRejectedValue(new Error('USH02 unavailable'));
+
+      for (let cycle = 0; cycle < 5; cycle++) {
+        await monitor.pollOnce(testAdapter, { now: tick(), retryDelays: NO_WAIT });
+      }
+
+      expect(await monitor.monitorStatus(clock)).toMatchObject({
+        state: 'failed',
+        errorMessage: 'USH02 cursor did not advance for 5 consecutive polls',
+      });
+      expect(mailer.sendMail).not.toHaveBeenCalled();
+
+      setLock('ALICE', 64);
+      await monitor.pollOnce(testAdapter, { now: tick(), retryDelays: NO_WAIT });
+      expect(mailed()).toHaveLength(1);
+      expect(await monitor.monitorStatus(clock)).toMatchObject({ state: 'failed' });
+
+      historyRead.mockResolvedValue([]);
+      await monitor.pollOnce(testAdapter, { now: tick(), retryDelays: NO_WAIT });
+      expect(await monitor.monitorStatus(clock)).toMatchObject({ state: 'ok', errorMessage: '' });
+      expect((await cds.db.run(SELECT.one.from(MONITOR))).cursorStallCount).toBe(0);
+    });
+
     test('sends nothing, keeps the snapshot, and the next tick catches up', async () => {
       await poll();
       setLock('ALICE', 64);
@@ -256,18 +409,6 @@ describe('Integration: lock monitor', () => {
   });
 
   describe('dedupe across a restart', () => {
-    /** A restart: every module and its memory is gone. Only the database remains. */
-    function restarted() {
-      let fresh;
-      jest.isolateModules(() => {
-        // The database and the mock mailer stand for what outlives a restart and the outside world.
-        jest.doMock('@sap/cds', () => cds);
-        jest.doMock('../../srv/common/mailer', () => mailer);
-        fresh = require('../../srv/admin/lockNotifier');
-      });
-      return fresh;
-    }
-
     test('a sent lock is not emailed again after a restart', async () => {
       await poll();
       setLock('ALICE', 64);
@@ -402,6 +543,21 @@ describe('Integration: lock monitor', () => {
       expect(mailed()[0].text).toContain('and 2 more');
       expect((await events()).every((r) => r.status === 'sent')).toBe(true);
     });
+
+    test('60 locks list 50 users and report 10 more in one email', async () => {
+      await poll();
+      Array.from({ length: 60 }, (_, index) => `FLOOD${String(index).padStart(2, '0')}`)
+        .forEach((user) => setLock(user, 64));
+
+      await poll();
+
+      expect(mailed()).toHaveLength(1);
+      expect(mailed()[0].subject).toBe('[SAP Alert] 60 users locked');
+      expect(mailed()[0].text).toContain('Username: FLOOD49');
+      expect(mailed()[0].text).not.toContain('Username: FLOOD50');
+      expect(mailed()[0].text).toContain('and 10 more');
+      expect((await events()).filter((row) => row.status === 'sent')).toHaveLength(60);
+    });
   });
 
   describe('context from the app', () => {
@@ -464,14 +620,20 @@ describe('Integration: lock monitor', () => {
       expect((await events())[0]).toMatchObject({ source: 'SAP / automatic', lockedBy: 'SAPADMIN', reason: '' });
     });
 
-    test('a lock then Undo before the next check sends no email', async () => {
+    test('an app lock then unlock before the next check is attributed to the app actor', async () => {
       await poll();
       await lock('ALICE', { reason: 'Mistake' });
       await axios.post(`${BASE}/unlockUser`, { username: 'ALICE' }, ADMIN);
 
       await poll();
 
-      expect(mailer.sendMail).not.toHaveBeenCalled();
+      expect(mailed()).toHaveLength(1);
+      expect(mailed()[0].text).toContain('Short-lived lock (cleared before detection)');
+      expect((await events())[0]).toMatchObject({
+        source: 'Fiori app',
+        lockedBy: 'khushal',
+        reason: 'Short-lived lock (cleared before detection): Mistake',
+      });
       expect(await cds.db.run(SELECT.from(CONTEXT))).toEqual([]);
     });
 
@@ -541,7 +703,7 @@ describe('Integration: lock monitor', () => {
 
       sap.down = true;
       await poll();
-      expect(await monitor.monitorStatus(clock)).toMatchObject({ state: 'failed' });
+      expect(await monitor.monitorStatus(clock)).toMatchObject({ state: 'failed', errorMessage: 'USR02 lock-state read failed' });
 
       sap.down = false;
       await poll();

@@ -115,6 +115,7 @@ service UserManagementService @(path: '/odata/v4/user-management') {
     function getLockMonitor() returns {
         state        : String;
         lastCheckedAt: Timestamp;
+        errorMessage : String;
         recipient    : String;
         pollIntervalSec: Integer;
         maxPerEmail  : Integer;

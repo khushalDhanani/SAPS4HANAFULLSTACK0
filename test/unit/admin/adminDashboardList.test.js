@@ -182,6 +182,7 @@ describe('Admin dashboard user list', () => {
             [{ state: 'ok', lastCheckedAt: '2026-11-05T10:15:00.000Z' }, /^Lock monitor: Active · Last checked \d{2}:\d{2}$/, 'Success'],
             [{ state: 'starting' }, /^Lock monitor: Active · First check pending$/, 'Success'],
             [{ state: 'failed', lastCheckedAt: '2026-11-05T10:15:00.000Z' }, /^Lock monitor: Last check failed · .+/, 'Error'],
+            [{ state: 'failed', lastCheckedAt: '2026-11-05T10:15:00.000Z', errorMessage: 'USH02 cursor did not advance' }, /^Lock monitor: Last check failed · .+ · USH02 cursor did not advance$/, 'Error'],
             [{ state: 'stale', lastCheckedAt: '2026-11-05T10:15:00.000Z' }, /^Lock monitor: Not checking · Last checked .+/, 'Error'],
             [{ state: 'off' }, /^Lock monitor: Off \(email not configured\)$/, 'None'],
             [{}, /^Lock monitor: Status not available$/, 'Error']

@@ -6,6 +6,7 @@ const COLUMNS = [
   ['Username', 'username'],
   ['Full Name', 'fullName'],
   ['Lock Type', 'lockType'],
+  ['Lock Timestamp (SAP)', 'lockTimestamp'],
   ['Locked By', 'lockedBy'],
   ['Source', 'source'],
   ['Reason', 'reason'],
@@ -33,9 +34,10 @@ function userLink(username, appUrl) {
  * @returns {{subject: string, text: string, html: string}}
  */
 function buildLockEmail(events, { appUrl, maxListed = 50 } = {}) {
-  const subject = oneLine(events.length === 1
+  const distinctUsers = new Set(events.map(({ username }) => String(username || '').trim().toUpperCase()));
+  const subject = oneLine(distinctUsers.size === 1
     ? `[SAP Alert] User ${events[0].username} locked`
-    : `[SAP Alert] ${events.length} users locked`);
+    : `[SAP Alert] ${distinctUsers.size} users locked`);
   const listed = events.slice(0, maxListed);
   const more = events.length - listed.length;
 

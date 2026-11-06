@@ -908,7 +908,9 @@ sap.ui.define([
             var mLook = {
                 ok: this._text("adminLockMonitorActive", "Lock monitor: Active \u00b7 Last checked {0}", [sTime]),
                 starting: this._text("adminLockMonitorStarting", "Lock monitor: Active \u00b7 First check pending"),
-                failed: this._text("adminLockMonitorFailed", "Lock monitor: Last check failed \u00b7 {0}", [sTime]),
+                failed: oStatus.errorMessage
+                    ? this._text("adminLockMonitorFailedWithError", "Lock monitor: Last check failed \u00b7 {0} \u00b7 {1}", [sTime, oStatus.errorMessage])
+                    : this._text("adminLockMonitorFailed", "Lock monitor: Last check failed \u00b7 {0}", [sTime]),
                 stale: this._text("adminLockMonitorStale", "Lock monitor: Not checking \u00b7 Last checked {0}", [sTime]),
                 off: this._text("adminLockMonitorOff", "Lock monitor: Off (email not configured)")
             };
