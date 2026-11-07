@@ -1,0 +1,104 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.mib-label.controller.MibLabel"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page id="mibPage" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto" busy="{mibView>/busy}" busyIndicatorDelay="0">
+
+                <form:SimpleForm id="mibForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="2" columnsXL="2">
+                    <form:content>
+                        <core:Title text="{i18n>mibFormTitle}" />
+
+                        <Label text="{i18n>mibWarehouseNumber}" labelFor="mibWarehouseInput" required="true" />
+                        <Input id="mibWarehouseInput" value="{mibView>/warehouseNumber}" maxLength="3" placeholder="W01"
+                            valueState="{mibView>/warehouseState}" valueStateText="{mibView>/warehouseStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+
+                        <Label text="{i18n>mibTransferOrderNumber}" labelFor="mibTransferOrderInput" required="true" />
+                        <Input id="mibTransferOrderInput" value="{mibView>/transferOrderNumber}" maxLength="10" placeholder="0001037246"
+                            valueState="{mibView>/toState}" valueStateText="{mibView>/toStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+
+                        <Label text="{i18n>mibWeightedBy}" labelFor="mibWeightedByInput" />
+                        <Input id="mibWeightedByInput" value="{mibView>/weightedBy}" maxLength="12" placeholder="{i18n>mibWeightedByPlaceholder}"
+                            valueState="{mibView>/weightedByState}" valueStateText="{mibView>/weightedByStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+
+                        <Label text="{i18n>mibCheckedBy}" labelFor="mibCheckedByInput" />
+                        <Input id="mibCheckedByInput" value="{mibView>/checkedBy}" maxLength="12" placeholder="{i18n>mibCheckedByPlaceholder}"
+                            valueState="{mibView>/checkedByState}" valueStateText="{mibView>/checkedByStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+
+                        <Label text="{i18n>mibStickerVariant}" labelFor="mibVariantSelect" />
+                        <SegmentedButton id="mibVariantSelect" selectedKey="{mibView>/variant}" selectionChange=".onVariantChange">
+                            <items>
+                                <SegmentedButtonItem id="mibVariantStandard" key="standard" text="{i18n>mibVariantStandard}" icon="sap-icon://dimension" />
+                                <SegmentedButtonItem id="mibVariantVertical" key="vertical" text="{i18n>mibVariantVertical}" icon="sap-icon://header" />
+                            </items>
+                        </SegmentedButton>
+
+                        <Label />
+                        <HBox id="mibButtons" wrap="Wrap">
+                            <Button id="mibPreviewBtn" text="{i18n>mibPreviewBtn}" type="Emphasized" icon="sap-icon://pdf-attachment"
+                                press=".onPreview" enabled="{= !${mibView>/busy} }" class="sapUiTinyMarginEnd" />
+                            <Button id="mibInspectDataBtn" text="{i18n>mibInspectDataBtn}" icon="sap-icon://table-view"
+                                press=".onInspectData" enabled="{= !${mibView>/busy} }" class="sapUiTinyMarginEnd" />
+                            <Button id="mibPrintBtn" text="{i18n>mibPrintBtn}" icon="sap-icon://print"
+                                press=".onPrint" enabled="{= !!${mibView>/hasPdf} &amp;&amp; !${mibView>/busy} }" class="sapUiTinyMarginEnd" />
+                            <Button id="mibDownloadBtn" text="{i18n>mibDownloadBtn}" icon="sap-icon://download"
+                                press=".onDownload" enabled="{= !!${mibView>/hasPdf} &amp;&amp; !${mibView>/busy} }" />
+                        </HBox>
+                    </form:content>
+                </form:SimpleForm>
+
+                <MessageStrip id="mibMessageStrip" visible="{= !!${mibView>/message} }" text="{mibView>/message}"
+                    type="{mibView>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <!-- Table displaying sticker data rows -->
+                <Panel id="mibDataPanel" headerText="{i18n>mibDataPanelTitle}" expandable="true" expanded="true"
+                    visible="{= !!${mibData>/items} &amp;&amp; ${mibData>/items}.length > 0 }" class="sapUiSmallMarginTop">
+                    <Table id="mibDataTable" items="{mibData>/items}" noDataText="{i18n>mibNoDataText}">
+                        <columns>
+                            <Column><Text text="{i18n>mibColMaterial}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mibColDescription}" /></Column>
+                            <Column><Text text="{i18n>mibColBatch}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mibColQuantity}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mibColStorageUnit}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mibColDate}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mibColWeightedBy}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mibColCheckedBy}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <ObjectIdentifier title="{mibData>Material}" />
+                                    <Text text="{mibData>MaterialDescription}" />
+                                    <ObjectStatus text="{mibData>Batch}" state="Information" />
+                                    <Text text="{mibData>QuantityWithUom}" />
+                                    <Text text="{mibData>StorageUnit}" />
+                                    <Text text="{mibData>TransferDate}" />
+                                    <Text text="{mibData>WeightedBy}" />
+                                    <Text text="{mibData>CheckedBy}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+
+                <!-- PDF Preview Panel -->
+                <Panel id="mibPdfPanel" headerText="{i18n>mibPdfPanelTitle}" expandable="true" expanded="true"
+                    visible="{mibView>/hasPdf}" class="sapUiSmallMarginTop">
+                    <PDFViewer id="mibPdfViewer" visible="{mibView>/hasPdf}" source="{mibView>/pdfSource}" title="{mibView>/pdfTitle}"
+                        height="70vh" width="100%" showDownloadButton="false">
+                    </PDFViewer>
+                </Panel>
+
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

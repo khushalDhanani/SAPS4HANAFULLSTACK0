@@ -289,6 +289,11 @@
           "target": "TargetQuarantineLabels"
         },
         {
+          "name": "wmMibLabel",
+          "pattern": "wm/mib-label",
+          "target": "TargetMibLabel"
+        },
+        {
           "name": "wmHuStockTransfer",
           "pattern": "wm/hu-stock-transfer",
           "target": "TargetHuStockTransferList"
@@ -399,6 +404,11 @@
           "id": "quarantineLabels",
           "name": "QuarantineLabels",
           "path": "saps4hana.fiori.modules.wm.quarantine-label.view"
+        },
+        "TargetMibLabel": {
+          "id": "mibLabel",
+          "name": "MibLabel",
+          "path": "saps4hana.fiori.modules.wm.mib-label.view"
         },
         "TargetPackingInstructionDetail": {
           "id": "packingInstructionDetail",

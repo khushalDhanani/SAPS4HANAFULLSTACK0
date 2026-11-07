@@ -70,6 +70,8 @@ sap.ui.define([
                 this._updateShell("wmPackingInstructions");
             } else if (sHash.indexOf("wm/quarantine-labels") === 0) {
                 this._updateShell("wmQuarantineLabels");
+            } else if (sHash.indexOf("wm/mib-label") === 0) {
+                this._updateShell("wmMibLabel");
             } else if (sHash.indexOf("wm/hu-stock-transfer/") === 0) {
                 var aHuParts = sHash.replace("wm/hu-stock-transfer/", "").split("/");
                 if (aHuParts.length >= 3 && aHuParts[2] === "rack") {
@@ -233,6 +235,10 @@ sap.ui.define([
                     break;
                 case "wmQuarantineLabels":
                     sTitle = oBundle ? oBundle.getText("qlTitle") : "Quarantine Labels";
+                    bShowNav = true;
+                    break;
+                case "wmMibLabel":
+                    sTitle = oBundle ? oBundle.getText("mibPageTitle") : "Material Issued Batch Sticker";
                     bShowNav = true;
                     break;
                 case "wmPackingInstructionDetail":

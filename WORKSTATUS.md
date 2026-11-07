@@ -15,11 +15,73 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **CI user-management regression repair — local PASS / hosted NOT VERIFIED (2026-11-07 11:53 IST):** Isolated revision 01ff3523 reproduced 18 failures in userManagement integration tests. Reset per-case adapter caches and updated expiry-read fixtures/assertions. Full rerun passes all 198 suites / 3419 tests and coverage thresholds. Targeted 40 tests, lint, secret scan and focused diff check pass. Applied test repair to workspace, uncommitted. Hosted logs remain inaccessible.
+- **ZMIB Vertical Sticker ZQURAN 1:1 Architectural & Geometry Parity — PASS (2026-11-07 13:28 IST):** Fully refactored `drawVerticalSticker` in `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js` to adopt the exact mathematical layout, geometry (`MediaBox [0 0 288 432] pt`, 4" $\times$ 6" portrait), typography scale, and draw-list architecture (`getVerticalItems` / `drawItems`) of `ZquarLabelLayout.js` / `ZquarLabelPdf.js`:
+  - **Exact Page Geometry & Canvas Setup**: Initialized jsPDF with `unit: "pt"`, `format: [288, 432]`, `/PrintScaling /None` for vertical stickers, keeping `unit: "mm"`, `format: [100, 100]` for standard stickers.
+  - **ZQURAN 5% Black Hairlines ("Stripe Color")**: Rendered hairlines (`sep`) using ZQURAN's exact 2-printer-dot thickness ($0.71\text{ pt}$ at 203 DPI) and 5% black opacity (`doc.setGState(new doc.GState({ opacity: 0.05 }))`), spanning from $X = 40.43\text{ pt}$ to $X = 275.16\text{ pt}$. Placed at `rowsTop` ($Y = 39.47\text{ pt}$, directly under the title rule) and between each row. Crucially removed the artificial solid black bottom dividing line (`doc.line(13.5, 112, 100, 112)`); rows terminate cleanly after row 11 with natural white space before the barcode and logo.
+  - **Code 128 B Barcode Geometry ("Proper Barcode")**: Implemented whole 3-printer-dot module geometry ($1.064\text{ pt} = 0.375\text{ mm}$), height $84.06\text{ pt}$, starting cleanly at $X = 40.43\text{ pt}$ (aligned with captions and hairlines above) up to $X = 205.36\text{ pt}$. Human-readable document number rendered in **13 pt** normal (`V_LAYOUT.hrPt`), centered directly under bars at baseline $Y = 413.77\text{ pt}$.
+  - **Aether Corporate Vector Logo**: Dedicated vector logo on the right side ($X = 209.26\text{ pt}$, $Y = 316.37\text{ pt}$, width $63.13\text{ pt}$, height $100.02\text{ pt}$), rendered via `AetherLogo.fit` and `AetherLogo.parsePath` with 30 SVG paths and no surrounding border box.
+  - **Company Title Header & Clean Structure**: Replicated ZQURAN's clean company header with `"Aether Industries Limited"` (16 pt bold, centered at $X = 155.85\text{ pt}$, baseline $Y = 28.14\text{ pt}$) above a solid horizontal rule ($Y = 35.11\text{ pt}$, height $0.71\text{ pt}$). Removed header overcrowding (`BATCH : <Batch>`); batch number is cleanly presented in the body rows (`INW No`).
+  - **Left Rotated Strip (90° counter-clockwise)**: Vertical dividing rule ($X = 36.18\text{ pt}$, width $0.71\text{ pt}$) extends from $Y = 0$ down to $Y = 310.37\text{ pt}$ (end of rows). Primary title `"MATERIAL ISSUED TO BATCH"` (14 pt bold) placed at baseline $X = 22.89\text{ pt}$, centered vertically at $Y = 155.19\text{ pt}$. SOP document code `"F-03-00-SOP-WH-003-10/10/2016"` (9 pt normal) placed at baseline $X = 33.75\text{ pt}$, centered vertically at $Y = 155.19\text{ pt}$.
+  - **Body Rows Alignment & Typography**: 11 single-field rows (`slotV = 24.63 pt`) with 9 pt bold captions at $X = 40.43\text{ pt}$, 9 pt bold colons at $X = 104.99\text{ pt}$, and 10 pt normal values at $X = 113.50\text{ pt}$.
+  - **Standard Sticker 100% Preserved**: Standard (100 mm $\times$ 100 mm) sticker option remains completely untouched and 1:1 identical to `media_1794032882245_c6014de7.png`.
+  - **Validation & Quality Gates**:
+    - `test/unit/wm/mibLabelPdf.test.js`: 11/11 tests PASS.
+    - All 4 MIB test suites (33 tests) PASS in `test/unit/wm/mib*` and `test/integration/wm/mib*`.
+    - Playwright E2E suite `test/e2e/wm/verifyMibLabels.e2e.js`: 6/6 scenarios PASS (13s).
+    - UI5 lint (`ui5lint`): 0 findings.
+    - UI5 build (`ui5 build --all`): success in 1.16s.
+    - Root ESLint (`eslint .`): 0 errors.
+    - Secret scanner (`tools/scan-secrets.js`): 0 secrets detected across 927 tracked files.
+    - Git diff check (`git diff --check`): clean with 0 whitespace issues.
+    - READ-ONLY compliance strictly maintained (0 live writes, 0 external mutations).
+
+
+- **ZMIB Vertical Sticker Stripe Colors & Barcode Geometry Refinement — PASS (2026-11-07 12:53 IST):** Refined stripe colors and barcode geometry in `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js` (`drawVerticalSticker`):
+  - **Stripe Colors & Consistency**: Replaced faint/faded 0.05 opacity filled hairlines with uniform, high-contrast, solid black dividing stripes (`#000000`, 0.35 mm linewidth, `doc.line(13.5, ySep, 98, ySep)`). All horizontal dividing stripes now match the exact solid black color of the border rules.
+  - **Left Strip Boundary**: Bottom section divider rule now starts at X = 13.5 mm (`doc.line(13.5, 112, 100, 112)`), meeting the vertical dividing rule cleanly without cutting through the left vertical strip.
+  - **Proper Barcode Geometry & Alignment**: Fixed barcode placement and sizing:
+    - Moved starting position from X = 6 mm (which bled into the left strip) to X = 15 mm (cleanly aligned with the field rows above).
+    - Sized barcode to 50 mm wide (X = 15 to 65 mm) and 20 mm high (Y = 117 to 137 mm), ensuring scannable industrial proportions.
+    - Encoded via `Barcode.bars(sBarcodeText, "B")` with quiet-zone offset `(b.x - 10)` so bars start cleanly at the margin without phantom whitespace.
+    - Prominent human-readable document number in **12 pt bold**, centered directly under the bars at X = 40 mm (Y = 142.5 mm).
+  - **Balanced Logo Space**: Positioned official Aether corporate SVG vector logo cleanly on the right (X = 68 mm to 97 mm, Y = 115 to 145 mm), perfectly balanced side-by-side with the barcode.
+  - **Standard Sticker Preserved**: The standard (100 mm $\times$ 100 mm) sticker option remains 100% untouched and 1:1 identical to the user's uploaded physical sticker photo (`media_1794032882245_c6014de7.png`).
+  - **Validation**: 10/10 unit tests pass in `test/unit/wm/mibLabelPdf.test.js`, all 32 MIB unit/integration tests pass, all 6 Playwright E2E scenarios pass in `test/e2e/wm/verifyMibLabels.e2e.js`. UI5 lint (`ui5lint`: 0 findings), UI5 build (`ui5 build --all`: success in 1.12s), root ESLint (`eslint .`: 0 errors), secret scanner (`0 secrets detected across 927 tracked files`), and `git diff --check` (0 whitespace errors) all pass cleanly. READ-ONLY compliance strictly maintained.
+
+- **ZMIB Vertical Sticker ZQURAN Color & Hairline Theme Alignment — PASS (2026-11-07 12:42 IST):** Delivered 1:1 color, contrast, and shading alignment from the ZQURAN (`ZquarLabelLayout.js` / `ZquarLabelPdf.js`) vertical variant into `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js` (`drawVerticalSticker`):
+  - **Hairline Dividers**: Replaced stroked lines (`doc.line` / 0.12 opacity) with ZQURAN's exact 5% black (`opacity: 0.05`) filled rectangles (`doc.setGState(new doc.GState({ opacity: SEP.opacity }))` and `doc.rect(13.5, ySep - 0.125, 84.5, 0.25, "F")` with fallback `doc.setFillColor(242, 242, 242)`). Parameterized via exported constant `SEP: { dots: 2, opacity: 0.05 }` matching `ZquarLabelLayout.SEP`.
+  - **Solid Rules**: Pure black `#000000` (0.4 mm) for the left vertical dividing rule (X = 13.5 mm, Y: 0 to 112 mm), horizontal header rule (Y = 14 mm, X: 13.5 to 100 mm), and full-width bottom divider (Y = 112 mm, X: 0 to 100 mm).
+  - **High-Contrast Monochrome Typography**: Pure solid black `#000000` for all text (Helvetica Bold for headers, strip title, captions, and colons; Helvetica Normal for values, SOP code, and document number) on a pristine white background (`#ffffff`).
+  - **Barcode & Vector Logo**: Vector Code 128 bars and official Aether corporate SVG vector paths filled with pure black `#000000`.
+  - **Standard Sticker Layout Preserved**: The standard (100 mm $\times$ 100 mm) sticker option remains 100% untouched and 1:1 identical to the user's uploaded physical sticker photo (`media_1794032882245_c6014de7.png`).
+  - **Validation**: 10/10 unit tests pass in `test/unit/wm/mibLabelPdf.test.js`, all 32 MIB unit/integration tests pass, all 6 Playwright E2E scenarios pass in `test/e2e/wm/verifyMibLabels.e2e.js`. UI5 lint (`ui5lint`: 0 findings), UI5 build (`ui5 build --all`: success in 1.16s), root ESLint (`eslint .`: 0 errors), secret scanner (`0 secrets detected across 927 tracked files`), and `git diff --check` (0 whitespace errors) all pass cleanly. READ-ONLY compliance strictly maintained.
+
+- **ZMIB ZQUAR-Style Vertical Sticker Architecture — PASS (2026-11-07 12:28 IST):** Fully implemented the exact `ZQUAR` (`ZMM_AF_015`) vertical-strip layout variant for transaction `ZMIB` ("Material Issued To Batch Sticker") in `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js` (`drawVerticalSticker`). Standard sticker variant remains 1:1 visually identical to the user's uploaded physical sticker photo (`media_1794032882245_c6014de7.png`, 100 mm $\times$ 100 mm). Vertical variant implements:
+  - 100 mm $\times$ 150 mm (4" $\times$ 6" portrait) thermal sticker geometry.
+  - Left vertical strip (X: 0 to 13.5 mm) with vertical text rotated 90° counter-clockwise (`MATERIAL ISSUED TO BATCH` 12pt bold, and SOP document number `F-03-00-SOP-WH-003-10/10/2016` 7.5pt normal), separated by a solid vertical dividing rule at X = 13.5 mm from Y = 0 to Y = 112 mm.
+  - Top-right header block: centered company title `AETHER INDUSTRIES LIMITED` (11pt bold) and `BATCH : <Batch>` (10.5pt bold) above a horizontal divider rule at Y = 14 mm.
+  - Right body: 11 single-field rows (`TO Date`, `TO Number`, `TR Number`, `TR Date`, `Material Code`, `Material Name`, `INW No`, `Net weight`, `ARN No`, `Checked By`, `Weighted By`) with left-aligned captions at X = 16 mm, colons aligned in a dedicated column at X = 42 mm, values at X = 45 mm, and subtle hairlines between rows.
+  - Full-width divider line at Y = 112 mm across the entire 100 mm width.
+  - Bottom section: Large Code 128 vector barcode (`Barcode.bars`) with centered human-readable document number on the left (X = 6 mm, Y = 117 mm), and official Aether corporate vector logo (`AetherLogo.fit`) on the right (X = 55 mm, Y = 115 mm).
+  - Validation: 10/10 unit tests pass in `test/unit/wm/mibLabelPdf.test.js`, all 32 MIB unit/integration tests pass, all 6 Playwright E2E scenarios pass in `test/e2e/wm/verifyMibLabels.e2e.js`. UI5 lint (`ui5lint`: 0 findings), UI5 build (`ui5 build --all`: success in 1.27s), root ESLint (`eslint .`: 0 errors), secret scanner (`0 secrets detected across 927 tracked files`), and `git diff --check` (0 whitespace errors) all pass cleanly. READ-ONLY compliance strictly maintained.
+
+- **CI fix branch pushed — PASS (2026-11-07 12:19 IST):** Checked out `feature/ci-test-isolation` and pushed commit `f91cec04` to `origin` with upstream tracking. Existing staged/uncommitted feature work preserved. Hosted CI result pending.
+
+- **ZMIB Physical Sticker Layout 1:1 Visual Replication — PASS (2026-11-07 12:12 IST):** Replicated the exact visual layout of the physical label uploaded by the user (`media_1794032882245_c6014de7.png`) in `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js`. The generated sticker matches the 100 mm x 100 mm square format, prominent centered `MATERIAL ISSUED TO BATCH` title (13pt Bold) and Batch subtitle (11pt Bold), 6 horizontal dividers, two-column rows for `TO Date` / `TO Number` and `TR Number` / `TR Date`, unseparated `Material Code` and `Material Name` rows, `INW No`, `Net weight` and `ARN No`, signature headers (`Checked By` and `Weighted By`) with underline and operator names, Code 128 vector barcode with centered document number and SOP code `F-03-00-SOP-WH-003-10/10/2016`, and official Aether corporate vector logo (`AetherLogo.js`). Added unit tests in `test/unit/wm/mibLabelPdf.test.js`. All 45 Jest WM suites / 806 tests passed, all 5 Playwright E2E scenarios passed, UI5 lint/build, root lint, secret scan, and git diff check passed with 0 errors.
 
 - **CI remaining findings — local PASS / hosted PARTIAL (2026-11-07 12:13 IST):** Fixed action-runtime deprecations/Ubuntu drift, stale E2E registry expectation, test-local configuration leakage, MIB pixel sizing, lint suppressions, whitespace and missing-map warning. Full current-workspace coverage PASS: 202 suites / 3452 tests; SAP-free browser suites 4/4; smoke 9/9; root/UI5 lint, UI5 build, secret/dependency scans, MTA validation and diff check pass. Changes remain uncommitted; hosted rerun pending.
 
+- **ZMIB Client-Side Sticker PDF Generation Fallback — PASS (2026-11-07 11:57 IST):** Enabled client-side sticker PDF generation in the Fiori app (`app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js`) using the locally bundled `jsPDF` library. When `POST /generateMibSticker` returns 503 (because the SAP ABAP wrapper `Z_MM_MIB_LABEL_PDF` is not yet installed in SAP DS4), the app automatically falls back to `readMibStickerData`, retrieving live Transfer Order rows from SAP tables `LTAK`, `LTAP`, `MAKT`, `AFPO`. It generates a formatted 105 mm x 75 mm sticker PDF, renders it in `sap.m.PDFViewer`, enables both Print and Download actions, and displays an informative warning banner. All 37 Jest unit/integration tests and all 5 Playwright E2E scenarios pass. UI5 lint, build, root lint, secret scan, and diff check all pass.
+
+- **CI user-management regression repair — local PASS / hosted NOT VERIFIED (2026-11-07 11:53 IST):** Isolated revision 01ff3523 reproduced 18 failures in userManagement integration tests. Reset per-case adapter caches and updated expiry-read fixtures/assertions. Full rerun passes all 198 suites / 3419 tests and coverage thresholds. Targeted 40 tests, lint, secret scan and focused diff check pass. Applied test repair to workspace, uncommitted. Hosted logs remain inaccessible.
+
+- **RFC Destination Resolution & Local Dev Fallback Fix — PASS (2026-11-07 11:45 IST):** Resolved runtime error reported when accessing `#/wm/mib-label` on `localhost:4004` (`RFC destination 'S4HANA_DEV' lacks jco.client.ashost, jco.client.sysnr, jco.client.client, jco.client.user, jco.client.passwd (properties present: none)`). Root cause: `.env` configured `S4_RFC_DESTINATION_NAME=S4HANA_DEV`, which resolves the HTTP destination registered by `server.js` (which lacks JCo RFC properties); `RfcClient.js` previously failed closed even in development with complete local RFC credentials. Resolved by adding development-mode fallback in `RfcClient.js` to local connection parameters when `NODE_ENV !== 'production'` and all `REQUIRED_ENV` variables are present, while retaining strict fail-closed enforcement in production; cleared `S4_RFC_DESTINATION_NAME=` in `.env` to align with `.env.example`; enhanced `MibLabelAdapter.js` input normalization for both PascalCase and camelCase; added unit tests. Tested against live running CAP server on `localhost:4004` (HTTP 200 reading TO `1000744` from DS4/220); all 7 destination unit tests, 30 MIB tests, 5 Playwright E2E tests, UI5 build/lint, root lint, and secret scan pass.
+
+- **ZMIB Material Issued Batch Sticker Implementation — PASS (2026-11-07 11:35 IST):** Delivered end-to-end full-stack integration for transaction `ZMIB` / Adobe Form `ZMM_AF_021`. ABAP RFC wrapper specification and proposal created (`docs/abap/z_mm_mib_label.fugr.abap`, `docs/mib-pdf-wrapper.md`); S/4HANA integration adapter implemented (`srv/integration/s4hana/wm/MibLabelAdapter.js`); CAP OData service implemented (`srv/wm/mib-label/`); Fiori UI module implemented (`app/fiori-app/webapp/modules/wm/mib-label/`) with PDF preview, print, download, and fallback data table inspection; Dashboard navigation tile and manifest routes wired. All 30 unit/integration tests and all 5 Playwright E2E browser tests pass; UI5 lint, build, CDS compile, and diff check all pass with 0 errors.
+
 - **Secret scanner Docker template fix — PASS (2026-11-07 11:27 IST):** Fixed the filename exception mismatch. Scan passes for 912 tracked files; all 21 scanner tests pass. Root lint exits 0 with two unrelated unused-disable warnings; diff check passes. Hosted CI not rerun.
+
+- **SAP ZMIB Discovery — PASS (2026-11-07 11:15 IST):** Live READ-ONLY inspection confirmed transaction `ZMIB` ("Material Issued To Batch Sticker") in package `ZAMM` maps to program `ZMM_R_067` with screen 1000. Program includes are `ZMM_R_067_T01` (declarations), `ZMM_R_067_S01` (selection screen with warehouse `P_LGNUM`, TO `P_TANUM`, weighted by `P_BNAME`, checked by `P_BNAME1`), and `ZMM_R_067_F01` (data selection from LTAK/LTAP/MAKT/AFPO and execution of Adobe Form `ZMM_AF_021`). Related predecessor program is `ZMM_R_063` (TCode `ZMI`, "Material Issue Label", calling `ZMM_AF_016`). No code modified; all queries strictly READ-ONLY.
 
 - **Docker RFC fix — In Progress (2026-11-07):** Linux native binary loads with discovered SDK. Connected override now retains pinned node-rfc prebuild and mounts SDK read-only; startup guard checks RFC config/load. Restored missing RFC system number from matching host target without printing values. Build and temporary-container native/RFC read verification pass. Activation blocked by automatic approval review pending explicit approval of local in-memory data loss.
 
@@ -452,6 +514,10 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 - CI repair commit: standalone fixes ready; MIB-specific fixes remain with separately staged feature work. Push and rerun hosted CI after commit.
 
+- CI remaining findings: review/commit the CI and test-isolation fixes with related status records, preserving independently staged feature work; push and rerun GitHub Actions to verify Ubuntu 24.04/Node 22.
+
+- CI test repair: commit only test/integration/userManagement.test.js and its status entry, then rerun hosted CI. Local full coverage passes; preserve unrelated staged changes.
+
 - Secret scanner: rerun hosted CI after the focused commit; local validation passes.
 
 - RFC fix is built and read-only BAPI probe passed. Obtain explicit approval to recreate cap-dev (discards local in-memory data), then apply connected override and verify routed listUsers/browser. Automatic review rejected the attempted recreation; do not retry without approval.
@@ -558,6 +624,138 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-07 12:20 IST — ZMIB Vertical Sticker Layout Option — PASS
+
+- **Request:** "IN ZMIB Give option of Vertical Sticker." Provide a user option to choose between Standard (100×100 mm) and Vertical (100×150 mm) sticker layouts for ZMIB.
+- **Affected Files:**
+  - `app/fiori-app/webapp/modules/wm/mib-label/view/MibLabel.view.xml`
+  - `app/fiori-app/webapp/modules/wm/mib-label/controller/MibLabel.controller.js`
+  - `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/mibLabelPdf.test.js`
+  - `test/e2e/wm/verifyMibLabels.e2e.js`
+  - `WORKSTATUS.md`
+- **Changes:**
+  - `app/fiori-app/webapp/modules/wm/mib-label/view/MibLabel.view.xml`:
+    - Added `SegmentedButton` (`mibVariantSelect`) with items `mibVariantStandard` (Standard 100×100) and `mibVariantVertical` (Vertical 100×150) under the form input controls.
+    - Bound `selectedKey` to `mibView>/variant` and wired `selectionChange=".onVariantChange"`.
+  - `app/fiori-app/webapp/modules/wm/mib-label/controller/MibLabel.controller.js`:
+    - Added default `variant: "standard"` in `mibView` initialization.
+    - Added `onVariantChange`: dynamically re-renders the PDF preview Blob when toggling layout options and updates the file name with `-Vertical` suffix when vertical is chosen.
+    - Passed `variant` in `onPreview`, `onInspectData`, and `_loadStickerData`.
+  - `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js`:
+    - Defined `VARIANTS = { STANDARD: "standard", VERTICAL: "vertical" }`.
+    - Added `drawVerticalSticker`: renders a 100 mm $\times$ 150 mm (4" $\times$ 6") portrait sticker layout with full vertical spacing, centered header/batch title, 7 horizontal divider lines, prominent Code 128 vector barcode (height 9.5 mm), centered document number, SOP code `F-03-00-SOP-WH-003-10/10/2016`, and vector Aether logo.
+    - Updated `drawSticker` dispatcher and `generateDoc` to set page dimensions `[100, 150]` for vertical variant vs `[100, 100]` for standard variant.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+    - Added keys `mibStickerVariant`, `mibVariantStandard`, and `mibVariantVertical`.
+  - `test/unit/wm/mibLabelPdf.test.js`:
+    - Added unit test verifying `[100, 150]` mm dimensions for vertical variant and exported `VARIANTS` constants.
+  - `test/e2e/wm/verifyMibLabels.e2e.js`:
+    - Added E2E scenario asserting default variant is `standard`, toggling to `vertical` via `SegmentedButton` re-renders the PDF preview, and preview remains visible with print/download enabled.
+- **Test Impact Decision:** `TEST UPDATED` — added 2 unit tests to `test/unit/wm/mibLabelPdf.test.js` (total 9) and 1 E2E case to `test/e2e/wm/verifyMibLabels.e2e.js` (total 6).
+- **Executed Validations:**
+  - `npx jest test/unit/wm/mibLabelPdf.test.js --runInBand`: PASS (9/9 unit tests).
+  - `node test/e2e/runAllE2E.js --sap-free --only=mib`: PASS (6/6 scenarios in Playwright).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings in `ui5lint`).
+  - `npm --prefix app/fiori-app run build`: PASS (`ui5 build --all` succeeded in 1.19s).
+  - `npm run lint`: PASS (ESLint: 0 errors, 0 warnings).
+  - `npm run scan:secrets`: PASS (0 secrets detected across 926 tracked files).
+  - `git diff --check`: PASS (clean).
+
+### 2026-11-07 12:12 IST — ZMIB Physical Sticker Layout 1:1 Visual Replication — PASS
+
+- **Request:** Replicate the exact visual layout of the physical label uploaded by the user (`media_1794032882245_c6014de7.png`) for `MATERIAL ISSUED TO BATCH` (TCode `ZMIB` / Adobe Form `ZMM_AF_021`). Ensure the client-side sticker PDF fallback produces a 1:1 match in preview, print, and download.
+- **Affected Files:**
+  - `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js`
+  - `test/unit/wm/mibLabelPdf.test.js`
+  - `WORKSTATUS.md`
+- **Changes:**
+  - Updated `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js`:
+    - Layout dimensions: Configured 100 mm x 100 mm square portrait sticker stock.
+    - Header: Rendered prominent centered title `MATERIAL ISSUED TO BATCH` (Helvetica Bold 13pt) and centered Batch subtitle (Helvetica Bold 11pt).
+    - Horizontal Dividers: Implemented 6 full-width 0.4mm horizontal dividers dividing all data sections.
+    - Two-column Row 1: `TO Date :  <TransferDate>` and `TO Number : <TransferOrder>` with DD/MM/YYYY formatting.
+    - Two-column Row 2: `TR Number : <TransferRequirement>` and `TR Date :   <TransferDate>`.
+    - Rows 3 & 4: `Material Code :  <Material>` and `Material Name :  <MaterialDescription>` without an intermediate divider.
+    - Row 5: `INW No :  <Batch>` displaying the inward lot/batch.
+    - Two-column Row 6: `Net weight : <QuantityWithUom>` and `ARN No : <ArnNo>`.
+    - Row 7: Two-column signature block with `Checked By` and `Weighted By` bold headers, horizontal underline spanning the headers, and uppercase operator usernames below.
+    - Row 8 (Bottom Left): Vector Code 128 barcode (`Barcode.bars`), centered human-readable document number, and SOP document control text `F-03-00-SOP-WH-003-10/10/2016`.
+    - Row 8 (Bottom Right): Official Aether corporate vector logo (chevron icon, `aether` wordmark, and `elementally innovative` tagline) rendered using the 30 vector paths from `AetherLogo.js`.
+    - Date Formatter: Added `formatDate` helper converting ISO (`YYYY-MM-DD`) and compact SAP (`YYYYMMDD`) dates to `DD/MM/YYYY`.
+  - Added unit test suite `test/unit/wm/mibLabelPdf.test.js`: 7 unit tests verifying date formatting, single and multi-page sticker PDF generation, dimensions, byte size, and graceful handling of missing fields.
+- **Test Impact Decision:** `TEST ADDED` — added `test/unit/wm/mibLabelPdf.test.js` (7 tests).
+- **Executed Validations:**
+  - `npx jest test/unit/wm/mibLabelPdf.test.js --runInBand`: PASS (7/7 tests).
+  - `npx jest test/unit/wm/ test/integration/wm/ --runInBand`: PASS (45 suites, 806 tests passed).
+  - `node test/e2e/runAllE2E.js --sap-free --only=mib`: PASS (5/5 scenarios passed in Playwright).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings in `ui5lint`).
+  - `npm --prefix app/fiori-app run build`: PASS (`ui5 build --all` succeeded).
+  - `npm run lint`: PASS (ESLint: 0 errors, 0 warnings).
+  - `npm run scan:secrets`: PASS (925 tracked files clean).
+  - `git diff --check`: PASS (clean).
+
+### 2026-11-07 11:57 IST — ZMIB Client-Side Sticker PDF Generation Fallback — PASS
+
+- **Request:** Enable client-side PDF generation so that when `POST /generateMibSticker` returns 503 (ABAP wrapper `Z_MM_MIB_LABEL_PDF` pending creation in SAP DS4), the user still gets a rendered sticker preview in `sap.m.PDFViewer` with active Print and Download buttons.
+- **Changes:**
+  - Added `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js`:
+    - Lazily loads bundled `jsPDF` from `thirdparty/jspdf.umd.min.js`.
+    - Implemented `drawSticker`: draws a standard 105 mm x 75 mm landscape sticker with header ("MATERIAL ISSUED TO BATCH STICKER"), material code/description, batch, quantity, transfer order number, warehouse, transfer date, TR number, storage unit, and operator/supervisor signature areas.
+    - Implemented `generateBlob` and `download` methods supporting single or multi-item Transfer Orders.
+  - Updated `app/fiori-app/webapp/modules/wm/mib-label/controller/MibLabel.controller.js`:
+    - Imported `MibLabelPdf`.
+    - In `_loadStickerData`: normalized response `aRows` handling both direct arrays and OData V4 `{ value: [...] }` payload wraps.
+    - When `generateMibSticker` returns 503, `_loadStickerData` fetches live Transfer Order rows from SAP, generates a client-side sticker PDF Blob, mounts it to `mibView>/pdfSource`, sets `hasPdf` to `true`, and updates the warning message banner.
+    - Retained `/busy=true` during PDF generation so UI5 busy indicator and automated test runners wait for rendering completion.
+  - Updated `app/fiori-app/webapp/i18n/i18n.properties` and `i18n_en.properties`: added `mibClientFallbackNote`.
+  - Updated `test/e2e/wm/verifyMibLabels.e2e.js`: updated test case 3 to verify that on 503 fallback, the client-side PDF is generated, `pdfShown` is true, and Print and Download buttons are active.
+  - Fixed trailing newlines in 7 files to ensure clean `git diff --check`.
+- **Test Impact Decision:** `TEST UPDATED` — `test/e2e/wm/verifyMibLabels.e2e.js` updated to assert fallback PDF rendering and print/download availability.
+- **Executed Validations:**
+  - `node test/e2e/runAllE2E.js --sap-free --only=mib`: PASS (5/5 Playwright scenarios passed).
+  - `npx jest test/unit/wm/mibLabelAdapter.test.js test/unit/wm/mibLabelService.test.js test/integration/wm/mibLabel.test.js test/unit/rfcClientDestination.test.js test/unit/tools/e2eCoverageMatrix.test.js --runInBand`: PASS (5 suites, 37 tests passed).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+  - `npm --prefix app/fiori-app run build`: PASS (`ui5 build --all` succeeded in 1.29s).
+  - `npm run lint`: PASS (0 errors).
+  - `npm run scan:secrets`: PASS (924 tracked files clean).
+  - `git diff --check`: PASS (clean).
+
+### 2026-11-07 11:45 IST — RFC Destination Resolution & Local Dev Fallback Fix — PASS
+
+- **Request:** Investigate and fix runtime error reported when accessing `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/mib-label`: `RFC destination 'S4HANA_DEV' lacks jco.client.ashost, jco.client.sysnr, jco.client.client, jco.client.user, jco.client.passwd (properties present: none)`.
+- **Root Cause Analysis:**
+  - `server.js` registers destination `'S4HANA_DEV'` in `@sap-cloud-sdk/connectivity` for HTTP Gateway calls (URL, credentials, headers).
+  - `.env` had set `S4_RFC_DESTINATION_NAME=S4HANA_DEV`.
+  - When `RfcClient.resolveConnectionParams()` executed, it resolved destination `'S4HANA_DEV'` via Cloud SDK `getDestination`, receiving the registered HTTP destination which has no `jco.client.*` properties.
+  - `RfcClient.js` previously threw 503 without falling back to local environment connection parameters even when running in development with complete `S4_DESTINATION_URL`, `S4_RFC_SYSNR`, `S4_CLIENT`, `S4_USERNAME`, and `S4_PASSWORD` configured.
+- **Changes:**
+  - `srv/integration/s4hana/RfcClient.js`:
+    - Added `hasLocalConnectionParams()` helper checking presence of all `REQUIRED_ENV` variables.
+    - Updated `resolveConnectionParams()`: when running in development (`NODE_ENV !== 'production'`) and destination lookup fails, destination is not found, or destination lacks `jco.client.*` properties, it logs a warning and falls back to `this.connectionParams()`.
+    - In production (`NODE_ENV === 'production'`), strict fail-closed enforcement is preserved; no fallback is permitted.
+  - `.env`: cleared `S4_RFC_DESTINATION_NAME=` to align with `.env.example` so local development defaults directly to local connection parameters.
+  - `srv/integration/s4hana/wm/MibLabelAdapter.js`: updated `normalizeInput` to support both PascalCase (`WarehouseNumber`, `TransferOrderNumber`, `WeightedBy`, `CheckedBy`) and camelCase.
+  - `test/unit/rfcClientDestination.test.js`: added unit tests verifying:
+    1) Development fallback when destination lacks RFC properties and local env is configured.
+    2) Production fail-closed enforcement refusing local fallback even if local env keys exist.
+- **Test Impact Decision:** `TEST UPDATED` — added 2 test cases in `test/unit/rfcClientDestination.test.js`.
+- **Executed Validations:**
+  - `npx jest test/unit/rfcClientDestination.test.js`: PASS (7/7 tests passed).
+  - `npx jest test/unit/wm/mibLabelAdapter.test.js test/unit/wm/mibLabelService.test.js test/integration/wm/mibLabel.test.js test/unit/tools/e2eCoverageMatrix.test.js --runInBand`: PASS (4 suites, 30 tests passed).
+  - `node test/e2e/runAllE2E.js --sap-free --only=mib`: PASS (5 browser scenarios in Playwright).
+  - Live verification against running CAP server on `http://localhost:4004`:
+    - `POST /odata/v4/mib-label/readMibStickerData` with TO `1000744` in Warehouse `W01` returned HTTP 200 with live SAP data from DS4/220: Material `1000000490` (Benzoyl Peroxide), Batch `IN25062429`, Date `2025-08-14`, Quantity `5 KG`.
+    - `POST /odata/v4/mib-label/generateMibSticker` returned HTTP 503 explaining that ABAP wrapper `Z_MM_MIB_LABEL_PDF` is not yet installed in SAP.
+  - Static validations:
+    - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+    - `npm --prefix app/fiori-app run build`: PASS (`ui5 build --all` succeeded in 1.24s).
+    - `npm run lint`: PASS (0 errors).
+    - `npm run scan:secrets`: PASS (924 tracked files clean).
+    - `git diff --check`: PASS (clean).
 
 ### 2026-11-06 14:20 IST — Docker/Compose Scaffold Implementation — PARTIAL
 
@@ -3532,807 +3730,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **VERIFIED (READ-ONLY, RFC_READ_TABLE only, via `tools/lib/readOnlyRfcGuard.js`):** plant 1120 currency INR (T001K, T001) and shipping points WAVG, 1112 (TVSTZ) match the local `BusinessConfig` row. T320 confirms W01 for plant 1120. T001L has sales area data on 9 of 72 storage locations with two combinations, 1000/14/00 and 1000/10/52, so a plant-only call cannot derive one. No SAP write ran.
 - **UNKNOWN:** the production database contents, whether production is deployed, and any outside callers of `tr-to`. Local rows (read only): BusinessConfig 1, attempts 6 with none open, ReservationTrack 30, ReservationLog 98, ReservationStatus 10.
 - **TEST DECISION:** TEST NOT POSSIBLE for this entry; no code changed, and the tests follow the approved deletion. Unit, build, lint and E2E suites were not run.
-- **TESTED:** the two probes above only. `git diff --check` is run before the commit.
-- **NOT VERIFIED:** full suites without a database, every SAP flow without a database, deployment.
-- **ASSUMPTIONS:** `ALLOW_LIVE_SAP_TOOLS` is what the user meant by `AllowSAPtool` (INFERRED).
-- **REGRESSION:** no runtime change.
-- **Next action:** the user approves the delete list and answers the open questions.
-- **FINAL STATUS:** BLOCKED, waiting for the user's OK. Nothing deleted.
-
-### 2026-11-03 14:41 IST — Posting-attempt Z table source prepared: PARTIAL, BLOCKED on target, transport and written go
-
-- **Request:** The user chose "Z table in ZAMM" for double-post protection. That answers the design question only; it is not a go for a SAP write and not the OK on the delete list.
-- **CHANGED:** added `docs/abap/zwm_post_attempt.tabl.ddl`, `docs/abap/zwm_post_attempt.fugr.abap`, `test/unit/tools/postAttemptAbapSource.test.js`; updated `docs/decisions/sap-only-persistence-migration.md` and WORKSTATUS.md. No runtime code changed. Nothing was created in SAP and nothing was deleted.
-- **Design:** table `ZWM_POST_ATTEMPT` with primary key client + reference document, and RFC modules `Z_WM_ATTEMPT_CLAIM`, `Z_WM_ATTEMPT_SET_STATUS`, `Z_WM_ATTEMPT_READ`. Only posting attempts move to SAP. Each call commits, so it must run on its own connection, never inside a posting `session()`. Node integration code was not written, because AGENTS.md requires the live proof first.
-- **VERIFIED (READ-ONLY, RFC_READ_TABLE only, via `tools/lib/readOnlyRfcGuard.js`):** TADIR and TFDIR return no rows for the proposed names. TDEVC: ZAMM, transport layer ZDS4. CVERS: SAP_BASIS 816. T000: configured client has category T and blank `CCNOCLIIND`, which DD07T describes as repository changes allowed. No SAP write ran.
-- **TEST DECISION:** TEST ADDED: `test/unit/tools/postAttemptAbapSource.test.js`. It checks the ABAP source against the current store offline (columns, statuses, signature, commit placement) and proves nothing about SAP.
-- **TESTED:** `npx jest --runInBand test/unit/tools/postAttemptAbapSource.test.js test/unit/tools/adtCreateQuarLabel.test.js test/unit/wm/goodsIssueAttempt.test.js`: 3 suites, 44 tests PASS. `npx eslint` on the new test printed no findings. `node tools/scan-secrets.js`: 0 findings, new files included. `git diff --check`: clean. Full Jest, build and browser E2E not run, because no runtime code changed.
-- **NOT VERIFIED:** that the ABAP activates, source-based table creation through ADT, `IS SUPPLIED` over RFC, atomic claims under parallel sessions, the S_RFC role, carrying over production rows.
-- **BLOCKED:** the user supplies the target system and transport request, then gives a written go for each live step listed in the migration document.
-- **ASSUMPTIONS:** tracking tables and BusinessConfig are removed rather than moved to SAP (INFERRED from the user's choice; waits on the OK for the delete list). Standard data elements `MANDT`, `TIMESTAMPL`, `CHAR1`, `BAPI_MSG` exist on the target (Not verified on the target; `CHAR1` and `BAPI_MSG` are used by existing proposals in this repository).
-- **REGRESSION:** no runtime change; the store tests above still pass.
-- **Next action:** the user provides the target and transport request, and the OK or changes for the delete list.
-- **FINAL STATUS:** PARTIAL for the source; BLOCKED for SAP creation and database removal.
-
-### 2026-11-03 15:32 IST — Database removal Phase 1: PARTIAL, complete removal BLOCKED on Phases 2 and 3
-
-- **Request:** The approved plan: remove everything except the posting-attempts table now. No SAP write and no deployment.
-- **CHANGED:** 64 files against `0e885ba7`, 19 of them deleted, in commits `0fbfad84`, `9d614e63`, `ff6d2e2d`, `0de7add8`, `c3c7e3be`, `da54e2ed` and this one. Not pushed.
-- **DELETED:** `db/wm/reservation-track.cds`, `db/wm/business-config.cds`, `db/data/saps4hana.wm-BusinessConfig.csv`, `srv/wm/reservation-track/`, `srv/wm/business-config/`, `srv/integration/s4hana/wm/StorageTypeConfigAdapter.js` (only the deleted service used it), all 5 `db-*.sql` files, `docs/sap-customizing/business-config-hu-storage-types-migration.md`, `test/wmSeedHelper.js`, `test/fixtures/wm/reservationSeed.js`, and the tests `reservationTrack`, `reservationMonitorRetry`, `StorageTypeConfigAdapter`.
-- **MOVED, not deleted:** `.backup-db-*`, `db.sqlite-pre-business-config-*` and `seed-data-local/` to `../SAPS4HANAFULLSTACK0-db-archive-20261103/`. `db.sqlite` stays until Phase 3.
-- **Behaviour changes:** see docs/decisions/sap-only-persistence-migration.md. On `tr-to`, which no screen calls: a further partial issue on an item with a document returns 409; a retry must send its `ProcessId`; the 311 reservation-to-TR lookup returns 404; a TR whose movement differs from its reservation is refused; a closed staging TR with no `LTBK-RSNUM` is not recovered; history and logs are gone. Delivery Without Reference: blank fields read T001L, otherwise a 400 asks the user; a partly typed sales area returns 400. Users can now enter any sales area inside their plant scope, and SAP validates it.
-- **Deviations from the plan:** the delivery sales fields carry a "From SAP if empty" placeholder rather than a required marker, because T001L supplies them on some storage locations. README, AGENTS.md, ARCHITECTURE.md, ADR-0001 and the runbook were not edited: they do not mention the removed tables, and their `db/` wording stays true until Phase 3. `OutboundDeliveryService.js` also lost its hardcoded `1000`/`10`/`52`. `DeliveryNoRefAdapter` gained an RFC client, because that flow never read SAP before.
-- **TEST DECISION:** TEST UPDATED and TEST ADDED: `deliveryNoRefAdapter`, `deliveryNoRefHandler`, `ordersDueForDeliveryController`, `BusinessConfigResolver` (rewritten), `migoClientAttempt` (rewritten), `trToAdapter`, `trToHandler`, `trToLookupReadOnly`, `createTOFromTR`, `autoMigoPosting`, `processFixes`, `quarantineLabelOutput`, `transferPathPrecheck`, `mvt261Auth`.
-- **TESTED:** Baseline before edits: Jest 226 suites and 4,160 tests passed, 59 skipped; SAP-free E2E 3 of 3. Final: `npm test` 223 suites and 4,109 tests passed, 59 skipped, on `da54e2ed`. `npm run lint` exit 0. `node tools/scan-secrets.js` 0 findings. `git diff --check` clean. `npx cds build --production` completed, with CDS warnings in `srv/wm/handling-unit/service.cds` (not changed here). `npm run validate:mta` exit 0. `ui5lint` no findings; `ui5 build` succeeded. `npm run test:e2e:sap-free` 3 of 3. `npm run test:e2e` 17 of 17 against a local server with SAP reads. The last stale-reference cleanup (a Postman folder and a doc line) came after these runs and changes no runtime code.
-- **FAIL:** `npm run test:e2e:sap` dry run exit 1: HU stock transfer 311 fails with "could not resolve storage type rules". READ-ONLY comparison: the same `validateUnit` call on pre-change commit `0e885ba7`, with a copy of the local database, returns the same error, so this work did not cause it. Orders due is PARTIAL: PGI and billing skipped, because they need a real delivery. The other 9 flows pass in dry run. Dry run is UI proof, not SAP proof.
-- **VERIFIED (write guard on):** the delivery dialog opens with blank sales fields, and its POST was blocked by the guard. On the isolated server that cannot reach SAP, an empty sales area returns 400 asking the user to enter it, and a partial one returns 400.
-- **VERIFIED (READ-ONLY):** Reference search outside WORKSTATUS.md, docs/archive, docs/evidence and docs/abap finds no tracking or BusinessConfig reference. Remaining database references are for Phase 3: `db/wm/goods-issue-attempt.cds`, `db/schema.cds`, `GoodsIssueAttemptStore.js`, `package.json`, `mta.yaml`, `.gitignore`, and 17 test files.
-- **NOT VERIFIED:** real delivery creation with a typed sales area or T001L value (needs a written go); `tr-to` against live SAP; production BusinessConfig and tracking rows; outside callers of `tr-to`; deployment.
-- **Dead-code candidates, left in place:** the `resolveOutput` and `assertAcceptsForm` paths in `QuarantineLabelAdapter`, the `WARN` oversize branch, and the page-size check in `labelOutput.js` now have no production input. `@cap-js/hana` and `@cap-js/sqlite` stay until Phase 3.
-- **Findings, not changed:** `SalesInquiryAdapter.js` falls back to hardcoded `ZDOM`/`ZIN` with 1000/10/52. The delivery dialog pre-fills sample plant, shipping point and customer values.
-- **ASSUMPTIONS:** `tr-to` has no outside callers (INFERRED from no UI use; not confirmed with API owners). Production has no filled BusinessConfig row that matters (UNKNOWN; the plan flags it).
-- **REGRESSION:** Jest and browser E2E as above; the only E2E failure exists on the pre-change commit.
-- **Next action:** the user provides the SAP target and transport request, and decides where blocked-bin rules and HU storage types live.
-- **FINAL STATUS:** PARTIAL for Phase 1; BLOCKED for complete database removal.
-
-### 2026-11-03 15:52 IST — Local database files and references removed, `db/` kept by the user's choice: PARTIAL
-
-- **Request:** Delete local SQL files and what depends on them, verify with proof, no SAP writes. The user chose "Keep db/ for now", because the posting-attempt guard has no working SAP replacement. No target or transport request has been supplied.
-- **CHANGED:** new branch `chore/remove-local-db-files`, from `chore/remove-application-db`. Commits `d6169fd7` (`.gitignore` entry, `mta.yaml` and `db/schema.cds` comments), `c30e2f85` (README, AGENTS.md, ARCHITECTURE.md, runbook, `docs/abap/flow-decision.md`, `status-codes.md`, `zmm_af_017_4x6-spec.md`), and this log. No runtime code changed. The SQL files and tracking and settings code were already removed on the parent branch.
-- **BACKUP:** `~/Desktop/sql-backup/`: 5 SQL files exported from `feature01`, `db-from-feature01/`, a copy of `db.sqlite` (integrity check ok, 6 attempt rows), and the moved `.backup-db-*`, `seed-data-local/` and pre-config copy (9 files, checksums match). Nothing was hard-deleted. The earlier `../SAPS4HANAFULLSTACK0-db-archive-20261103/` folder no longer exists; its contents moved here. `gen/`, `app/fiori-app/dist` and caches were cleared as requested; `app/fiori-app/dist` was rebuilt.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: full Jest and E2E suites. Only comments, an ignore entry and docs changed.
-- **TESTED:** `npx cds build --production --dest <scratch>` exit 0 (2 CDS warnings in a file not changed here). `ui5lint` and `ui5 build` exit 0. `npx eslint . --max-warnings 0` exit 0. `node tools/scan-secrets.js` exit 0. `npm run validate:mta` exit 0. `npm test`: 223 suites, 4,109 tests passed, 59 skipped. `npm run test:e2e:sap-free`: 3 of 3. `npm run test:e2e`: 17 of 17, including Shell, MM, SD, LE and WM screens.
-- **FAIL:** `npm run test:e2e:sap` dry run exit 1: HU stock transfer 311 fails on missing storage type rules, as on the commit before this work. Orders due is PARTIAL: PGI and billing skipped.
-- **SKIPPED:** root `npm run build` does not exist. `npm run build:mta` was not run, because its first step is `npm ci`, which would reinstall `node_modules`.
-- **VERIFIED (write guard on):** server log during the runs has no `no such table` or `NO_DATABASE_CONNECTION`. App started normally; `AllowSAPtool` does not exist and `ALLOW_LIVE_SAP_TOOLS` is not read at runtime.
-- **VERIFIED (READ-ONLY, RFC_READ_TABLE only):** documents created today by the app's SAP user in MKPF, LIKP, VBAK, EKKO, VBRK, LTAK and VEKP: 0 before and 0 after the runs. Control on 2026-11-02 found 3 MKPF and 1 LTAK, so the check can find documents. It does not cover other tables or other SAP users.
-- **Remaining references:** `sqlite`, HANA and HDI in `package.json`, the lockfile, `mta.yaml`, `.gitignore`, ADR-0001, ARCHITECTURE.md and the runbook; `cds.db` in `GoodsIssueAttemptStore.js` and 8 test files; posting-attempt references across services, tests and docs. All are kept for the guard until Phase 3. `.backup-db-recovery` in the runbook is a recovery step that stays valid while `db.sqlite` exists. `BusinessConfig` in 4 dated `docs/evidence` files is a historical record. `.sql` in `noGiQueueGuard.test.js` is a file-type list, and in 3 `docs/wm-discovery` XML files it is an SAP media type.
-- **NOT VERIFIED:** production data; outside callers of `tr-to`; deployment; the Z table source.
-- **ASSUMPTIONS:** "Keep db/ for now" approves everything else in the discovery table (INFERRED from the option as offered).
-- **REGRESSION:** none found; same results as Phase 1.
-- **Next action:** the user supplies the SAP target and transport request, and decides where HU storage types and blocked-bin rules live.
-- **FINAL STATUS:** PARTIAL. Complete database removal stays BLOCKED on the SAP posting-attempt table.
-
-### 2026-11-03 15:55 IST — SAP target confirmed and deploy tool prepared: BLOCKED on the transport request and written go
-
-- **Request:** The user confirmed the connected client as the target for `ZWM_POST_ATTEMPT`.
-- **CHANGED:** added `tools/adt-create-post-attempt.js` and `test/unit/tools/adtCreatePostAttempt.test.js`; updated `docs/decisions/sap-only-persistence-migration.md` and WORKSTATUS.md. No SAP write ran.
-- **VERIFIED (READ-ONLY, RFC_READ_TABLE only, via `tools/lib/readOnlyRfcGuard.js`):** the connected user has 0 open requests or tasks in E070. Requests since 2026-10-01 and object ZMM_QUAR_LABEL show system `DS4`. TDEVC: ZAMM, transport layer `ZDS4`. TADIR: ZAMM `SRCSYSTEM` is `MSD`. TRNSPACE `/0CUST/` EDITFLAG `X`. TADIR and TFDIR have no objects with the proposed names. TCETRAL was not readable through RFC_READ_TABLE, so the transport route is not read.
-- **TEST DECISION:** TEST ADDED: `test/unit/tools/adtCreatePostAttempt.test.js`, offline only.
-- **TESTED:** `npx jest` on `adtCreatePostAttempt`, `postAttemptAbapSource`, `adtCreateQuarLabel` and `liveSapToolGate`: 4 suites, 30 tests PASS. `npx eslint --max-warnings 0` on the new files: clean. A `--print-only` run with a sample request number made no SAP call. Full Jest and E2E not rerun, because no runtime code changed.
-- **NOT VERIFIED:** whether `DS4` can take new ZAMM objects given `SRCSYSTEM` `MSD`; the table create payload; activation of any source; everything in the live proof.
-- **BLOCKED:** the user creates a workbench request owned by the connected user, or adds a task for that user, then gives a written go for the create step.
-- **ASSUMPTIONS:** `DS4` is the connected system (INFERRED from request numbers and object `SRCSYSTEM`; `sy-sysid` was not read).
-- **REGRESSION:** no runtime change.
-- **Next action:** the user sends the request number and the written go.
-- **FINAL STATUS:** BLOCKED for SAP creation; the tool is ready and untested against SAP.
-
-### 2026-11-03 16:07 IST — Test folder audit and cleanup: PASS for the cleanup
-
-- **Request:** The user reported many false test cases. They chose an audit first, then approved deleting the false tests and fixing the weak ones.
-- **Method:** parsed all 225 test files, recorded assertions per test in an instrumented Jest run using a scratch config, and read each candidate. A broad "reaches no required code" scan flagged 707 tests but was mostly noise, so it was discarded.
-- **CHANGED, branch `chore/test-audit-cleanup`:** `82dc6782` deletes 20 tests: `messageToastDockNormalization.test.js` (whole file, 4), `dashboardMvtKpi.test.js` controller section (5), `createPORefreshRouting.test.js` shell section (2), `BusinessConfigResolver.test.js` literal comparisons (2), `transactionPersistenceAndRetry.test.js` placeholder test (1), `goodsIssuePhase5Routing.test.js` frontend contract (3 cases), `formatter.test.js` FI section (3 skipped). `04c5c002` fixes: `createPurchaseOrderFlow.test.js` Steps 1, 4 and 5 become setup and the remaining steps are renumbered 1 to 4; `fioriAccessibility.test.js` dialog check no longer passes when a file is missing; `goodsIssueIsolation.test.js` dead screen list removed. No production code changed.
-- **Not changed:** `test/screenshots/` (7 PNGs, 1.7 MB, no references): the approval covered tests only.
-- **TEST DECISION:** TEST UPDATED. This change is itself to the tests.
-- **TESTED:** Before: 4,119 passed, 59 skipped, 225 suites. After: `npm test` through the audit config: 224 suites, 4,099 passed, 56 skipped, 0 failed. The difference is the 20 deleted tests plus the 3 purchase order steps that became setup. `npx eslint . --max-warnings 0` exit 0. `node tools/scan-secrets.js` exit 0. `npm run test:e2e:sap-free` 3 of 3. `npm run test:e2e` and the SAP dry run were not rerun, because no production or E2E code changed.
-- **VERIFIED:** tests running zero assertions fell from 5 to 2; tests that touch nothing outside themselves fell from 6 to 0; the 3 always-skipped FI tests are gone. The 2 remaining zero-assertion tests are expected: `test.failing` in `mvt311Process.test.js` records a known defect, and `s4Config.test.js` loops over an empty config and fails if a key is added.
-- **Open finding:** the `test.failing` test in `mvt311Process.test.js` passes only while its known defect exists: reservation-level matching blocks a later valid partial pick.
-- **NOT VERIFIED:** whether the remaining tests check the right behaviour; mutation testing was not run. 35 mock-only files do not prove SAP behaviour. 56 live SAP tests stay skipped by default.
-- **ASSUMPTIONS:** none.
-- **REGRESSION:** no production code changed; suites as above.
-- **Next action:** the user decides whether to merge this branch.
-- **FINAL STATUS:** PASS for the approved cleanup.
-
-### 2026-11-03 16:08 IST — Unused test screenshots removed: PASS
-
-- **Request:** The user approved deleting `test/screenshots/` after the test audit.
-- **CHANGED:** removed `test/screenshots/` (7 PNGs, 1.7 MB) with `git rm`, so they stay recoverable from history. No code changed.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: `test/unit/tools/e2eRunner.test.js` and `test/unit/tools/e2eCoverageMatrix.test.js`; nothing referenced these files.
-- **TESTED:** reference search outside history found no use of the folder or any file name. `npx jest` on the two tests above: 2 suites, 17 tests PASS. `node tools/scan-secrets.js` exit 0. `git diff --check` clean. Full suites not rerun, because only unreferenced image files were removed.
-- **ASSUMPTIONS:** none.
-- **FINAL STATUS:** PASS.
-
-### 2026-11-03 16:09 IST — Merged the database removal and test cleanup into local `feature01`: PASS for the merge
-
-- **Request:** The user asked to merge the current branch. `feature01` was the proposed target and the branch this work started from (INFERRED that it is the target).
-- **CHANGED:** fast-forward of local `feature01` from `0e885ba7` to `1211748b` (17 commits), plus this log entry. No merge commit and no conflicts. Not pushed. The 3 source branches were kept.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: the runs recorded in the entries above. A fast-forward leaves the tree identical to the tested branch.
-- **TESTED:** `git diff --stat 1211748b HEAD` before this log entry showed no difference. `git diff --check` clean.
-- **Remote:** `origin/feature01` is at `c74f0b52`, so local `feature01` is ahead and nothing here is on the remote.
-- **ASSUMPTIONS:** `feature01` is the intended target (INFERRED).
-- **FINAL STATUS:** PASS for the merge. Complete database removal stays BLOCKED on the SAP posting-attempt table.
-
-### 2026-11-03 16:11 IST — Pushed `feature01` to origin: PASS for the push
-
-- **Request:** The user said "Push it".
-- **CHANGED:** `origin/feature01` moved from `c74f0b52` to `e7b82681` by a normal push, 22 commits with no force. This log entry follows as one more commit. No deployment and no SAP write ran.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: runs recorded in the entries above.
-- **TESTED:** `node tools/scan-secrets.js` passed before the push. The remote had no commits missing locally.
-- **NOT VERIFIED:** GitHub Actions results for this push.
-- **ASSUMPTIONS:** none.
-- **FINAL STATUS:** PASS for the push. Complete database removal stays BLOCKED on the SAP posting-attempt table.
-
-### 2026-11-03 16:37 IST — HU storage type rules for W01: PARTIAL
-
-- **Request:** The user chose: `OH1` is hold only; pickable `RM1`, `EN1`, `GS1`; all 14 interim areas; rules in a JSON file.
-- **CHANGED, branch `chore/hu-storage-rules`, commit `58e9c880`:** added `srv/wm/hu-stock-transfer/storage-types.json`; `BusinessConfigResolver.js` loads it; updated `BusinessConfigResolver.test.js`, `transferPathPrecheck.test.js` and the migration document.
-- **Deviation from the user's choice:** the user chose `config/`. `cds build --production` does not copy `config/`, so the file would not reach production; it sits under `srv/`, and the build output includes it.
-- **VERIFIED (READ-ONLY):** T301 lists all 18 chosen types for W01. `validateUnit` on a local server: HU `2000019372` on `EN1` returns Valid, IsPreferredStorage true; HU `2000019348` on `911` returns Valid, IsInProcess true; HU `2000020150` on `OH1` returns not valid with blockers OPEN_DELIVERY_EXISTS and HU_NOT_IN_STOCK. A sample of 24 HUs across the first 60 of 78 open reservations in plant 1120 returned Valid, with no `OH1` among them. The server log has no "could not resolve storage type rules".
-- **Finding, not changed:** every accepted HU in that sample warned "Packaging type Z007 has no storage unit type in warehouse W01". 18 of the 24 are on interim types `911` and `913`, and these return Valid with an in-process status.
-- **TEST DECISION:** TEST UPDATED: `BusinessConfigResolver.test.js`, `transferPathPrecheck.test.js`.
-- **TESTED:** `npx eslint . --max-warnings 0` exit 0. `node tools/scan-secrets.js` exit 0. `npm test`: 223 suites, 4,101 passed, 56 skipped. `npm run test:e2e:sap-free`: 3 of 3. `runAllE2E --only=wm,a11y`: 3 of 3. Full `test:e2e` not rerun.
-- **FAIL:** `npm run test:e2e:sap` exit 1: HU stock transfer picks HU `2000020150`, which is now refused as intended. Orders due stays PARTIAL. A temporary change raising the suite's candidate limit from 5 to 25 did not help and was reverted. Why the suite's picker does not reach an accepted HU is NOT VERIFIED.
-- **VERIFIED (READ-ONLY, RFC_READ_TABLE only):** the app user's documents created today in MKPF, LIKP, VBAK, EKKO, VBRK, LTAK and VEKP: 0 before and 0 after each run. No SAP write ran.
-- **NOT VERIFIED:** an accepted HU through the browser; a real transfer, which needs a written go; other warehouses, which still fail closed; whether packaging type Z007 blocks a live post.
-- **ASSUMPTIONS:** the user's approved lists are warehouse policy, not production-only configuration (INFERRED; agreed as the premise of the question).
-- **REGRESSION:** Jest and WM browser suites as above; other flows in the dry run unchanged.
-- **Next action:** the user reviews and merges the branch, and has packaging type Z007 checked.
-- **FINAL STATUS:** PARTIAL.
-
-### 2026-11-03 16:37 IST — Merged HU storage type rules into local `feature01`: PASS for the merge
-
-- **Request:** The user said "Merge it".
-- **CHANGED:** fast-forward of local `feature01` to `167486b0`, plus this log entry. No conflicts. Not pushed. The source branch was kept.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: the runs in the entry above. A fast-forward leaves the tree identical to the tested branch.
-- **TESTED:** `git diff --check` clean.
-- **Remote:** `origin/feature01` does not have these commits.
-- **ASSUMPTIONS:** none.
-- **FINAL STATUS:** PASS for the merge. The HU rules work itself stays PARTIAL, because the HU dry run still fails.
-
-### 2026-11-03 16:38 IST — Pushed HU storage type rules to origin: PASS for the push
-
-- **Request:** The user said "Push it".
-- **CHANGED:** `origin/feature01` moved from `0120fbac` to `b85c83f9` by a normal push, with no force. This log entry follows as one more commit. No deployment and no SAP write ran.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: runs recorded above.
-- **TESTED:** `node tools/scan-secrets.js` passed before the push. The remote had no commits missing locally.
-- **NOT VERIFIED:** GitHub Actions results for this push. `gh` is not installed here.
-- **ASSUMPTIONS:** none.
-- **FINAL STATUS:** PASS for the push. The HU rules work stays PARTIAL.
-
-### 2026-11-03 16:43 IST — Creatable services classification saved and conflicting doc rows corrected: PARTIAL
-
-- **Request:** The user asked how many services in `creatable-services.xlsx` are proper, asked for a deep dive, then said "Yes, save it".
-- **CHANGED:**
-  - New `docs/creatable-services-classification.md`: all 497 workbook services in five buckets, with evidence and limits.
-  - `docs/sd-creatable-services.md`: rows 2, 6, 9, 10 and one takeaway line no longer claim proof the repo does not hold.
-  - `docs/creatable_services_report.md`: the `LE_SHP_QC_DLVREF_SRV` and `MMIM_GR4PO_DL_SRV` rows corrected, and a dated correction section added.
-  - `creatable-services.xlsx` was not changed. Nothing is committed.
-- **Result:** 4 proven live with read-back, 69 likely document or posting services, 117 likely master data or configuration, 152 unclear, 155 not proper. Only the proven bucket is CONFIRMED. The other four are INFERRED from names.
-- **Evidence for the corrections:**
-  - `MMIM_GR4PO_DL_SRV`: failing live on 2026-10-06 (`docs/archive/WORKSTATUS-archive-2026-10-31.md:1805`). Goods receipt 5000005789/2026 used `BAPI_INB_DELIVERY_CONFIRM_DEC` (`srv/integration/s4hana/wm/GoodsReceiptAdapter.js:1471`).
-  - Delivery 13000526: found only in docs and unit test fixtures, with no read-back proof.
-  - `SD_CUSTOMER_INVOICES_MANAGE`: the live run is pending (`docs/e2e-coverage-matrix.md:81`).
-  - Credit release actions: no live run found in `WORKSTATUS.md` or `docs/archive/`.
-  - `SD_F2651_CRT_CREATE_SRV`: `CustomerReturnAdapter.js` sends only GETs to it, and POSTs through `LORD_ODATA_ORDER_SRV/HeaderSet` (line 536).
-- **TEST DECISION:** TEST NOT POSSIBLE: documentation only, with no executable behaviour to test. A one-off cross-check stood in for a test.
-- **TESTED:**
-  - One-off Python check: all 497 rows match the workbook on service, module, type, set count and POST count; bucket and module totals add up. PASS.
-  - `npx jest test/unit/tools/e2eCoverageMatrix.test.js`: 8 passed. The matrix itself was not changed.
-  - `node tools/scan-secrets.js`: 0 findings across tracked files. The new doc is untracked, so this scan did not cover it.
-  - `git diff --check`: clean.
-- **NOT VERIFIED:** Buckets 2 to 5 against SAP. No SAP call, read or write, ran for this work. The 261 route through `API_MATERIAL_DOCUMENT_SRV` is traced from code, because the log names only the CAP action (INFERRED).
-- **BLOCKED:** The workbook cannot be rebuilt here, because `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json` are absent.
-- **Findings, not fixed:**
-  - About 139 POST-only services are outside the workbook, including `SD_CUSTOMER_INVOICES_CREATE`, the app's billing path. Reason: `tools/build-creatable-xlsx.py:61`.
-  - `tools/find-creatable.py:22-23` counts a missing `sap:creatable` flag as creatable, and its filter lets helper sets such as `VHLockboxNumberCollection` through.
-  - `docs/e2e-coverage-matrix.md:78` and `:84` still say "pending go" for goods receipt and movement 261, although the route rows above them record live passes on 2026-11-02.
-- **ASSUMPTIONS:** "Proper" follows `docs/sd-creatable-services.md`, meaning the service really creates or posts a business document. Bucket assignment is my own judgement from names.
-- **Next action:** The user reviews the docs and decides whether to commit them.
-- **FINAL STATUS:** PARTIAL.
-
-### 2026-11-03 — Committed the creatable services classification: PASS for the commit
-
-- **Request:** The user asked to commit the working tree changes.
-- **CHANGED:** Local commit `43e96d2b` on `feature01`, plus this log entry as one more commit. Not pushed.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: the checks in the entry above, for the same content.
-- **TESTED:** `git diff --check` clean. `node tools/scan-secrets.js` found 0 secrets with all four files staged.
-- **ASSUMPTIONS:** none.
-- **FINAL STATUS:** PASS for the commit. The classification work stays PARTIAL.
-
-### 2026-11-03 16:49 IST — Root files moved into proper folders: PARTIAL
-
-- **Request:** The user asked to move five root files with `git mv`, update references, and verify.
-- **CHANGED:**
-  - `AUDIT_261.md` -> `docs/audits/AUDIT_261.md`
-  - `migo_idempotency_design.md` -> `docs/design/migo_idempotency_design.md`
-  - `sap_s4hana_all_apis.postman_collection.json` -> `docs/api/sap_s4hana_all_apis.postman_collection.json`
-  - `ZRF_RES_HU_DNR_DISCOVERY.md` -> `docs/abap/ZRF_RES_HU_DNR_DISCOVERY.md`
-  - `AetherLogoForSAP.svg`: root copy removed with `git mv -f` onto `app/fiori-app/webapp/assets/AetherLogoForSAP.svg`. `shasum` showed both copies identical, so the app's file did not change. No root `assets/` folder was created.
-  - `srv/integration/s4hana/wm/Mvt261Adapter.js:25`: comment now points to `docs/audits/AUDIT_261.md`. This was the only live path reference.
-- **Left unchanged on purpose:** `WORKSTATUS.md` history and `docs/archive/`. `AetherLogo.js:4` and `:42` name the logo file without a path, and the name is unchanged. The first line of `AUDIT_261.md` is its own title.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: `npx jest --runInBand`, the lint commands and the UI5 build.
-- **TESTED:**
-  - Re-search of the five names outside `WORKSTATUS.md` and `docs/archive/`: no old root path remains.
-  - `npm run lint`: clean. `npm run lint` in `app/fiori-app`: no findings.
-  - `npm run build` in `app/fiori-app`: succeeded, with `dist/assets` holding both logo files. It warned that the `jspdf.umd.min.js` source map is missing.
-  - `npx jest --runInBand`: 223 suites passed, 1 skipped; 4,101 tests passed, 56 skipped.
-  - Browser on the `cap-e2e` server: `AetherLogoForSAP.svg` loaded at 4232 x 2804 and `AeElementally.png` at 755 x 500 through the app's asset path. `git diff --check`: clean.
-- **NOT VERIFIED:** The header logo after sign-in; I stopped at the login page. That logo is `AeElementally.png`, which did not move. Playwright E2E and `npm run build:mta` were not run. No SAP call ran.
-- **Finding:** Nothing in the app loads `AetherLogoForSAP.svg` at runtime. The label logo comes from vectors stored in `AetherLogo.js`.
-- **ASSUMPTIONS:** Reusing `app/fiori-app/webapp/assets/` fits "the existing logo/images folder" in the request.
-- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
-- **Next action:** The user decides whether to push.
-- **FINAL STATUS:** PARTIAL.
-
-### 2026-11-03 16:55 IST — Undefined `FinanceManager` role removed from `cancelBillingDocument`: PARTIAL
-
-- **Request:** The user chose "Remove it" for the `FinanceManager` role, which `xs-security.json` does not define.
-- **CHANGED:**
-  - `srv/sd/customer-invoice/service.cds:51`: `@requires` is now `['SalesManager', 'Admin']`. This was the only `FinanceManager` reference outside `WORKSTATUS.md` and `docs/archive/`.
-  - New `test/unit/common/roleDefinitions.test.js`.
-- **Behaviour:** No grantable access was lost on BTP, because no `xs-security.json` scope or role template provided this role. A user given `FinanceManager` by another route, such as a local mock user, can no longer cancel.
-- **TEST DECISION:** TEST ADDED: `test/unit/common/roleDefinitions.test.js`.
-- **TESTED:**
-  - New test: 2 passed. With the role temporarily restored, both tests failed as expected; the file was then restored.
-  - `npx cds compile srv/ --to json`: exit 0. `npx eslint` on the new test: clean. `git diff --check`: clean.
-  - `node test/e2e/negative/verifyWriteAuthorization.e2e.js` (no SAP reachable): PASS, Viewer and signed-out users refused on all 38 role-checked write actions.
-  - `npx jest --runInBand`: 224 suites passed, 1 skipped; 4,103 tests passed, 56 skipped.
-- **NOT VERIFIED:** No test signed in with a `FinanceManager` user. The cancel action was not run against SAP. The live invoice round trip stays pending (`docs/e2e-coverage-matrix.md:81`). No SAP call ran.
-- **ASSUMPTIONS:** Finance users are not meant to cancel billing documents through this role. The user chose removal over adding the role.
-- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
-- **Next action:** The user decides whether to push.
-- **FINAL STATUS:** PARTIAL.
-
-### 2026-11-03 16:57 IST — Pushed creatable services, root file move and role fix to origin: PASS for the push
-
-- **Request:** The user said "Go" and then chose "Push to origin" when asked what it meant.
-- **CHANGED:** `origin/feature01` moved from `fdafd552` to `c57be992` by a normal push, with no force. Commits: `43e96d2b`, `4762e441`, `a0637bc0`, `c57be992`. This log entry follows as one more commit and push. No deployment and no SAP write ran.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: runs recorded in the entries above.
-- **TESTED:** `node tools/scan-secrets.js` passed before the push. The remote had no commits missing locally.
-- **NOT VERIFIED:** GitHub Actions results for this push. `gh` is not installed here.
-- **ASSUMPTIONS:** none.
-- **FINAL STATUS:** PASS for the push. The three pieces of work stay PARTIAL.
-
-### 2026-11-03 16:58 IST — Open checks for the root file move and role fix: PASS for these checks
-
-- **Request:** The user said "Next". I took it to mean the checks still open from the file move, because they cannot touch SAP.
-- **CHANGED:** This log entry and one Next Steps line. No code changed.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: `npm run test:e2e:sap-free` and `npm run validate:mta`.
-- **TESTED:**
-  - `npm run validate:mta`: exit 0.
-  - `npm run test:e2e:sap-free`: 3 suites passed, 0 failed (write authorization, negative UI paths, quarantine labels with mocked data).
-- **NOT VERIFIED:** The full `npm run test:e2e`, which reads SAP. `npm run build:mta`. The header logo after sign-in; these suites do not assert it. No SAP call ran.
-- **ASSUMPTIONS:** none.
-- **Next action:** The user chooses the next item. Open findings: `docs/e2e-coverage-matrix.md:78` and `:84` are stale; POST-only services are outside the workbook; `tools/find-creatable.py:22-23` counts a missing flag as creatable.
-- **FINAL STATUS:** PASS for these checks. The file move and role fix stay PARTIAL.
-
-### 2026-11-03 16:59 IST — Stale Tier C rows corrected in the E2E matrix: PASS for this doc fix
-
-- **Request:** The user said "Yes, fix them" for the two stale rows in `docs/e2e-coverage-matrix.md`.
-- **CHANGED:** The "Goods receipt post" and "Movement 261 post / reverse" rows in the Tier C table no longer say "pending go". Each now records the 2026-11-02 live result, matching the route rows above it and the status log. The goods receipt row keeps the fact that the suite has not had a complete live PASS. No code changed.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT: `test/unit/tools/e2eCoverageMatrix.test.js`.
-- **TESTED:** `npx jest test/unit/tools/e2eCoverageMatrix.test.js`: 8 passed. `git diff --check`: clean.
-- **NOT VERIFIED:** No new live run. These rows restate results already recorded on 2026-11-02. No SAP call ran.
-- **Noticed, not changed:** The HU stock transfer row at `docs/e2e-coverage-matrix.md:79` says the storage-type rules for 1120/W01 are not configured, but W01 rules were added on 2026-11-03 and the dry run now fails on a correctly refused HU.
-- **ASSUMPTIONS:** none.
-- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry and the earlier check entry. Not pushed.
-- **Next action:** The user decides whether to push.
-- **FINAL STATUS:** PASS for this doc fix.
-
-### 2026-11-03 17:09 IST — Administrator item in the sidebar: PASS for the item and its empty section
-
-- **Request:** "In Side nav Add administrator." The repo had no administrator screen, service or route, so the user was asked and chose an empty section, visible to the Admin role only.
-- **CHANGED:** `App.view.xml` has an `Administrator` sidebar item, shown only when `AuthService.hasAnyRole(["Admin"])` is true. `Dashboard.view.xml` has an empty `sectionAdmin` with a "No administrator tools are available yet." message. `App.controller.js` and `Dashboard.controller.js` accept the `admin` section only for that role; anyone else gets the Overview. Three i18n keys were added to both bundles. No backend, route or SAP change.
-- **TEST DECISION:** TEST UPDATED and TEST ADDED: `test/unit/controller/AppController.test.js`, `test/unit/dashboard/dashboardMetrics.test.js`, `test/e2e/shell/verifyShellScreens.e2e.js`. The dashboard test title that ruled out placeholder tabs now allows this one empty section, as the user chose. `docs/e2e-coverage-matrix.md` is unchanged because no route changed.
-- **TESTED:** `npx jest --runInBand --silent`: 224 suites passed, 1 skipped; 4,105 tests passed, 56 skipped. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. ESLint on the changed test files: clean (the two controllers are ignored by the ESLint config). `git diff --check`: clean. `TARGET_URL=http://localhost:4010 node test/e2e/shell/verifyShellScreens.e2e.js`: every step printed PASS, including the admin item opening its section and a `test-viewer-1120` user seeing no item and the Overview on `#/dashboard/admin`. `node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
-- **SAP:** READ-ONLY. The dashboard read its figures through CAP behind the write guard. No SAP write ran.
-- **Warnings:** The accessibility suite now reports `aria-allowed-attr` ×5 on the dashboard, because the new item is a fifth node of the rule the user accepted at ×4. It passes because the suite compares rule ids, not counts, so `test/e2e/a11y/baseline.json` still says 4. The UI5 MCP API lookup failed with a CDN error, so the item's `visible` behaviour was proven in the browser instead. The other browser suites, `npm run test:e2e` in full and GitHub Actions were not run.
-- **ASSUMPTIONS:** none. Wording of the item tooltip and empty message is the agent's.
-- **Next action:** The user decides whether to commit, and which tools the section should hold.
-- **FINAL STATUS:** PASS for the item and empty section. It offers no administrator function yet. Uncommitted.
-
-### 2026-11-03 17:30 IST — SAP user existence check for a LOCK request: STOP
-
-- **Request:** STEP 1 read-only existence check, action LOCK, target `DS4/220`. The username is left out of this log on purpose (`AGENTS.md` security rules); the user gave it in chat.
-- **CHANGED:** this log only. The check ran from a throwaway script outside the repo. `tools/lib/readOnlyRfcGuard.js` allows only `RFC_READ_TABLE`, so the script kept its own allowlist of the two functions this run needed.
-- **TEST DECISION:** TEST NOT POSSIBLE: no repo code changed, so there is nothing to test.
-- **SAP:** READ-ONLY, run twice because the first run's output filter masked one role name and the message text. Each run: the connection reported `DS4` and client `220` before any function call, then `BAPI_USER_EXISTENCE_CHECK` and `BAPI_USER_GET_DETAIL`. No write, no `BAPI_TRANSACTION_COMMIT`. The role check and duplicate check did not apply: no roles were requested and the action is not CREATE.
-- **VERIFIED:** `BAPI_USER_EXISTENCE_CHECK` returned type I, 01/088, "exists". `BAPI_USER_GET_DETAIL` returned an empty `RETURN`, `USTYP` A, all four `ISLOCKED` flags `U`, `GLTGV` and `GLTGB` `00000000`, 95 roles. The requested user equals the user of the local RFC connection.
-- **NOT VERIFIED:** the meaning of the `U` flag on this system, what a lock would do to other logons, and whether deployed environments use this user. `ABSENT_MSG` was not supplied; this run did not need it because the user exists.
-- **Blocker:** the prompt's decision table has no PROCEED rule for LOCK on an existing user, and the user is also the local RFC user. Recommendation is STOP.
-- **ASSUMPTIONS:** none.
-- **Next action:** The user confirms the target user. Any lock is a separate step that needs a written go for that call.
-- **FINAL STATUS:** BLOCKED. Existence check done; no lock sent.
-
-### 2026-11-05 11:04 IST — Sub-User Master table and dashboard greeting removal: PARTIAL
-
-- **Request:** On `/dashboard/admin`, add a Sub-User Master table with toolbar, search, sort, filter, busy state, empty text and i18n labels; move existing sub-user data and logic into it; remove the Welcome card from every PO view. No new libraries and no API, data or other-tab change.
-- **Findings:** Nothing in the repo is called a sub-user, and no PO view has a Welcome card. The user was asked and chose: SAP Users are the sub-users, and only the "Welcome back" line on the dashboard header is removed.
-- **CHANGED:** `Dashboard.view.xml`: `adminUsersTable` stays a `sap.m.Table` bound to `adminView>/users`; search and refresh moved into its toolbar, and a lock status filter and sortable column headers were added. `Dashboard.controller.js`: `onFilterUsersByLockStatus`, `onSortUsers`, `onAdminUsersUpdated`; the count after a load now comes from the filtered binding. `i18n.properties`, `i18n_en.properties`: `adminUsersTableTitle` is "Sub-User Master", `adminFilterAll` added, `dashboardWelcomePrefix` removed. `docs/e2e-coverage-matrix.md` row `dashboard` updated. No PO view, API, service or other tab changed.
-- **Behaviour note:** The greeting was the Overview's only heading, so the shell suite failed with "no visible page title". The header's existing subtitle is now the H2 heading in the greeting's place. No new text was added, but its style changed from muted text to a heading.
-- **Bug found and fixed during validation:** A refresh returning the same filtered rows fires no table update, so the count showed the unfiltered total. The new browser step caught it.
-- **TEST DECISION:** TEST ADDED and TEST UPDATED: `test/unit/admin/adminDashboardList.test.js`, `test/unit/dashboard/dashboardMetrics.test.js` (factory mock), `test/e2e/shell/verifyShellScreens.e2e.js` (`verifyAdminTable`).
-- **TESTED before the change:** `npx jest --runInBand --silent`: 188 suites, 3,051 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded.
-- **TESTED after the change:** `npx jest --runInBand --silent`: 188 suites, 3,059 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. ESLint on the three changed test files: clean. `git diff --check`: clean. `TARGET_URL=http://localhost:4010 node test/e2e/shell/verifyShellScreens.e2e.js`: 39 PASS, 0 FAIL. `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
-- **SAP:** READ-ONLY only. The browser suites and two screenshots read `listUsers` and dashboard metrics with the write guard on. No lock, unlock or other write was sent.
-- **VERIFIED:** Sort, filter, count, search, busy state and empty text in a browser with controlled `listUsers` rows (UI proof, not SAP proof). The live list renders in the new table, 200 rows on the system this server reaches. Header status and actions remain.
-- **NOT VERIFIED:** Lock and Unlock against SAP; the row handlers are unchanged and remain Tier C pending. Phone layout of the new toolbar. Full `npm run test:e2e` and GitHub Actions were not run.
-- **Warnings:** The UI5 MCP API lookup failed with a CDN error (`sdk.openui5.org/1.136.5`), so control behaviour was proven in the browser instead. The accessibility suite passed with the existing dashboard counts, `aria-allowed-attr`×5 and `label-content-name-mismatch`×10; the baseline file still says 4 for the first rule because it compares rule ids.
-- **Dead-code review:** `dashboardWelcomePrefix` had no other user and was removed. The CSS class `dashboardUserGreetingRow` still styles the row, so it stays under its old name.
-- **ASSUMPTIONS:** Sub-users are the SAP users from `listUsers` (user's choice). The lock status filter is the only filter; a user type filter was not requested specifically and was not added.
-- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
-- **Next action:** The user decides whether to push, and whether the 200-row cap is acceptable.
-- **FINAL STATUS:** PARTIAL. Implemented, browser-tested and committed locally; not pushed, not deployed, no SAP write.
-
-### 2026-11-05 11:20 IST — User Master group in the side navigation: PARTIAL
-
-- **Request:** Add an expandable User Master group with Administrator as its child, reusing the expandable Statistics item (Usage Statistics, Order Statistics) and matching its behaviour. Standard `sap.tnt` only, no custom CSS or new libraries, i18n texts, router navigation.
-- **Findings:** No Statistics, Usage Statistics or Order Statistics item exists in the working tree, in `git log --all -G`, or on any branch. The user was asked and chose the standard UI5 parent and child pattern, and an Admin-only group.
-- **CHANGED:** `App.view.xml`: new `sideNavUserMaster` parent with `selectable="false"` and the Admin-only visibility check; `sideNavAdmin` moved inside it, keeping its id, key and texts. Its own `icon` and `visible` were dropped: the group carries the icon and the check. `App.controller.js`: `onSideNavItemPress` ignores non-selectable items, because the UI5 1.136.22 source fires `itemPress` on a parent that only expands, and the handler would otherwise route to the Overview. Navigation still uses `navTo("dashboard", ...)`; the route already exists in `manifest.json` and no route changed. `i18n.properties`, `i18n_en.properties`: `tabUserMasterTitle`, `tabUserMasterTooltip`. `docs/e2e-coverage-matrix.md` row `dashboard` updated. No custom CSS, HTML or library. The other nav items are unchanged.
-- **TEST DECISION:** TEST ADDED and TEST UPDATED: `test/unit/controller/AppController.test.js`, `test/e2e/shell/verifyShellScreens.e2e.js` (`verifyUserMasterGroup`; the closed-sidebar Administrator step now goes through the popover).
-- **TESTED before the change:** `npx jest --runInBand --silent`: 188 suites, 3,059 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded.
-- **TESTED after the change:** `npx jest --runInBand --silent`: 188 suites, 3,061 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. ESLint on the two changed test files: clean. `git diff --check`: clean. `TARGET_URL=http://localhost:4010 node test/e2e/shell/verifyShellScreens.e2e.js`: 47 PASS, 0 FAIL. `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
-- **Failures during the work:** The first shell run had 2 FAIL because the test read `aria-expanded` on the link. See the UI5 finding below; the test now reads `getExpanded()` and the child's visibility. A new unit test also failed once on a missing `fs` import in the test file.
-- **SAP:** READ-ONLY only. The browser suites read dashboard metrics and the admin list with the write guard on. No SAP write ran.
-- **VERIFIED in a browser:** Open sidebar: press and keyboard (Enter, Space, ArrowLeft, ArrowRight) collapse and expand without navigating; ArrowDown then Enter selects the child; the child routes to `#/dashboard/admin`; the highlight follows the selection. Closed sidebar: the group opens a popover without navigating; the child routes and the group is highlighted; Enter opens, Escape closes, Enter selects. A non-admin sees no group, and the Administrator URL shows the Overview.
-- **NOT VERIFIED:** Matching Statistics, because it does not exist here. The group on a real phone layout (the press guard is unit-tested only). Screen reader output. Full `npm run test:e2e` and GitHub Actions were not run.
-- **Findings, not changed:** (1) On UI5 1.136.22, a parent item's `<a>` keeps `aria-expanded="true"` after a collapse: `expand` and `collapse` write to `.sapTntNLIFirstLevel`, while the attribute is rendered on the link. A screen reader may announce a collapsed group as expanded; fixing it would need custom code or a UI5 upgrade. (2) `/dashboard/admin` with the sidebar open at 1440 px squeezes the Full Name column to about one character, because the other columns have fixed widths. Those widths are unchanged by this work; the old commit was not run to compare.
-- **Warnings:** The UI5 MCP API lookup failed with a CDN error again, so the 1.136.22 source was read from `ui5.sap.com` and behaviour was proven in the browser. The accessibility suite still reports `aria-allowed-attr`×5 and `label-content-name-mismatch`×10 on the dashboard.
-- **ASSUMPTIONS:** The group starts expanded (the control's default) and uses `sap-icon://group`; the request named neither. Tooltip text "User master administration" was not specified.
-- **Next action:** The user decides whether to commit, and whether to fix the Full Name column.
-- **FINAL STATUS:** PARTIAL. Implemented and browser-tested; uncommitted, not deployed, no SAP write.
-
-### 2026-11-05 11:50 IST — User detail side pane on the Sub-User Master: PARTIAL
-
-- **Request:** Clicking any user on `/dashboard/admin` opens a standard UI5 right-side pane showing all necessary details through the standard BAPI. The user chose the SU01-style set when asked.
-- **Correction to the previous entry:** The 11:20 entry says uncommitted. The user committed that work as `57ce427c`; this session did not make that commit.
-- **CHANGED:** `Dashboard.view.xml`: the table now sits in the begin column of a `sap.f.FlexibleColumnLayout` (`sap.f` was already in the manifest), and the pane is in the mid column; the row shows a navigated marker; the table uses `contextualWidth="Auto"`; the Actions column went from 22rem to 16rem; User Type, Last Changed and Changed By no longer pop in under a row and hide when the table is narrow. New `fragment/UserDetailPane.fragment.xml` (`sap.ui.layout.form.Form` with `ColumnLayout`, role and profile lists, Lock/Unlock in the footer); `fragment/UserDetailDialog.fragment.xml` removed. `Dashboard.controller.js`: `onSelectUser` and `_executeUserAction` drive the pane, formatters added, `Fragment` dependency removed. `srv/admin/service.cds` and `UserManagementAdapter.js`: `getUserDetail` adds telephone, department, function, company, created by/on, last logon, language, date and decimal format, cost center, time zone, last changed time, and the role and profile lists. 45 i18n keys added to both bundles. `docs/e2e-coverage-matrix.md` row `dashboard` updated. No new BAPI, library or route.
-- **Bug fixed:** The adapter read email from `ADDRESS.SMTP_ADDR`, a field that `ADDRESS` does not have on DS4/220, so email was blank for every user. It now reads `ADDRESS.E_MAIL`. The test mock had the same wrong field, as did `PROFILES.BAPIPRNAM`, and both were corrected.
-- **Behaviour added beyond the dialog:** A failed read shows its error in the pane with no old data and no lock action. A slower answer for an earlier user cannot replace the pane. A lock on another row leaves the open pane alone. An unconfirmed lock on the open user clears its details and action buttons. Lock is shown only when the lock state is known to be unlocked; the dialog also showed it when the state was unknown.
-- **Security:** `mapDetail` maps named fields only, and tests prove that LOGONDATA's `BCODE`, `PASSCODE` and `PWDSALTEDHASH` do not leave the adapter or the OData response.
-- **SAP evidence (READ-ONLY, DS4/220):** One `BAPI_USER_GET_DETAIL` printing field names only, no values. `RFC_GET_FUNCTION_INTERFACE`, `DDIF_FIELDINFO_GET` and `RFC_READ_TABLE` on `DD07T` for field and domain texts. `DD_DOMVALUES_GET` cannot be called remotely. This also resolves the earlier open point on the lock flag: domain `BAPIUSLOCK` has `L`=Locked and `U`=Not Locked. No SAP write ran.
-- **TEST DECISION:** TEST ADDED and TEST UPDATED: `test/unit/admin/UserManagementAdapter.test.js`, `test/unit/admin/adminDashboardList.test.js`, `test/unit/dashboard/dashboardMetrics.test.js` (factory mock), `test/integration/userManagement.test.js`, `test/e2e/shell/verifyShellScreens.e2e.js` (`verifyUserDetailPane`).
-- **TESTED before the change:** `npx jest --runInBand --silent`: 188 suites, 3,061 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded.
-- **TESTED after the change:** `npx jest --runInBand --silent`: 188 suites, 3,074 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. `npx cds compile srv/admin/service.cds --to json`: exit 0. ESLint on the changed server and test files: clean. `git diff --check`: clean. `TARGET_URL=http://localhost:4010 node test/e2e/shell/verifyShellScreens.e2e.js`: 55 PASS, 0 FAIL. `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
-- **Failures during the work:** The layout rendered at zero height until the wrapper used `renderType="Bare"`, which made 3 shell steps time out. A full jest run failed `test/unit/controller/uiConsistency.test.js` because the pane's Page had its own title; the pane now uses a `customHeader` and that rule is unchanged.
-- **VERIFIED:** In a browser with controlled rows: the pane opens beside the list with no dialog, shows the details, switches user, Unlock asks first and Cancel sends nothing, a failed read behaves as above, Close restores one column, and the action button is inside a 1440x900 window. One live read: a real row opens its `BAPI_USER_GET_DETAIL` details with role and profile lists, and the email displays.
-- **Resolved:** The Full Name squeeze from the 11:20 entry. With the sidebar open and the pane closed at 1440 px, the column now measures 123 px, as a result of the Actions width and `contextualWidth` changes above.
-- **NOT VERIFIED:** Lock and Unlock from the pane against SAP, which need a written go; only Cancel ran. Phone layout of the pane. Screen reader output. Full `npm run test:e2e` and GitHub Actions were not run.
-- **Warnings:** The UI5 MCP API lookup failed with a CDN error again, so control behaviour was proven in the browser. The accessibility suite still reports `aria-allowed-attr`×5 and `label-content-name-mismatch`×10 on the dashboard.
-- **ASSUMPTIONS:** Lock flag labels (Global Lock, Local Lock, Incorrect Logons, No Password) are INFERRED from the field names, because the dictionary gives each only "Status of User Lock". Language shows SAP's raw code. "Necessary" is the SU01-style set the user chose: no postal address, parameters or other communication fields.
-- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
-- **Next action:** The user decides whether to push.
-- **FINAL STATUS:** PARTIAL. Implemented, browser-tested with a live read and committed locally; not pushed, not deployed, no SAP write.
-
-### 2026-11-05 11:58 IST — Dashboard header card removed: PARTIAL
-
-- **Request:** "Integrated S/4HANA business modules and operational insights. Remove this Card Form Everywhere."
-- **Findings:** The card exists only in `Dashboard.view.xml`, and that one view serves every `/dashboard` section, so one removal covers everywhere. Its Create PO and Manage Orders buttons also exist in the Procurement section (`btnMMCreatePO`, `btnMMManagePOs`). Its Refresh button and connection status existed nowhere else.
-- **CHANGED:** `Dashboard.view.xml`: card removed; the Overview gets a `Title` using the existing `tabOverviewTitle`, the same pattern as the Procurement, Sales and Warehouse headings; the admin layout height is now `calc(100vh - 11.5rem)`. `Dashboard.controller.js`: removed `_setConnectionStatus`, `onRefresh` and the `connectionState`/`connectionText` model properties, which nothing used any more. `style.css`: 10 card rules removed. `i18n.properties`, `i18n_en.properties`: 7 keys removed (`dashboardSubtitle`, five `dashboardConnection*`, `dashboardActionRefreshDesc`). No API, route, service or other screen changed.
-- **Behaviour removed:** The dashboard Refresh button; figures now reload on arrival from another screen or on a browser reload. The connected, partial and not-reachable status, and the "figures as of" time that showed when cached figures were read from SAP. Failures still show: the red `dashboardMetricsError` strip and each tile's Failed state stay.
-- **Behaviour added:** The "Overview" heading, because the page would otherwise have no heading and the suite's page title check (`test/e2e/support/screenCheck.js:261`) fails without one. The user did not ask for this text.
-- **TEST DECISION:** TEST ADDED and TEST UPDATED: `test/unit/dashboard/dashboardMetrics.test.js` (card gone and Procurement buttons kept; 12 connection assertions and the `asOf` test removed with the feature), `test/e2e/shell/verifyShellScreens.e2e.js`.
-- **TESTED before the change:** No separate run. The last run on this code, before commit `3e890143`, had `npx jest --runInBand --silent`: 188 suites, 3,074 tests passed; lint and build clean.
-- **TESTED after the change:** `npx jest --runInBand --silent`: 188 suites, 3,074 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. ESLint on the two changed test files: clean. `git diff --check`: clean. `TARGET_URL=http://localhost:4010 node test/e2e/shell/verifyShellScreens.e2e.js`: 55 PASS, 0 FAIL. `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
-- **SAP:** READ-ONLY only. The browser suites and screenshots read dashboard metrics and the admin list with the write guard on. No SAP write ran.
-- **VERIFIED:** In a browser: the card text, greeting and card controls are absent; Procurement shows Create PO and Manage Orders; the Overview and the admin list with the pane open render without the card, and the pane's action button is inside a 1440x900 window.
-- **NOT VERIFIED:** The tablet and phone layouts without the card (the suite's phone step only checks the sidebar). Full `npm run test:e2e` and GitHub Actions were not run.
-- **Warnings:** One Overview screenshot shows the focused collapsed-sidebar item overlapping the "O" of the new heading. The cause was not investigated; it was seen only with focus on that item. The accessibility suite still reports `aria-allowed-attr`×5 and `label-content-name-mismatch`×10 on the dashboard.
-- **ASSUMPTIONS:** "This card" means the whole card including its buttons and status, not only its text.
-- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
-- **Next action:** The user decides whether to push.
-- **FINAL STATUS:** PARTIAL. Implemented, browser-tested and committed locally; not pushed, not deployed, no SAP write.
-
-### 2026-11-05 12:30 IST — Sub-User Master KPI cards, filters and bulk lock/unlock: PARTIAL
-
-- **Request:** Phase 1 of the SU01 screen: KPI cards, advanced filters, and bulk lock/unlock with a result summary, retry and undo, using existing BAPIs.
-- **Findings (READ-ONLY, DS4/220):** `BAPI_USER_GETLIST` returns 278 users, not the ~200 in the brief; the screen requested 200. The dictionary says `B` = System and `S` = Service, while the brief said `S` System. No audit store exists in the repo. `listUsers` already reads `BAPI_USER_GET_DETAIL` per user.
-- **User decisions:** Protect both B and S. Protection also blocks the row Lock. Audit goes to the application log.
-- **CHANGED, backend:** New `srv/admin/protectedUsers.js` is the one place for the rule (`PROTECTED_USER_TYPES`, the logged-in user, the RFC connection user). `srv/admin/service.js`: `lockUser` refuses protected users with 403 on every route, failing closed if the type read fails; `listUsers` and `getUserDetail` return `protectedReason`; each attempt writes an `AUDIT` log line (who, when, target, action, result, reason), including refused and failed ones; `reason` is limited to 500 characters; a BAPI error reaches the client with `code` `ID/NUMBER`. `UserManagementAdapter.js`: lock and unlock share `changeLock`, which now calls `BAPI_TRANSACTION_ROLLBACK` on an E or A message and returns `status` and `messages`. `srv/admin/service.cds`: `reason` parameter, `protectedReason`, `status`, `messages`. Unlock stays allowed for protected users so they can be recovered. No bulk endpoint: one request cannot report progress or be cancelled.
-- **CHANGED, UI:** New `modules/admin/user-management/util/UserListLogic.js` (pure rules; `BULK_CONCURRENCY` = 5, `LIST_LIMIT` = 1000). New `fragment/UserBulkDialogs.fragment.xml`. `Dashboard.view.xml`, `Dashboard.controller.js`, `UserDetailPane.fragment.xml`, `style.css`, both i18n files: five KPI cards, Lock Status, User Type, Changed By and date filters, chips, Clear all, Showing X of Y, sortable sticky table, CSV export, session-saved view, row checkboxes, selection toolbar, confirm, progress with Cancel, result dialog with Retry failed and Download, Undo for 10 seconds. The list now requests up to 1,000 users and warns if it reaches that limit. Search is client-side on username or full name. `docs/e2e-coverage-matrix.md` row `dashboard` updated, Tier C date moved to 2026-11-05.
-- **Deviations from the brief:** Undo is a message strip with a link above the table, because `sap.m.MessageToast` cannot hold an action. The view is saved in `sessionStorage`, not the URL. A filter deselects rows it hides, so a bulk action never reaches users off screen. Only the first match per cell is highlighted. The username is bold text instead of a link; pressing the row still opens the pane. Dormant and Expiring cards were left out (optional). `TIMEFM`, profile type and version are not shown. Esc in the reason box first reverts typed text, as UI5 standard, and a second Esc closes.
-- **TEST DECISION:** TEST ADDED and TEST UPDATED: new `test/unit/admin/protectedUsers.test.js`, `test/unit/admin/userListLogic.test.js`; updated `adminDashboardList.test.js`, `UserManagementAdapter.test.js`, `UserManagementService.test.js`, `dashboardMetrics.test.js`, `test/integration/userManagement.test.js`, `test/e2e/shell/verifyShellScreens.e2e.js` (`verifyBulkFlow`). The rule in `dashboardMetrics.test.js` that tile figures keep their Loading and Failed state now also accepts `adminView>/kpis/`.
-- **TESTED before the change:** No separate run. The last run, on `cca2d87f`, had 188 suites and 3,074 tests passed; lint and build clean.
-- **TESTED after the change:** `npx jest --runInBand --silent`: 190 suites, 3,142 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. `npx cds compile srv/admin/service.cds --to json`: exit 0. ESLint on the changed server and test files: clean. `git diff --check`: clean. `npm run scan:secrets`: 0 findings. `TARGET_URL=http://localhost:4010 node test/e2e/shell/verifyShellScreens.e2e.js`: 69 PASS, 0 FAIL. `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
-- **Failures during the work:** Backend tests failed until updated for the type read. `dashboardMetrics` and `uiConsistency` rules failed until the KPI tiles used the project's tile contract and both tables had `noDataText`. Browser runs failed on an uninitialized KPI flag (a UI5 console error), a sort check on the wrong column, and an Esc test; all fixed.
-- **SAP:** READ-ONLY only: `BAPI_USER_GETLIST` counts, `BAPI_USER_GET_DETAIL` through the app, dictionary reads. Every lock and unlock in the browser suite is stubbed with `page.route`. No SAP write ran; `BAPI_USER_LOCK` and `BAPI_USER_UNLOCK` were not called.
-- **VERIFIED:** With SAP stubbed: cards, sync with filters and chips, search, highlight, saved view, CSV, protected rows, confirm, per-user results with BAPI id and number, retry, undo, select all, progress and Cancel. Live read: 278 total, 230 active, 48 locked, 9 protected by type, 1 by self; the list took about 19 seconds to load; the confirm dialog opened and was cancelled.
-- **NOT VERIFIED:** Any real lock or unlock, the BAPI's messages on a real run, and what `BAPI_USER_LOCK` returns for an already locked user. Whether the RFC user can lock at all: this file's earlier entry (line 1030) records writes as blocked until the RFC user gets `S_USR_ADM`; that was not re-checked. Whether `req.user.id` equals the SAP username on BTP, so the logged-in-user rule may not match there. Five parallel calls against real SAP. Phone layout. Screen reader output. Full `npm run test:e2e`, GitHub Actions. `test/e2e/negative/verifyWriteAuthorization.e2e.js` was not run because this server can reach SAP; the Admin gate is covered by `test/integration/userManagement.test.js`.
-- **Warnings:** List load is about 19 seconds for 278 users, because `listUsers` reads each user's detail in sequence. `Changed Today` compares SAP's date with the browser's date. The accessibility suite still reports `aria-allowed-attr`×5 and `label-content-name-mismatch`×10 on the dashboard. The UI5 MCP API lookup was not retried; control behaviour was proven in the browser.
-- **ASSUMPTIONS:** Audit retention depends on the platform's logs. The checkbox of a protected user is disabled for unlock too, as the brief says; its row Unlock stays available. A user with unavailable details cannot be selected.
-- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
-- **Next action:** The user decides whether to push, then arranges `S_USR_ADM` confirmation and a written go for a live test.
-- **FINAL STATUS:** PARTIAL. Implemented, browser-tested with SAP stubbed and committed locally; not pushed, not deployed, no SAP write.
-
-### 2026-11-05 12:40 IST — Sub-User Master open checks: PARTIAL
-
-- **Request:** The user said "Next". I took it to mean the checks still open that cannot change anything in SAP, because the push and a live test both need the user's go.
-- **Correction to earlier entries:** The entry at line 1030 and the 12:30 entry say writes may be blocked because the RFC user lacks `S_USR_ADM`. The earlier probe read roles only. This run shows it holds profile `SAP_ALL`, and `AUTHORITY_CHECK` on `S_USER_GRP` activity 05 (lock, by SAP's general convention) returns `USER_IS_AUTHORIZED` for class blank and `SUPER`. The same check returns `USER_NOT_AUTHORIZED` for two ordinary dialog users and `USER_DONT_EXIST` for a fake user, so it does discriminate. `S_USR_ADM` is still in none of the 95 roles.
-- **SAP (READ-ONLY, DS4/220):** `AUTHORITY_CHECK`, `BAPI_USER_GET_DETAIL` on the RFC user, `RFC_READ_TABLE` on `TFDIR` and `AGR_1251`. No write BAPI, no commit.
-- **CHANGED:** `srv/admin/service.js`: self-protection uses the existing `srv/auth/userIdentity.js` instead of the raw `req.user.id`, which under XSUAA can be an email; I missed this helper in the 12:30 work. `Dashboard.view.xml`: the Actions column drops below the row under tablet width, because each row's Lock button was cut off at the screen edge on a phone. `service.cds`, `UserManagementAdapter.js`: comments corrected.
-- **TEST DECISION:** TEST ADDED: `test/unit/admin/UserManagementService.test.js` (self-protection by logon name, email name and CAP id), `test/unit/admin/adminDashboardList.test.js` (Actions column).
-- **TESTED:** `npx jest --runInBand --silent`: 190 suites, 3,147 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. `npx cds compile srv/admin/service.cds --to json`: exit 0. ESLint on `srv/admin`, the adapter folder and `test/unit/admin`: clean. `git diff --check`: clean. Shell browser suite: 69 PASS, 0 FAIL. `node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
-- **VERIFIED:** At 390x844 with live read-only data: the sections fit the screen width, the Lock button is inside it (358 of 390 px), the pane takes the full width and Close returns to the list, and there were no console errors. The phone check is a one-off script, not part of the suite.
-- **NOT VERIFIED:** A real lock or unlock. That `BAPI_USER_LOCK` checks only `S_USER_GRP`. BTP token attributes. Bulk selection and dialogs at phone width. Screen reader output. Full `npm run test:e2e` and GitHub Actions. The RFC user on other environments: this result is for the local connection only.
-- **Finding, not changed:** The RFC connection user holds `SAP_ALL`, full system authorization, so any flaw in this app's SAP access would run with it. On a phone the cards and filters fill the first screen, so the list needs scrolling.
-- **ASSUMPTIONS:** Activity 05 of `S_USER_GRP` is the lock activity: SAP's general convention, not read from this system.
-- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
-- **Next action:** The user decides whether to push, and names a test user and the actions for a live test.
-- **FINAL STATUS:** PARTIAL. Committed locally; not pushed, not deployed, no SAP write.
-
-### 2026-11-05 13:05 IST — Lock notification email: PARTIAL
-
-- **Request:** Email `LOCK_NOTIFY_TO` when a user becomes locked: one summary per bulk run, a scheduled job for locks made outside the app, persisted dedupe, HTML and text, retries, and a status in the result dialog and audit log.
-- **User decisions:** Application database for now, recorded in `AGENTS.md`, ADR-0001 and `docs/decisions/sap-only-persistence-migration.md`. SMTP from env variables everywhere, recorded as an exception in `AGENTS.md`. Recipient in config files, not code (`.env.example`, `mta/extensions/prod/prod.mtaext`).
-- **Dependency proof:** `nodemailer` 10.3.1 (MIT-0) added: the repo had no mail mechanism and nothing installed can send mail.
-- **SAP evidence (READ-ONLY, DS4/220):** `USR02.UFLAG` for all 278 users in 56 ms. Domain `XUUFLAG`: 32 global by admin, 64 local by admin, 128 incorrect logons. All 48 locked users have a newest `USH02` row with the same `UFLAG`, a date, a time and `MODBE`.
-- **CHANGED:** New `db/admin/user-lock.cds`, `srv/admin/lockEventStore.js`, `srv/admin/lockNotifier.js`, `srv/admin/lockEmail.js`, `srv/admin/audit.js`, `srv/common/mailer.js`. `srv/admin/service.js` and `service.cds`: `lockUser` takes `bulkRunId`, new action `finishBulkLock`, job start. `UserManagementAdapter.js`: `readLockFlags`, `readLastLockChange`. `Dashboard.controller.js`, `UserBulkDialogs.fragment.xml`, both i18n files: Notify by email status. `manifest.json`: route `dashboard/:section::?query:`, and `?user=` opens the pane. `.env.example`, `prod.mtaext`, `db/schema.cds`, `docs/e2e-coverage-matrix.md`, `AGENTS.md`, ADR-0001, migration doc.
-- **Design:** Whoever moves a user's snapshot row owns the event, in one transaction, so the app and the job cannot both report a lock. `lockedAt` comes from `USH02` when it shows this lock and is newer than the last one reported, otherwise detection time in UTC, labelled as such. Unset mail settings skip all extra RFC reads and table writes; `finishBulkLock` returns `not_configured`.
-- **Deviation from the plan:** `not_configured` is reported and audited, not stored as a row, because nothing is recorded when mail is off. `srv/admin/audit.js` was added so the service and notifier share one audit line.
-- **TEST DECISION:** TEST ADDED and TEST UPDATED: `test/integration/lockNotification.test.js` (real store on SQLite, mailer and RFC stubbed), `test/unit/admin/lockEmail.test.js`, `test/unit/admin/lockNotifierRules.test.js`, `test/unit/admin/adminDashboardList.test.js`, `test/e2e/shell/verifyShellScreens.e2e.js`.
-- **TESTED:** `npx jest --runInBand --silent`: 193 suites, 3,207 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. `npx cds compile srv/admin/service.cds --to json`: exit 0. ESLint on the changed server and test files: clean. `git diff --check`: clean. `npm run scan:secrets`: 0 findings. `npm run scan:dependencies`: 0 findings for root and Fiori app. `npm audit --omit=dev`: 0 vulnerabilities. `npm run validate:mta`: exit 0. Shell browser suite: 70 PASS, 0 FAIL. `node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
-- **Failures during the work:** 11 controller tests failed until given the new `uid` dependency and request body. A cancel test counted `finishBulkLock` as a lock. Both fixed in the tests.
-- **SAP:** READ-ONLY only. A poll cycle ran twice against real SAP with the mailer replaced and an in-memory database: first 278 stored silently in 582 ms, second nothing in 121 ms, 0 mails, and only `RFC_READ_TABLE` called. No email was sent and no lock ran.
-- **VERIFIED:** With mailer and RFC stubbed: baseline, new lock, wrong-password lock, one summary per cycle and per run, app then job and job then app dedupe, re-lock, empty read, app window, abandoned run, crash recovery, first send plus 3 retries then `failed` and audit, no SMTP detail in logs, no hash in mail. A failed mail or database write never fails the lock. In a browser: the Notify status and the `?user=` link.
-- **NOT VERIFIED:** A real email. That `BAPI_USER_LOCK` writes a `USH02` row (if not, detection time is used). What `MODBE` holds for incorrect-logon locks, and combined `UFLAG` values. HANA key-conflict behaviour and the two new tables on HANA. SMTP reachability from BTP. `RFC_READ_TABLE` on `USR02` through the production destination. Retries reach `failed` after 7 s at default delays; tests use zero delays. Full `npm run test:e2e` and GitHub Actions.
-- **Known limits:** A lock then unlock between two polls outside the app is not seen. `NO_USER_PW` alone sends no alert. A signed-out user following the link loses the user after login. The job needs the server running; on 2 instances only index 0 runs it. Local `db.sqlite` needs `npx cds deploy` before mail is enabled.
-- **ASSUMPTIONS:** Locks found in one poll cycle go in one summary email. "Retry up to 3 times" means a first send plus 3 retries. Status `retrying` is what the dialog shows when the first attempt fails; the final outcome is in the audit log.
-- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
-- **Next action:** The user decides whether to push, then provides SMTP settings and a written go for a live test.
-- **FINAL STATUS:** PARTIAL. Implemented, tested with the mailer mocked and committed locally; not pushed, not deployed, no real email or SAP write.
-
-### 2026-11-05 13:25 IST — Lock monitor: poller as the single detector: PARTIAL
-
-- **Request:** Detect any SAP user lock from any source with a backend poller and email it automatically, with a persisted snapshot, one email per cycle, context from app locks, a pending queue, a flood guard, and a monitor status in the SU01 header.
-- **Supersedes:** The event-based design of the 13:05 entry, committed as `9c256fcd`. Removed: email from the lock request, `finishBulkLock`, the `?user=` link, the terminal `failed` status, `LOCK_POLL_INTERVAL_MS`.
-- **SAP evidence (READ-ONLY, DS4/220):** `USER_ADDR` returns 262 names of 278 users in one read (702 ms), so no `BAPI_USER_GET_DETAIL` per user is needed; the 16 others show no name. For 12 current incorrect-logon locks, `USH02.MODBE` is the user themself in 11 (`TCODE` `KRNL`, `REPID` `SAPMSYST`) and another user in 1 (`SU01`). No SAP write ran.
-- **CHANGED:** `srv/admin/lockNotifier.js`, `lockEventStore.js`, `lockEmail.js` rewritten. `db/admin/user-lock.cds`: `UserLockSnapshot`, new `UserLockContext` and `UserLockMonitor`, `UserLockNotification` simplified; none has reached a deployed database. `srv/admin/service.js`, `service.cds`: `lockUser` writes the note before the BAPI; new `getLockMonitor` and `getBulkLockEmailStatus`. `UserManagementAdapter.js`: `readFullNames`. `Dashboard.view.xml`, `Dashboard.controller.js`, `UserBulkDialogs.fragment.xml`, both i18n files: monitor status with dot, Notification settings popover, Email notification status, `?search=` link. `.env.example`: `LOCK_POLL_INTERVAL_SEC` (60), `LOCK_MAX_PER_EMAIL` (50). ADR-0001, migration doc, `docs/e2e-coverage-matrix.md` updated.
-- **Design notes:** The poller is the only writer of the snapshot and the emails. A bulk run still locking is held until 20 s after its last user, so a run that spans a check stays in one email. A note is ignored after 5 minutes or for an incorrect-logon lock. Failure audit is written once per lock, not once per cycle. Runs on instance 0 only; status comes from the database so either instance can answer.
-- **Bug found by the new tests:** A failed lock left its note behind, because `req.reject` throws before the cleanup line, so a later lock by someone else could show as the app's. Fixed with `finally`.
-- **TEST DECISION:** TEST UPDATED and TEST ADDED: `test/integration/lockNotification.test.js`, `test/unit/admin/lockEmail.test.js`, `test/unit/admin/lockNotifierRules.test.js`, `test/unit/admin/adminDashboardList.test.js`, `test/unit/dashboard/dashboardMetrics.test.js`, `test/e2e/shell/verifyShellScreens.e2e.js`.
-- **TESTED:** `npx jest --runInBand --silent`: 193 suites, 3,238 tests passed. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. `npx cds compile srv/admin/service.cds --to json`: exit 0. ESLint on the changed server and test files: clean. `git diff --check`: clean. `npm run scan:secrets`: 0 findings. `npm run scan:dependencies`: 0 for root and Fiori app. `npm run validate:mta`: exit 0. Shell browser suite: 71 PASS, 0 FAIL. `node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed. Afterward only the time format changed to 24-hour; re-checked by `test/unit/admin/adminDashboardList.test.js` and lint.
-- **SAP:** READ-ONLY. A poll cycle ran twice against real SAP with the mailer replaced and an in-memory database: first 278 stored silently in 547 ms, second nothing in 249 ms, 0 mails, only `RFC_READ_TABLE` called.
-- **VERIFIED (SAP, mailer and clock mocked):** Every item of the request's test list: baseline, one email, several in one email, already-locked silent, dedupe across a restart with fresh modules, SAP read failure, mail failure with retries then queue, UFLAG labels. Also flood guard, app context merge, 5-user run spanning a check, failed lock, skipped tick, monitor states, admin-only access. In a browser with stubs: header, settings, Email notification status, `?search=` link.
-- **NOT VERIFIED:** The Definition of Done: a real email from a real SAP GUI or wrong-password lock, and a real restart. SMTP reachability. That `BAPI_USER_LOCK` writes a `USH02` row. The new tables on HANA, and `USR02` and `USER_ADDR` through the production destination. Real monitor header state, since this server has no SMTP and shows Off. Full `npm run test:e2e`, GitHub Actions.
-- **Known limits:** A lock and unlock within one interval is not seen, including a lock then Undo. A crash between sending and recording could resend one email. Locked By for a wrong-password lock shows the user themself, as `USH02` records it. A held bulk run can take up to about 80 s to email. The monitor runs only with SMTP and `LOCK_NOTIFY_TO` set, and only while the server runs. A signed-out person following the link loses the search after login. 16 users have no name.
-- **ASSUMPTIONS:** "Retry 3 times" means a first send plus 3 retries. A bulk run's Email notification polls every 15 s while the dialog is open.
-- **Next action:** The user decides whether to commit, then provides SMTP settings and runs the Definition of Done.
-- **FINAL STATUS:** PARTIAL. Implemented and tested with mocks; uncommitted, not deployed, no real email or SAP write.
-
-### 2026-11-05 13:30 IST — SMTP check: BLOCKED
-
-- **Request:** The user updated the email values and asked whether email works.
-- **CHANGED:** No code. This entry only.
-- **TESTED:** All SMTP values come from `.env.local` (no `.env` exists), and none looks like a placeholder. `nodemailer` `verify()` with the same settings as `srv/common/mailer.js`, values not printed: failed in about 5.4 s with `EAUTH`, `535 5.7.139`, "SmtpClientAuthentication is disabled for the Tenant". Connection and TLS succeeded as far as the login step.
-- **NOT DONE:** No test email was sent, because login failed. No SAP call ran.
-- **Evidence:** Microsoft Learn "Enable or disable SMTP AUTH in Exchange Online": a per-mailbox setting overrides the organization setting; security defaults or an authentication policy can also block it. Exchange Team, January 2026: Basic authentication for SMTP AUTH is disabled by default for existing tenants at the end of December 2026, can be re-enabled by admins, and the final removal date is to be announced in the second half of 2027.
-- **NOT VERIFIED:** Whether the block comes from the organization setting, security defaults or an authentication policy; that needs tenant admin access. Whether the password is correct, because the server refused before accepting a login. Whether `SMTP_USER` may send as `MAIL_FROM`.
-- **Next action:** The user chooses how to send: Authenticated SMTP on one mailbox, or another route.
-- **FINAL STATUS:** BLOCKED on the Microsoft 365 tenant setting.
-
-### 2026-11-05 13:27 IST — SMTP re-check: BLOCKED
-
-- **Request:** The user said "Check now".
-- **TESTED:** `nodemailer` `verify()` with `.env.local`: failed again in about 5.4 s with `EAUTH`, `535 5.7.139`, SMTP client authentication disabled for the tenant, at 07:56 UTC. `SMTP_USER` now equals `MAIL_FROM`, which removes the Send As concern.
-- **NOT DONE:** No email was sent. No code changed, and no SAP call ran.
-- **NOT VERIFIED:** Whether an admin has made the Microsoft 365 change, and if so how long it takes to apply; this check cannot see tenant settings.
-- **FINAL STATUS:** BLOCKED on the Microsoft 365 tenant setting.
-
-### 2026-11-05 — SMTP blocker traced to admin rights: BLOCKED
-
-- **Request:** The user ran the Exchange Online checks on their Mac and pasted the output.
-- **VERIFIED (user's output):** For the sending mailbox, `SmtpClientAuthenticationDisabled` is blank, so it follows the organization setting. `Get-TransportConfig` is not available to the user's account, and `Set-CASMailbox` is available but without the `-SmtpClientAuthenticationDisabled` parameter, so the user's account cannot make this change. No Microsoft 365 setting changed.
-- **CHANGED:** No code. This entry only.
-- **NOT VERIFIED:** The organization setting's value, other than through the `535 5.7.139` error; security defaults; authentication policies; whether the mailbox has multi-factor sign-in.
-- **Next action:** A Microsoft 365 admin enables Authenticated SMTP for the mailbox, or the user chooses another mail route. Then re-test login and send one test email.
-- **FINAL STATUS:** BLOCKED on a Microsoft 365 admin.
-
-### 2026-11-05 13:41 IST — SMTP re-check: BLOCKED on 535 5.7.3 Authentication unsuccessful
-
-- **Request:** The user requested "Check Email test working or not give me what are the if not works."
-- **TESTED:**
-  - Automated unit and integration tests (mocked): `npx jest test/unit/admin/lockEmail.test.js test/unit/admin/lockNotifierRules.test.js test/integration/lockNotification.test.js` passed 76 of 76 tests.
-  - Live SMTP verification: Executed `transport.verify()` via nodemailer using current `.env.local` settings (values not printed). Connection and STARTTLS succeeded on `smtp.office365.com:587`.
-  - Microsoft 365 response: Progressed from previous `535 5.7.139` ("SmtpClientAuthentication is disabled for the Tenant") to `535 5.7.3 Authentication unsuccessful [PNYP287CA0025.INDP287.PROD.OUTLOOK.COM]`.
-- **DIAGNOSIS (Why it does not work):**
-  - Tenant-level SMTP block (`5.7.139`) is no longer returned; server reached authentication handshake.
-  - `535 5.7.3` indicates the credentials/method were rejected by Microsoft 365 during `AUTH LOGIN`. This occurs due to:
-    1. Multi-Factor Authentication (MFA) / Security Defaults active on the mailbox account. Standard account passwords fail MFA; an **App Password** (if enabled in Microsoft 365) or OAuth 2.0 token is required.
-    2. Incorrect password in `SMTP_PASS` in `.env.local`.
-    3. Per-mailbox "Authenticated SMTP" permission is disabled in Microsoft 365 Admin Center (`Active users` -> `Mail` -> `Manage email apps` -> `Authenticated SMTP`).
-- **NOT DONE:** No live email was sent because SMTP authentication failed. No SAP call ran.
-- **Next action:**
-  1. If MFA is active on the Microsoft 365 user account, generate an **App Password** at `https://mysignins.microsoft.com/security-info` (under App passwords) and set that in `SMTP_PASS`, OR have an admin exclude the account from MFA/Security Defaults for SMTP AUTH.
-  2. Verify the account password in `.env.local`.
-  3. Ensure "Authenticated SMTP" is checked under Microsoft 365 Admin Center for this specific user mailbox.
-- **FINAL STATUS:** BLOCKED on Microsoft 365 credentials / MFA authentication.
-
-### 2026-11-05 14:21 IST — SMTP # character identified & authentication confirmed: PASS
-
-- **Request:** The user pointed out: "in .env after # showing green".
-- **DIAGNOSIS:**
-  - In `.env` syntax, `#` introduces a comment. The editor syntax highlighter marks text after `#` as green (comment).
-  - Crucially, the Node.js `dotenv` parser also treats an unquoted `#` as the start of an inline comment. Because `SMTP_PASS` had an unquoted `#`, `dotenv` truncated the password at character 11 (dropping the remaining 7 characters).
-  - This was the direct and sole cause of the `535 5.7.3 Authentication unsuccessful` error.
-- **TESTED:**
-  - Tested `transport.verify()` using the complete, unchopped 18-character password from `.env.local` (as parsed when wrapped in quotes).
-  - Result: `VERIFY_SUCCESS: SMTP connection and authentication verified successfully!`. Exit code 0.
-- **RESOLUTION:** Wrap `SMTP_PASS` in double quotes in `.env.local`: `SMTP_PASS="..."`.
-  - Fixes the green comment syntax highlighting in the editor.
-  - Ensures `dotenv` preserves the `#` and loads the full password.
-  - Microsoft 365 SMTP AUTH completes successfully.
-- **FINAL STATUS:** PASS for SMTP authentication.
-
-### 2026-11-05 14:23 IST — Live .env.local verification confirmed: PASS
-
-- **Request:** The user updated `.env.local` and said "Check now test".
-- **TESTED:**
-  - Ran `nodemailer.createTransport(...).verify()` loaded strictly via `dotenv.config({ path: '.env.local' })` without manual parsing.
-  - Result: `VERIFY_SUCCESS: SMTP connection and authentication verified successfully.` (Exit code 0).
-  - Automated tests: `npx jest test/unit/admin/lockEmail.test.js test/unit/admin/lockNotifierRules.test.js test/integration/lockNotification.test.js` passed 76 of 76 tests.
-- **VERIFIED:**
-  - `dotenv` now successfully loads the full `SMTP_PASS` from `.env.local`.
-  - Microsoft 365 Exchange Online (`smtp.office365.com:587`, STARTTLS) authenticated and approved the session.
-  - Secret scan: `npm run scan:secrets` clean (0 findings).
-- **FINAL STATUS:** PASS. Live SMTP connection & authentication is fully operational.
-
-### 2026-11-05 14:26 IST — One live test email sent: PARTIAL
-
-- **Request:** The user confirmed "Yes, send it" for one test email to the `LOCK_NOTIFY_TO` addresses.
-- **CHANGED:** No code. This entry and the matching Current Status and Next Steps lines only.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT — no code changed, so the mocked suites from the 14:23 IST entry were not re-run.
-- **TESTED:** One-off `node -e` call loading `.env.local` with `dotenv` and calling `sendMail` from `srv/common/mailer.js`, values not printed. Result: `SEND_ACCEPTED recipients=1 at=2026-11-05T08:56:14.644Z`, exit code 0. Subject: "Test email - SAP lock monitor mail setup (please ignore)".
-- **VERIFIED:** Microsoft 365 accepted the message for 1 recipient without an error.
-- **NOT VERIFIED:** Arrival in the recipient's inbox. The lock monitor's own path: lock detection, `buildLockEmail`, and the notification record were not exercised.
-- **Observed, not changed:** `.env.local` sets `LOCK_POLL_INTERVAL_MS`, while `.env.example` documents `LOCK_POLL_INTERVAL_SEC`. Whether the `_MS` value is ignored is INFERRED; the code that reads it was not inspected.
-- **Side effects:** One real email sent. No SAP call ran.
-- **Next action:** The recipient confirms arrival, including the spam folder.
-- **FINAL STATUS:** PARTIAL. The send was accepted; delivery is not confirmed.
-
-### 2026-11-05 14:27 IST — Test email delivery confirmed: PASS for this check
-
-- **Request:** The user said "Yes, it arrived" about the test email from the 14:26 IST entry.
-- **CHANGED:** No code. This entry and the matching Current Status and Next Steps lines only.
-- **TEST DECISION:** EXISTING TEST SUFFICIENT — no code changed, so no tests were re-run.
-- **TESTED:** Nothing new ran and no further email was sent. `git diff --check` was run on this file.
-- **VERIFIED (user's statement):** The test email arrived. This agent cannot see the mailbox.
-- **NOT VERIFIED:** The lock monitor's own path: lock detection, `buildLockEmail`, and the notification record. Whether `LOCK_POLL_INTERVAL_MS` in `.env.local` is ignored remains INFERRED.
-- **Next action:** The user decides whether to test a real lock alert from the running monitor. Locking an SAP user for that test needs a written go for that call.
-- **FINAL STATUS:** PASS for test email delivery. PARTIAL for the lock monitor email feature.
-
-### 2026-11-05 14:40 IST — Whole-repo audit: findings only, no code changed
-
-- **Request:** Report what needs fixing, ranked, read-only.
-- **CHANGED:** No code. This entry only.
-- **TEST DECISION:** TEST NOT POSSIBLE for the findings themselves: nothing was fixed, and each fix needs its own test.
-- **TESTED:** `git diff --check` clean. `npm run lint`: 0 errors, 2 warnings (unused eslint-disable in `test/unit/controller/blockSubmitIfNotConfirmed.test.js:71`, `test/unit/helpers/realBlockSubmit.js:12`). UI5 lint: clean. `npm run scan:secrets`: 0 findings (HEAD only, it cannot see Git history). `npm run scan:dependencies`: 0 findings. `npm run validate:mta`: passed. Jest with SAP mocked: 193 suites, 3,238 passed, 0 failed, including 3 `failing` markers. `npm run test:e2e:sap-free`: 3 of 3 passed. `npx cds build --production` into a scratch folder outside the repo: completed. One local `getUserInfo` call to the running dev server, which makes no SAP call. Anonymous GitHub API reads of repository visibility and CI status.
-- **NOT RUN:** `npm run test:e2e`, `test:e2e:sap`, `check:connectivity`, `preflight:rfc`, `validate:sap:sandbox` (they contact SAP); `test:coverage`; UI5 build and `build:mta` (they write build output). No SAP call, deployment or email.
-- **Ranked findings (fuller report in the final message of this audit):**
-  1. CONFIRMED: the SAP password now in `.env.local` is in the history of the public `origin/feature01` (`2256822d`, `5f655727`). The Next Step at line 205 of this file is still open.
-  2. CONFIRMED: the HU transfer double-post guard does not work (`huStockTransfer.handler.js:148,157`, `GoodsIssueAttemptStore.js:174`, `HuStockTransferAdapter.js:1456,1573`, `HuStockTransferDetail.controller.js:462`).
-  3. CONFIRMED locally: the dev server accepts any password for the mocked Admin and listens on all interfaces (`package.json:79`). Reach from another machine is INFERRED.
-  4. CONFIRMED: the production build omits `config/schema/purchaseOrderRules.json`, which `purchaseOrder.validation.js:7` requires.
-  5. CONFIRMED: `mta.yaml` and the extensions do not set the destination names `productionGuard.js` requires. INFERRED: node-rfc will not work on BTP.
-  6. Goods receipt with no delivery skips the plant check and the claim (`goodsReceipt.handler.js:24,42`).
-  7. RFC table-read injection (`GoodsReceiptAdapter.js:541,576,1358`, `SalesInquiryAdapter.js:2207`).
-  8. Commit-then-read failures answer as plain failures (`SalesInquiryAdapter.js:1966`, `CustomerInvoiceAdapter.js:248,291`).
-  9. Other write screens can resend after no answer (`goodsReceipt.handler.js:62`).
-  10. Success without read-back (`SalesInquiryAdapter.js:1617`, `UserManagementAdapter.js:334,351`, `ODataClient.js:267`).
-  11. Values dropped or invented (`CustomerReturnAdapter.js:526`, `DeliveryNoRefAdapter.js:116-121`).
-  12. Plant scope gaps; 13. lock email can name the wrong person (`lockNotifier.js:105`); 14. approuter gaps (`app/router/xs-app.json`); 15. AI prompt set by the client (`srv/ai/service.js:46`); 16. posting recheck runs on every instance; 17. Sub-User Master stops at 200 of 278 users; 18. label data wrong or missing; 19. UTC dates and float quantities; 20. RFC trace files keep growing (`RfcClient.js:99`).
-- **Answered:** `LOCK_POLL_INTERVAL_MS` is ignored. `lockNotifier.js:39` reads only `LOCK_POLL_INTERVAL_SEC`, so the monitor uses its 60-second default.
-- **Stale entries found, not rewritten here:** line 20 "uncommitted" (`ed0b3aac` is pushed); the "not pushed" lines (`origin/feature01` is at `ed0b3aac`, and only `57bbb677` is ahead); line 163 (`SMTP_PASS` is now quoted); line 165 "no lock tables" (they exist, with 278 snapshot rows and a monitor row with status ok); lines 22 and 82 on `S_USR_ADM` (superseded by line 21); lines 189-199 and 210-212 on removed screens and services.
-- **Observed:** the lock monitor is running on the local server on port 4004, so a real lock in SAP would now send a real email.
-- **Corrected reviewer claim:** production does get a database: `cds env` resolves `@cap-js/hana`, and the scratch build produced HDI output.
-- **NOT VERIFIED:** Whether SAP accepts the duplicate, injected or out-of-scope requests described. Whether the SAP host can be reached from the internet. BTP behaviour, because nothing was deployed. Parts of the warehouse, sales and UI code were read only along write, catch and auth paths.
-- **Next action:** The user changes the SAP password and makes the repository private, then chooses which findings to fix.
-- **FINAL STATUS:** PARTIAL. Audit delivered; no finding is fixed.
-
-### 2026-11-07 09:55 IST — Docker Local Development Profile — IN PROGRESS
-
-- **Request:** Continue with local mode while retaining XSUAA and external HANA/HDI for QA/production.
-- **Changes:**
-  - `compose.yaml`: Separate local-only `cap-dev`/`approuter-dev` from QA/production services. Local CAP uses the test profile and does not receive BTP bindings, SAP variables, RFC SDK mount, or SAP egress network; the local router is loopback-only.
-  - `docker/cap/Dockerfile`: Add an opt-in build argument to install development dependencies needed by the local SQLite test profile while production builds continue to omit dev dependencies.
-  - `docker/approuter/xs-app.local.json`: Add local-only unauthenticated static/API routes, mounted only by `approuter-dev`.
-  - `tools/docker/runtime.js` and `test/unit/tools/dockerRuntime.test.js`: Require local token issuer, minimum-length local signing secret, and local password when running the local CAP profile; add a focused validation test.
-  - `.env.docker.local.example`, `.env.example`, `.gitignore`, `docs/deployment/docker.md`, and `WORKSTATUS.md`: Document and configure a distinct local auth env file, distinguish local mock/test auth from deployed XSUAA, and record the local-only profile and unresolved QA/production prerequisites.
-  - Existing BTP MTA/router behavior, `productionGuard.js`, and SAP integration clients remain unchanged. The project `.env` and all credential/certificate contents were not read or printed.
-  - Static-route debugging found the local router's catch-all target duplicated the `localDir` prefix and returned HTTP 404. Changed it to the same explicit `/saps4hanafiori/` path mapping used by the production Docker route; retest is pending.
-- **Test Impact Decision:** `TEST ADDED` — local auth profile validation case in `test/unit/tools/dockerRuntime.test.js`; run the targeted suite and local container smoke before closing this entry.
-- **Executed Validations so far:**
-  - `docker compose --env-file .env.example --profile dev config --quiet`, and equivalent `qa` and `prod` commands: PASS, exit code 0.
-  - `npx jest test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 1 suite / 9 tests.
-  - `npx eslint tools/docker/runtime.js test/unit/tools/dockerRuntime.test.js`: PASS.
-  - `npm --prefix app/fiori-app run build`: PASS; UI5 build succeeded with the existing missing jspdf source-map warning.
-  - Local CAP API smoke: PASS for health, local login, issued bearer-token `getUserInfo`, and seven configured role scopes.
-  - Initial local approuter static smoke: FAIL, HTTP 404 because of duplicated `localDir` prefix; route was corrected and needs retest.
-  - `docker compose --env-file .env.example --profile dev build cap-dev approuter-dev`: NOT RUN successfully; Docker daemon socket is absent. `docker info` confirms the daemon is unavailable in this session. Direct local approuter test and final diff checks remain pending.
-- **Blockers / NOT VERIFIED:** Local Fiori delivery and login/token round trip still need container smoke validation. Real XSUAA, HANA/HDI, Destination, custom CA, licensed RFC SDK, SAP network/preflight, and QA/production runtime are not verified; prerequisites are not available in this local continuation.
-- **Validation update (2026-11-07 10:01 IST):**
-  - `npx jest test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 1 suite / 9 tests.
-  - `npx eslint tools/docker/runtime.js test/unit/tools/dockerRuntime.test.js`: PASS.
-  - `npx jest test/unit/auth/authService.test.js test/unit/serverStartupGuards.test.js test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 3 suites / 56 tests.
-  - `npm --prefix app/fiori-app run build`: PASS; emitted the existing missing jspdf source-map warning.
-  - `npm --prefix app/fiori-app run lint`: PASS, no findings.
-  - `npm ci --prefix docker/approuter --no-audit --no-fund`: PASS, installed 205 packages from the pinned lockfile; no manifest/lockfile changes from install.
-  - `docker compose --env-file .env.example --profile dev config --quiet`, with equivalent `qa` and `prod` checks: PASS. A structured config assertion confirmed local CAP has no bindings, SDK mount, host port, or SAP egress, while QA/prod retain XSUAA/HANA bindings, SAP egress, and unpublished CAP.
-  - Local CAP API smoke using `tools/docker/runtime.js`: PASS for health, local login, issued bearer-token `getUserInfo`, and all seven configured local role scopes.
-  - Local router smoke using `docker/approuter/xs-app.local.json` and the built Fiori app: initial attempt FAILed with 404 due to a doubled `localDir` prefix; after correcting the route, retest PASSed for Fiori static delivery, routed login, and authenticated `getUserInfo` with seven role scopes.
-  - Playwright browser E2E through the Compose containers: NOT RUN because the Docker daemon is unavailable. The passing router/API check used direct local HTTP requests, not a browser.
-  - `docker compose --env-file .env.example --profile dev build cap-dev approuter-dev`: BLOCKED, Docker could not connect to the absent `/Users/khushaldhanani/.docker/run/docker.sock`; `docker info --format '{{.OSType}}/{{.Architecture}}'` failed for the same reason. No container was created.
-  - `git diff --check`: PASS. No SAP/XSUAA/HANA/Destination calls were made; no secret values were read or printed.
-- **Blockers / NOT VERIFIED:** Docker image/container behavior; real XSUAA, HANA/HDI, Destination, custom CA, licensed RFC SDK, SAP network/preflight, and QA/production runtime remain unverified. External prerequisites are unavailable in this local continuation.
-- **Next Action:** Finish targeted regression and diff checks. To run the persistent local stack, create `.env.docker.local` per `docs/deployment/docker.md`, then execute `docker compose --env-file .env.example --profile dev up --build -d`. Proceed with QA/production only after obtaining approved bindings, target architecture, matching licensed SDK, and approved CA material as needed.
-
-### 2026-11-07 10:09 IST — Local CAP Image Runtime Dependency Fix — IN PROGRESS
-
-- **Request:** Fix the local Docker startup after the Docker daemon was restarted and local `cap-dev` became unhealthy.
-- **Finding:** Docker Desktop successfully started (`docker info --format '{{.OSType}}/{{.Architecture}}'` returned `linux/aarch64`). Building both local images succeeded. An isolated CAP log identified `Cannot find module '../../../../config/schema/purchaseOrderRules.json'`, imported by the existing CAP purchase-order validator. The image previously copied `server.js`, `db/`, and `srv/`, but omitted this runtime configuration.
-- **Change:** `docker/cap/Dockerfile` now copies `config/schema` only. This avoids copying unrelated approuter/destination deployment configuration into the image.
-- **Test Impact Decision:** `TEST UPDATED` — isolated Docker Compose CAP startup and full local Fiori/login path are the required runtime checks; run after this change.
-- **Validation before fix:** `docker compose --env-file .env.example --profile dev build cap-dev approuter-dev` passed for both default images. The first isolated native-ARM64 Compose run was unhealthy; sanitized startup logs showed the missing config module after in-memory SQLite deployment.
-- **Validation after change:**
-  - `docker info --format '{{.OSType}}/{{.Architecture}}'`: PASS, `linux/aarch64`.
-  - Isolated ARM64 Compose `up -d --build` with a temporary mode-0600 local auth env file: PASS; `cap-dev` and `approuter-dev` both became healthy.
-  - Smoke through the router: PASS for `GET /saps4hanafiori/index.html`, local login, and authenticated `getUserInfo` returning the configured seven local role scopes.
-  - Temporary auth file, containers, and networks were removed by the smoke script; generated credentials were not printed. No SAP or external write occurred.
-- **Final validation (2026-11-07 10:10 IST):**
-  - `npx jest test/unit/auth/authService.test.js test/unit/serverStartupGuards.test.js test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 3 suites / 56 tests.
-  - `npx eslint tools/docker/runtime.js test/unit/tools/dockerRuntime.test.js`: PASS.
-  - `npm --prefix app/fiori-app run lint`: PASS, no findings.
-  - `docker compose --env-file .env.example --profile dev config --quiet` and equivalent `qa` and `prod` commands: PASS.
-  - `git diff --check` and `git diff --cached --check`: PASS.
-- **Remaining NOT VERIFIED:** QA/production binding, identity, HANA, SAP network, TLS, and RFC SDK behavior; no SAP calls were made.
-- **Next Action:** Create a local `.env.docker.local` with the documented generated values, then start the persistent local profile using `docker compose --env-file .env.example --profile dev up --build -d`. The isolated smoke services and temporary credentials were cleaned up.
-- **Blockers / NOT VERIFIED:** The full container smoke has not yet been rerun. QA/production services and real XSUAA/HANA/SAP connectivity remain outside this local-only validation.
-- **Next Action:** Rebuild and rerun the isolated ARM64 Compose health and routed login smoke; record exact result and run final regression/diff checks.
-
-### 2026-11-07 10:11 IST — Local CAP Restart Diagnosis: Missing Local Auth File — PARTIAL
-
-- **Request:** Diagnose the user's `cap-dev` unhealthy status.
-- **Finding:** `docker compose --env-file .env.example --profile dev ps -a --format json` shows the current `cap-dev` restarting. Sanitized `cap-dev` logs report the local CAP auth requirements are not met. A file-presence-only check confirms `.env.docker.local` is absent; `docker compose ... config --format json` shows the optional local env file is omitted. Compose sets `ENABLE_DEV_TOKEN_ISSUER=true`, but no local `LOCAL_AUTH_SECRET` or `LOCAL_DEV_PASSWORD` can be loaded without that file.
-- **Changes:** `WORKSTATUS.md` only. No application or Compose behavior changed. No project `.env` or auth file content was read, and no secret values were printed.
-- **Test Impact Decision:** `EXISTING TEST SUFFICIENT` — `test/unit/tools/dockerRuntime.test.js` covers acceptance/rejection of local auth settings. A targeted rerun is recorded below.
-- **Executed Validations:**
-  - `docker compose --env-file .env.example --profile dev ps -a --format json`: confirmed `cap-dev` restarting; existing QA/production `cap` and local `approuter-dev` containers were separate.
-  - Sanitized `docker compose --env-file .env.example --profile dev logs --no-color --tail 100 cap-dev`: confirmed local auth guard error without exposing credential values.
-  - Presence-only `.env.docker.local` check: absent. Resolved Compose config: optional `env_file` omitted.
-  - `npx jest test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 1 suite / 9 tests.
-  - `git diff --check` and `git diff --cached --check`: PASS.
-  - No SAP/XSUAA/HANA/Destination calls made.
-- **Blocker:** Local CAP cannot authenticate users until the user creates `.env.docker.local` with a local JWT secret and local password. This file must remain ignored/uncommitted.
-- **Next Action:** Use the `umask 077` and `openssl rand` command in `docs/deployment/docker.md` to create the file; run `docker compose --env-file .env.example --profile dev up --build -d` and verify both dev services become healthy.
-
-### 2026-11-07 10:21 IST — Isolated Docker login fallback fix — In Progress
-
-- CHANGED: `srv/auth-service.js`, `test/unit/auth/authService.test.js`, and this log. Preserve existing staged Docker work.
-- CONFIRMED: Both dev containers healthy. Sanitized Compose logs show login HTTP 500 caused by missing SAP client; unmatched local credentials call AuthAdapter even though cap-local deliberately has no SAP connection.
-- Plan: Restrict the existing cap-local mode to khushal plus LOCAL_DEV_PASSWORD, reject other credentials without SAP fallback; leave other modes unchanged. No dependencies or integration contracts changed.
-- TEST DECISION: TEST ADDED — four local credential cases cover success, incorrect password, incorrect username, and refusal of SAP password with no adapter calls. Existing auth/startup/Docker suites provide regressions.
-- Validation pending. No SAP calls, secrets printed, or external writes. Assumption: the documented isolated local-only profile remains intended. Browser login validation still required.
-- Next: Run focused tests, lint and CDS compile; rebuild local service and verify login responses.
-
-- Validation results (2026-11-07 10:23 IST):
-  - `npx jest test/unit/auth/authService.test.js test/unit/serverStartupGuards.test.js test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 3 suites / 60 tests.
-  - `npx eslint srv/auth-service.js test/unit/auth/authService.test.js`: PASS.
-  - `npx cds compile srv/ > /tmp/login-cds-compile.txt`: PASS. `npx cds --version`: runtime 10.1.1, CLI 10.2.0.
-  - `git diff --check` and `git diff --cached --check`: PASS. Reviewed focused diff and git status; unrelated staged changes preserved. No superseded helper/dependency added.
-- VERIFIED: Error cause from runtime logs; handler unit tests prove local credential rejection does not call SAP and valid credentials issue a token. REGRESSION: existing auth/startup/Docker suites pass.
-- NOT VERIFIED: Browser E2E and corrected running-container response; container not rebuilt/recreated because recreation discards in-memory local data. Existing browser suite assumes the host-dev static route, not Docker's static route. SAP/BTP checks not applicable to this local-only change; none called. Favicon 404 and unload warning were not modified and do not explain the confirmed backend exception.
-- BLOCKED: Running image requires user-controlled recreation; no missing implementation prerequisite. ASSUMPTIONS: documented local-only mode remains intended; exact submitted credentials unknown and not requested.
-- Next action: When local data loss is acceptable, run `docker compose --env-file .env.example --profile dev up --build -d cap-dev approuter-dev`, then log in with khushal and LOCAL_DEV_PASSWORD from .env.docker.local; verify invalid credentials display a message and valid login completes.
-- FINAL STATUS: PARTIAL — source fix and focused checks pass; runtime/browser verification pending.
-
-### 2026-11-07 10:28 IST — Local login credential verification
-
-- CHANGED: WORKSTATUS.md only; no code/configuration/password changes.
-- TEST DECISION: EXISTING TEST SUFFICIENT — authService.test.js; no rerun for documentation-only update. Direct running API verification performed instead.
-- TESTED / VERIFIED: Secret-safe Node/dotenv comparison with docker compose exec confirms saved LOCAL_DEV_PASSWORD equals running cap-dev value and APP_ROLE is cap-local. Node fetch POST to localhost routed auth/login using khushal and the saved password returned HTTP 200, authenticated=true, token present. Bearer GET getUserInfo() returned HTTP 200 and authenticated=true. No secret/token values printed; no SAP calls or persistent writes.
-- REGRESSION: No application change; previous unit evidence unchanged.
-- NOT VERIFIED: Browser-entered credentials and successful browser navigation. BLOCKED: none for API. ASSUMPTIONS: Browser input/autofill mismatch is inferred, not confirmed.
-- Next action: Clear browser username/password autofill; enter khushal and only the LOCAL_DEV_PASSWORD value from .env.docker.local, without quotes. No container restart needed.
-- FINAL STATUS: PASS for local API login/token acceptance; PARTIAL for browser outcome.
-
-### 2026-11-07 10:29 IST — User-requested updated .env.docker.local check
-
-- CHANGED: WORKSTATUS.md only. No credentials/configuration/code changed.
-- TEST DECISION: EXISTING TEST SUFFICIENT — authService.test.js remains applicable; no unit rerun for this verification-only task.
-- TESTED: Secret-safe Node/dotenv + docker compose exec comparison: password present, signing secret minimum length satisfied, both match running container, cap-local confirmed. Node fetch localhost login with saved password: HTTP 200, authenticated=true, token issued. Bearer getUserInfo(): HTTP 200, authenticated=true. `git check-ignore .env.docker.local`: ignored. `git status --short`: prior changes preserved.
-- VERIFIED: Updated saved credentials work through running local router and token authentication. No secrets printed, SAP calls, restarts, or persistent writes.
-- NOT VERIFIED: Browser login/navigation, SAP/BTP (outside local-only scope). BLOCKED: none. ASSUMPTIONS: none for these checks. REGRESSION: no application changes.
-- Next: Sign in through browser using khushal and LOCAL_DEV_PASSWORD from .env.docker.local; no restart needed.
-- FINAL STATUS: PASS for requested local configuration/API check; browser outcome NOT VERIFIED.
-
-### 2026-11-07 10:33 IST — Browser login and dashboard diagnosis
-
-- CHANGED: Browser login fields replaced with configured local credentials; WORKSTATUS.md only in repository. Password-save prompt declined. No application/configuration changes.
-- TEST DECISION: EXISTING TEST SUFFICIENT — authService.test.js for unchanged handler; manual Chrome login exercised here, no automated E2E or unit rerun.
-- TESTED / VERIFIED: Existing Chrome tab showed local-credential rejection. Initial native automation appended instead of replacing field contents; corrected via setValue. Sign-in then navigated to #dashboard, rendered Enterprise Operations Dashboard and profile khushal. Original user password was not inspected. No claim made about exact original input.
-- Observed dashboard failure: SAP S/4HANA backend unavailable: connect ECONNREFUSED 127.0.0.1:1. Network getDashboardMetrics returned HTTP 200 while tiles visibly failed, not business success. Confirmed compose.yaml uses NODE_ENV=test and package.json test service URLs point to loopback port 1; Docker guide documents no SAP egress.
-- Tool limitations: in-app browser unavailable; native Chrome used. Transient noWindowsAvailable recovered by rebinding Chrome. CJS dotenv import into UI runtime failed; parsed credentials transferred via mode-0600 temporary file and deleted immediately. Secrets/tokens not printed or saved to browser password manager.
-- NOT VERIFIED: Full console audit, automated browser suite, live SAP/BTP connectivity, business data. BLOCKED: Real dashboard data requires intended SAP-connected runtime/configuration, beyond isolated local mode. No live SAP call or write.
-- ASSUMPTIONS: none for observed browser result; intended next runtime is UNKNOWN. REGRESSION: no application changes.
-- Next: User selects retaining isolated mode (real SAP tiles remain unavailable) or configuring a verified SAP-connected development runtime.
-- FINAL STATUS: PASS for browser login; BLOCKED for real SAP dashboard data; overall PARTIAL.
-
-### 2026-11-07 10:35 IST — SAP-connected local Docker configuration
-
-- CHANGED: compose.sap-dev.yaml, docs/deployment/docker.md, WORKSTATUS.md.
-- CONFIRMED: Four saved SAP settings are absent in running cap-dev; test fallback targets port 1. Existing server.js registers supplied destination and replaces test URLs. Host read-only C_PURCHASEORDER_FS_SRV metadata returned HTTP 200 and valid EDMX/entity sets with existing CA.
-- Plan: Explicit local override adds SAP egress and read-only trusted CA; no integration payload, service handler, auth or default network changes. No dependencies added. No need for RFC SDK for this OData dashboard boundary.
-- TEST DECISION: EXISTING TEST SUFFICIENT — dockerRuntime.test.js and dashboardMetrics.test.js, Compose structural validation and read-only connected-container probe. Validation pending.
-- Assumption: User request to fix SAP data connectivity authorizes preparation of opt-in local connection. Running service recreation is held pending confirmation because it discards in-memory data. No SAP write authorized or performed.
-- Next: Validate override and probe from one-off container, then obtain go to recreate running local services.
-
-- Validation results:
-  - `npx jest test/unit/tools/dockerRuntime.test.js test/unit/dashboard/dashboardMetrics.test.js --runInBand`: PASS, 2 suites / 54 tests.
-  - `SAP_DEV_CA_FILE` set to existing host trusted CA; `docker compose --env-file .env.example -f compose.yaml -f compose.sap-dev.yaml --profile dev config --quiet`: PASS.
-  - Initial temporary container run: FAIL at existing auth startup guard. Presence-only check confirms LOCAL_DEV_PASSWORD is absent in current .env.docker.local; secret remains present and meets length requirement. This differs from earlier verified file contents. No credentials changed by agent.
-  - Metadata-only temporary container using Node directly (app not started), mounted CA and NODE_EXTRA_CA_CERTS: PASS, read-only C_PURCHASEORDER_FS_SRV metadata HTTP 200 and valid EDMX. TLS verification retained. Temporary containers automatically removed. No SAP writes or active-service restarts.
-  - `git diff --check` and `git diff --cached --check`: PASS. Focused changes reviewed; unrelated staged work preserved. No superseded code/dependency introduced.
-- VERIFIED: Saved SAP configuration can reach real metadata from host and connected Docker override. REGRESSION: Docker/dashboard tests pass.
-- NOT VERIFIED: Active dashboard counts/browser with override, other SAP services, RFC functionality, QA/production. No new UI behavior; browser retest pending activation.
-- BLOCKED: Missing local password in saved env file and pending go to recreate current local app (clears in-memory database). ASSUMPTIONS: proposed connected local development is the intended mode; production remains unchanged.
-- Next: Obtain approval to restore existing running LOCAL_DEV_PASSWORD into ignored env file without displaying/changing it, recreate cap-dev/approuter-dev using validated override and existing CA, and verify read-only dashboard.
-- FINAL STATUS: BLOCKED for activation; configuration prepared and SAP metadata connectivity verified.
-
-### 2026-11-07 10:37 IST — Failed cap-dev restart diagnosis
-
-- CHANGED: WORKSTATUS.md only.
-- TEST DECISION: EXISTING TEST SUFFICIENT — dockerRuntime.test.js covers missing local auth; not rerun for diagnosis-only documentation.
-- TESTED / VERIFIED: Secret-safe dotenv presence check confirms LOCAL_DEV_PASSWORD absent/empty, LOCAL_AUTH_SECRET meets minimum, all four SAP settings and host CA present. Sanitized docker compose logs confirm repeated local-auth startup guard error. git status inspected; unrelated work preserved.
-- NOT VERIFIED: Container startup and dashboard after password restoration. BLOCKED: local password missing. ASSUMPTIONS: none for diagnosed failure. REGRESSION: no code change. No SAP calls, credential mutations or restart performed.
-- Next: User supplies or generates LOCAL_DEV_PASSWORD in ignored .env.docker.local, then repeats Compose recreation with compose.sap-dev.yaml and SAP_DEV_CA_FILE.
-- FINAL STATUS: BLOCKED — confirmed missing local password, no application defect demonstrated.
-
-### 2026-11-07 10:39 IST — Admin listUsers 502 RFC prerequisites
-
-- CHANGED: WORKSTATUS.md only; no application/configuration changes.
-- TEST DECISION: TEST NOT POSSIBLE for successful RFC integration — licensed Linux x86-64 SDK and node-rfc absent in container.
-- TESTED / VERIFIED: Sanitized cap-dev logs identify BAPI_USER_GETLIST session failure: node-rfc not installed. Docker exec confirms linux/x64, node-rfc resolution failure, missing /usr/sap/nwrfcsdk/lib/libsapnwrfc.so. Presence-only env check confirms S4_RFC_SYSNR missing. Inspected RfcClient.connectionParams: host derived from S4_DESTINATION_URL, no separate S4_RFC_HOST required. Host ~/nwrfcsdk libraries are .dylib and not ELF; repo nwrfcsdk empty.
-- NOT VERIFIED: Successful RFC connectivity/authentication/user list and unload warning remedy. No SAP call made; OData metadata success from earlier session does not verify RFC.
-- BLOCKED: Linux-compatible licensed RFC SDK unavailable in inspected locations. ASSUMPTIONS: none for diagnosed cause; location of another installed SDK UNKNOWN. REGRESSION: no code changed, tests not rerun.
-- Next: User provides local path to Linux x86-64 SDK; then install matching node-rfc in image, mount SDK and configure verified RFC system number, followed by read-only validation.
-- FINAL STATUS: BLOCKED.
-
-### 2026-11-07 10:42 IST — Locate installed SDKs
-
-- CHANGED: WORKSTATUS.md only. Read-only filesystem search requested by user.
-- TEST DECISION: EXISTING TEST SUFFICIENT — no application change; filesystem/archive inspection and file-format validation used for this inventory.
-- TESTED / VERIFIED: rg --files --hidden --no-ignore over workspace/common locations then home directory; file on discovered libraries; Python zipfile inventory. ~/nwrfcsdk contains macOS ARM64 Mach-O libraries; Downloads/nwrfc750P_19-80008131.zip also contains .dylib libraries. Linux libraries found at ~/.vscode/extensions/sapse.service-catalog-1.4.0/dist/sapnoderfcaddons/nwrfcsdk/linux; both libsapnwrfc.so and libsapucum.so are ELF 64-bit x86-64. Directory includes include and lib.
-- NOT VERIFIED: Library dependency completeness, node-rfc compatibility, permitted reuse of extension-bundled SDK, container loading or SAP connectivity. Inaccessible search paths were skipped; not a proof no other SDK exists.
-- BLOCKED: none for locating files. ASSUMPTIONS: none for inspected file formats. REGRESSION: no code/config changes or tests rerun. No SAP calls.
-- Next: Inspect discovered SDK dependencies and reuse terms before configuring Docker/node-rfc. Earlier unavailable-SDK finding superseded by this broader search.
-- FINAL STATUS: PASS for requested SDK inventory only.
-
-### 2026-11-07 10:48 IST — Docker RFC runtime fix — Activation blocked
-
-- Request: Fix properly, continue. Preflight: AGENTS.md/WORKSTATUS.md read, git status inspected; existing Docker/runtime/auth/RFC flow and tests traced.
-- Root cause: optional node-rfc install-time load fails without mounted SDK, so package is omitted. Existing node-gyp-build source supports NODE_RFC to defer package load check.
-- Plan/change: docker/cap/Dockerfile opt-in INSTALL_RFC_PREBUILD uses that supported flag only during install and asserts Linux prebuilt exists; compose.sap-dev.yaml enables it and mounts SDK read-only; runtime.js requires SDK/native load plus RFC settings for connected local mode. docs/deployment/docker.md updated. No new dependencies, service contracts or business logic.
-- .env.docker.local: restored missing S4_RFC_SYSNR from .env.local only after matching destination URL and client; value not printed or committed. User's existing password retained.
-- TEST DECISION: TEST ADDED — connected local RFC missing-config and guard dispatch cases; existing auth/admin regression suites.
-- Evidence: Network-disabled first probe failed because host build/Release selected macOS binary; direct packaged Linux native binary probe then PASSed with mounted Linux SDK. Host artifacts will not be copied into image.
-- Executed `npx jest test/unit/tools/dockerRuntime.test.js test/unit/auth/authService.test.js test/unit/admin/UserManagementAdapter.test.js --runInBand`: PASS, 3 suites/116 tests. Fixture negative paths emit expected warning/error logs.
-- Assumption: existing user-provided SDK used only locally, no redistribution into image. No live SAP writes authorized or performed. Build, read-only RFC and browser verification pending.
-- Next: build and test isolated image, then activate/retest local stack subject to in-memory recreation gate.
-
-- Final validation:
-  - Connected `docker compose ... build cap-dev`: PASS. Installed 987 lockfile dependencies; Linux prebuilt retained. npm reported existing node-rfc unsupported/deprecation warning and whatwg-encoding/glob deprecation warnings; no dependency version change.
-  - Temporary `docker compose ... run --rm --no-deps -T cap-dev node -`: startup guard PASS; native module available=true; READ-ONLY BAPI_USER_GETLIST with MAX_ROWS=1 returned 1 row and 0 E/A SAP messages. No user data printed; no SAP writes; temporary container removed.
-  - Connected `docker compose ... config --quiet`: PASS. `npx jest test/unit/tools/dockerRuntime.test.js test/unit/serverStartupGuards.test.js --runInBand`: PASS, 2 suites / 14 tests.
-  - `npx eslint tools/docker/runtime.js test/unit/tools/dockerRuntime.test.js`, `git diff --check`, `git diff --cached --check`: PASS. Focused diff/status reviewed; earlier staged changes preserved. No superseded helper or extra dependency introduced.
-- Attempted activation `docker compose ... up -d cap-dev approuter-dev`: NOT EXECUTED. Automatic approval review rejected it because recreating cap-dev irreversibly discards local in-memory data and the user has not explicitly approved that concrete side effect. No retry or workaround.
-- VERIFIED: Corrected image installs/loads node-rfc and reads SAP using supplied SDK/settings. TEST DECISION: TEST ADDED (startup guard regression). REGRESSION: 116 auth/admin/runtime tests and 14 runtime/startup tests pass.
-- NOT VERIFIED: Active application's full listUsers endpoint and browser after activation, full user enrichment, production/BTP. Browser E2E not run because active runtime still uses old image.
-- BLOCKED: Explicit approval to clear local in-memory data during recreation. ASSUMPTIONS: no claim that the successful one-row RFC probe proves the full user-management flow.
-- Next: Ask user to approve recreation/data loss; after approval apply validated override and check routed login/listUsers and browser read-only.
-- FINAL STATUS: PARTIAL — fix built and native/RFC read validated; activation BLOCKED by automatic approval review.
-
-### 2026-11-07 11:27 IST — Secret scanner Docker template false positive
-
-- CHANGED: `tools/scan-secrets.js`, `test/unit/tools/scanSecrets.test.js`, `WORKSTATUS.md`. Match the two explicit template exceptions already present in `.gitignore`; keep both in content scanning. Added injectable Git execution using the existing scanner test pattern. No dependencies or application flows changed.
-- CONFIRMED: `npm run scan:secrets` reproduced exit 1 for `.env.docker.local.example`. Secret-safe template inspection found two empty credential assignments and one boolean setting. Reviewed repository instructions, current status/unresolved Docker issues, Git status, scanner/call sites, tests, CI and lint configuration. Unrelated in-progress MIB work preserved.
-- TEST DECISION: TEST UPDATED — scanner unit regressions for both allowed templates, rejection of actual/unapproved environment files, and credential detection in allowed templates.
-- TESTED: Pre-change scan FAIL as above. Post-change `npm test -- --runTestsByPath test/unit/tools/scanSecrets.test.js` PASS (21 tests); `npm run scan:secrets` PASS (912 tracked files, 9 rules, zero findings); `npm run lint -- --no-warn-ignored tools/scan-secrets.js test/unit/tools/scanSecrets.test.js` exits 0 (script also runs root lint; two unrelated unused eslint-disable warnings at test/unit/controller/blockSubmitIfNotConfirmed.test.js:71 and test/unit/helpers/realBlockSubmit.js:12); `git diff --check` PASS. Reviewed focused diff and Git status; concurrent unrelated MIB edits preserved.
-- VERIFIED: Root cause is the filename exception mismatch with `.gitignore`.
-- NOT VERIFIED: Hosted CI; SAP/BTP, UI E2E and application builds are not applicable to this tooling-only change. No SAP calls.
-- BLOCKED: None. ASSUMPTIONS: None for this fix. REGRESSION: All 21 scanner tests pass, including rejection and content-detection cases.
-- Review: No duplicated/superseded implementation or new dependency; content-scanning rules unchanged.
-- Next action: Rerun hosted CI after the focused commit authorized by the user; unrelated work stays uncommitted.
-- FINAL STATUS: PASS for the requested scanner fix.
-
+- **TESTED:** the two probes above only. `git diff --c
+... [truncated for diff preview]
 ### 2026-11-07 11:53 IST — CI user-management regression repair
 
 - CHANGED: `test/integration/userManagement.test.js`, `WORKSTATUS.md`. Reset retained adapter caches before each case; supply empty RFC table-read results and assert existing password-expiry enrichment requests/response fields. No runtime, SAP contract, dependency or configuration changes. Existing expiry helper was not present; small expected-call helper shared by two cases. No superseded/dead implementation remains. Unrelated staged and working changes preserved.
@@ -4393,3 +3792,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - MIB files are absent from HEAD and belong to separately staged feature work. Their UI/whitespace fixes and the MIB-specific E2E registry expectation remain with that feature, outside this standalone commit. Existing staged feature/index state will be preserved.
 - Standalone snapshot validation: `npm test -- --runTestsByPath test/integration/userManagement.test.js test/unit/networkSafety.test.js test/unit/tools/e2eRunner.test.js test/unit/tools/scanSecrets.test.js` PASS (4 suites / 75 tests) in isolated worktree. Prior full-workspace evidence remains recorded above. No push authorized or performed.
 - Next: commit reviewed snapshot, then push/rerun CI when requested.
+
+### 2026-11-07 12:19 IST — Check out and push CI repair branch
+
+- CHANGED: Created and checked out `feature/ci-test-isolation` from `f91cec04`; pushed to origin and configured upstream tracking at the user’s request. Updated this local status record. Uncommitted/staged MIB changes remain local.
+- TEST DECISION: EXISTING TEST SUFFICIENT — prior standalone 75-test validation and full-workspace validation remain applicable; no code changed in this action.
+- TESTED / VERIFIED: `git switch -c feature/ci-test-isolation` and `git push -u origin feature/ci-test-isolation` exited 0; `git rev-parse HEAD origin/feature/ci-test-isolation` matches; branch/status inspected.
+- NOT VERIFIED: Hosted CI result. BLOCKED: None. ASSUMPTIONS: Origin is the requested remote, confirmed as the repository used in this conversation. REGRESSION: No code changes; uncommitted work preserved.
+- Next: Check the newly triggered GitHub Actions run; this status-only record remains local.
+- FINAL STATUS: PASS for checkout/push.

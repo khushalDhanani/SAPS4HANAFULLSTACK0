@@ -17,6 +17,7 @@ const { verifyPlantIsolation } = require('./negative/verifyPlantIsolation.e2e');
 const { verifyWriteAuthorization } = require('./negative/verifyWriteAuthorization.e2e');
 const { verifySubmitFailures, SHARDS: SUBMIT_SHARDS } = require('./negative/verifySubmitFailures.e2e');
 const { verifyQuarantineLabels } = require('./wm/verifyQuarantineLabels.e2e');
+const { verifyMibLabels } = require('./wm/verifyMibLabels.e2e');
 const { verifyActionFailures, SHARDS: ACTION_SHARDS } = require('./negative/verifyActionFailures.e2e');
 const { verifyA11yScreens } = require('./a11y/verifyA11yScreens.e2e');
 const { verifyScreenPerformance } = require('./performance/verifyScreenPerformance.e2e');
@@ -108,6 +109,8 @@ async function runSuitesAndSummarize(options) {
     ...SUBMIT_SHARDS.map((s) => ({ name: s.name, file: 'negative/verifySubmitFailures.e2e.js', fn: (o) => verifySubmitFailures({ ...o, only: s.only }) })),
     // Quarantine labels screen; the label action is mocked in every case (SAP wrapper not yet activated)
     { name: 'Quarantine labels (mocked)', file: 'wm/verifyQuarantineLabels.e2e.js', fn: verifyQuarantineLabels, sapFree: true },
+    // MIB labels screen; the label action is mocked in every case (SAP wrapper not yet activated)
+    { name: 'MIB labels (mocked)', file: 'wm/verifyMibLabels.e2e.js', fn: verifyMibLabels, sapFree: true },
     // Submit failures on action-style write screens (customer invoice so far); action MOCKED per case
     ...ACTION_SHARDS.map((s) => ({ name: s.name, file: 'negative/verifyActionFailures.e2e.js', fn: (o) => verifyActionFailures({ ...o, only: s.only }) })),
     // P1: axe-core on every parameterless route (new serious/critical violations fail) and screen-load timings vs baseline

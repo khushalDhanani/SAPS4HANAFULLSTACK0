@@ -416,6 +416,10 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmQuarantineLabels");
         },
 
+        onNavigateToMibLabel: function () {
+            this.getOwnerComponent().getRouter().navTo("wmMibLabel");
+        },
+
         onNavigateToHuStockTransfer: function () {
             this.getOwnerComponent().getRouter().navTo("wmHuStockTransfer");
         },

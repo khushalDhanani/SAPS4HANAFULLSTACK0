@@ -40,7 +40,7 @@ describe('SAP-free browser E2E PR gate', () => {
 
     it('marks exactly the suites that pass without SAP', () => {
         const sapFree = RUNNERS[0].split('\n').filter((l) => l.includes('sapFree: true')).map((l) => l.match(/file: '([^']+)'/)[1]);
-        expect(sapFree).toEqual(['negative/verifyNegativeUi.e2e.js', 'negative/verifyWriteAuthorization.e2e.js', 'wm/verifyQuarantineLabels.e2e.js']);
+        expect(sapFree).toEqual(['negative/verifyNegativeUi.e2e.js', 'negative/verifyWriteAuthorization.e2e.js', 'wm/verifyQuarantineLabels.e2e.js', 'wm/verifyMibLabels.e2e.js']);
     });
 
     it('uses Node 24 actions while retaining Node 22 application tests and a pinned runner', () => {

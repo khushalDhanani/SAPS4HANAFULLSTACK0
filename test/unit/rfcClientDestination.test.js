@@ -21,6 +21,34 @@ describe('RfcClient.resolveConnectionParams — BTP RFC destination first, local
     await expect(rfc.resolveConnectionParams()).rejects.toMatchObject({ status: 503, message: expect.stringMatching(/lacks jco\.client\.ashost, jco\.client\.sysnr.*properties present: URL, Name/) });
   });
 
+  test('in development: falls back to local env when destination lacks RFC properties but local env is fully configured', async () => {
+    const localEnv = {
+      S4_RFC_DESTINATION_NAME: 'S4_RFC',
+      NODE_ENV: 'development',
+      S4_DESTINATION_URL: 'https://sap.local:44300',
+      S4_RFC_SYSNR: '00',
+      S4_CLIENT: '100',
+      S4_USERNAME: 'U',
+      S4_PASSWORD: 'P'
+    };
+    const rfc = new RfcClient(localEnv, noLoader, dest({ URL: 'https://x', Name: 'S4_RFC' }));
+    await expect(rfc.resolveConnectionParams()).resolves.toMatchObject({ ashost: 'sap.local', client: '100', sysnr: '00' });
+  });
+
+  test('in production: refuses to fall back to local env even if local env keys exist', async () => {
+    const localEnv = {
+      S4_RFC_DESTINATION_NAME: 'S4_RFC',
+      NODE_ENV: 'production',
+      S4_DESTINATION_URL: 'https://sap.local:44300',
+      S4_RFC_SYSNR: '00',
+      S4_CLIENT: '100',
+      S4_USERNAME: 'U',
+      S4_PASSWORD: 'P'
+    };
+    const rfc = new RfcClient(localEnv, noLoader, dest({ URL: 'https://x', Name: 'S4_RFC' }));
+    await expect(rfc.resolveConnectionParams()).rejects.toMatchObject({ status: 503, message: expect.stringMatching(/lacks jco\.client\.ashost/) });
+  });
+
   test('destination lookup error and missing destination are 503 with the destination name', async () => {
     await expect(new RfcClient({ S4_RFC_DESTINATION_NAME: 'S4_RFC' }, noLoader, jest.fn(async () => { throw new Error('no binding'); })).resolveConnectionParams())
       .rejects.toMatchObject({ status: 503, message: expect.stringContaining("'S4_RFC' could not be read") });

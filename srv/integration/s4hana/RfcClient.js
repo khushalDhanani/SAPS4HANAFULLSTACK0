@@ -8,6 +8,7 @@
  * A session is one SAP LUW: a BAPI and its BAPI_TRANSACTION_COMMIT must run inside the same session().
  */
 const REQUIRED_ENV = ['S4_DESTINATION_URL', 'S4_RFC_SYSNR', 'S4_CLIENT', 'S4_USERNAME', 'S4_PASSWORD'];
+const LOG = require('./logger')('rfc-client');
 
 const unavailable = (msg) => Object.assign(new Error(msg), { status: 503 });
 
@@ -29,14 +30,20 @@ class RfcClient {
     this._destinationParams = null;
   }
 
+  /** Check whether all local environment connection variables are present. */
+  hasLocalConnectionParams() {
+    return REQUIRED_ENV.every((k) => Boolean(this.env[k]));
+  }
+
   /**
    * Connection parameters from the BTP RFC destination named by S4_RFC_DESTINATION_NAME (deployed environments),
    * otherwise from the local environment (development only; refused in production).
    */
   async resolveConnectionParams() {
     const destinationName = String(this.env.S4_RFC_DESTINATION_NAME || '').trim();
+    const isProduction = String(this.env.NODE_ENV || '').toLowerCase() === 'production';
     if (!destinationName) {
-      if (String(this.env.NODE_ENV || '').toLowerCase() === 'production') {
+      if (isProduction) {
         throw unavailable('RFC connection in production must come from a BTP RFC destination: set S4_RFC_DESTINATION_NAME (credentials in environment variables are not allowed)');
       }
       return this.connectionParams();
@@ -48,9 +55,19 @@ class RfcClient {
     try {
       dest = await getDestination({ destinationName });
     } catch (e) {
+      if (!isProduction && this.hasLocalConnectionParams()) {
+        LOG.warn(`RFC destination '${destinationName}' could not be read (${e.message}); falling back to local environment connection parameters.`);
+        return this.connectionParams();
+      }
       throw unavailable(`RFC destination '${destinationName}' could not be read from the Destination service: ${e.message}`);
     }
-    if (!dest) throw unavailable(`RFC destination '${destinationName}' not found in the Destination service`);
+    if (!dest) {
+      if (!isProduction && this.hasLocalConnectionParams()) {
+        LOG.warn(`RFC destination '${destinationName}' not found; falling back to local environment connection parameters.`);
+        return this.connectionParams();
+      }
+      throw unavailable(`RFC destination '${destinationName}' not found in the Destination service`);
+    }
     const props = dest.originalProperties || {};
     const params = {};
     const missing = [];
@@ -59,6 +76,10 @@ class RfcClient {
       if (v === undefined || v === null || String(v).trim() === '') missing.push(prop); else params[key] = String(v).trim();
     }
     if (missing.length) {
+      if (!isProduction && this.hasLocalConnectionParams()) {
+        LOG.warn(`RFC destination '${destinationName}' lacks RFC properties (${missing.join(', ')}); falling back to local environment connection parameters.`);
+        return this.connectionParams();
+      }
       throw unavailable(`RFC destination '${destinationName}' lacks ${missing.join(', ')} (properties present: ${Object.keys(props).filter((k) => !/passwd|password/i.test(k)).join(', ') || 'none'})`);
     }
     params.lang = String(props['jco.client.lang'] || 'EN').trim();
