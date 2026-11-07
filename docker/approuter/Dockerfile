@@ -1,5 +1,4 @@
-ARG PLATFORM=linux/amd64
-FROM --platform=${PLATFORM} node:22.23.4-bookworm-slim AS fiori-build
+FROM node:22.23.4-bookworm-slim AS fiori-build
 
 WORKDIR /workspace/app/fiori-app
 COPY app/fiori-app/package.json app/fiori-app/package-lock.json ./
@@ -7,9 +6,9 @@ RUN npm ci --no-audit --no-fund
 COPY app/fiori-app/ ./
 RUN npm run build
 
-FROM --platform=${PLATFORM} node:22.23.4-bookworm-slim
+FROM node:22.23.4-bookworm-slim
 
-ARG PLATFORM=linux/amd64
+ARG PLATFORM=""
 ENV NODE_ENV=production \
     PORT=5000 \
     PLATFORM=${PLATFORM} \

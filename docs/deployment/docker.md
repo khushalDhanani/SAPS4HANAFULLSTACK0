@@ -32,9 +32,10 @@ never baked into the image or printed by the startup code. Start the local app:
 docker compose --env-file .env.example --profile dev up --build
 ```
 
-Set `PLATFORM` and `ROUTER_PORT` in a separate non-secret Compose env file as
-needed. Open `http://127.0.0.1:5000` and log in with username `khushal` and the
-generated local password.
+Set `PLATFORM`, `ROUTER_PLATFORM`, and `ROUTER_PORT` in a separate non-secret Compose env file as
+needed. In local development (`dev` profile), `approuter-dev` defaults to the host's native
+architecture (e.g. `linux/arm64` on Apple Silicon) so it runs natively without emulation. Open
+`http://127.0.0.1:5000` and log in with username `khushal` and the generated local password.
 
 ## QA and production profiles
 

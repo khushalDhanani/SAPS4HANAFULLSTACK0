@@ -2,10 +2,13 @@
 # Requires SAP settings in .env.docker.local and an existing trusted CA bundle.
 services:
   cap-dev:
+    platform: linux/amd64
     build:
       args:
+        PLATFORM: linux/amd64
         INSTALL_RFC_PREBUILD: "true"
     environment:
+      PLATFORM: linux/amd64
       CUSTOM_CA_CERT_FILE: /run/certs/sap-dev.pem
       REQUIRE_RFC_SDK: "true"
     volumes:

@@ -63,13 +63,13 @@ services:
       context: .
       dockerfile: docker/cap/Dockerfile
       args:
-        PLATFORM: ${PLATFORM:-linux/amd64}
+        PLATFORM: ${CAP_DEV_PLATFORM:-}
         INSTALL_DEV_DEPENDENCIES: "true"
-    platform: ${PLATFORM:-linux/amd64}
+    platform: ${CAP_DEV_PLATFORM:-}
     environment:
       NODE_ENV: test
       PORT: "4004"
-      PLATFORM: ${PLATFORM:-linux/amd64}
+      PLATFORM: ${CAP_DEV_PLATFORM:-linux/arm64}
       APP_ROLE: cap-local
       BINDING_SERVICES: ""
       REQUIRE_RFC_SDK: "false"
@@ -106,12 +106,12 @@ services:
       context: .
       dockerfile: docker/approuter/Dockerfile
       args:
-        PLATFORM: ${PLATFORM:-linux/amd64}
-    platform: ${PLATFORM:-linux/amd64}
+        PLATFORM: ${ROUTER_PLATFORM:-${PLATFORM:-linux/amd64}}
+    platform: ${ROUTER_PLATFORM:-${PLATFORM:-linux/amd64}}
     environment:
       NODE_ENV: production
       PORT: "5000"
-      PLATFORM: ${PLATFORM:-linux/amd64}
+      PLATFORM: ${ROUTER_PLATFORM:-${PLATFORM:-linux/amd64}}
       APP_ROLE: approuter
       BINDING_SERVICES: xsuaa
       destinations: '[{"name":"cap-api","url":"http://cap:4004","forwardAuthToken":true}]'
@@ -160,12 +160,12 @@ services:
       context: .
       dockerfile: docker/approuter/Dockerfile
       args:
-        PLATFORM: ${PLATFORM:-linux/amd64}
-    platform: ${PLATFORM:-linux/amd64}
+        PLATFORM: ${ROUTER_PLATFORM:-}
+    platform: ${ROUTER_PLATFORM:-}
     environment:
       NODE_ENV: production
       PORT: "5000"
-      PLATFORM: ${PLATFORM:-linux/amd64}
+      PLATFORM: ${ROUTER_PLATFORM:-}
       APP_ROLE: approuter
       BINDING_SERVICES: ""
       destinations: '[{"name":"cap-local","url":"http://cap-dev:4004","forwardAuthToken":true}]'

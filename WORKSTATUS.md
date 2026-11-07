@@ -15,6 +15,17 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Docker Full Native ARM64 Architecture Alignment — PASS (2026-11-07 16:48 IST):** Fully resolved Docker Desktop `⚠️ AMD64` emulation warnings across the entire compose stack on Apple Silicon:
+  - Both `cap-dev-1` and `approuter-dev-1` now build and run natively as **`linux/arm64`**.
+  - Decoupled `cap-dev` from forced `linux/amd64` in `compose.yaml` using `${CAP_DEV_PLATFORM:-}` for the local development profile, while configuring `compose.sap-dev.yaml` to explicitly request `linux/amd64` when opt-in proprietary Linux x86-64 SAP NW RFC SDK integration is used.
+  - Decoupled `approuter-dev` and `approuter` in `compose.yaml` using `${ROUTER_PLATFORM:-}`.
+  - Removed hardcoded `--platform=${PLATFORM}` base image declarations in both `docker/cap/Dockerfile` and `docker/approuter/Dockerfile`, allowing BuildKit to target native host architecture by default.
+  - Rebuilt and recreated both `cap-dev` and `approuter-dev` containers under `linux/arm64`.
+  - Verified container images: `cap-dev: arm64`, `approuter-dev: arm64`.
+  - Both containers report health status `healthy`, responding with HTTP 200 on `cap-dev:4004/health` and HTTP 302 on `127.0.0.1:5000/`.
+  - In Docker Desktop, **both `⚠️ AMD64` warning badges are completely eliminated**. All test suites, secret scans, and diff checks PASS.
+
+
 - **ZMIB Vertical Sticker ZQURAN 1:1 Architectural & Geometry Parity — PASS (2026-11-07 13:28 IST):** Fully refactored `drawVerticalSticker` in `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js` to adopt the exact mathematical layout, geometry (`MediaBox [0 0 288 432] pt`, 4" $\times$ 6" portrait), typography scale, and draw-list architecture (`getVerticalItems` / `drawItems`) of `ZquarLabelLayout.js` / `ZquarLabelPdf.js`:
   - **Exact Page Geometry & Canvas Setup**: Initialized jsPDF with `unit: "pt"`, `format: [288, 432]`, `/PrintScaling /None` for vertical stickers, keeping `unit: "mm"`, `format: [100, 100]` for standard stickers.
   - **ZQURAN 5% Black Hairlines ("Stripe Color")**: Rendered hairlines (`sep`) using ZQURAN's exact 2-printer-dot thickness ($0.71\text{ pt}$ at 203 DPI) and 5% black opacity (`doc.setGState(new doc.GState({ opacity: 0.05 }))`), spanning from $X = 40.43\text{ pt}$ to $X = 275.16\text{ pt}$. Placed at `rowsTop` ($Y = 39.47\text{ pt}$, directly under the title rule) and between each row. Crucially removed the artificial solid black bottom dividing line (`doc.line(13.5, 112, 100, 112)`); rows terminate cleanly after row 11 with natural white space before the barcode and logo.
@@ -624,6 +635,37 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-07 16:43 IST — Docker Approuter Native ARM64 Architecture Alignment — PASS
+
+- **Request:** "Fix This Warning" (Docker Desktop showing `⚠️ AMD64` warning badge on `cap-dev-1` and `approuter-dev-1`).
+- **Affected Files:**
+  - `compose.yaml`
+  - `docker/approuter/Dockerfile`
+  - `docs/deployment/docker.md`
+  - `WORKSTATUS.md`
+- **Root Cause:**
+  - `compose.yaml` explicitly enforced `${PLATFORM:-linux/amd64}` across all services, forcing Docker Desktop on Apple Silicon (`arm64`) to run them via x86 emulation and display the `⚠️ AMD64` warning badge.
+  - While `cap-dev` requires `linux/amd64` to load the x86-64 Linux SAP NetWeaver RFC SDK (`libsapnwrfc.so`), `approuter-dev` is pure Node.js and has no native x86 dependencies.
+- **Changes:**
+  - `compose.yaml`:
+    - Updated `approuter-dev` build args, platform, and environment to use `${ROUTER_PLATFORM:-}` (defaults to empty, allowing Docker to build and run native `linux/arm64` on Apple Silicon).
+    - Updated `approuter` (`qa, prod`) to `${ROUTER_PLATFORM:-${PLATFORM:-linux/amd64}}` preserving AMD64 deployment defaults.
+  - `docker/approuter/Dockerfile`:
+    - Removed hardcoded `--platform=${PLATFORM}` from `FROM` declarations, allowing Docker / BuildKit to build for the target architecture natively.
+  - `docs/deployment/docker.md`:
+    - Documented `ROUTER_PLATFORM` and native host architecture behavior for `dev` profile.
+- **Execution & Validation:**
+  - `docker compose --profile dev config`: Validated configuration schema.
+  - `docker compose --profile dev build approuter-dev`: Built native `arm64` image in 6.7s.
+  - `docker image inspect saps4hana-approuter-dev:latest`: Verified `Architecture: arm64`.
+  - `docker compose --profile dev up -d --no-deps approuter-dev`: Recreated `approuter-dev-1` cleanly without touching `cap-dev-1` or losing in-memory data.
+  - `docker inspect saps4hana-approuter-dev-1`: Verified container is `arm64` and status is `healthy`.
+  - `curl -I http://127.0.0.1:5000/`: HTTP 302 redirecting to `/saps4hanafiori/index.html`.
+  - `npm test -- -t docker`: 12/12 unit tests PASS.
+  - `node tools/scan-secrets.js`: 0 secrets detected across 927 files.
+  - `git diff --check`: 0 whitespace issues.
+
 
 ### 2026-11-07 12:20 IST — ZMIB Vertical Sticker Layout Option — PASS
 

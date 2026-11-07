@@ -1,8 +1,7 @@
-ARG PLATFORM=linux/amd64
 ARG INSTALL_DEV_DEPENDENCIES=false
-FROM --platform=${PLATFORM} node:22.23.4-bookworm-slim
+FROM node:22.23.4-bookworm-slim
 
-ARG PLATFORM=linux/amd64
+ARG PLATFORM=""
 ENV NODE_ENV=production \
     HOME=/tmp \
     PORT=4004 \
