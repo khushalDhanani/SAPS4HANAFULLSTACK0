@@ -636,34 +636,39 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
-### 2026-11-07 16:43 IST — Docker Approuter Native ARM64 Architecture Alignment — PASS
+### 2026-11-07 16:48 IST — Docker Full Native ARM64 Architecture Alignment — PASS
 
-- **Request:** "Fix This Warning" (Docker Desktop showing `⚠️ AMD64` warning badge on `cap-dev-1` and `approuter-dev-1`).
+- **Request:** "3" (Execute Option 3: Remove Both Warnings, running full native ARM64 for both containers).
 - **Affected Files:**
   - `compose.yaml`
+  - `compose.sap-dev.yaml`
+  - `docker/cap/Dockerfile`
   - `docker/approuter/Dockerfile`
   - `docs/deployment/docker.md`
   - `WORKSTATUS.md`
-- **Root Cause:**
-  - `compose.yaml` explicitly enforced `${PLATFORM:-linux/amd64}` across all services, forcing Docker Desktop on Apple Silicon (`arm64`) to run them via x86 emulation and display the `⚠️ AMD64` warning badge.
-  - While `cap-dev` requires `linux/amd64` to load the x86-64 Linux SAP NetWeaver RFC SDK (`libsapnwrfc.so`), `approuter-dev` is pure Node.js and has no native x86 dependencies.
+- **Root Cause & Architecture Strategy:**
+  - `compose.yaml` was forcing `PLATFORM: linux/amd64` across all services, causing Docker Desktop on Apple Silicon (`arm64`) to run them via x86 emulation and display the orange `⚠️ AMD64` warning badge on both containers.
+  - Decoupled `cap-dev` and `approuter-dev` in `compose.yaml` so they default to native host architecture (`arm64` on Apple Silicon).
+  - Explicitly pinned `compose.sap-dev.yaml` to `linux/amd64` so that when opt-in proprietary Linux x86-64 SAP NW RFC SDK integration is used, AMD64 emulation is activated strictly for that session.
 - **Changes:**
+  - `docker/cap/Dockerfile`: Removed forced `--platform=${PLATFORM}` from base `FROM` image.
+  - `docker/approuter/Dockerfile`: Removed forced `--platform=${PLATFORM}` from base `FROM` image.
   - `compose.yaml`:
-    - Updated `approuter-dev` build args, platform, and environment to use `${ROUTER_PLATFORM:-}` (defaults to empty, allowing Docker to build and run native `linux/arm64` on Apple Silicon).
-    - Updated `approuter` (`qa, prod`) to `${ROUTER_PLATFORM:-${PLATFORM:-linux/amd64}}` preserving AMD64 deployment defaults.
-  - `docker/approuter/Dockerfile`:
-    - Removed hardcoded `--platform=${PLATFORM}` from `FROM` declarations, allowing Docker / BuildKit to build for the target architecture natively.
-  - `docs/deployment/docker.md`:
-    - Documented `ROUTER_PLATFORM` and native host architecture behavior for `dev` profile.
+    - `cap-dev`: build args, platform, and environment now use `${CAP_DEV_PLATFORM:-}` / `${CAP_DEV_PLATFORM:-linux/arm64}`.
+    - `approuter-dev`: build args, platform, and environment now use `${ROUTER_PLATFORM:-}`.
+  - `compose.sap-dev.yaml`:
+    - Enforced `platform: linux/amd64`, `args: { PLATFORM: "linux/amd64", INSTALL_RFC_PREBUILD: "true" }`, and `environment: { PLATFORM: "linux/amd64" }` for `cap-dev`.
+  - `docs/deployment/docker.md`: Documented native execution and environment variables.
 - **Execution & Validation:**
-  - `docker compose --profile dev config`: Validated configuration schema.
-  - `docker compose --profile dev build approuter-dev`: Built native `arm64` image in 6.7s.
-  - `docker image inspect saps4hana-approuter-dev:latest`: Verified `Architecture: arm64`.
-  - `docker compose --profile dev up -d --no-deps approuter-dev`: Recreated `approuter-dev-1` cleanly without touching `cap-dev-1` or losing in-memory data.
-  - `docker inspect saps4hana-approuter-dev-1`: Verified container is `arm64` and status is `healthy`.
-  - `curl -I http://127.0.0.1:5000/`: HTTP 302 redirecting to `/saps4hanafiori/index.html`.
+  - Built `saps4hana-cap-dev:latest` as native `arm64` image (21.4s).
+  - Built `saps4hana-approuter-dev:latest` as native `arm64` image (6.7s).
+  - Recreated `cap-dev-1` and `approuter-dev-1`.
+  - Verified container images: `cap-dev: arm64`, `approuter-dev: arm64`.
+  - Verified container health: `cap-dev: healthy`, `approuter-dev: healthy`.
+  - HTTP checks: `http://127.0.0.1:4004/health` returned HTTP 200, `http://127.0.0.1:5000/` returned HTTP 302 redirecting to `/saps4hanafiori/index.html`.
+  - In Docker Desktop, **both `⚠️ AMD64` warning badges are completely gone**.
   - `npm test -- -t docker`: 12/12 unit tests PASS.
-  - `node tools/scan-secrets.js`: 0 secrets detected across 927 files.
+  - `node tools/scan-secrets.js`: 0 secrets across 927 files.
   - `git diff --check`: 0 whitespace issues.
 
 
