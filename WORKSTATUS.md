@@ -15,6 +15,14 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Local Dev Approuter Authentication & Fiori UI Verification — PASS (2026-11-07 17:15 IST):** Verified full end-to-end login, navigation, and SAP S/4HANA data loading at `http://127.0.0.1:5000/saps4hanafiori/index.html`:
+  - Resolved local authentication mismatch caused by duplicate `LOCAL_DEV_PASSWORD` definitions in `.env.docker.local`. Unified `LOCAL_DEV_PASSWORD` to align with `S4_PASSWORD`.
+  - Verified `/odata/v4/auth/login` endpoint returns HTTP 200 with valid JWT session for user `khushal`.
+  - In browser (verified via Chrome DevTools), Shell Bar renders with profile `KHUSHAL`.
+  - `#dashboard` route loads live metrics from SAP S/4HANA: Purchase Orders (3,050), Suppliers (4,377), Open Sales Orders (584), Warehouses (2), Goods Receipts (32), Deliveries (1,244), Customer Invoices (520), Customer Returns (186).
+  - `#/wm/mib-label` route loads Transfer Order Selection form and layout toggle (Standard 100x100 / Vertical 100x150) without errors.
+  - Browser console logs: 0 errors.
+
 - **Docker Dev Stack Active & Approuter Port 5000 Verified — PASS (2026-11-07 17:01 IST):** Verified full dev stack accessibility at `http://127.0.0.1:5000`:
   - Resolved port interception by macOS AirPlay Receiver (`ControlCenter` / `Server: AirTunes/940.23.1` returning 403 Forbidden) by starting `approuter-dev` alongside `cap-dev`.
   - Both containers `saps4hana-cap-dev-1` and `saps4hana-approuter-dev-1` are running native `arm64` with status `healthy`.
@@ -22,14 +30,14 @@ All historical change logs and past milestone statuses are preserved verbatim in
   - Reverse proxy route `http://127.0.0.1:5000/odata/v4/...` verified forwarding to `cap-dev:4004`.
 
 
-- **Docker `cap-dev` SAP Egress Network & CA Bundle Resolution — PASS (2026-11-07 16:58 IST):** Resolved backend error `SAP S/4HANA backend unavailable: getaddrinfo EAI_AGAIN vheudds4ap01.sap.aether.co.in`:
+- **Docker `cap-dev` SAP Egress Network & CA Bundle Resolution — PASS (2026-11-07 16:58 IST):** Resolved backend error `SAP S/4HANA backend unavailable: getaddrinfo EAI_AGAIN`:
   - **Root Cause**: In `compose.yaml`, `cap-dev` was placed exclusively on the `application` network, which is configured with `internal: true`. Docker strictly isolates internal networks, blocking all external DNS resolution and outbound traffic. Additionally, `cap-dev` lacked access to the trusted corporate SAP CA certificate for HTTPS.
   - **Fix**:
     - Attached the `sap-egress` network to `cap-dev` in `compose.yaml` alongside `application`.
     - Mounted `./certs` to `/run/certs` (read-only) and configured `NODE_EXTRA_CA_CERTS: /run/certs/ca-bundle.pem` in `cap-dev`'s environment in `compose.yaml`.
     - Placed trusted corporate SAP CA cert into `certs/ca-bundle.pem` (Git-ignored per `.gitignore`).
   - **Validation**:
-    - `cap-dev-1` DNS lookup: `vheudds4ap01.sap.aether.co.in` successfully resolves to `172.27.100.32`.
+    - `cap-dev-1` DNS lookup: SAP destination hostname successfully resolves to the target host IP.
     - TCP probe: port 44300 connected successfully.
     - HTTPS TLS handshake with corporate CA: verified successful against SAP Gateway.
     - Container status: `healthy`.
@@ -657,6 +665,26 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-07 17:15 IST — Local Dev Authentication & Fiori UI Verification — PASS
+
+- **Request:** "Still Error Check andf fix."
+- **Affected Files:**
+  - `.env.docker.local` (local secrets, Git-ignored)
+  - `WORKSTATUS.md`
+- **Root Cause:**
+  - Duplicate entries for `LOCAL_DEV_PASSWORD` in `.env.docker.local` caused credential mismatch between login attempt and backend validation handler.
+- **Resolution:**
+  - Deduplicated `.env.docker.local` and unified `LOCAL_DEV_PASSWORD` to match `S4_PASSWORD`.
+  - Recreated `cap-dev-1` with updated environment.
+  - Authenticated via `POST /odata/v4/auth/login` to obtain JWT session.
+- **Validation:**
+  - Verified live in Chrome DevTools MCP (Page 2):
+    - Navigated to `http://127.0.0.1:5000/saps4hanafiori/index.html`.
+    - Shell Bar displays user `KHUSHAL` and navigation controls.
+    - `#dashboard` route displays live S/4HANA operational counts: 3,050 POs, 4,377 Suppliers, 584 Open Sales Orders, 32 Goods Receipts, 1,244 Deliveries, 520 Invoices, 186 Customer Returns.
+    - `#/wm/mib-label` route displays Transfer Order Selection form and layout toggle.
+    - Browser console: 0 errors.
+
 ### 2026-11-07 17:01 IST — Approuter Port 5000 Active & Verified — PASS
 
 - **Request:** "Not working : http://127.0.0.1:5000/saps4hanafiori/index.html"
@@ -674,14 +702,14 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ### 2026-11-07 16:58 IST — Docker cap-dev SAP Egress Network & CA Bundle Resolution — PASS
 
-- **Request:** "SAP S/4HANA backend unavailable: getaddrinfo EAI_AGAIN vheudds4ap01.sap.aether.co.in"
+- **Request:** "SAP S/4HANA backend unavailable: getaddrinfo EAI_AGAIN"
 - **Affected Files:**
   - `compose.yaml`
   - `certs/ca-bundle.pem` (Git-ignored)
   - `WORKSTATUS.md`
 - **Root Cause:**
   - `cap-dev` was attached exclusively to the `application` network, configured as `internal: true`. Docker isolates internal networks by dropping all external DNS queries and outbound packets, resulting in `getaddrinfo EAI_AGAIN`.
-  - In addition, `cap-dev` lacked a volume mount for `./certs` to supply the corporate CA bundle required for HTTPS TLS verification to `https://vheudds4ap01.sap.aether.co.in:44300`.
+  - In addition, `cap-dev` lacked a volume mount for `./certs` to supply the corporate CA bundle required for HTTPS TLS verification to the S/4 destination.
 - **Changes:**
   - Attached `sap-egress` network to `cap-dev` in `compose.yaml`.
   - Added `./certs` bind mount to `/run/certs` (read-only) for `cap-dev` in `compose.yaml`.
@@ -689,7 +717,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
   - Copied corporate CA cert to `certs/ca-bundle.pem` (ignored by `.gitignore`).
   - Recreated `cap-dev-1` container.
 - **Validation:**
-  - `cap-dev-1` DNS lookup: `vheudds4ap01.sap.aether.co.in` successfully resolves to `172.27.100.32`.
+  - `cap-dev-1` DNS lookup: SAP destination hostname successfully resolves to the target host IP.
   - TCP probe: port 44300 connects successfully.
   - HTTPS TLS handshake with corporate CA bundle: verified.
   - `docker inspect saps4hana-cap-dev-1`: `healthy`.
