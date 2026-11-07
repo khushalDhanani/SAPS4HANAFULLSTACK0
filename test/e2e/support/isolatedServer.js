@@ -2,6 +2,7 @@
 
 /**
  * Starts a private CAP server for write-authorization E2E that cannot reach SAP:
+ * - The test-only localConfigGuard preload prevents CAP from re-importing .env/default-env.json.
  * - NODE_ENV=test, so server.js skips .env/.env.local and the cds [test] profile points every external S/4 OData
  *   service at http://127.0.0.1:1 with dummy credentials, uses an in-memory DB and the test mock users;
  * - every S4_* / AI / NVIDIA variable is removed from the child environment, so no OData or RFC connection can be built;
@@ -50,7 +51,7 @@ async function startIsolatedServer(options = {}, attempts = 3) {
 async function startOnce({ timeoutMs = 60000 } = {}) {
     const port = await freePort();
     const env = isolatedEnv(port);
-    const child = spawn(process.execPath, [require.resolve('@sap/cds/bin/serve', { paths: [ROOT] }), '--port', String(port)], {
+    const child = spawn(process.execPath, ['--require', path.join(ROOT, 'test/localConfigGuard.js'), require.resolve('@sap/cds/bin/serve', { paths: [ROOT] }), '--port', String(port)], {
         cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe']
     });
     let log = '';

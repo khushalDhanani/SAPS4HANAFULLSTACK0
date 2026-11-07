@@ -14,8 +14,19 @@ describe('Jest outbound network safeguard [MOCK]', () => {
       'S4_DESTINATION_URL', 'S4_DESTINATION_NAME', 'S4_USERNAME', 'S4_PASSWORD', 'S4_RFC_SYSNR',
       'CDS_S4_DESTINATION_URL', 'CDS_S4_USERNAME', 'CDS_S4_PASSWORD', 'VCAP_SERVICES'
     ]) {
-      expect(process.env[key]).toBeUndefined();
+      expect({ key, present: process.env[key] !== undefined }).toEqual({ key, present: false });
     }
+  });
+
+  test('CAP cannot repopulate cleared variables from local environment files', () => {
+    const config = require('@sap/cds/lib/env/cds-env');
+    const load = jest.fn(() => ({ S4_PASSWORD: 'TEST_ONLY', VCAP_SERVICES: '{}' }));
+    const env = {};
+    for (const file of ['.env', '.test.env', 'default-env.json']) {
+      config._add_to_env.call({ load, _home: '/unused-test-root' }, file, env);
+    }
+    expect(load).not.toHaveBeenCalled();
+    expect(env).toEqual({});
   });
 
   test('denies non-loopback HTTP, HTTPS, fetch, sockets, TLS, and DNS [MOCK]', async () => {

@@ -1,3 +1,5 @@
+require('./localConfigGuard');
+
 // Tests must never inherit local SAP credentials, destinations, or VCAP-bound service keys.
 // SAP_SYSTEM_TYPE is non-secret and is retained only so the explicit live-test gate can fail closed.
 // Do not load .env.local or .env here: tests use explicit adapter/RFC mocks instead.

@@ -43,6 +43,20 @@ describe('SAP-free browser E2E PR gate', () => {
         expect(sapFree).toEqual(['negative/verifyNegativeUi.e2e.js', 'negative/verifyWriteAuthorization.e2e.js', 'wm/verifyQuarantineLabels.e2e.js']);
     });
 
+    it('uses Node 24 actions while retaining Node 22 application tests and a pinned runner', () => {
+        const allowedActions = ['actions/checkout@v5', 'actions/setup-node@v5', 'actions/upload-artifact@v6'];
+        for (const configured of Object.values(ci.jobs)) {
+            expect(configured['runs-on']).not.toContain('ubuntu-latest');
+            for (const step of configured.steps) {
+                if (step.uses) expect(allowedActions).toContain(step.uses);
+                if (step.uses === 'actions/setup-node@v5') expect(step.with['node-version']).toBe(22);
+            }
+        }
+        expect(job['runs-on']).toBe('ubuntu-24.04');
+        expect(ci.jobs.ci['runs-on']).toBe('ubuntu-24.04');
+        expect(ci.on.workflow_dispatch.inputs.e2e_runner.default).toBe('ubuntu-24.04');
+    });
+
     it('runs on every push and PR, without SAP environment or secrets', () => {
         expect(Object.keys(ci.on)).toEqual(expect.arrayContaining(['push', 'pull_request']));
         expect(job.if).toBeUndefined();

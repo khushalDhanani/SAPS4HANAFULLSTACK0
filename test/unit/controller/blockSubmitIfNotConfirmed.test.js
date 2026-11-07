@@ -68,7 +68,7 @@ describe('Packing instruction dialog after a not-confirmed answer', () => {
   beforeAll(() => {
     const file = path.join(WEBAPP, 'modules/wm/packing-instruction/controller/PackingInstructions.controller.js');
     const sap = { ui: { define: (_deps, factory) => factory({ extend: (_n, p) => { proto = p; return p; } }, function JSONModel() {}, odata, {}, { show: jest.fn() }) } };
-    new Function('sap', fs.readFileSync(file, 'utf8'))(sap); // eslint-disable-line no-new-func
+    new Function('sap', fs.readFileSync(file, 'utf8'))(sap);
   });
 
   it('shows the warning, turns submit off, and a second press sends nothing', async () => {

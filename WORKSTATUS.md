@@ -15,6 +15,10 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **CI user-management regression repair — local PASS / hosted NOT VERIFIED (2026-11-07 11:53 IST):** Isolated revision 01ff3523 reproduced 18 failures in userManagement integration tests. Reset per-case adapter caches and updated expiry-read fixtures/assertions. Full rerun passes all 198 suites / 3419 tests and coverage thresholds. Targeted 40 tests, lint, secret scan and focused diff check pass. Applied test repair to workspace, uncommitted. Hosted logs remain inaccessible.
+
+- **CI remaining findings — local PASS / hosted PARTIAL (2026-11-07 12:13 IST):** Fixed action-runtime deprecations/Ubuntu drift, stale E2E registry expectation, test-local configuration leakage, MIB pixel sizing, lint suppressions, whitespace and missing-map warning. Full current-workspace coverage PASS: 202 suites / 3452 tests; SAP-free browser suites 4/4; smoke 9/9; root/UI5 lint, UI5 build, secret/dependency scans, MTA validation and diff check pass. Changes remain uncommitted; hosted rerun pending.
+
 - **Secret scanner Docker template fix — PASS (2026-11-07 11:27 IST):** Fixed the filename exception mismatch. Scan passes for 912 tracked files; all 21 scanner tests pass. Root lint exits 0 with two unrelated unused-disable warnings; diff check passes. Hosted CI not rerun.
 
 - **Docker RFC fix — In Progress (2026-11-07):** Linux native binary loads with discovered SDK. Connected override now retains pinned node-rfc prebuild and mounts SDK read-only; startup guard checks RFC config/load. Restored missing RFC system number from matching host target without printing values. Build and temporary-container native/RFC read verification pass. Activation blocked by automatic approval review pending explicit approval of local in-memory data loss.
@@ -445,6 +449,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **ZQUAR 4x6 Quarantine Label Production Format & Movement 261 BusinessConfig (2026-10-31 IST) — BASELINE CONFIRMED:** Full ZQUAR 4x6 label layout (vertical left strip, official Aether SVG corporate vector logo, colon alignment on uniform vertical axis, centered barcode, 14 field rows) and Plant 1120 / Warehouse W01 BusinessConfig bootstrap operational. Detailed implementation history, measurements, and evidence archived in [`WORKSTATUS-archive-2026-10-31.md`](docs/archive/WORKSTATUS-archive-2026-10-31.md).
 
 ## Next Steps
+
+- CI repair commit: standalone fixes ready; MIB-specific fixes remain with separately staged feature work. Push and rerun hosted CI after commit.
 
 - Secret scanner: rerun hosted CI after the focused commit; local validation passes.
 
@@ -4326,3 +4332,64 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Review: No duplicated/superseded implementation or new dependency; content-scanning rules unchanged.
 - Next action: Rerun hosted CI after the focused commit authorized by the user; unrelated work stays uncommitted.
 - FINAL STATUS: PASS for the requested scanner fix.
+
+### 2026-11-07 11:53 IST — CI user-management regression repair
+
+- CHANGED: `test/integration/userManagement.test.js`, `WORKSTATUS.md`. Reset retained adapter caches before each case; supply empty RFC table-read results and assert existing password-expiry enrichment requests/response fields. No runtime, SAP contract, dependency or configuration changes. Existing expiry helper was not present; small expected-call helper shared by two cases. No superseded/dead implementation remains. Unrelated staged and working changes preserved.
+- TEST DECISION: TEST UPDATED. Traced CAP HTTP → admin service → adapter → mocked RFC → mapped OData response, including authorization and error cases. Evidence is repository source; no invented SAP fields or live calls.
+- TESTED: Exact commit 01ff3523 in `/private/tmp/sap-ci-42346009487` using installed dependencies. Initial sandbox test attempt failed localhost EPERM and was terminated. Permitted `env -u RUN_LIVE_SAP -u ALLOW_LIVE_SAP_TOOLS -u SAP_SYSTEM_TYPE npm test -- --ci --coverage --json --outputFile=test-results/jest-unrestricted-results.json` exited 1: 197 suites passed, 1 failed, 3401 tests passed, 18 failed. All failures in userManagement.test.js.
+- TESTED after repair: `npm test -- --runTestsByPath test/integration/userManagement.test.js` PASS (40 tests); `npm exec -- eslint test/integration/userManagement.test.js` PASS; `npm run scan:secrets` PASS (912 files); `git diff --check` PASS in isolated worktree. Full rerun `env -u RUN_LIVE_SAP -u ALLOW_LIVE_SAP_TOOLS -u SAP_SYSTEM_TYPE npm test -- --ci --coverage --json --outputFile=test-results/jest-fixed-results.json` PASS: 198 suites / 3419 tests, zero skipped; 91.761 seconds. productionGuard coverage: lines/functions 100%, statements 97.56%, branches 96.66%; configured thresholds pass. Expected negative-path application logs emitted by tests. Local Node v24.21.0; CI config uses Node 22.
+- VERIFIED: Cache contamination between fixtures and outdated exact-call/response assertions reproduced locally and resolved in targeted tests. Hosted run 42346009487 passed scan/audit/root lint/UI5 lint and failed test/coverage step; annotations do not identify failing tests.
+- NOT VERIFIED: Hosted exact failure logs (GitHub download HTTP 403), hosted rerun, Linux/Node 22 equivalence (local installed runtime/dependencies reused). SAP/BTP live checks, UI E2E/build are not applicable to this test-only repair.
+- BLOCKED: Hosted log access only. ASSUMPTIONS: Matching local failures to hosted test failures is INFERRED, not confirmed. REGRESSION: Full isolated test/coverage rerun PASS. Focused workspace diff check PASS; workspace-wide `git diff --check` fails on seven unrelated MIB files with blank lines at EOF (MibLabelService.js, ABAP wrapper, wrapper documentation, MIB service.cds/service.js, MIB integration test, MIB adapter unit test); left untouched. Reviewed focused diff and git status. No application build or live SAP checks required for test-only changes.
+- Next action: Commit only the test repair and related status entry, then rerun hosted CI. Changes remain uncommitted.
+- FINAL STATUS: PASS for local test repair; hosted CI NOT VERIFIED (overall CI resolution PARTIAL).
+
+### 2026-11-07 12:07 IST — Resolve remaining CI warnings and workspace regressions
+
+- Plan/scope: User requested Fix All in CI context. Inspected current staged/working changes, status, workflow/scripts, test setup, and existing E2E governance. Preserve feature work and avoid live SAP writes/deployments. Interpreting scope as CI failures/warnings, not all historical business blockers.
+- CHANGED: `.github/workflows/ci.yml`: checkout/setup-node v5 and upload-artifact v6 verified from upstream action.yml to use node24; retain node-version 22, pin Ubuntu 24.04 (already used for Playwright). Existing inputs are supported. Sources: https://raw.githubusercontent.com/actions/checkout/v5/action.yml, https://raw.githubusercontent.com/actions/setup-node/v5/action.yml, https://raw.githubusercontent.com/actions/upload-artifact/v6/action.yml. No new packages.
+- CHANGED: `test/unit/tools/e2eRunner.test.js`: include the already registered mocked MIB suite and validate action/runtime/runner configuration. Two stale no-new-func disables removed from `test/unit/controller/blockSubmitIfNotConfirmed.test.js` and `test/unit/helpers/realBlockSubmit.js`.
+- CHANGED: Whitespace only in MibLabelPdf.js, MibLabel.view.xml and docs/mib-pdf-wrapper.md. Removed dangling sourceMappingURL comment in vendored jspdf.umd.min.js; executable library bytes otherwise unchanged. No missing map artifact added. UI5 skill/MCP guidelines queried and MCP linter found zero issues.
+- TEST DECISION: TEST UPDATED — existing E2E runner governance suite; existing full Jest coverage, controller tests, UI5 lint/build, and mocked browser flows cover formatting/vendor comment changes.
+- Reproduced before change: root lint exits 0 with two unused-disable warnings; git diff --check HEAD exits 2 (three whitespace findings); E2E runner test fails because MIB suite was absent from expected registry. UI5 lint/build pass with missing source-map warning and sandbox update-notifier warnings. MTA validation passes. Remaining validations pending.
+- BLOCKED/NOT VERIFIED: Hosted run requires later commit/push; local tests cannot prove hosted Node 22/Linux execution. No SAP/BTP calls.
+- Review: No replacement implementation/dead code or new dependency. Unrelated staged state preserved.
+- FINAL STATUS: In Progress. Next: finish checks and review.
+
+### 2026-11-07 12:10 IST — Remaining UI consistency and test environment isolation failures
+
+- Reproduced current workspace full coverage: 199 suites passed / 2 failed, 3442 tests passed / 2 failed (uiConsistency pixel height and networkSafety local environment re-import). SAP-free E2E: 3 suites passed / 1 failed; write-authorization expected 503 but received approval-check 502. A concurrent MIB run replaced the shared E2E summary; this task uses its captured log as evidence.
+- Root cause: installed CAP 10 cds-env.js includes development profile in test mode and _add_process_env reloads .env via _add_to_env after setup deletes variables. This also undermines the isolated E2E child configuration. CAP MCP and installed source inspected. No environment values recorded here.
+- Plan/CHANGED: test/localConfigGuard.js is a shared test-only preload (no existing helper prevents CAP file loading). It requires NODE_ENV=test and blocks the inspected CAP _add_to_env seam, failing closed if unavailable. Applied before Jest imports and to isolated E2E server spawn. test/unit/networkSafety.test.js verifies file-load suppression and reports only key presence on failures. Internal API dependency is isolated, version-sensitive and regression-tested; no production code changed.
+- CHANGED: MIB viewer height uses existing quarantine viewer's 70vh pattern instead of 600px. UI5 API tool unavailable for configured CDN resource; no new API introduced, existing CSSSize usage/pattern and uiConsistency test used. Fiori/UI5 skills applied.
+- TEST DECISION: TEST UPDATED — networkSafety and existing uiConsistency/MIB browser suite. Re-run full Jest coverage and SAP-free browser suites; preserve authorization expectations while diagnosing environment leak first.
+- Dependency audit PASS: root and Fiori production dependencies each report zero vulnerabilities. Initial MTA validation PASS. Hosted execution and live SAP/BTP remain not verified; no live SAP write authorized or attempted.
+- FINAL STATUS: In Progress. Next: focused isolation/UI checks, then full regression.
+
+### 2026-11-07 12:12 IST — CI validation checkpoint
+
+- TESTED: focused `npm test -- --runTestsByPath test/unit/networkSafety.test.js test/unit/controller/uiConsistency.test.js test/unit/tools/e2eRunner.test.js` PASS (3 suites, 22 tests). `npm run test:e2e:sap-free` PASS (4 suites, zero failed); captured `/private/tmp/sap-fix-all-e2e-after.log`. Original 502 authorization failure resolves to expected 503 with test-only environment guard; no authorization test weakened.
+- TESTED: `npm run lint` PASS without warnings; `npm run scan:secrets` PASS (925 tracked files); direct scanFile check of new untracked test/localConfigGuard.js reports zero findings; `npm run validate:mta` PASS; `git diff --check HEAD` PASS. `CI=true npm run lint` and `CI=true npm run build` in app/fiori-app PASS without warnings; UI5 MCP linter also zero findings. CI=true suppresses the tooling's irrelevant update-notifier filesystem check; no permissions changed.
+- TESTED: `npm run scan:dependencies` PASS with zero production vulnerabilities for root/Fiori. Isolated smoke via startIsolatedServer/assertSapUnreachable and executeSmokeTests PASS (9 checks); server stopped afterward. No live SAP calls in final checks.
+- VERIFIED: jsPDF diff is exactly removal of the missing-map directive; executable source unchanged. MIB matrix already cites verifyMibLabels.e2e.js; its five browser cases passed. Unrelated concurrent MIB PDF source/tests appeared during validation; preserved.
+- Pending: full current-workspace Jest coverage run and final review. Hosted CI/Linux Node 22 remains NOT VERIFIED; local Node is v24.21.0.
+
+### 2026-11-07 12:13 IST — CI repair final local validation
+
+- CHANGED: Final status/evidence update only. Earlier 12:07 and 12:10 In Progress entries resolved by this checkpoint. Application feature work and staged state preserved; no commit/push/deploy performed.
+- TEST DECISION: TEST UPDATED (workflow governance and network-isolation regression; existing UI consistency, controller, MIB/browser tests used).
+- TESTED / REGRESSION: `env -u RUN_LIVE_SAP -u ALLOW_LIVE_SAP_TOOLS -u SAP_SYSTEM_TYPE npm test -- --ci --coverage --json --outputFile=/private/tmp/sap-fix-all-final.json` PASS: 202 suites, 3452 tests, zero failures/skips, 94.513 seconds. Includes concurrent mibLabelPdf.test.js. All configured coverage thresholds pass; productionGuard lines/functions 100%, statements 97.56%, branches 96.66%. Full run includes unit, integration, performance, accessibility and smoke test patterns; redundant individual Jest script reruns not needed.
+- VERIFIED: 4/4 SAP-free browser suites, 9/9 isolated HTTP smoke checks, root lint without warnings, UI5 CLI/MCP lint with zero findings, UI5 build without source-map warning, zero production dependency vulnerabilities, zero secret findings, MTA validation and `git diff --check HEAD` all pass as executed in preceding checkpoint. Focused diff reviewed; no new package or unused replacement implementation.
+- NOT VERIFIED: Hosted Actions and Linux/Node 22 execution; optional SAP-connected/browser Tier C runs, live SAP persistence and BTP deployment were not run (outside CI-only fix scope and no write authorization). Current task does not establish deployment or business completion for separate feature work.
+- BLOCKED: No local validation blocker. Hosted logs remain unavailable via unauthenticated download (403); hosted execution awaits commit/push. ASSUMPTIONS: Fix All interpreted as remaining CI/test/lint/build issues in this conversation. The local repair cannot prove an unrun hosted workflow.
+- Known maintenance risk: test/localConfigGuard uses the inspected CAP 10 internal environment-loading seam; it is test-only, fails if the seam disappears, and is protected by regression checks.
+- Next action: Commit reviewed changes and rerun hosted CI after push; current changes remain local/uncommitted.
+- FINAL STATUS: PASS for local fixes/validation; PARTIAL for hosted CI resolution.
+
+### 2026-11-07 12:15 IST — Commit scope review
+
+- User authorized commit. Prepare a standalone CI/test repair commit containing workflow actions/runner pins, user-management test isolation, local environment guard and regressions, lint comment cleanup, jsPDF source-map comment removal, and related status entries.
+- MIB files are absent from HEAD and belong to separately staged feature work. Their UI/whitespace fixes and the MIB-specific E2E registry expectation remain with that feature, outside this standalone commit. Existing staged feature/index state will be preserved.
+- Standalone snapshot validation: `npm test -- --runTestsByPath test/integration/userManagement.test.js test/unit/networkSafety.test.js test/unit/tools/e2eRunner.test.js test/unit/tools/scanSecrets.test.js` PASS (4 suites / 75 tests) in isolated worktree. Prior full-workspace evidence remains recorded above. No push authorized or performed.
+- Next: commit reviewed snapshot, then push/rerun CI when requested.

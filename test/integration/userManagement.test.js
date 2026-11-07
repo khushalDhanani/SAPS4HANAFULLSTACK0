@@ -17,7 +17,7 @@ const ADMIN = { auth: { username: 'khushal', password: '' }, validateStatus: () 
 const VIEWER = { auth: { username: 'test-viewer-1120', password: '' }, validateStatus: () => true };
 const ANONYMOUS = { validateStatus: () => true };
 
-const DEFAULT_ANSWERS = { BAPI_USER_GET_DETAIL: { LOGONDATA: { USTYP: 'A' }, ISLOCKED: {}, RETURN: [] } };
+const DEFAULT_ANSWERS = { RFC_READ_TABLE: { DATA: [] }, BAPI_USER_GET_DETAIL: { LOGONDATA: { USTYP: 'A' }, ISLOCKED: {}, RETURN: [] } };
 
 /** Answers each function module from `answers` (a value, or a function that may throw); records every call. */
 function stubRfc(answers = {}) {
@@ -38,7 +38,24 @@ const detailOfType = (USTYP) => ({ LOGONDATA: { USTYP }, ISLOCKED: {}, RETURN: [
 const LOCK_OK = { BAPI_USER_LOCK: { RETURN: [] }, BAPI_TRANSACTION_COMMIT: {} };
 const UNLOCK_OK = { BAPI_USER_UNLOCK: { RETURN: [] }, BAPI_TRANSACTION_COMMIT: {} };
 
+// Password-expiry enrichment uses only these non-secret columns (see readPasswordExpiryData).
+const expiryReads = (username) => [
+    { fm: 'RFC_READ_TABLE', params: {
+        QUERY_TABLE: 'USR02', DELIMITER: '|',
+        FIELDS: ['BNAME', 'USTYP', 'UFLAG', 'GLTGV', 'GLTGB', 'PWDCHGDATE', 'TRDAT', 'LTIME'].map((FIELDNAME) => ({ FIELDNAME })),
+        OPTIONS: username ? [{ TEXT: `BNAME = '${username}'` }] : []
+    } },
+    { fm: 'RFC_READ_TABLE', params: {
+        QUERY_TABLE: 'USER_ADDR', DELIMITER: '|',
+        FIELDS: ['BNAME', 'NAME_TEXTC'].map((FIELDNAME) => ({ FIELDNAME })), OPTIONS: []
+    } }
+];
+
 describe('Integration: SU01 user management', () => {
+    beforeEach(() => {
+        // CAP retains its service/adapter across requests; each case supplies fresh RFC answers.
+        cds.services.UserManagementService._getAdapter().clearCache();
+    });
     afterEach(() => {
         jest.restoreAllMocks();
     });
@@ -96,13 +113,19 @@ describe('Integration: SU01 user management', () => {
 
             const res = await axios.get(`${BASE}/listUsers(search='ali',maxRows=100)`, ADMIN);
 
-            expect(calls).toEqual([
+            expect(calls).toHaveLength(4);
+            expect(calls).toEqual(expect.arrayContaining([
                 { fm: 'BAPI_USER_GETLIST', params: { MAX_ROWS: 100 } },
-                { fm: 'BAPI_USER_GET_DETAIL', params: { USERNAME: 'ALICE' } }
-            ]);
+                { fm: 'BAPI_USER_GET_DETAIL', params: { USERNAME: 'ALICE' } },
+                ...expiryReads()
+            ]));
             expect(res.status).toBe(200);
             expect(res.data.value).toEqual([{
                 protectedReason: '',
+                pwdLastChanged: '',
+                pwdExpiresAt: '',
+                pwdDaysRemaining: null,
+                pwdStatus: 'valid',
                 username: 'ALICE',
                 firstName: '',
                 lastName: '',
@@ -146,7 +169,11 @@ describe('Integration: SU01 user management', () => {
 
             const res = await axios.get(`${BASE}/getUserDetail(username='%20%20alice%20%20')`, ADMIN);
 
-            expect(calls).toEqual([{ fm: 'BAPI_USER_GET_DETAIL', params: { USERNAME: 'ALICE' } }]);
+            expect(calls).toHaveLength(3);
+            expect(calls).toEqual(expect.arrayContaining([
+                { fm: 'BAPI_USER_GET_DETAIL', params: { USERNAME: 'ALICE' } },
+                ...expiryReads('ALICE')
+            ]));
             expect(res.status).toBe(200);
             expect(res.data).toMatchObject({ username: 'ALICE', fullName: 'Alice Smith', userType: 'A', isLocked: false });
         });
