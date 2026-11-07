@@ -15,6 +15,20 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Docker `cap-dev` SAP Egress Network & CA Bundle Resolution — PASS (2026-11-07 16:58 IST):** Resolved backend error `SAP S/4HANA backend unavailable: getaddrinfo EAI_AGAIN vheudds4ap01.sap.aether.co.in`:
+  - **Root Cause**: In `compose.yaml`, `cap-dev` was placed exclusively on the `application` network, which is configured with `internal: true`. Docker strictly isolates internal networks, blocking all external DNS resolution and outbound traffic. Additionally, `cap-dev` lacked access to the trusted corporate SAP CA certificate for HTTPS.
+  - **Fix**:
+    - Attached the `sap-egress` network to `cap-dev` in `compose.yaml` alongside `application`.
+    - Mounted `./certs` to `/run/certs` (read-only) and configured `NODE_EXTRA_CA_CERTS: /run/certs/ca-bundle.pem` in `cap-dev`'s environment in `compose.yaml`.
+    - Placed trusted corporate SAP CA cert into `certs/ca-bundle.pem` (Git-ignored per `.gitignore`).
+  - **Validation**:
+    - `cap-dev-1` DNS lookup: `vheudds4ap01.sap.aether.co.in` successfully resolves to `172.27.100.32`.
+    - TCP probe: port 44300 connected successfully.
+    - HTTPS TLS handshake with corporate CA: verified successful against SAP Gateway.
+    - Container status: `healthy`.
+    - Automated tests: `npm test -- -t docker` (12/12 PASS), secret scan clean (0 findings).
+
+
 - **Docker Full Native ARM64 Architecture Alignment — PASS (2026-11-07 16:48 IST):** Fully resolved Docker Desktop `⚠️ AMD64` emulation warnings across the entire compose stack on Apple Silicon:
   - Both `cap-dev-1` and `approuter-dev-1` now build and run natively as **`linux/arm64`**.
   - Decoupled `cap-dev` from forced `linux/amd64` in `compose.yaml` using `${CAP_DEV_PLATFORM:-}` for the local development profile, while configuring `compose.sap-dev.yaml` to explicitly request `linux/amd64` when opt-in proprietary Linux x86-64 SAP NW RFC SDK integration is used.
@@ -635,6 +649,32 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-07 16:58 IST — Docker cap-dev SAP Egress Network & CA Bundle Resolution — PASS
+
+- **Request:** "SAP S/4HANA backend unavailable: getaddrinfo EAI_AGAIN vheudds4ap01.sap.aether.co.in"
+- **Affected Files:**
+  - `compose.yaml`
+  - `certs/ca-bundle.pem` (Git-ignored)
+  - `WORKSTATUS.md`
+- **Root Cause:**
+  - `cap-dev` was attached exclusively to the `application` network, configured as `internal: true`. Docker isolates internal networks by dropping all external DNS queries and outbound packets, resulting in `getaddrinfo EAI_AGAIN`.
+  - In addition, `cap-dev` lacked a volume mount for `./certs` to supply the corporate CA bundle required for HTTPS TLS verification to `https://vheudds4ap01.sap.aether.co.in:44300`.
+- **Changes:**
+  - Attached `sap-egress` network to `cap-dev` in `compose.yaml`.
+  - Added `./certs` bind mount to `/run/certs` (read-only) for `cap-dev` in `compose.yaml`.
+  - Set `NODE_EXTRA_CA_CERTS: /run/certs/ca-bundle.pem` in `cap-dev` environment in `compose.yaml`.
+  - Copied corporate CA cert to `certs/ca-bundle.pem` (ignored by `.gitignore`).
+  - Recreated `cap-dev-1` container.
+- **Validation:**
+  - `cap-dev-1` DNS lookup: `vheudds4ap01.sap.aether.co.in` successfully resolves to `172.27.100.32`.
+  - TCP probe: port 44300 connects successfully.
+  - HTTPS TLS handshake with corporate CA bundle: verified.
+  - `docker inspect saps4hana-cap-dev-1`: `healthy`.
+  - `npm test -- -t docker`: 12/12 unit tests PASS.
+  - `node tools/scan-secrets.js`: 0 secrets across 927 tracked files.
+  - `git diff --check`: 0 whitespace issues.
+
 
 ### 2026-11-07 16:48 IST — Docker Full Native ARM64 Architecture Alignment — PASS
 
