@@ -15,6 +15,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Docker Dev Stack Active & Approuter Port 5000 Verified — PASS (2026-11-07 17:01 IST):** Verified full dev stack accessibility at `http://127.0.0.1:5000`:
+  - Resolved port interception by macOS AirPlay Receiver (`ControlCenter` / `Server: AirTunes/940.23.1` returning 403 Forbidden) by starting `approuter-dev` alongside `cap-dev`.
+  - Both containers `saps4hana-cap-dev-1` and `saps4hana-approuter-dev-1` are running native `arm64` with status `healthy`.
+  - `curl -v http://127.0.0.1:5000/saps4hanafiori/index.html` returns `HTTP/1.1 200 OK` serving the SAPUI5 Fiori app.
+  - Reverse proxy route `http://127.0.0.1:5000/odata/v4/...` verified forwarding to `cap-dev:4004`.
+
+
 - **Docker `cap-dev` SAP Egress Network & CA Bundle Resolution — PASS (2026-11-07 16:58 IST):** Resolved backend error `SAP S/4HANA backend unavailable: getaddrinfo EAI_AGAIN vheudds4ap01.sap.aether.co.in`:
   - **Root Cause**: In `compose.yaml`, `cap-dev` was placed exclusively on the `application` network, which is configured with `internal: true`. Docker strictly isolates internal networks, blocking all external DNS resolution and outbound traffic. Additionally, `cap-dev` lacked access to the trusted corporate SAP CA certificate for HTTPS.
   - **Fix**:
@@ -649,6 +656,21 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-07 17:01 IST — Approuter Port 5000 Active & Verified — PASS
+
+- **Request:** "Not working : http://127.0.0.1:5000/saps4hanafiori/index.html"
+- **Affected Files:**
+  - `WORKSTATUS.md`
+- **Root Cause:**
+  - When `cap-dev` was recreated earlier, `approuter-dev` was not started in that single-service command.
+  - On macOS Monterey/Ventura/Sonoma/Sequoia, the default AirPlay Receiver (`ControlCenter`) listens on port 5000 (`*:commplex-main`). When `approuter-dev` is down, AirPlay intercepts port 5000 and responds with `HTTP 403 Forbidden` (`Server: AirTunes/940.23.1`).
+- **Resolution:**
+  - Started `approuter-dev` container with `docker compose --profile dev up -d approuter-dev`.
+  - Re-bound port `127.0.0.1:5000` to `approuter-dev`.
+  - Verified `curl -v http://127.0.0.1:5000/saps4hanafiori/index.html` returns `HTTP/1.1 200 OK`.
+  - Verified reverse proxy forwarding from `approuter-dev` to `cap-dev:4004`.
+
 
 ### 2026-11-07 16:58 IST — Docker cap-dev SAP Egress Network & CA Bundle Resolution — PASS
 
