@@ -1,0 +1,209 @@
+name: saps4hana
+
+services:
+  cap:
+    profiles: [qa, prod]
+    build:
+      context: .
+      dockerfile: docker/cap/Dockerfile
+      args:
+        PLATFORM: ${PLATFORM:-linux/amd64}
+        INSTALL_DEV_DEPENDENCIES: "false"
+    platform: ${PLATFORM:-linux/amd64}
+    environment:
+      NODE_ENV: production
+      PORT: "4004"
+      PLATFORM: ${PLATFORM:-linux/amd64}
+      APP_ROLE: cap
+      BINDING_SERVICES: xsuaa,destination,hana
+      RFC_SDK_PATH: /usr/sap/nwrfcsdk
+      S4_DESTINATION_NAME: ${S4_DESTINATION_NAME:-}
+      S4_RFC_DESTINATION_NAME: ${S4_RFC_DESTINATION_NAME:-}
+    volumes:
+      - type: bind
+        source: ${BINDINGS_HOST_PATH:-./secrets}
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${RFC_SDK_HOST_PATH:-./nwrfcsdk}
+        target: /usr/sap/nwrfcsdk
+        read_only: true
+      - type: bind
+        source: ./certs
+        target: /run/certs
+        read_only: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://127.0.0.1:4004/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - application
+      - sap-egress
+
+  cap-dev:
+    profiles: [dev]
+    build:
+      context: .
+      dockerfile: docker/cap/Dockerfile
+      args:
+        PLATFORM: ${PLATFORM:-linux/amd64}
+        INSTALL_DEV_DEPENDENCIES: "true"
+    platform: ${PLATFORM:-linux/amd64}
+    environment:
+      NODE_ENV: test
+      PORT: "4004"
+      PLATFORM: ${PLATFORM:-linux/amd64}
+      APP_ROLE: cap-local
+      BINDING_SERVICES: ""
+      REQUIRE_RFC_SDK: "false"
+      ENABLE_DEV_TOKEN_ISSUER: "true"
+      LOCAL_AUTH_REQUIRED: "true"
+    env_file:
+      - path: ${LOCAL_AUTH_ENV_FILE:-./.env.docker.local}
+        required: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://127.0.0.1:4004/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    networks:
+      - application
+
+  approuter:
+    profiles: [qa, prod]
+    build:
+      context: .
+      dockerfile: docker/approuter/Dockerfile
+      args:
+        PLATFORM: ${PLATFORM:-linux/amd64}
+    platform: ${PLATFORM:-linux/amd64}
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      PLATFORM: ${PLATFORM:-linux/amd64}
+      APP_ROLE: approuter
+      BINDING_SERVICES: xsuaa
+      destinations: '[{"name":"cap-api","url":"http://cap:4004","forwardAuthToken":true}]'
+    ports:
+      - "127.0.0.1:${ROUTER_PORT:-5000}:5000"
+    volumes:
+      - type: bind
+        source: ${BINDINGS_HOST_PATH:-./secrets}
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./certs
+        target: /run/certs
+        read_only: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 20s
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('net').connect(5000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      cap:
+        condition: service_healthy
+    networks:
+      - frontend
+      - application
+
+  approuter-dev:
+    profiles: [dev]
+    build:
+      context: .
+      dockerfile: docker/approuter/Dockerfile
+      args:
+        PLATFORM: ${PLATFORM:-linux/amd64}
+    platform: ${PLATFORM:-linux/amd64}
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      PLATFORM: ${PLATFORM:-linux/amd64}
+      APP_ROLE: approuter
+      BINDING_SERVICES: ""
+      destinations: '[{"name":"cap-local","url":"http://cap-dev:4004","forwardAuthToken":true}]'
+    ports:
+      - "127.0.0.1:${ROUTER_PORT:-5000}:5000"
+    volumes:
+      - type: bind
+        source: ./docker/approuter/xs-app.local.json
+        target: /app/router/xs-app.json
+        read_only: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 20s
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('net').connect(5000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      cap-dev:
+        condition: service_healthy
+    networks:
+      - frontend
+      - application
+
+networks:
+  frontend:
+  application:
+    internal: true
+  sap-egress:

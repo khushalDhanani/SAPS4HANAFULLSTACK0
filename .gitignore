@@ -11,9 +11,19 @@ yarn-error.log*
 .env
 .env.*
 .env.local
+.env.docker.local
 !.env.example
+!.env.docker.local.example
 default-env.json
 default-services.json
+secrets/*
+!secrets/README.md
+!secrets/.gitkeep
+certs/*
+!certs/README.md
+sdk/
+nwrfcsdk/
+sapnwrfcsdk/
 
 # CAP & Node Runtime Artifacts
 gen/

@@ -15,6 +15,99 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Docker RFC fix — In Progress (2026-11-07):** Linux native binary loads with discovered SDK. Connected override now retains pinned node-rfc prebuild and mounts SDK read-only; startup guard checks RFC config/load. Restored missing RFC system number from matching host target without printing values. Build and temporary-container native/RFC read verification pass. Activation blocked by automatic approval review pending explicit approval of local in-memory data loss.
+
+- **SDK search (2026-11-07 10:42 IST) — FOUND:** Wider home-directory search located Linux x86-64 SDK libraries and include/lib directories inside the installed SAP service-catalog VS Code extension. Earlier missing-SDK finding is superseded for file availability only; Docker/node-rfc compatibility and permitted reuse remain NOT VERIFIED.
+
+- **Admin listUsers 502 (2026-11-07 10:39 IST) — BLOCKED:** Logs confirm BAPI_USER_GETLIST fails because node-rfc is not installed. Running container is Linux x64 with no mounted RFC SDK; .env.docker.local lacks S4_RFC_SYSNR. Host SDK contains macOS .dylib files (not Linux ELF); repository nwrfcsdk directory empty. Requires licensed Linux x86-64 SDK, matching node-rfc installation and verified RFC config before implementation/validation.
+
+- **cap-dev startup (2026-11-07 10:37 IST) — BLOCKED:** Sanitized logs confirm local-auth startup guard failure. Saved LOCAL_DEV_PASSWORD is absent/empty; signing secret meets minimum, SAP settings and trusted CA are present. Add a local password, then recreate with the SAP override. No runtime or credential changes made in this check.
+
+- **SAP-connected Docker override (2026-11-07 10:35 IST) — In Progress:** Newly saved SAP settings are absent from running cap-dev. Host metadata GET passes with existing CA. Added opt-in compose.sap-dev.yaml for SAP egress and read-only CA mount; 54 tests and host/container metadata checks pass. Default isolation retained. BLOCKED: LOCAL_DEV_PASSWORD is now absent from saved env file; active container still has earlier password. Applying requires restoration and recreation with loss of in-memory local data.
+
+- **Browser login (2026-11-07 10:33 IST) — PASS; SAP dashboard BLOCKED:** Chrome sign-in with configured local credentials reaches #dashboard and shows profile khushal. Dashboard reports ECONNREFUSED 127.0.0.1:1, matching the intentionally isolated test-profile backend. No application change required for login. Next: decide whether to retain offline mode or configure a verified SAP-connected runtime.
+
+- **Updated local auth file rechecked (2026-11-07 10:29 IST) — API PASS:** Password and signing secret match the running cap-local container; secret meets the 32-character minimum. Saved-password login and bearer profile both return HTTP 200 and authenticated=true. File is Git-ignored. Browser outcome remains NOT VERIFIED; no restart needed.
+
+- **Local login verification (2026-11-07 10:28 IST) — API PASS / browser PARTIAL:** Saved and running-container local passwords match. Routed login with khushal and the saved password returns HTTP 200, authenticated=true and a token; bearer getUserInfo returns HTTP 200 and authenticated=true. No restart needed. Next: clear browser autofill and use LOCAL_DEV_PASSWORD from .env.docker.local; browser-submitted credentials remain unknown.
+
+- **Local Docker login 500 (2026-11-07 10:21 IST) — PARTIAL:** Both dev containers are healthy; failed login logs confirm missing SAP client after local credentials fall through to SAP authentication. The `cap-local` handler now accepts only the configured local login and returns an authentication failure otherwise. All 60 targeted tests, lint and CDS compile pass. Running image remains unchanged; container recreation discards in-memory local data and is left to the user. Browser/runtime validation is pending.
+
+- **Docker Deployment — `cap-dev` Missing Local Auth File (2026-11-07 10:11 IST):**
+  - Current `cap-dev` logs show the runtime guard rejecting startup because the required local token secret/password values are missing. File-presence-only check confirms `.env.docker.local` is absent; the Compose config omits the optional env file when it is absent.
+  - Compose already sets `ENABLE_DEV_TOKEN_ISSUER=true`; the failure message lists all local requirements together, but the missing signing secret and password are confirmed by the absent env file. This is local setup, not the earlier missing-schema image defect.
+  - No application/config code was changed. No `.env` or credential contents were read; no SAP calls were made.
+  - **Next:** Create `.env.docker.local` using the documented `umask 077`/`openssl rand` command, then recreate the local stack with `docker compose --env-file .env.example --profile dev up --build -d`. Check `ps` and non-secret startup status.
+
+- **Docker Deployment — Isolated Local Development Profile — PARTIAL (2026-11-07 10:01 IST):**
+  - Following the user's direction to use local mode, Compose now separates local `cap-dev`/`approuter-dev` from QA/production `cap`/`approuter`. The local CAP profile uses `NODE_ENV=test`, in-memory SQLite, and the existing local token issuer; it has no service bindings, RFC SDK mount, SAP environment configuration, or SAP egress network. Its unauthenticated router is published only on loopback.
+  - Added local-auth startup validation and a unit test; added a local auth env-file template and updated Docker deployment instructions to distinguish local testing from XSUAA/HANA deployment. A local `localDir` route bug found in smoke testing was corrected.
+  - Targeted Jest tests, lint, UI5 build/lint, Compose profile validation, local CAP health/login/token validation, and local approuter Fiori/API routing all pass. The local router/API smoke ran directly under Node and is not a Docker container test.
+  - Docker image build was attempted but could not connect to the Docker daemon socket, which is absent in this session. Container startup, health, filesystem/UID enforcement, and actual Compose port/network behavior therefore remain NOT VERIFIED.
+  - No SAP, XSUAA, HANA, Destination, or live deployment call was made. The project `.env` and secret file contents were not read or printed.
+  - **Next:** Restore Docker daemon access and build/run the local Compose profile, then verify container health and the same loopback Fiori/login flow. Keep QA/production and real SAP integration PARTIAL until their prerequisites are available.
+
+- **Docker Deployment — Local CAP Container Startup Fix — PARTIAL (2026-11-07 10:09 IST):**
+  - Docker Desktop was started; `docker info` reports `linux/aarch64`. Both local images built, and the isolated native-ARM64 Compose smoke now passes.
+  - Root cause was a missing packaged runtime dependency: `srv/mm/purchase-order/validation/purchaseOrder.validation.js` imports `config/schema/purchaseOrderRules.json`, but the CAP image omitted `config/`.
+  - Updated `docker/cap/Dockerfile` to copy only `config/schema`; unrelated deployment configuration remains excluded.
+  - An isolated Compose run confirmed both services healthy, Fiori static route success, local login, bearer-token `getUserInfo`, and seven configured role scopes. Temporary credentials and the isolated project were removed.
+  - **Test Impact Decision:** `TEST UPDATED` — actual container startup and routed API smoke plus targeted CAP/auth regressions.
+  - No SAP calls were made and the project `.env` was not read.
+  - **Next:** User can create `.env.docker.local` per the Docker guide and start the persistent local profile. QA/production and real SAP integration remain unverified pending their prerequisites.
+
+- **Docker Deployment — Repeated Build Blocked by Docker Daemon (2026-11-07 10:04 IST):**
+  - User-provided terminal output repeats failure to connect to `~/.docker/run/docker.sock`; Docker Desktop's `desktop-linux` context is selected but its daemon socket is unavailable. The image build did not start.
+  - `docker compose --env-file .env.example --profile dev config --services` confirms the current `compose.yaml` resolves the local services as `cap-dev` and `approuter-dev`. The pasted `cap`/`approuter` unhealthy output does not match the current local `dev` service set and likely came from an earlier Compose configuration/run.
+  - No project files other than this status record changed; no `.env` contents were read. No container, SAP, or external call was made.
+  - **Next:** Start/restart Docker Desktop and wait for `docker info --format '{{.OSType}}/{{.Architecture}}'` to succeed; then run `docker compose --env-file .env.example --profile dev up --build -d` and confirm only `cap-dev`/`approuter-dev` appear.
+
+- **Docker Deployment — CAP Startup Blocked by Missing Service Bindings (2026-11-06 14:26 IST):**
+  - User's Compose run built both images, but `cap` exited with code 1 and entered a restart loop; `approuter` stayed `Created` because it depends on a healthy CAP.
+  - Sanitized container-log inspection identified the first required binding as `xsuaa`. File-presence checks (names only; contents not read) confirmed `secrets/xsuaa.json`, `secrets/destination.json`, and `secrets/hana.json` are all absent.
+  - This is the expected fail-fast binding validation, not a health endpoint or Docker build failure. No binding values, `.env` values, or SAP/HANA/XSUAA calls were inspected or made.
+  - Next, obtain the approved binding files through the protected deployment channel and place them in the configured host binding directory. CAP will then proceed to the RFC SDK check; a matching licensed SDK is also required before CAP can become healthy.
+
+- **Docker Deployment — Docker/Compose Scaffold Implemented — PARTIAL (2026-11-06 14:20 IST):**
+  - Added CAP and approuter Docker images, shared `dev`/`qa`/`prod` Compose profiles, a Docker-only approuter config that serves the built Fiori app through `localDir`, service-binding loading, RFC SDK architecture/load checks, optional CA loading, and deployment documentation. Existing MTA, BTP approuter config, and application production guard are unchanged.
+  - Verified to date: Compose configuration for all three profiles; AMD64 builds of both images; ARM64 approuter build and runtime architecture; local static-file routing via the built approuter without XSUAA in a test-only unauthenticated config; runtime's clear SDK-missing failure; 8 helper unit tests; targeted ESLint.
+  - Images run as non-root with read-only root filesystems, health checks, reduced capabilities, and CAP not published on a host port. No binding values, SDK, or certificates are included in image layers.
+  - XSUAA sign-in/role enforcement, actual service-binding compatibility, HANA persistence, SAP/Destination access, custom CA trust, mounted licensed SDK loading/connectivity, authenticated browser flow, and target environment remain NOT VERIFIED because deployment prerequisites are still unavailable.
+  - `hadolint` is not installed. Docker builds emitted dependency/source-map warnings; see the change log. No SAP, XSUAA, HANA, or remote deployment calls were made.
+
+- **Docker Deployment — Missing RFC SDK Host Mount Handling (2026-11-06 14:25 IST) — PARTIAL:**
+  - User ran `docker compose --profile dev up --build -d` with the documented default SDK host path absent. Compose failed before creating containers with `bind source path does not exist` because the SDK bind had `create_host_path: false`.
+  - Updated Compose to create an empty SDK host directory when absent so CAP can run its startup check and report the missing SDK library itself. This does not install or validate the SDK; `PLATFORM` and a matching licensed SDK are still required for a healthy CAP.
+  - No user `.env` values were inspected or changed. No SAP, XSUAA, HANA, or remote calls were made.
+
+- **Docker Deployment — Architecture Choice Recorded (2026-11-06 14:02 IST):**
+  - User selected option 1: retain the existing XSUAA identity and SAP HANA/HDI persistence. Preserve the current seven roles and the existing BTP production guard; this selection does not confirm that the Docker target has service bindings, network access, or SAP SDK support.
+  - Verified the published `@sap/approuter` 22.0.3 schema accepts `localDir` routes and its static-resource handler serves those paths. This supports a route design for a locally built Fiori bundle while retaining XSUAA route authentication; no router image/build/runtime test has been run.
+  - The intended Linux deployment architecture and supported Linux SAP NW RFC SDK artifact/source remain UNKNOWN. The earlier local macOS SDK check does not validate a Linux container.
+  - Availability and approved delivery of XSUAA, Destination, and HANA/HDI bindings; external HANA and SAP network routes; and TLS certificate sources remain UNKNOWN. Do not put service keys or certificates in Git or chat.
+  - No application or deployment source was changed. No SAP, HANA, XSUAA, or deployment connection was made.
+
+- **Docker Deployment — P0 Phase 5 Authentication/Security and P1 Phase 6 Compose Profiles — BLOCKED (2026-11-06 13:57 IST):**
+  - Existing deployed auth is CAP JWT with the `xsuaa` VCAP binding; both BTP approuter configs require XSUAA. `xs-security.json` defines the requested seven roles/scopes and role templates, including Plant attributes for warehouse roles. No standalone OIDC issuer, JWKS, audience, claim mapping, Compose auth proxy, Compose profiles, or Dockerfiles are configured.
+  - The local bearer-token verifier is explicitly development-only and signs with `LOCAL_AUTH_SECRET`; it is not an approved production identity provider and must not be enabled as a Compose workaround. `productionGuard.js` still enforces the existing production checks.
+  - The approved external identity provider and its issuer, audience, signature/JWKS source, role/scope claim shape, and Plant attribute mapping are UNKNOWN. No Compose auth branch or router was implemented, so existing BTP behavior and production guards remain unchanged.
+  - Existing request-size protection includes a 4 MB AI chat limit; a shared edge rate-limit policy/configuration was not found. A Compose proxy topology, TLS certificate source, internet exposure, external HANA route, and corporate SAP private routes remain unverified. Docker is currently available and reports `linux/aarch64`; this does not establish the deployment target architecture.
+  - No security configuration, auth dependency, Docker/Compose file, certificate, or secret was changed. No token, SAP, HANA, or deployment calls were made.
+
+- **Docker Deployment — P0 Phase 3: Database and Persistence — BLOCKED (2026-11-06 13:55 IST):**
+  - Confirmed the repository depends on CAP persistence for Goods Issue posting-attempt idempotency/recovery, User Lock notification deduplication/retries/monitor state, and password-expiry notification/monitor state. `@cap-js/hana` is installed and the MTA declares an HDI container bound to the CAP service.
+  - HANA-dialect CDS compilation confirms the schema emits a unique constraint for `GoodsIssuePostingAttempt.ReferenceDocument`. Existing posting-attempt and lock-queue tests exercise database-backed uniqueness, visibility across store instances, duplicate notifications, and concurrent claiming under the test profile; tests use SQLite/test mocks, not HANA.
+  - The Docker daemon currently reports `linux/aarch64`; this does not establish that it is the intended deployment target. HANA endpoint/service binding, credentials, private routing/firewall access, HDI schema provisioning, and availability of an existing HANA instance to the target VM are UNKNOWN. No HANA connection or deployment was attempted.
+  - Process environment and local `.env`/`.env.local` key-presence checks found no `VCAP_SERVICES` or HANA database configuration keys (values were not inspected). `cf` CLI is unavailable.
+  - Backup/restore, real database restart persistence, target HANA schema deployment, and two-backend-instance behavior on HANA remain NOT VERIFIED. No SQLite or JSON replacement was introduced.
+
+- **Docker Deployment — P0 Phase 2: SAP Connectivity — BLOCKED (2026-11-06 13:48 IST):**
+  - Inspection confirmed existing BTP Destination-backed OData/RFC paths and a local development fallback; no Compose deployment mode or Compose-specific configuration variables exist.
+  - The current local OData fallback uses Basic authentication and RFC uses username/password credentials. Approval of those authentication methods for Compose is UNKNOWN; no Compose resolver or production-guard changes were made.
+  - Existing startup requires BTP destination bindings in production. Docker identity provider, destination/credential delivery, target SAP system/client scope, and company/SAP CA certificate source are UNKNOWN.
+  - The host is macOS arm64 with `node-rfc` 3.3.1 and SAP NW RFC SDK 7.50 PL19 loadable locally; Docker is unavailable. Target Linux architecture, SDK installation/source, container library resolution, DNS/routing, and SAP RFC connectivity are NOT VERIFIED.
+  - `npm run preflight:rfc` was NOT RUN: the SAP target identity and non-production scope were not verified. No SAP calls or writes were made.
+
 - **Password Expiry Monitoring — Phase 5: Regression Verification, Playwright E2E & Final Sign-Off (2026-11-06 13:38 IST) — PASS:**
   - Milestone Completion: All 5 phases of the SAP S/4HANA Password Expiry Monitoring system are fully implemented, tested, and validated with zero live SAP writes and zero hash leakage.
   - End-to-End Regression Verification:
@@ -351,6 +444,33 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- RFC fix is built and read-only BAPI probe passed. Obtain explicit approval to recreate cap-dev (discards local in-memory data), then apply connected override and verify routed listUsers/browser. Automatic review rejected the attempted recreation; do not retry without approval.
+
+- Admin listUsers: obtain path to licensed Linux x86-64 SAP NW RFC SDK, then prepare matching node-rfc image installation/mount and S4_RFC_SYSNR from verified development settings; run read-only RFC validation. macOS SDK cannot satisfy Linux container dependency.
+
+- Restore missing LOCAL_DEV_PASSWORD (existing running value can be retained without printing it), then approve recreation with compose.sap-dev.yaml and trusted CA path. This clears local in-memory data. Verify dashboard after activation; no SAP writes.
+
+- Browser login is verified. To load real dashboard data, establish the intended SAP-connected runtime; current cap-local/test mode intentionally cannot connect to SAP. Do not bypass isolation or invent connection settings.
+
+- Local login: API verification supersedes the earlier pending runtime check. No restart needed for the current password. Clear browser autofill and enter khushal plus LOCAL_DEV_PASSWORD from .env.docker.local; confirm browser navigation.
+
+- Recreate local Docker services when loss of in-memory local data is acceptable: `docker compose --env-file .env.example --profile dev up --build -d cap-dev approuter-dev`. Verify browser login using khushal and LOCAL_DEV_PASSWORD from .env.docker.local.
+
+- **Docker Deployment — Local Profile Verification and QA/Production Prerequisites:**
+  - The current `cap-dev` restart loop is because `.env.docker.local` is absent. Create the local-only auth file using the documented command, then recreate with `docker compose --env-file .env.example --profile dev up --build -d`; confirm `cap-dev` and `approuter-dev` reach healthy state using `docker compose --env-file .env.example --profile dev ps`.
+  - Docker daemon has been restored and an isolated native-ARM64 Compose smoke passed with both services healthy, Fiori served, and local login/token checks successful. That smoke used a temporary auth file and cleaned up its stack; it does not persist credentials for the user's subsequent run.
+  - The non-container local checks passed using temporary generated credentials; do not read or pass the project `.env` to local containers. Use `docker compose --env-file .env.example --profile dev up --build` after creating `.env.docker.local` as documented in `docs/deployment/docker.md`. This profile uses test auth and is not suitable for shared/deployed environments.
+  - QA/production remain dependent on the real protected `xsuaa.json`, `destination.json`, and `hana.json` bindings; approved external HANA/SAP routes; a licensed RFC SDK matching the chosen `PLATFORM`; and optional approved CA material. Keep those values out of Git/chat. The current startup check previously confirmed the binding files were absent.
+  - Only after prerequisites are supplied should the corresponding `qa`/`prod` profile, XSUAA roles, HANA persistence, external SAP/Destination connectivity, TLS trust, RFC load, and explicitly authorized **READ-ONLY** preflight be tested. No SAP write is authorized.
+- **Docker Deployment — P0 Phase 3: Database and Persistence:**
+  - Confirm whether the intended deployment VM can reach the existing HANA instance over an approved private route and whether an HDI container/database service is already provisioned for this application.
+  - If reachable/provisioned, provide a non-secret connectivity/deployment path and authorize a bounded read-only connection check; supply credentials and certificates only through the approved secret/certificate channel. If not, provision a separate supported HANA database/HDI container before wiring Docker.
+  - After the target is established, add the Compose HANA binding/configuration without replacing HANA with SQLite or JSON, then verify HANA schema deployment, persistent restart behavior, duplicate `ReferenceDocument` prevention, pending notification persistence, concurrent instances, and backup/restore.
+- **Docker Deployment — P0 Phase 2:**
+  - Obtain the approved Compose OData and RFC authentication methods, including whether secrets are to be provided via mounted Compose secret files or another approved secret manager. Do not select Basic authentication by inference from local development configuration.
+  - Confirm the intended non-production SAP target identity and client for the read-only RFC preflight; provide endpoint/system values only through the approved local secret/config channel, not chat.
+  - Confirm the target Linux architecture and provide the authorized SAP NW RFC SDK installation artifact/source and company/SAP CA certificate through approved non-Git channels.
+  - After these inputs, implement the explicit Compose configuration mode while preserving BTP behavior, add resolver/guard/TLS tests, build and run the container, then perform the authorized READ-ONLY `npm run preflight:rfc` and restart verification.
 - **SAP User Lock Notification System (Agent 5 Complete - 2026-11-06 11:30 IST):**
   - All automated unit, integration, queue concurrency, health monitoring, MTA build validation, and lint suites pass with 0 errors.
   - Final GO recommended for deployment to BTP test environment.
@@ -428,6 +548,136 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-06 14:20 IST — Docker/Compose Scaffold Implementation — PARTIAL
+
+- **Request:** Implement Docker/Compose deployment support while retaining XSUAA and external HANA/HDI, parameterizing architecture, loading bindings from read-only secrets, validating a separately mounted RFC SDK, and keeping custom CA support optional.
+- **Scope:** Add only Docker-specific container, Compose, runtime, test, ignore, and documentation files. Do not modify BTP MTA/manifest/router deployment behavior or relax the production guard.
+- **Changes:**
+  - Added pinned Node 22.23.4 CAP and approuter images. The approuter image installs exact `@sap/approuter` 22.0.3 and builds the Fiori app into a local `localDir` route using `docker/approuter/xs-app.json`; existing `app/router/xs-app.json` is unchanged.
+  - Added `compose.yaml` with `dev`, `qa`, and `prod` profiles, internal CAP network, SAP egress network, loopback-only approuter port, a protected read-only binding-directory mount, optional read-only CA directory, read-only/non-root containers, reduced capabilities, and health checks.
+  - Added `tools/docker/runtime.js` to validate and combine per-service binding objects into `VCAP_SERVICES`, configure optional CA trust, validate RFC SDK ELF architecture and loadability, and fail closed on missing prerequisites without logging binding values. It can also run one-off commands after preparing the same runtime environment for the guarded RFC preflight.
+  - Added a Docker-only package manifest and lockfile pinning approuter 22.0.3 and its dependency tree, helper tests, an unauthenticated test-only route fixture, deployment and secret/CA documentation, `.dockerignore`, and Docker ignore/Compose variables in `.gitignore` and `.env.example`.
+  - No BTP/MTA files, `productionGuard.js`, SAP integration clients, credentials, SDK binaries, or certificate material changed.
+- **Test Impact Decision:** `TEST ADDED` — `test/unit/tools/dockerRuntime.test.js`; also verified the built approuter's local static route with a Docker smoke run that does not require XSUAA.
+- **Executed Validations:**
+  - `npx jest test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 1 suite and 8 tests.
+  - `npx eslint tools/docker/runtime.js test/unit/tools/dockerRuntime.test.js`: PASS.
+  - `docker compose --env-file .env.example --profile dev config --quiet`, and equivalent `qa` and `prod` commands: PASS without warnings.
+  - `jq -e '.packages["node_modules/@sap/approuter"].version == "22.0.3"' docker/approuter/package-lock.json`: PASS.
+  - `docker build --platform linux/amd64 --build-arg PLATFORM=linux/amd64 -f docker/approuter/Dockerfile -t saps4hana-approuter:local .`: PASS; UI5 build succeeded, with existing `glob`/`whatwg-encoding` deprecation notices and a missing jspdf source-map warning.
+  - `docker build --platform linux/amd64 --build-arg PLATFORM=linux/amd64 -f docker/cap/Dockerfile -t saps4hana-cap:local .`: PASS; npm warned the existing optional `node-rfc@3.3.1` dependency is deprecated/unsupported by its publisher.
+  - `docker build --platform linux/arm64 --build-arg PLATFORM=linux/arm64 -f docker/approuter/Dockerfile -t saps4hana-approuter:arm64-check .`: PASS. Container reported `linux/arm64`; the daemon itself reports `linux/aarch64`.
+  - Docker smoke: started the built AMD64 approuter with a test-only route configured for `authenticationType: none`, no XSUAA binding, and a read-only filesystem; `GET /saps4hanafiori/index.html` returned HTTP 200 and HTML.
+  - Docker startup smoke with test-only binding files and no SDK: CAP failed clearly for missing `/usr/sap/nwrfcsdk/lib/libsapnwrfc.so`; output did not contain the fixture credential marker.
+  - Docker startup smoke with no binding files: CAP failed clearly for missing `/run/secrets/xsuaa.json`; no binding values were logged.
+  - Image inspection: all three built images use user `node`; AMD64 and ARM64 image architectures match their build targets. Built approuter reports `@sap/approuter` 22.0.3. Compose inspection confirmed read-only filesystems, unprivileged user, and no published CAP port.
+  - `git diff --check`: PASS. `hadolint` Dockerfile lint: NOT RUN because `hadolint` is not installed.
+  - An initial test run exposed that the SDK helper assumed Linux when unit-tested on macOS; the check now takes runtime platform as an input and the final suite passes. An initial Compose config warned that local-file secret mode is ignored; Compose now uses a protected read-only binding-directory mount and final profile configs are warning-free. A first router smoke probe encountered startup-time empty replies, then passed after retry; the final repeat passed without retries.
+  - No XSUAA-authenticated login, real binding file, HANA connection/persistence, TLS trust, licensed SDK load, live SAP preflight, or remote deployment was attempted. These remain NOT VERIFIED.
+- **Blockers:** Real XSUAA/role flow, Destination/HANA binding compatibility and network reachability, licensed RFC SDK support/runtime load, CA trust, and SAP read-only preflight still require the human-provided target-specific prerequisites.
+- **Next Action:** Supply the architecture choice, protected binding files and host paths, licensed matching RFC SDK mount, and optional CA bundle on the deployment host; then run the documented Compose and environment checks.
+
+### 2026-11-06 14:26 IST — CAP Startup Diagnosis: Missing XSUAA Binding — BLOCKED
+
+- **Request:** Diagnose the user's Compose result: `cap` became unhealthy and the dependent approuter did not start.
+- **Finding:** `docker compose ps -a` showed `cap` restarting with exit code 1 and `approuter` still `Created`. Sanitized `docker logs saps4hana-cap-1` classification identified `xsuaa` as the first missing binding. A file-presence-only check found all three expected files (`xsuaa.json`, `destination.json`, `hana.json`) absent; file contents and `.env` values were not read.
+- **Changes:** `WORKSTATUS.md` only; no application or Compose files changed.
+- **Test Impact Decision:** `EXISTING TEST SUFFICIENT` — `test/unit/tools/dockerRuntime.test.js` verifies missing service bindings fail with a clear error; the container's actual sanitized startup output confirmed that path.
+- **Executed Validations:**
+  - `docker compose --env-file .env ps -a`: observed CAP `Restarting (1)` and approuter `Created`.
+  - Sanitized log classifier using `docker logs saps4hana-cap-1`: first missing binding reported as `xsuaa`; did not emit raw log lines.
+  - File-presence checks only: `xsuaa.json`, `destination.json`, and `hana.json` all absent from `secrets/`.
+  - No binding values, `.env` values, SAP/XSUAA/HANA endpoints, or service calls were inspected or made.
+- **Blockers:** Required real XSUAA, Destination, and HANA binding files are not present. The licensed RFC SDK is also not confirmed at the configured path.
+- **Next Action:** Obtain and install the approved binding files on the deployment host (do not use placeholders), then ensure a matching licensed Linux RFC SDK is mounted. Retry Compose only after those prerequisites are in place.
+
+### 2026-11-06 14:25 IST — Missing RFC SDK Host Mount Handling — PARTIAL
+
+- **Request:** Diagnose the user's Compose startup failure: the default `./nwrfcsdk` bind source did not exist, so Compose rejected the mount before the SDK startup check could report the missing library.
+- **Changes:**
+- `compose.yaml`: Allow Compose to create the SDK host directory when absent; the existing startup validator then reports that the SDK shared library is missing.
+- `docs/deployment/docker.md`: Explain that the created directory must be populated with the licensed, architecture-matching SDK or `RFC_SDK_HOST_PATH` changed.
+- `WORKSTATUS.md`: Record the user-provided failure and the narrow fix. No `.env` was read or changed.
+- **Test Impact Decision:** `EXISTING TEST SUFFICIENT` — `test/unit/tools/dockerRuntime.test.js` includes the explicit missing SDK library case; Compose config validation will be re-run after the mount change.
+- **Executed Validations:**
+  - `docker compose --env-file .env.example --profile dev config --quiet`, and equivalent `qa` and `prod` commands: PASS after the SDK mount change.
+  - `npx jest test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 1 suite / 8 tests, including the missing-SDK check.
+  - `git diff --check`: PASS.
+  - No `docker compose up` retry was run because real binding files and the licensed SDK are still absent; no SAP, XSUAA, HANA, or remote calls were made.
+- **Blockers:** No licensed RFC SDK is available at the selected host path; CAP will fail startup with the expected missing-SDK message until supplied. Binding, XSUAA, HANA, SAP network, and CA checks remain NOT VERIFIED.
+- **Next Action:** User places the matching Linux SDK at the configured read-only host path and provides approved bindings, then retries `docker compose --profile dev up --build -d`.
+
+### 2026-11-06 14:02 IST — Docker Deployment Architecture Choice Recorded — BLOCKED
+
+- **Request:** Continue Docker deployment work after the user selected option 1.
+- **Scope:** Record the selected identity/database direction and verify the existing approuter's local static-file routing before implementation.
+- **Changes:**
+  - `WORKSTATUS.md`: Recorded the selection to retain XSUAA and HANA/HDI, confirmed the `localDir` capability in the published approuter 22.0.3 package, and replaced the unresolved IdP choice with the remaining deployment prerequisites.
+  - No Docker, router, CAP, SAP integration, security, database, or secret files changed.
+- **Test Impact Decision:** `TEST NOT POSSIBLE` — this is a status/planning update only; no runtime behavior changed.
+- **Executed Validations:**
+  - Reviewed `AGENTS.md`, `WORKSTATUS.md`, `skills/README.md`, and the `sap-test-validation` skill; checked `git status` before editing. The branch is `feature01`; the pre-existing worktree change is in `WORKSTATUS.md`.
+  - `npm view @sap/approuter@22 version repository.url dist.tarball`: confirmed available 22.x package versions.
+  - Inspected the published `@sap/approuter` 22.0.3 `xs-app-schema.json` and `static-resource-handler.js`: `localDir` is an accepted route property, and the handler serves static paths. This is source-level evidence only, not a container runtime test.
+  - No credentials were read or exposed. No SAP, HANA, XSUAA, or deployment calls were made.
+- **Blockers:** Target Linux architecture and SDK artifact/support; approved external XSUAA/Destination/HANA bindings and delivery method; HANA/SAP/XSUAA network reachability; TLS certificate delivery/rotation.
+- **Next Action:** User/platform owner confirms the target architecture, approved non-secret configuration and SDK/certificate delivery paths, and host network reachability; then implement and validate the Compose deployment.
+
+### 2026-11-06 13:57 IST — Docker Deployment P0 Phase 5 Authentication/Security and P1 Phase 6 Compose Profiles Audit — BLOCKED
+
+- **Request:** Establish a secure standalone Docker identity/auth design preserving existing application roles and production guards, and define shared Compose profiles plus proxy/Fiori/CAP/external-HANA network topology.
+- **Scope:** Read-only audit of current CAP/XSUAA auth, role definitions, approuter routes, request-size controls, production guard, Docker/Compose files and runtime; do not select an unapproved identity provider or expose application services.
+- **Changes:**
+  - `WORKSTATUS.md`: Recorded verified existing auth/role behavior, security gaps, and exact decisions required before implementation.
+  - No auth handler, production guard, role mapping, router config, Docker/Compose file, dependency, certificate, or secret changed.
+- **Test Impact Decision:** `TEST NOT POSSIBLE` — no implementation is safe until the enterprise IdP/token contract, browser/proxy trust model, secret/TLS choices, and network target are approved.
+- **Executed Validations:**
+  - Read-only source review confirmed CAP `jwt` with `vcap.label: xsuaa`, XSUAA-only BTP routes, the seven requested scopes/role templates and Plant role attributes in `xs-security.json`, and the local token issuer is gated for development.
+  - Search found an existing 4 MB AI request limit but no configured shared Compose rate limiter or Docker/Compose files.
+  - `docker --version` / `docker info --format '{{.OSType}}/{{.Architecture}}'`: Docker 29.9.2 available; daemon reports `linux/aarch64`. The intended deployment architecture remains UNKNOWN.
+  - Unit/integration/E2E, Compose config, image build, auth token verification, TLS, HANA/SAP network checks: NOT RUN; design inputs are unresolved. No credentials were printed, no calls were made.
+  - `git diff --check`: PASS; no whitespace errors.
+- **Blockers:** Approved IdP and JWT issuer/audience/signature/claim contract; role and Plant mapping; browser/proxy identity trust; TLS and secret-source/rotation decisions; Phase 2 SAP and Phase 3 HANA network/auth decisions; target network exposure policy.
+- **Next Action:** User/platform owner provides the approved identity and proxy contract and resolves prior SAP/HANA target prerequisites; then implement Compose security and profiles without weakening XSUAA production checks.
+
+### 2026-11-06 13:55 IST — Docker Deployment P0 Phase 3: Database and Persistence Audit — BLOCKED
+
+- **Request:** Establish whether the Docker deployment can securely use the existing HANA instance or needs a separately provisioned HANA database; retain HANA and validate persistence, concurrency, restart, and backup behavior.
+- **Scope:** Inspect the CDS models, HANA/MTA bindings, persistence implementations and tests, environment/deployment evidence; run safe local model compilation and isolated persistence regressions only.
+- **Changes:**
+  - `WORKSTATUS.md`: Added the Phase 3 evidence, validation results, blockers, and exact next steps.
+  - No schema, service, database, Docker configuration, deployment, or credential changes were made.
+- **Test Impact Decision:** `EXISTING TEST SUFFICIENT` for the local persistence behavior reviewed — `test/unit/wm/goodsIssueAttempt.test.js`, `test/unit/wm/goodsIssueAttemptInstances.test.js`, and `test/integration/lockNotificationQueue.test.js`. These use the test database/mocks and do not establish HANA behavior.
+- **Executed Validations:**
+  - `npx jest test/unit/wm/goodsIssueAttempt.test.js test/unit/wm/goodsIssueAttemptInstances.test.js test/integration/lockNotificationQueue.test.js --runInBand`: PASS, 3 suites and 21 tests.
+  - `npx cds compile db/schema.cds --to sql --dialect hana`: PASS; generated HANA-dialect tables and the `ReferenceDocument` unique constraint. Compilation is not a schema deployment.
+  - `npm run validate:mta`: PASS; MTA project validation completed.
+  - `npm ls @cap-js/hana --depth=0`: PASS; installed `@cap-js/hana@3.1.1`.
+  - `docker --version` / `docker info --format '{{.OSType}}/{{.Architecture}}'`: Docker 29.9.2 is available and daemon reports `linux/aarch64`; target deployment architecture is not thereby confirmed.
+  - Read-only key-presence check: no HANA/VCAP database configuration keys present in local environment files or process environment; values were not read or printed. `cf` CLI unavailable.
+  - HANA connection, schema deployment, process/container restart persistence, HANA multi-instance concurrency, backup, and restoration: NOT RUN; target service, binding, route, credentials, and recovery procedure are unknown. No database or SAP calls/writes were made.
+  - `git diff --check`: PASS; no whitespace errors.
+- **Blockers:** Unknown whether existing HANA is reachable/provisioned for the Docker host; no HANA binding/configuration, CF CLI, target route, or authorized connection evidence. Backup/restore procedure and deployment-specific data scope are also not provided.
+- **Next Action:** User/platform owner confirms existing-HANA access and HDI provisioning, or authorizes/provisions a separate HANA target; then supply target configuration via an approved secret channel and run authorized connectivity/deployment validation.
+
+### 2026-11-06 13:48 IST — Docker Deployment P0 Phase 2: SAP Connectivity Audit — BLOCKED
+
+- **Request:** Begin SAP connectivity work for Docker, reusing the existing OData and RFC clients and validating the SDK, destination, credentials, TLS, and read-only RFC preflight.
+- **Scope:** Inspect current S/4 configuration, authentication and TLS behavior, RFC SDK/runtime evidence, existing tests and preflight gates; do not alter SAP behavior without the approved Compose auth and target-system details.
+- **Changes:**
+  - `WORKSTATUS.md`: Recorded the evidence-backed blockers and the exact prerequisites for resuming Phase 2.
+  - No application code, Docker files, secrets, certificates, or SAP configuration values were changed or exposed.
+- **Test Impact Decision:** `TEST NOT POSSIBLE` — implementation is blocked pending approved Compose authentication, SAP target scope, CA certificate source, and Linux RFC SDK target; no behavior change was made.
+- **Executed Validations:**
+  - Read-only source/configuration review confirmed existing BTP destination handling and local OData Basic/RFC username-password fallbacks; no Compose resolver/configuration exists.
+  - Local-only addon probe: `node-rfc` 3.3.1 loaded with SAP NW RFC SDK 7.50 PL19 on macOS arm64. This does not validate target Linux compatibility.
+  - Docker availability check: unavailable on this host.
+  - `npm run preflight:rfc`: NOT RUN; target SAP system and non-production scope are not verified. No SAP calls or writes were made.
+  - Unit, integration, container-build, TLS, RFC connectivity, and restart tests: NOT RUN because implementation is blocked and Docker is unavailable.
+  - `git diff --check`: PASS; no whitespace errors.
+- **Blockers:** Approved OData/RFC auth methods and secret-delivery model; non-production SAP target/client scope; target Linux architecture; authorized SDK artifact/source; company/SAP CA certificate source; Docker runtime.
+- **Next Action:** User/Basis confirms the blockers listed under **Next Steps**; then implement and test the Compose mode without changing BTP behavior.
 
 ### 2026-11-06 13:38 IST — Password Expiry Monitoring: Phase 5 Regression Verification, Playwright E2E & Final Sign-Off: PASS
 
@@ -3857,3 +4107,205 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **NOT VERIFIED:** Whether SAP accepts the duplicate, injected or out-of-scope requests described. Whether the SAP host can be reached from the internet. BTP behaviour, because nothing was deployed. Parts of the warehouse, sales and UI code were read only along write, catch and auth paths.
 - **Next action:** The user changes the SAP password and makes the repository private, then chooses which findings to fix.
 - **FINAL STATUS:** PARTIAL. Audit delivered; no finding is fixed.
+
+### 2026-11-07 09:55 IST — Docker Local Development Profile — IN PROGRESS
+
+- **Request:** Continue with local mode while retaining XSUAA and external HANA/HDI for QA/production.
+- **Changes:**
+  - `compose.yaml`: Separate local-only `cap-dev`/`approuter-dev` from QA/production services. Local CAP uses the test profile and does not receive BTP bindings, SAP variables, RFC SDK mount, or SAP egress network; the local router is loopback-only.
+  - `docker/cap/Dockerfile`: Add an opt-in build argument to install development dependencies needed by the local SQLite test profile while production builds continue to omit dev dependencies.
+  - `docker/approuter/xs-app.local.json`: Add local-only unauthenticated static/API routes, mounted only by `approuter-dev`.
+  - `tools/docker/runtime.js` and `test/unit/tools/dockerRuntime.test.js`: Require local token issuer, minimum-length local signing secret, and local password when running the local CAP profile; add a focused validation test.
+  - `.env.docker.local.example`, `.env.example`, `.gitignore`, `docs/deployment/docker.md`, and `WORKSTATUS.md`: Document and configure a distinct local auth env file, distinguish local mock/test auth from deployed XSUAA, and record the local-only profile and unresolved QA/production prerequisites.
+  - Existing BTP MTA/router behavior, `productionGuard.js`, and SAP integration clients remain unchanged. The project `.env` and all credential/certificate contents were not read or printed.
+  - Static-route debugging found the local router's catch-all target duplicated the `localDir` prefix and returned HTTP 404. Changed it to the same explicit `/saps4hanafiori/` path mapping used by the production Docker route; retest is pending.
+- **Test Impact Decision:** `TEST ADDED` — local auth profile validation case in `test/unit/tools/dockerRuntime.test.js`; run the targeted suite and local container smoke before closing this entry.
+- **Executed Validations so far:**
+  - `docker compose --env-file .env.example --profile dev config --quiet`, and equivalent `qa` and `prod` commands: PASS, exit code 0.
+  - `npx jest test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 1 suite / 9 tests.
+  - `npx eslint tools/docker/runtime.js test/unit/tools/dockerRuntime.test.js`: PASS.
+  - `npm --prefix app/fiori-app run build`: PASS; UI5 build succeeded with the existing missing jspdf source-map warning.
+  - Local CAP API smoke: PASS for health, local login, issued bearer-token `getUserInfo`, and seven configured role scopes.
+  - Initial local approuter static smoke: FAIL, HTTP 404 because of duplicated `localDir` prefix; route was corrected and needs retest.
+  - `docker compose --env-file .env.example --profile dev build cap-dev approuter-dev`: NOT RUN successfully; Docker daemon socket is absent. `docker info` confirms the daemon is unavailable in this session. Direct local approuter test and final diff checks remain pending.
+- **Blockers / NOT VERIFIED:** Local Fiori delivery and login/token round trip still need container smoke validation. Real XSUAA, HANA/HDI, Destination, custom CA, licensed RFC SDK, SAP network/preflight, and QA/production runtime are not verified; prerequisites are not available in this local continuation.
+- **Validation update (2026-11-07 10:01 IST):**
+  - `npx jest test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 1 suite / 9 tests.
+  - `npx eslint tools/docker/runtime.js test/unit/tools/dockerRuntime.test.js`: PASS.
+  - `npx jest test/unit/auth/authService.test.js test/unit/serverStartupGuards.test.js test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 3 suites / 56 tests.
+  - `npm --prefix app/fiori-app run build`: PASS; emitted the existing missing jspdf source-map warning.
+  - `npm --prefix app/fiori-app run lint`: PASS, no findings.
+  - `npm ci --prefix docker/approuter --no-audit --no-fund`: PASS, installed 205 packages from the pinned lockfile; no manifest/lockfile changes from install.
+  - `docker compose --env-file .env.example --profile dev config --quiet`, with equivalent `qa` and `prod` checks: PASS. A structured config assertion confirmed local CAP has no bindings, SDK mount, host port, or SAP egress, while QA/prod retain XSUAA/HANA bindings, SAP egress, and unpublished CAP.
+  - Local CAP API smoke using `tools/docker/runtime.js`: PASS for health, local login, issued bearer-token `getUserInfo`, and all seven configured local role scopes.
+  - Local router smoke using `docker/approuter/xs-app.local.json` and the built Fiori app: initial attempt FAILed with 404 due to a doubled `localDir` prefix; after correcting the route, retest PASSed for Fiori static delivery, routed login, and authenticated `getUserInfo` with seven role scopes.
+  - Playwright browser E2E through the Compose containers: NOT RUN because the Docker daemon is unavailable. The passing router/API check used direct local HTTP requests, not a browser.
+  - `docker compose --env-file .env.example --profile dev build cap-dev approuter-dev`: BLOCKED, Docker could not connect to the absent `/Users/khushaldhanani/.docker/run/docker.sock`; `docker info --format '{{.OSType}}/{{.Architecture}}'` failed for the same reason. No container was created.
+  - `git diff --check`: PASS. No SAP/XSUAA/HANA/Destination calls were made; no secret values were read or printed.
+- **Blockers / NOT VERIFIED:** Docker image/container behavior; real XSUAA, HANA/HDI, Destination, custom CA, licensed RFC SDK, SAP network/preflight, and QA/production runtime remain unverified. External prerequisites are unavailable in this local continuation.
+- **Next Action:** Finish targeted regression and diff checks. To run the persistent local stack, create `.env.docker.local` per `docs/deployment/docker.md`, then execute `docker compose --env-file .env.example --profile dev up --build -d`. Proceed with QA/production only after obtaining approved bindings, target architecture, matching licensed SDK, and approved CA material as needed.
+
+### 2026-11-07 10:09 IST — Local CAP Image Runtime Dependency Fix — IN PROGRESS
+
+- **Request:** Fix the local Docker startup after the Docker daemon was restarted and local `cap-dev` became unhealthy.
+- **Finding:** Docker Desktop successfully started (`docker info --format '{{.OSType}}/{{.Architecture}}'` returned `linux/aarch64`). Building both local images succeeded. An isolated CAP log identified `Cannot find module '../../../../config/schema/purchaseOrderRules.json'`, imported by the existing CAP purchase-order validator. The image previously copied `server.js`, `db/`, and `srv/`, but omitted this runtime configuration.
+- **Change:** `docker/cap/Dockerfile` now copies `config/schema` only. This avoids copying unrelated approuter/destination deployment configuration into the image.
+- **Test Impact Decision:** `TEST UPDATED` — isolated Docker Compose CAP startup and full local Fiori/login path are the required runtime checks; run after this change.
+- **Validation before fix:** `docker compose --env-file .env.example --profile dev build cap-dev approuter-dev` passed for both default images. The first isolated native-ARM64 Compose run was unhealthy; sanitized startup logs showed the missing config module after in-memory SQLite deployment.
+- **Validation after change:**
+  - `docker info --format '{{.OSType}}/{{.Architecture}}'`: PASS, `linux/aarch64`.
+  - Isolated ARM64 Compose `up -d --build` with a temporary mode-0600 local auth env file: PASS; `cap-dev` and `approuter-dev` both became healthy.
+  - Smoke through the router: PASS for `GET /saps4hanafiori/index.html`, local login, and authenticated `getUserInfo` returning the configured seven local role scopes.
+  - Temporary auth file, containers, and networks were removed by the smoke script; generated credentials were not printed. No SAP or external write occurred.
+- **Final validation (2026-11-07 10:10 IST):**
+  - `npx jest test/unit/auth/authService.test.js test/unit/serverStartupGuards.test.js test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 3 suites / 56 tests.
+  - `npx eslint tools/docker/runtime.js test/unit/tools/dockerRuntime.test.js`: PASS.
+  - `npm --prefix app/fiori-app run lint`: PASS, no findings.
+  - `docker compose --env-file .env.example --profile dev config --quiet` and equivalent `qa` and `prod` commands: PASS.
+  - `git diff --check` and `git diff --cached --check`: PASS.
+- **Remaining NOT VERIFIED:** QA/production binding, identity, HANA, SAP network, TLS, and RFC SDK behavior; no SAP calls were made.
+- **Next Action:** Create a local `.env.docker.local` with the documented generated values, then start the persistent local profile using `docker compose --env-file .env.example --profile dev up --build -d`. The isolated smoke services and temporary credentials were cleaned up.
+- **Blockers / NOT VERIFIED:** The full container smoke has not yet been rerun. QA/production services and real XSUAA/HANA/SAP connectivity remain outside this local-only validation.
+- **Next Action:** Rebuild and rerun the isolated ARM64 Compose health and routed login smoke; record exact result and run final regression/diff checks.
+
+### 2026-11-07 10:11 IST — Local CAP Restart Diagnosis: Missing Local Auth File — PARTIAL
+
+- **Request:** Diagnose the user's `cap-dev` unhealthy status.
+- **Finding:** `docker compose --env-file .env.example --profile dev ps -a --format json` shows the current `cap-dev` restarting. Sanitized `cap-dev` logs report the local CAP auth requirements are not met. A file-presence-only check confirms `.env.docker.local` is absent; `docker compose ... config --format json` shows the optional local env file is omitted. Compose sets `ENABLE_DEV_TOKEN_ISSUER=true`, but no local `LOCAL_AUTH_SECRET` or `LOCAL_DEV_PASSWORD` can be loaded without that file.
+- **Changes:** `WORKSTATUS.md` only. No application or Compose behavior changed. No project `.env` or auth file content was read, and no secret values were printed.
+- **Test Impact Decision:** `EXISTING TEST SUFFICIENT` — `test/unit/tools/dockerRuntime.test.js` covers acceptance/rejection of local auth settings. A targeted rerun is recorded below.
+- **Executed Validations:**
+  - `docker compose --env-file .env.example --profile dev ps -a --format json`: confirmed `cap-dev` restarting; existing QA/production `cap` and local `approuter-dev` containers were separate.
+  - Sanitized `docker compose --env-file .env.example --profile dev logs --no-color --tail 100 cap-dev`: confirmed local auth guard error without exposing credential values.
+  - Presence-only `.env.docker.local` check: absent. Resolved Compose config: optional `env_file` omitted.
+  - `npx jest test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 1 suite / 9 tests.
+  - `git diff --check` and `git diff --cached --check`: PASS.
+  - No SAP/XSUAA/HANA/Destination calls made.
+- **Blocker:** Local CAP cannot authenticate users until the user creates `.env.docker.local` with a local JWT secret and local password. This file must remain ignored/uncommitted.
+- **Next Action:** Use the `umask 077` and `openssl rand` command in `docs/deployment/docker.md` to create the file; run `docker compose --env-file .env.example --profile dev up --build -d` and verify both dev services become healthy.
+
+### 2026-11-07 10:21 IST — Isolated Docker login fallback fix — In Progress
+
+- CHANGED: `srv/auth-service.js`, `test/unit/auth/authService.test.js`, and this log. Preserve existing staged Docker work.
+- CONFIRMED: Both dev containers healthy. Sanitized Compose logs show login HTTP 500 caused by missing SAP client; unmatched local credentials call AuthAdapter even though cap-local deliberately has no SAP connection.
+- Plan: Restrict the existing cap-local mode to khushal plus LOCAL_DEV_PASSWORD, reject other credentials without SAP fallback; leave other modes unchanged. No dependencies or integration contracts changed.
+- TEST DECISION: TEST ADDED — four local credential cases cover success, incorrect password, incorrect username, and refusal of SAP password with no adapter calls. Existing auth/startup/Docker suites provide regressions.
+- Validation pending. No SAP calls, secrets printed, or external writes. Assumption: the documented isolated local-only profile remains intended. Browser login validation still required.
+- Next: Run focused tests, lint and CDS compile; rebuild local service and verify login responses.
+
+- Validation results (2026-11-07 10:23 IST):
+  - `npx jest test/unit/auth/authService.test.js test/unit/serverStartupGuards.test.js test/unit/tools/dockerRuntime.test.js --runInBand`: PASS, 3 suites / 60 tests.
+  - `npx eslint srv/auth-service.js test/unit/auth/authService.test.js`: PASS.
+  - `npx cds compile srv/ > /tmp/login-cds-compile.txt`: PASS. `npx cds --version`: runtime 10.1.1, CLI 10.2.0.
+  - `git diff --check` and `git diff --cached --check`: PASS. Reviewed focused diff and git status; unrelated staged changes preserved. No superseded helper/dependency added.
+- VERIFIED: Error cause from runtime logs; handler unit tests prove local credential rejection does not call SAP and valid credentials issue a token. REGRESSION: existing auth/startup/Docker suites pass.
+- NOT VERIFIED: Browser E2E and corrected running-container response; container not rebuilt/recreated because recreation discards in-memory local data. Existing browser suite assumes the host-dev static route, not Docker's static route. SAP/BTP checks not applicable to this local-only change; none called. Favicon 404 and unload warning were not modified and do not explain the confirmed backend exception.
+- BLOCKED: Running image requires user-controlled recreation; no missing implementation prerequisite. ASSUMPTIONS: documented local-only mode remains intended; exact submitted credentials unknown and not requested.
+- Next action: When local data loss is acceptable, run `docker compose --env-file .env.example --profile dev up --build -d cap-dev approuter-dev`, then log in with khushal and LOCAL_DEV_PASSWORD from .env.docker.local; verify invalid credentials display a message and valid login completes.
+- FINAL STATUS: PARTIAL — source fix and focused checks pass; runtime/browser verification pending.
+
+### 2026-11-07 10:28 IST — Local login credential verification
+
+- CHANGED: WORKSTATUS.md only; no code/configuration/password changes.
+- TEST DECISION: EXISTING TEST SUFFICIENT — authService.test.js; no rerun for documentation-only update. Direct running API verification performed instead.
+- TESTED / VERIFIED: Secret-safe Node/dotenv comparison with docker compose exec confirms saved LOCAL_DEV_PASSWORD equals running cap-dev value and APP_ROLE is cap-local. Node fetch POST to localhost routed auth/login using khushal and the saved password returned HTTP 200, authenticated=true, token present. Bearer GET getUserInfo() returned HTTP 200 and authenticated=true. No secret/token values printed; no SAP calls or persistent writes.
+- REGRESSION: No application change; previous unit evidence unchanged.
+- NOT VERIFIED: Browser-entered credentials and successful browser navigation. BLOCKED: none for API. ASSUMPTIONS: Browser input/autofill mismatch is inferred, not confirmed.
+- Next action: Clear browser username/password autofill; enter khushal and only the LOCAL_DEV_PASSWORD value from .env.docker.local, without quotes. No container restart needed.
+- FINAL STATUS: PASS for local API login/token acceptance; PARTIAL for browser outcome.
+
+### 2026-11-07 10:29 IST — User-requested updated .env.docker.local check
+
+- CHANGED: WORKSTATUS.md only. No credentials/configuration/code changed.
+- TEST DECISION: EXISTING TEST SUFFICIENT — authService.test.js remains applicable; no unit rerun for this verification-only task.
+- TESTED: Secret-safe Node/dotenv + docker compose exec comparison: password present, signing secret minimum length satisfied, both match running container, cap-local confirmed. Node fetch localhost login with saved password: HTTP 200, authenticated=true, token issued. Bearer getUserInfo(): HTTP 200, authenticated=true. `git check-ignore .env.docker.local`: ignored. `git status --short`: prior changes preserved.
+- VERIFIED: Updated saved credentials work through running local router and token authentication. No secrets printed, SAP calls, restarts, or persistent writes.
+- NOT VERIFIED: Browser login/navigation, SAP/BTP (outside local-only scope). BLOCKED: none. ASSUMPTIONS: none for these checks. REGRESSION: no application changes.
+- Next: Sign in through browser using khushal and LOCAL_DEV_PASSWORD from .env.docker.local; no restart needed.
+- FINAL STATUS: PASS for requested local configuration/API check; browser outcome NOT VERIFIED.
+
+### 2026-11-07 10:33 IST — Browser login and dashboard diagnosis
+
+- CHANGED: Browser login fields replaced with configured local credentials; WORKSTATUS.md only in repository. Password-save prompt declined. No application/configuration changes.
+- TEST DECISION: EXISTING TEST SUFFICIENT — authService.test.js for unchanged handler; manual Chrome login exercised here, no automated E2E or unit rerun.
+- TESTED / VERIFIED: Existing Chrome tab showed local-credential rejection. Initial native automation appended instead of replacing field contents; corrected via setValue. Sign-in then navigated to #dashboard, rendered Enterprise Operations Dashboard and profile khushal. Original user password was not inspected. No claim made about exact original input.
+- Observed dashboard failure: SAP S/4HANA backend unavailable: connect ECONNREFUSED 127.0.0.1:1. Network getDashboardMetrics returned HTTP 200 while tiles visibly failed, not business success. Confirmed compose.yaml uses NODE_ENV=test and package.json test service URLs point to loopback port 1; Docker guide documents no SAP egress.
+- Tool limitations: in-app browser unavailable; native Chrome used. Transient noWindowsAvailable recovered by rebinding Chrome. CJS dotenv import into UI runtime failed; parsed credentials transferred via mode-0600 temporary file and deleted immediately. Secrets/tokens not printed or saved to browser password manager.
+- NOT VERIFIED: Full console audit, automated browser suite, live SAP/BTP connectivity, business data. BLOCKED: Real dashboard data requires intended SAP-connected runtime/configuration, beyond isolated local mode. No live SAP call or write.
+- ASSUMPTIONS: none for observed browser result; intended next runtime is UNKNOWN. REGRESSION: no application changes.
+- Next: User selects retaining isolated mode (real SAP tiles remain unavailable) or configuring a verified SAP-connected development runtime.
+- FINAL STATUS: PASS for browser login; BLOCKED for real SAP dashboard data; overall PARTIAL.
+
+### 2026-11-07 10:35 IST — SAP-connected local Docker configuration
+
+- CHANGED: compose.sap-dev.yaml, docs/deployment/docker.md, WORKSTATUS.md.
+- CONFIRMED: Four saved SAP settings are absent in running cap-dev; test fallback targets port 1. Existing server.js registers supplied destination and replaces test URLs. Host read-only C_PURCHASEORDER_FS_SRV metadata returned HTTP 200 and valid EDMX/entity sets with existing CA.
+- Plan: Explicit local override adds SAP egress and read-only trusted CA; no integration payload, service handler, auth or default network changes. No dependencies added. No need for RFC SDK for this OData dashboard boundary.
+- TEST DECISION: EXISTING TEST SUFFICIENT — dockerRuntime.test.js and dashboardMetrics.test.js, Compose structural validation and read-only connected-container probe. Validation pending.
+- Assumption: User request to fix SAP data connectivity authorizes preparation of opt-in local connection. Running service recreation is held pending confirmation because it discards in-memory data. No SAP write authorized or performed.
+- Next: Validate override and probe from one-off container, then obtain go to recreate running local services.
+
+- Validation results:
+  - `npx jest test/unit/tools/dockerRuntime.test.js test/unit/dashboard/dashboardMetrics.test.js --runInBand`: PASS, 2 suites / 54 tests.
+  - `SAP_DEV_CA_FILE` set to existing host trusted CA; `docker compose --env-file .env.example -f compose.yaml -f compose.sap-dev.yaml --profile dev config --quiet`: PASS.
+  - Initial temporary container run: FAIL at existing auth startup guard. Presence-only check confirms LOCAL_DEV_PASSWORD is absent in current .env.docker.local; secret remains present and meets length requirement. This differs from earlier verified file contents. No credentials changed by agent.
+  - Metadata-only temporary container using Node directly (app not started), mounted CA and NODE_EXTRA_CA_CERTS: PASS, read-only C_PURCHASEORDER_FS_SRV metadata HTTP 200 and valid EDMX. TLS verification retained. Temporary containers automatically removed. No SAP writes or active-service restarts.
+  - `git diff --check` and `git diff --cached --check`: PASS. Focused changes reviewed; unrelated staged work preserved. No superseded code/dependency introduced.
+- VERIFIED: Saved SAP configuration can reach real metadata from host and connected Docker override. REGRESSION: Docker/dashboard tests pass.
+- NOT VERIFIED: Active dashboard counts/browser with override, other SAP services, RFC functionality, QA/production. No new UI behavior; browser retest pending activation.
+- BLOCKED: Missing local password in saved env file and pending go to recreate current local app (clears in-memory database). ASSUMPTIONS: proposed connected local development is the intended mode; production remains unchanged.
+- Next: Obtain approval to restore existing running LOCAL_DEV_PASSWORD into ignored env file without displaying/changing it, recreate cap-dev/approuter-dev using validated override and existing CA, and verify read-only dashboard.
+- FINAL STATUS: BLOCKED for activation; configuration prepared and SAP metadata connectivity verified.
+
+### 2026-11-07 10:37 IST — Failed cap-dev restart diagnosis
+
+- CHANGED: WORKSTATUS.md only.
+- TEST DECISION: EXISTING TEST SUFFICIENT — dockerRuntime.test.js covers missing local auth; not rerun for diagnosis-only documentation.
+- TESTED / VERIFIED: Secret-safe dotenv presence check confirms LOCAL_DEV_PASSWORD absent/empty, LOCAL_AUTH_SECRET meets minimum, all four SAP settings and host CA present. Sanitized docker compose logs confirm repeated local-auth startup guard error. git status inspected; unrelated work preserved.
+- NOT VERIFIED: Container startup and dashboard after password restoration. BLOCKED: local password missing. ASSUMPTIONS: none for diagnosed failure. REGRESSION: no code change. No SAP calls, credential mutations or restart performed.
+- Next: User supplies or generates LOCAL_DEV_PASSWORD in ignored .env.docker.local, then repeats Compose recreation with compose.sap-dev.yaml and SAP_DEV_CA_FILE.
+- FINAL STATUS: BLOCKED — confirmed missing local password, no application defect demonstrated.
+
+### 2026-11-07 10:39 IST — Admin listUsers 502 RFC prerequisites
+
+- CHANGED: WORKSTATUS.md only; no application/configuration changes.
+- TEST DECISION: TEST NOT POSSIBLE for successful RFC integration — licensed Linux x86-64 SDK and node-rfc absent in container.
+- TESTED / VERIFIED: Sanitized cap-dev logs identify BAPI_USER_GETLIST session failure: node-rfc not installed. Docker exec confirms linux/x64, node-rfc resolution failure, missing /usr/sap/nwrfcsdk/lib/libsapnwrfc.so. Presence-only env check confirms S4_RFC_SYSNR missing. Inspected RfcClient.connectionParams: host derived from S4_DESTINATION_URL, no separate S4_RFC_HOST required. Host ~/nwrfcsdk libraries are .dylib and not ELF; repo nwrfcsdk empty.
+- NOT VERIFIED: Successful RFC connectivity/authentication/user list and unload warning remedy. No SAP call made; OData metadata success from earlier session does not verify RFC.
+- BLOCKED: Linux-compatible licensed RFC SDK unavailable in inspected locations. ASSUMPTIONS: none for diagnosed cause; location of another installed SDK UNKNOWN. REGRESSION: no code changed, tests not rerun.
+- Next: User provides local path to Linux x86-64 SDK; then install matching node-rfc in image, mount SDK and configure verified RFC system number, followed by read-only validation.
+- FINAL STATUS: BLOCKED.
+
+### 2026-11-07 10:42 IST — Locate installed SDKs
+
+- CHANGED: WORKSTATUS.md only. Read-only filesystem search requested by user.
+- TEST DECISION: EXISTING TEST SUFFICIENT — no application change; filesystem/archive inspection and file-format validation used for this inventory.
+- TESTED / VERIFIED: rg --files --hidden --no-ignore over workspace/common locations then home directory; file on discovered libraries; Python zipfile inventory. ~/nwrfcsdk contains macOS ARM64 Mach-O libraries; Downloads/nwrfc750P_19-80008131.zip also contains .dylib libraries. Linux libraries found at ~/.vscode/extensions/sapse.service-catalog-1.4.0/dist/sapnoderfcaddons/nwrfcsdk/linux; both libsapnwrfc.so and libsapucum.so are ELF 64-bit x86-64. Directory includes include and lib.
+- NOT VERIFIED: Library dependency completeness, node-rfc compatibility, permitted reuse of extension-bundled SDK, container loading or SAP connectivity. Inaccessible search paths were skipped; not a proof no other SDK exists.
+- BLOCKED: none for locating files. ASSUMPTIONS: none for inspected file formats. REGRESSION: no code/config changes or tests rerun. No SAP calls.
+- Next: Inspect discovered SDK dependencies and reuse terms before configuring Docker/node-rfc. Earlier unavailable-SDK finding superseded by this broader search.
+- FINAL STATUS: PASS for requested SDK inventory only.
+
+### 2026-11-07 10:48 IST — Docker RFC runtime fix — Activation blocked
+
+- Request: Fix properly, continue. Preflight: AGENTS.md/WORKSTATUS.md read, git status inspected; existing Docker/runtime/auth/RFC flow and tests traced.
+- Root cause: optional node-rfc install-time load fails without mounted SDK, so package is omitted. Existing node-gyp-build source supports NODE_RFC to defer package load check.
+- Plan/change: docker/cap/Dockerfile opt-in INSTALL_RFC_PREBUILD uses that supported flag only during install and asserts Linux prebuilt exists; compose.sap-dev.yaml enables it and mounts SDK read-only; runtime.js requires SDK/native load plus RFC settings for connected local mode. docs/deployment/docker.md updated. No new dependencies, service contracts or business logic.
+- .env.docker.local: restored missing S4_RFC_SYSNR from .env.local only after matching destination URL and client; value not printed or committed. User's existing password retained.
+- TEST DECISION: TEST ADDED — connected local RFC missing-config and guard dispatch cases; existing auth/admin regression suites.
+- Evidence: Network-disabled first probe failed because host build/Release selected macOS binary; direct packaged Linux native binary probe then PASSed with mounted Linux SDK. Host artifacts will not be copied into image.
+- Executed `npx jest test/unit/tools/dockerRuntime.test.js test/unit/auth/authService.test.js test/unit/admin/UserManagementAdapter.test.js --runInBand`: PASS, 3 suites/116 tests. Fixture negative paths emit expected warning/error logs.
+- Assumption: existing user-provided SDK used only locally, no redistribution into image. No live SAP writes authorized or performed. Build, read-only RFC and browser verification pending.
+- Next: build and test isolated image, then activate/retest local stack subject to in-memory recreation gate.
+
+- Final validation:
+  - Connected `docker compose ... build cap-dev`: PASS. Installed 987 lockfile dependencies; Linux prebuilt retained. npm reported existing node-rfc unsupported/deprecation warning and whatwg-encoding/glob deprecation warnings; no dependency version change.
+  - Temporary `docker compose ... run --rm --no-deps -T cap-dev node -`: startup guard PASS; native module available=true; READ-ONLY BAPI_USER_GETLIST with MAX_ROWS=1 returned 1 row and 0 E/A SAP messages. No user data printed; no SAP writes; temporary container removed.
+  - Connected `docker compose ... config --quiet`: PASS. `npx jest test/unit/tools/dockerRuntime.test.js test/unit/serverStartupGuards.test.js --runInBand`: PASS, 2 suites / 14 tests.
+  - `npx eslint tools/docker/runtime.js test/unit/tools/dockerRuntime.test.js`, `git diff --check`, `git diff --cached --check`: PASS. Focused diff/status reviewed; earlier staged changes preserved. No superseded helper or extra dependency introduced.
+- Attempted activation `docker compose ... up -d cap-dev approuter-dev`: NOT EXECUTED. Automatic approval review rejected it because recreating cap-dev irreversibly discards local in-memory data and the user has not explicitly approved that concrete side effect. No retry or workaround.
+- VERIFIED: Corrected image installs/loads node-rfc and reads SAP using supplied SDK/settings. TEST DECISION: TEST ADDED (startup guard regression). REGRESSION: 116 auth/admin/runtime tests and 14 runtime/startup tests pass.
+- NOT VERIFIED: Active application's full listUsers endpoint and browser after activation, full user enrichment, production/BTP. Browser E2E not run because active runtime still uses old image.
+- BLOCKED: Explicit approval to clear local in-memory data during recreation. ASSUMPTIONS: no claim that the successful one-row RFC probe proves the full user-management flow.
+- Next: Ask user to approve recreation/data loss; after approval apply validated override and check routed login/listUsers and browser read-only.
+- FINAL STATUS: PARTIAL — fix built and native/RFC read validated; activation BLOCKED by automatic approval review.

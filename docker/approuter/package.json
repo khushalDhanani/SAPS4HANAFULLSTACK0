@@ -1,0 +1,10 @@
+{
+  "name": "saps4hana-docker-approuter",
+  "private": true,
+  "scripts": {
+    "start": "node node_modules/@sap/approuter/approuter.js"
+  },
+  "dependencies": {
+    "@sap/approuter": "22.0.3"
+  }
+}

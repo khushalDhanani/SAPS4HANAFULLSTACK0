@@ -1,0 +1,7 @@
+{
+  "name": "test-destination-binding",
+  "label": "destination",
+  "credentials": {
+    "fixture": "not-a-real-credential"
+  }
+}

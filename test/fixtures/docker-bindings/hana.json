@@ -1,0 +1,7 @@
+{
+  "name": "test-hana-binding",
+  "label": "hana",
+  "credentials": {
+    "fixture": "not-a-real-credential"
+  }
+}

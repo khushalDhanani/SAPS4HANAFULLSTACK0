@@ -1,0 +1,26 @@
+{
+  "welcomeFile": "/saps4hanafiori/index.html",
+  "authenticationMethod": "route",
+  "routes": [
+    {
+      "source": "^/odata/v4/(.*)$",
+      "target": "/odata/v4/$1",
+      "destination": "cap-api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": true
+    },
+    {
+      "source": "^/sap/bc/lrep/(.*)$",
+      "target": "/sap/bc/lrep/$1",
+      "destination": "cap-api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/saps4hanafiori/(.*)$",
+      "target": "$1",
+      "localDir": "saps4hanafiori",
+      "authenticationType": "xsuaa"
+    }
+  ]
+}

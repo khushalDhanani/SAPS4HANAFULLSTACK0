@@ -1,0 +1,26 @@
+{
+  "welcomeFile": "/saps4hanafiori/index.html",
+  "authenticationMethod": "none",
+  "routes": [
+    {
+      "source": "^/odata/v4/(.*)$",
+      "target": "/odata/v4/$1",
+      "destination": "cap-local",
+      "authenticationType": "none",
+      "csrfProtection": true
+    },
+    {
+      "source": "^/sap/bc/lrep/(.*)$",
+      "target": "/sap/bc/lrep/$1",
+      "destination": "cap-local",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/saps4hanafiori/(.*)$",
+      "target": "$1",
+      "localDir": "saps4hanafiori",
+      "authenticationType": "none"
+    }
+  ]
+}

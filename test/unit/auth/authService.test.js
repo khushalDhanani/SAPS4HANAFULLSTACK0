@@ -71,6 +71,28 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
     });
 
     describe('login (Custom Login Restrictions)', () => {
+        it.each([
+            ['khushal', 'local-password', true],
+            ['khushal', 'wrong-password', false],
+            ['another-user', 'local-password', false],
+            ['khushal', 'sap-password', false]
+        ])('isolated local login for %s authenticates=%s without SAP fallback', async (username, password, authenticated) => {
+            process.env.APP_ROLE = 'cap-local';
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'local-test-signing-secret-at-least-32-characters';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
+            process.env.S4_PASSWORD = 'sap-password';
+            const sap = jest.spyOn(authAdapter, 'validateCredentials').mockRejectedValue(new Error('SAP must not be called'));
+            const result = await service._handleLogin({ data: { username, password } });
+            expect(result.authenticated).toBe(authenticated);
+            expect(sap).not.toHaveBeenCalled();
+            if (authenticated) expect(result.token).toEqual(expect.any(String));
+            else {
+                expect(result.token).toBeUndefined();
+                expect(result.message).toContain('Invalid local credentials');
+            }
+        });
+
         it('should reject with 403 in production environment', async () => {
             process.env.NODE_ENV = 'production';
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';

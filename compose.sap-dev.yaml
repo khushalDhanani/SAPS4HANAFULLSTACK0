@@ -1,0 +1,25 @@
+# Opt-in SAP OData and RFC connectivity for loopback-only local development.
+# Requires SAP settings in .env.docker.local and an existing trusted CA bundle.
+services:
+  cap-dev:
+    build:
+      args:
+        INSTALL_RFC_PREBUILD: "true"
+    environment:
+      CUSTOM_CA_CERT_FILE: /run/certs/sap-dev.pem
+      REQUIRE_RFC_SDK: "true"
+    volumes:
+      - type: bind
+        source: ${SAP_DEV_CA_FILE:?Set SAP_DEV_CA_FILE to the trusted SAP CA PEM file}
+        target: /run/certs/sap-dev.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${RFC_SDK_HOST_PATH:?Set RFC_SDK_HOST_PATH to the Linux x86-64 SAP NW RFC SDK directory}
+        target: /usr/sap/nwrfcsdk
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - sap-egress

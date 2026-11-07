@@ -1,0 +1,12 @@
+{
+  "welcomeFile": "/saps4hanafiori/index.html",
+  "authenticationMethod": "none",
+  "routes": [
+    {
+      "source": "^/saps4hanafiori/(.*)$",
+      "target": "$1",
+      "localDir": "saps4hanafiori",
+      "authenticationType": "none"
+    }
+  ]
+}

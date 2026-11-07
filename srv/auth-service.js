@@ -102,7 +102,20 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     let authResult;
     const isKhushalUser = sUserLower === "khushal";
 
-    if (isKhushalUser) {
+    if (process.env.APP_ROLE === "cap-local") {
+      // The isolated Docker profile has no SAP connectivity or SAP credentials.
+      if (!isKhushalUser || !sLocalDevPass || !localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
+        return {
+          authenticated: false,
+          message: "Invalid local credentials. Use khushal and the configured LOCAL_DEV_PASSWORD."
+        };
+      }
+      authResult = {
+        authenticated: true,
+        message: "Authentication successful (local development).",
+        system: s4Config.getSystemLabel()
+      };
+    } else if (isKhushalUser) {
       // Allow 'khushal' with the local mock password (LOCAL_DEV_PASSWORD, if set),
       // real S/4 credentials (S4_PASSWORD), or S/4 Gateway
       const sEnvDevPass = (process.env.S4_PASSWORD || "").trim();
