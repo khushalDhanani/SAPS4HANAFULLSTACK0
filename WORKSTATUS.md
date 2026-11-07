@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Secret scanner Docker template fix — PASS (2026-11-07 11:27 IST):** Fixed the filename exception mismatch. Scan passes for 912 tracked files; all 21 scanner tests pass. Root lint exits 0 with two unrelated unused-disable warnings; diff check passes. Hosted CI not rerun.
+
 - **Docker RFC fix — In Progress (2026-11-07):** Linux native binary loads with discovered SDK. Connected override now retains pinned node-rfc prebuild and mounts SDK read-only; startup guard checks RFC config/load. Restored missing RFC system number from matching host target without printing values. Build and temporary-container native/RFC read verification pass. Activation blocked by automatic approval review pending explicit approval of local in-memory data loss.
 
 - **SDK search (2026-11-07 10:42 IST) — FOUND:** Wider home-directory search located Linux x86-64 SDK libraries and include/lib directories inside the installed SAP service-catalog VS Code extension. Earlier missing-SDK finding is superseded for file availability only; Docker/node-rfc compatibility and permitted reuse remain NOT VERIFIED.
@@ -443,6 +445,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **ZQUAR 4x6 Quarantine Label Production Format & Movement 261 BusinessConfig (2026-10-31 IST) — BASELINE CONFIRMED:** Full ZQUAR 4x6 label layout (vertical left strip, official Aether SVG corporate vector logo, colon alignment on uniform vertical axis, centered barcode, 14 field rows) and Plant 1120 / Warehouse W01 BusinessConfig bootstrap operational. Detailed implementation history, measurements, and evidence archived in [`WORKSTATUS-archive-2026-10-31.md`](docs/archive/WORKSTATUS-archive-2026-10-31.md).
 
 ## Next Steps
+
+- Secret scanner: rerun hosted CI after the focused commit; local validation passes.
 
 - RFC fix is built and read-only BAPI probe passed. Obtain explicit approval to recreate cap-dev (discards local in-memory data), then apply connected override and verify routed listUsers/browser. Automatic review rejected the attempted recreation; do not retry without approval.
 
@@ -4309,3 +4313,16 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - BLOCKED: Explicit approval to clear local in-memory data during recreation. ASSUMPTIONS: no claim that the successful one-row RFC probe proves the full user-management flow.
 - Next: Ask user to approve recreation/data loss; after approval apply validated override and check routed login/listUsers and browser read-only.
 - FINAL STATUS: PARTIAL — fix built and native/RFC read validated; activation BLOCKED by automatic approval review.
+
+### 2026-11-07 11:27 IST — Secret scanner Docker template false positive
+
+- CHANGED: `tools/scan-secrets.js`, `test/unit/tools/scanSecrets.test.js`, `WORKSTATUS.md`. Match the two explicit template exceptions already present in `.gitignore`; keep both in content scanning. Added injectable Git execution using the existing scanner test pattern. No dependencies or application flows changed.
+- CONFIRMED: `npm run scan:secrets` reproduced exit 1 for `.env.docker.local.example`. Secret-safe template inspection found two empty credential assignments and one boolean setting. Reviewed repository instructions, current status/unresolved Docker issues, Git status, scanner/call sites, tests, CI and lint configuration. Unrelated in-progress MIB work preserved.
+- TEST DECISION: TEST UPDATED — scanner unit regressions for both allowed templates, rejection of actual/unapproved environment files, and credential detection in allowed templates.
+- TESTED: Pre-change scan FAIL as above. Post-change `npm test -- --runTestsByPath test/unit/tools/scanSecrets.test.js` PASS (21 tests); `npm run scan:secrets` PASS (912 tracked files, 9 rules, zero findings); `npm run lint -- --no-warn-ignored tools/scan-secrets.js test/unit/tools/scanSecrets.test.js` exits 0 (script also runs root lint; two unrelated unused eslint-disable warnings at test/unit/controller/blockSubmitIfNotConfirmed.test.js:71 and test/unit/helpers/realBlockSubmit.js:12); `git diff --check` PASS. Reviewed focused diff and Git status; concurrent unrelated MIB edits preserved.
+- VERIFIED: Root cause is the filename exception mismatch with `.gitignore`.
+- NOT VERIFIED: Hosted CI; SAP/BTP, UI E2E and application builds are not applicable to this tooling-only change. No SAP calls.
+- BLOCKED: None. ASSUMPTIONS: None for this fix. REGRESSION: All 21 scanner tests pass, including rejection and content-detection cases.
+- Review: No duplicated/superseded implementation or new dependency; content-scanning rules unchanged.
+- Next action: Rerun hosted CI after the focused commit authorized by the user; unrelated work stays uncommitted.
+- FINAL STATUS: PASS for the requested scanner fix.

@@ -96,7 +96,7 @@ function getTrackedFiles(exec = execSync) {
   return files;
 }
 
-function verifyGitignore() {
+function verifyGitignore(exec = execSync) {
   const gitignorePath = path.join(PROJECT_ROOT, '.gitignore');
   if (!fs.existsSync(gitignorePath)) {
     return { ok: false, message: '.gitignore does not exist!' };
@@ -110,13 +110,14 @@ function verifyGitignore() {
     return { ok: false, message: `Missing required secret patterns in .gitignore: ${missing.join(', ')}` };
   }
 
-  // Ensure no .env or .env.local file is tracked in git (excluding safe .env.example)
+  // Only the explicitly permitted templates may be tracked; their contents are still scanned.
+  const allowedTemplates = ['.env.example', '.env.docker.local.example'];
   try {
-    const rawTracked = execSync('git ls-files .env .env.local .env.*', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
+    const rawTracked = exec('git ls-files .env .env.local .env.*', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
     const trackedSecrets = rawTracked
       .split('\n')
       .map((f) => f.trim())
-      .filter((f) => f && f !== '.env.example');
+      .filter((f) => f && !allowedTemplates.includes(f));
 
     if (trackedSecrets.length > 0) {
       return { ok: false, message: `FATAL: Sensitive environment file(s) are tracked in git: ${trackedSecrets.join(', ')}` };

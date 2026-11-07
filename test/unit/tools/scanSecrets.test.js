@@ -21,6 +21,33 @@ describe('Release Automation: Secret Scanner Unit Tests', () => {
     expect(res.ok).toBe(true);
   });
 
+  it('accepts only the explicitly allowed environment templates', () => {
+    expect(verifyGitignore(() => '.env.example\n.env.docker.local.example\n')).toEqual({ ok: true });
+  });
+
+  it.each(['.env', '.env.local', '.env.docker.local', '.env.production', '.env.other.example', '.env.docker.local.example.bak'])(
+    'rejects tracked environment file %s alongside allowed templates', (file) => {
+      const result = verifyGitignore(() => `.env.example\n.env.docker.local.example\n${file}\n`);
+      expect(result.ok).toBe(false);
+      expect(result.message).toBe(`FATAL: Sensitive environment file(s) are tracked in git: ${file}`);
+    }
+  );
+
+  it('keeps allowed templates in the content scan and detects credentials inside them', () => {
+    const files = getTrackedFiles(() => '.env.example\n.env.docker.local.example\n');
+    expect(files).toEqual(['.env.example', '.env.docker.local.example']);
+    const read = jest.spyOn(require('fs'), 'readFileSync').mockReturnValue(Buffer.from('S4_PASSWORD="scanner-test-value"\n'));
+    try {
+      for (const file of files) {
+        expect(scanFile(file)).toEqual(expect.arrayContaining([
+          expect.objectContaining({ file, rule: 'Hardcoded S/4HANA Password in non-test file' })
+        ]));
+      }
+    } finally {
+      read.mockRestore();
+    }
+  });
+
   it('detects private key blocks in scanned text', () => {
     const privateKeyRule = SECRET_RULES.find((r) => r.name === 'Private Key Block');
     expect(privateKeyRule).toBeDefined();
