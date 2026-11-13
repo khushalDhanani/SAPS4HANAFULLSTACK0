@@ -316,8 +316,14 @@ describe('job start conditions', () => {
     expect(timer).not.toBeNull();
   });
 
+  test('LOCK_MONITOR_IN_TEST=1 runs it under the test profile', () => {
+    timer = startJob(jest.fn(), { ...env, NODE_ENV: 'test', LOCK_MONITOR_IN_TEST: '1' });
+    expect(timer).not.toBeNull();
+  });
+
   test('does not run under test or without a recipient', () => {
     expect(startJob(jest.fn(), { ...env, NODE_ENV: 'test' })).toBeNull();
+    expect(startJob(jest.fn(), { ...env, NODE_ENV: 'test', LOCK_MONITOR_IN_TEST: 'true' })).toBeNull();
     delete process.env.LOCK_NOTIFY_TO;
     expect(startJob(jest.fn(), env)).toBeNull();
   });

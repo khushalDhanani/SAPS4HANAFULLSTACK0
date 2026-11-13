@@ -560,9 +560,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 - Secret scanner: rerun hosted CI after the focused commit; local validation passes.
 
-- RFC fix is built and read-only BAPI probe passed. Obtain explicit approval to recreate cap-dev (discards local in-memory data), then apply connected override and verify routed listUsers/browser. Automatic review rejected the attempted recreation; do not retry without approval.
+- RFC fix: approved recreation done 2026-11-13; see the listUsers line below.
 
-- Admin listUsers: obtain path to licensed Linux x86-64 SAP NW RFC SDK, then prepare matching node-rfc image installation/mount and S4_RFC_SYSNR from verified development settings; run read-only RFC validation. macOS SDK cannot satisfy Linux container dependency.
+- Lock monitor email: Docker cap-dev monitor active 2026-11-13 via LOCK_MONITOR_IN_TEST=1; real email delivery NOT VERIFIED (needs a new lock; a test lock needs written go).
+
+- Admin listUsers: PASS 2026-11-13 — cap-dev recreated with compose.sap-dev.yaml; routed listUsers and browser SU01 page load live SAP users (READ-ONLY). Lock/unlock live proof still needs written go.
 
 - Restore missing LOCAL_DEV_PASSWORD (existing running value can be retained without printing it), then approve recreation with compose.sap-dev.yaml and trusted CA path. This clears local in-memory data. Verify dashboard after activation; no SAP writes.
 
@@ -3938,3 +3940,49 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - NOT VERIFIED: Hosted CI result. BLOCKED: None. ASSUMPTIONS: Origin is the requested remote, confirmed as the repository used in this conversation. REGRESSION: No code changes; uncommitted work preserved.
 - Next: Check the newly triggered GitHub Actions run; this status-only record remains local.
 - FINAL STATUS: PASS for checkout/push.
+
+### 2026-11-13 IST — Docker cap-dev recreated with SAP override; Admin listUsers verified — PASS
+
+- REQUEST: User wrote "Go, recreate": recreate cap-dev with `compose.sap-dev.yaml` (local in-memory data loss accepted) and verify Admin listUsers.
+- CHANGED: Runtime only, no code. Started Docker Desktop; ran `docker compose --env-file .env.example -f compose.yaml -f compose.sap-dev.yaml --profile dev up --build -d --force-recreate cap-dev approuter-dev` (command from docs/deployment/docker.md:56). Merged config checked first: `./nwrfcsdk` → `/usr/sap/nwrfcsdk` read-only, `./certs` → `/run/certs` read-only, networks `application` + `sap-egress`, platform linux/amd64. Local in-memory CAP data was discarded as approved. Corrected the stale listUsers Next Steps line.
+- SAP: READ-ONLY only (BAPI_USER_GETLIST + BAPI_USER_GET_DETAIL via listUsers). No SAP write.
+- TEST DECISION: EXISTING TEST SUFFICIENT — `test/unit/tools/dockerRuntime.test.js`; no code changed, live verification below.
+- TESTED / VERIFIED:
+  - Both containers `healthy`; cap-dev log serves `UserManagementService`.
+  - Routed login `POST 127.0.0.1:5000/odata/v4/auth/login` (khushal): HTTP 200, authenticated=true.
+  - Routed `GET /odata/v4/user-management/listUsers(search=null,maxRows=5)`: HTTP 200, 5 rows, all detailsAvailable=true (~4.5 s).
+  - Headless Playwright (scratch script, password read from `.env.docker.local`, not printed): login → `#/dashboard/admin`, listUsers HTTP 200, User Management (SU01) shows 278 total / 230 active / 48 locked live users, 0 console errors.
+  - `npx jest test/unit/tools/dockerRuntime.test.js`: 10/10 PASS. `git diff --check`: clean.
+- NOT VERIFIED: Lock/unlock (SAP write, Tier C pending written go). Committed Playwright suite not rerun (no code change). Lock monitor shows "Off (email not configured)" — observed, not investigated.
+- BLOCKED: None. ASSUMPTIONS: none.
+- Next: Commit `compose.sap-dev.yaml` change when ready; lock/unlock live proof still needs a written go for a specific test user.
+- FINAL STATUS: PASS (read-only listUsers through Docker RFC runtime).
+
+### 2026-11-13 IST — Lock monitor email configuration (Docker cap-dev) — BLOCKED (decision needed)
+
+- REQUEST: Configure lock monitor email.
+- CHANGED: No repo code changed. The user added SMTP_HOST, SMTP_PORT (587), SMTP_USER, SMTP_PASS, MAIL_FROM, LOCK_NOTIFY_TO and LOCK_NOTIFY_APP_URL to the Git-ignored `.env.docker.local`. The check printed only set/empty status: no placeholders or duplicates, and both addresses are well-formed. LOCK_POLL_INTERVAL_SEC and LOCK_MAX_PER_EMAIL are absent, so the code defaults apply (5 s and 50, srv/admin/lockNotifier.js:14-15). Recreated cap-dev with `docker compose --env-file .env.example -f compose.yaml -f compose.sap-dev.yaml --profile dev up -d --force-recreate cap-dev`; it is healthy. Local in-memory data was discarded again.
+- TESTED / VERIFIED (READ-ONLY): login HTTP 200. `GET /odata/v4/user-management/getLockMonitor()` returns HTTP 200 with state=`starting` (no longer `off`/not configured), recipient set, pollIntervalSec=5, maxPerEmail=50. No email was sent and no SAP write was made.
+- FINDING (root cause, CONFIRMED from code): `startJob` returns early when `NODE_ENV === 'test'` (srv/admin/lockNotifier.js:464), and compose.yaml sets cap-dev `NODE_ENV: test` (docs/deployment/docker.md:10). The monitor therefore never polls in Docker cap-dev, and its state stays `starting`. Changing NODE_ENV would also affect passwordExpiryNotifier (srv/admin/passwordExpiryNotifier.js:199), the HU stock-transfer and goods-receipt pollers, tools/docker/runtime.js:120 and the CDS profile, so no change was made.
+- TEST DECISION: TEST NOT POSSIBLE — the end-to-end email path needs a decision on how the monitor may run in Docker dev, and a real send needs a written go.
+- NOT VERIFIED: SMTP connectivity/TLS/auth, actual email delivery, browser header text.
+- ASSUMPTIONS: none.
+- Next: User decides between (a) keeping the Docker dev monitor off, (b) an explicit opt-in env flag in startJob for the test profile (code + test change), or (c) running CAP outside NODE_ENV=test.
+- FINAL STATUS: BLOCKED.
+
+### 2026-11-13 11:46 IST — Lock monitor opt-in flag for the Docker dev (NODE_ENV=test) profile — PASS
+
+- REQUEST: User chose "Add opt-in flag" so the lock monitor runs in Docker cap-dev.
+- CHANGED:
+  - `srv/admin/lockNotifier.js`: new `isTestProfile(env)` = `NODE_ENV === 'test'` unless `LOCK_MONITOR_IN_TEST` is exactly `1`. `startJob` and `defaultRetryDelays` use it, so a forced run also gets real retry delays (1/2/4 s) instead of the test `[0,0,0]`. All other guards are unchanged: interval 0 = off, first CF instance only, email configured and recipient set.
+  - `test/unit/admin/lockNotifierRules.test.js`: added "LOCK_MONITOR_IN_TEST=1 runs it under the test profile"; asserts that the value `true` does not enable it.
+  - `.env.example`, `.env.docker.local.example`: documented `LOCK_MONITOR_IN_TEST` (empty = off).
+  - Local only (Git-ignored): `LOCK_MONITOR_IN_TEST=1` appended to `.env.docker.local`. Rebuilt and recreated cap-dev (`... up --build -d --force-recreate cap-dev`); local in-memory data discarded.
+- TEST DECISION: TEST ADDED — `job start conditions` in `test/unit/admin/lockNotifierRules.test.js`.
+- TESTED: `npx jest --runTestsByPath test/unit/tools/scanSecrets.test.js test/unit/admin/lockNotifierRules.test.js test/integration/lockNotification.test.js test/integration/lockNotificationQueue.test.js test/unit/tools/dockerRuntime.test.js` → 5 suites, 149 tests PASS. `npx eslint` on changed JS: clean. `git diff --check`: clean.
+- VERIFIED (READ-ONLY SAP): cap-dev healthy. `getLockMonitor()` HTTP 200: state=ok, lastSuccessfulPollAt advancing, pollDurationMs ≈ 340–380, pollIntervalSec=5, pending/failed notifications 0. Headless browser at `#/dashboard/admin`: header "Lock monitor: Active · Last checked 11:45", listUsers 200, 0 console errors. The first poll took a baseline only, so no email was sent for the 48 already-locked users.
+- NOT VERIFIED: SMTP connection/TLS/auth and real email delivery. The first real email goes out only when a user becomes newly locked; a deliberate test lock is an SAP write and needs a written go. The Playwright browser suite was not rerun because there was no UI change.
+- NOTE: the code default poll interval is 5 s (srv/admin/lockNotifier.js:14). `.env.example` suggests 60; `.env.docker.local` does not set it.
+- ASSUMPTIONS: none.
+- Next: Commit the flag change with the pending compose.sap-dev.yaml change when ready. Optionally set LOCK_POLL_INTERVAL_SEC in `.env.docker.local`. To prove delivery, give a written go for one test-user lock, or wait for a natural lock.
+- FINAL STATUS: PARTIAL — the monitor runs and is verified; email delivery is NOT VERIFIED.

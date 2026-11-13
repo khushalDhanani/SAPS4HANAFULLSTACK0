@@ -16,7 +16,9 @@ const DEFAULT_MAX_PER_EMAIL = 50;
 const CONTEXT_WINDOW_MS = 5 * 60 * 1000; // how long an app note can explain a lock
 const RUN_SETTLE_MS = 20 * 1000; // a bulk run still locking is held back, so that it stays in one email
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
-const defaultRetryDelays = () => (process.env.NODE_ENV === 'test' ? [0, 0, 0] : RETRY_DELAYS_MS);
+// The local Docker dev profile runs NODE_ENV=test; LOCK_MONITOR_IN_TEST=1 lets the monitor run there like a real server.
+const isTestProfile = (env = process.env) => env.NODE_ENV === 'test' && String(env.LOCK_MONITOR_IN_TEST || '').trim() !== '1';
+const defaultRetryDelays = () => (isTestProfile() ? [0, 0, 0] : RETRY_DELAYS_MS);
 const DEFAULT_LEASE_MS = 60 * 1000;
 const DEFAULT_MAX_ATTEMPTS = 30;
 const STALE_AFTER_INTERVALS = 3;
@@ -461,7 +463,7 @@ async function runCycle(adapter, options) {
 function startJob(getAdapter, env = process.env) {
   const everySec = pollIntervalSec(env);
   const instance = env.CF_INSTANCE_INDEX;
-  if (env.NODE_ENV === 'test' || everySec <= 0 || !isEnabled() || (instance !== undefined && String(instance) !== '0')) {
+  if (isTestProfile(env) || everySec <= 0 || !isEnabled() || (instance !== undefined && String(instance) !== '0')) {
     return null;
   }
   const timer = setInterval(() => runCycle(getAdapter()), everySec * 1000);

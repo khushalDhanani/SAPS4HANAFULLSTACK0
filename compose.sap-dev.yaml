@@ -9,17 +9,11 @@ services:
         INSTALL_RFC_PREBUILD: "true"
     environment:
       PLATFORM: linux/amd64
-      CUSTOM_CA_CERT_FILE: /run/certs/sap-dev.pem
+      CUSTOM_CA_CERT_FILE: /run/certs/ca-bundle.pem
       REQUIRE_RFC_SDK: "true"
     volumes:
       - type: bind
-        source: ${SAP_DEV_CA_FILE:?Set SAP_DEV_CA_FILE to the trusted SAP CA PEM file}
-        target: /run/certs/sap-dev.pem
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${RFC_SDK_HOST_PATH:?Set RFC_SDK_HOST_PATH to the Linux x86-64 SAP NW RFC SDK directory}
+        source: ${RFC_SDK_HOST_PATH:-./nwrfcsdk}
         target: /usr/sap/nwrfcsdk
         read_only: true
         bind:
