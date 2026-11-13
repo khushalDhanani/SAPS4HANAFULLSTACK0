@@ -562,7 +562,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 - RFC fix: approved recreation done 2026-11-13; see the listUsers line below.
 
-- Lock monitor email: Docker cap-dev monitor active 2026-11-13 via LOCK_MONITOR_IN_TEST=1; real email delivery NOT VERIFIED (needs a new lock; a test lock needs written go).
+- Lock monitor email: monitor active 2026-11-13; delivery BLOCKED — outbound SMTP to Microsoft 365 blocked/intercepted on this network (587 no greeting, 25 TLS stalls). Needs network/IT fix, then SMTP verify, then written go for a test lock.
 
 - Admin listUsers: PASS 2026-11-13 — cap-dev recreated with compose.sap-dev.yaml; routed listUsers and browser SU01 page load live SAP users (READ-ONLY). Lock/unlock live proof still needs written go.
 
@@ -3986,3 +3986,19 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: none.
 - Next: Commit the flag change with the pending compose.sap-dev.yaml change when ready. Optionally set LOCK_POLL_INTERVAL_SEC in `.env.docker.local`. To prove delivery, give a written go for one test-user lock, or wait for a natural lock.
 - FINAL STATUS: PARTIAL — the monitor runs and is verified; email delivery is NOT VERIFIED.
+
+### 2026-11-13 11:58 IST — P0 Verify lock email delivery — BLOCKED (SMTP network path)
+
+- REQUEST: P0: verify actual lock email delivery.
+- CHANGED: None (diagnosis only). No email sent, no SAP write, no env/config change.
+- CHECKED (READ-ONLY): `getLockMonitor()` HTTP 200 state=ok, lastNotificationDispatchedAt=null, pending/failed 0, which means no natural lock has occurred since the monitor started.
+- SMTP diagnosis (connect/handshake only; nothing sent; values not printed; host is Microsoft 365):
+  - Container, configured port 587, nodemailer `verify()`: FAIL `ETIMEDOUT` on CONN, "Greeting never received".
+  - Host, raw TCP: port 587 connects but sends no greeting within 8 s. Port 465 is also silent, which is expected for implicit TLS. Port 25 returned the genuine "Microsoft ESMTP MAIL Service ready" banner and advertised STARTTLS.
+  - Container, port 25 (one-off env override): FAIL "TLS handshake timed out" after STARTTLS. A host retry on port 25 minutes later: `ECONNREFUSED`.
+  - FortiClient (Fortinet) is installed; its VPN profile is disconnected.
+- ROOT CAUSE (INFERRED): Outbound SMTP from this machine/network to Microsoft 365 is blocked or intercepted (silent 587, stalled TLS and intermittent refusal on 25). Not an app, Docker or credential fault: authentication was never reached. Exact blocking device/policy UNKNOWN.
+- RELATED (external, Not verified for this tenant): Microsoft MC786329 says SMTP AUTH Basic auth becomes off by default in Exchange Online from December 2026; admins can re-enable it; final removal date to be announced in 2027.
+- TEST DECISION: TEST NOT POSSIBLE — the SMTP network path is unavailable.
+- Next: User/IT allows outbound TCP 587 to Microsoft 365 SMTP (or tests from another network, or supplies an approved internal relay), then rerun SMTP verify. After verify passes, a written go naming one test user is needed for lock → email → unlock (two SAP writes).
+- FINAL STATUS: BLOCKED.
