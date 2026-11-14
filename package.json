@@ -27,8 +27,9 @@
     "validate:sap:sandbox": "node tools/validate-sap-sandbox.js",
     "lint": "eslint .",
     "generate:rules": "node tools/generate-po-rules.js",
-    "validate:mta": "mbt validate -x paths",
-    "build:mta": "mbt build"
+    "check:mbt": "mbt --version | grep -q . || { echo 'mbt binary is missing: its install script did not run or its download failed. Nothing was validated or built.' >&2; exit 1; }",
+    "validate:mta": "npm run -s check:mbt && mbt validate -x paths",
+    "build:mta": "npm run -s check:mbt && mbt build"
   },
   "license": "ISC",
   "dependencies": {
