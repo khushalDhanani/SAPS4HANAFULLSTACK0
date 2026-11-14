@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Host CAP start after fresh clone — PARTIAL (2026-11-14 11:15 IST):** The `Unable to locate module @sap/ux-ui5-tooling` bootstrap error is fixed by `npm ci` in `app/fiori-app` (Git-ignored install only). `cds-serve` boots on the host; `/health` and `/saps4hana-fiori-app/index.html` return 200. Update 11:27 IST: the local `db.sqlite` schema is deployed (18 tables), `~/.sap-certs/s4-dev.pem` is installed and `S4_DESTINATION_URL` in `.env` uses the host name; strict TLS to SAP passes. Update 11:28 IST: after the user's restart, READ-ONLY SAP reads through the app return 200 (one purchase order; all 12 dashboard counts). Update 11:48 IST: SAP NW RFC SDK 7.50 PL20 macOS arm64 is extracted under `~/nwrfcsdk`; the ignored node-rfc prebuild's rpath was updated and `npm exec` can load it. The CAP server was not listening on port 4004, so the RFC-backed reservation endpoint remains NOT VERIFIED. Open: browser sign-in is NOT VERIFIED; root package files were restored to the Git baseline and `npm ci` completed at 11:35 (see the Changes Log).
+
 - **Local Dev Approuter Authentication & Fiori UI Verification — PASS (2026-11-07 17:15 IST):** Verified full end-to-end login, navigation, and SAP S/4HANA data loading at `http://127.0.0.1:5000/saps4hanafiori/index.html`:
   - Resolved local authentication mismatch caused by duplicate `LOCAL_DEV_PASSWORD` definitions in `.env.docker.local`. Unified `LOCAL_DEV_PASSWORD` to align with `S4_PASSWORD`.
   - Verified `/odata/v4/auth/login` endpoint returns HTTP 200 with valid JWT session for user `khushal`.
@@ -551,6 +553,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **ZQUAR 4x6 Quarantine Label Production Format & Movement 261 BusinessConfig (2026-10-31 IST) — BASELINE CONFIRMED:** Full ZQUAR 4x6 label layout (vertical left strip, official Aether SVG corporate vector logo, colon alignment on uniform vertical axis, centered barcode, 14 field rows) and Plant 1120 / Warehouse W01 BusinessConfig bootstrap operational. Detailed implementation history, measurements, and evidence archived in [`WORKSTATUS-archive-2026-10-31.md`](docs/archive/WORKSTATUS-archive-2026-10-31.md).
 
 ## Next Steps
+
+- Fresh clone setup (2026-11-14): root package files were restored to Git and `npm ci` completed (11:35). Update 11:27 IST: the local schema, certificate file and `.env` host name are in place; the server was restarted and SAP reads through the app are verified (11:28 IST). RFC SDK 7.50 PL20 for macOS arm64 is extracted and node-rfc loads through npm after a local ignored-prebuild rpath fix. Remaining: restart `npm run watch`, retry the read-only `getOpenReservations` request, and confirm the browser dashboard.
 
 - CI repair commit: standalone fixes ready; MIB-specific fixes remain with separately staged feature work. Push and rerun hosted CI after commit.
 
@@ -4002,3 +4006,98 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - TEST DECISION: TEST NOT POSSIBLE — the SMTP network path is unavailable.
 - Next: User/IT allows outbound TCP 587 to Microsoft 365 SMTP (or tests from another network, or supplies an approved internal relay), then rerun SMTP verify. After verify passes, a written go naming one test user is needed for lock → email → unlock (two SAP writes).
 - FINAL STATUS: BLOCKED.
+
+### 2026-11-14 11:15 IST — Host CAP start fails: `Unable to locate module @sap/ux-ui5-tooling` — PARTIAL
+
+- REQUEST: User pasted the `cds.bootstrap` error from `cds-plugin-ui5` (logged 2026-11-14T05:40:21Z = 11:10 IST).
+- ROOT CAUSE (CONFIRMED): The repo was cloned fresh today (`git reflog`: clone 10:46, checkout `feature01` 10:47) and dependencies were installed only at the root. `app/fiori-app/node_modules` did not exist, so `graphFromPackageDependencies` (`node_modules/cds-plugin-ui5/lib/applyUI5Middleware.js:77`) could not resolve the packages in `app/fiori-app/package.json`. Reproduced with a direct call: `REPRO FAIL: Unable to locate module jspdf` (same failure, another package of the same list).
+- CHANGED: No tracked code or configuration. Local only (Git-ignored): `npm ci` in `app/fiori-app` created `app/fiori-app/node_modules` from the committed lockfile.
+- TEST DECISION: TEST NOT POSSIBLE — the fix is a local install of Git-ignored `node_modules`; there is no repository code to test.
+- TESTED:
+  - Same direct `graphFromPackageDependencies({cwd: 'app/fiori-app', rootConfigPath: 'ui5-cap.yaml'})` call after the install: `GRAPH OK root=saps4hana-fiori-app`.
+  - `LOCK_POLL_INTERVAL_SEC=0 PORT=4099 npx cds-serve` (lock monitor off, spare port, no SAP call made by the agent): `server listening`, `GET /health` 200, `GET /saps4hana-fiori-app/index.html` 200, and the pasted error no longer appears. Server stopped afterwards; the empty `db.sqlite` this run created was deleted.
+  - `git status`: only the two files that were already modified before this session.
+- NOT VERIFIED: The user's own start command (UNKNOWN which one produced the log). The UI in a browser. Playwright E2E, Jest and lint were not run: no tracked code changed.
+- ERRORS/WARNINGS (found, not acted on):
+  - `package.json` and `package-lock.json` were already modified at 11:10:04, before this session: `@ui5/cli` ^4.0.71 → ^2.14.20, `cds-plugin-ui5` ^0.17.4 → ^0.13.2, `jest` ^30.5.1 → ^29.7.0. Cause INFERRED: `npm audit fix --force`. The server test above ran on these downgraded versions; Jest 29 against this test suite is NOT VERIFIED.
+  - Host boot log: `[queue] ... no such table: cds_outbox_Messages` (`ERR_SQLITE_ERROR`). The development profile uses the file `db.sqlite`, which a fresh clone does not have, so the schema is not deployed. The deploy command for this project is Not verified.
+  - Host boot log: `[cds-plugin-ui5] - Failed to inject application pages to welcome page!` and three `[cds] - WARNING: custom action/function ... conflicts with method in base class`. Not investigated.
+  - `npm ci` in `app/fiori-app`: `32 vulnerabilities (1 low, 23 moderate, 8 high)`; the `core-js` postinstall script was blocked by npm. Not investigated.
+- ASSUMPTIONS: The downgrade cause (`npm audit fix --force`) is INFERRED from the version pattern and file times. No other assumptions.
+- Next: User decides whether to restore `package.json` and `package-lock.json` from Git and rerun `npm ci` at the root. Then start the server with the usual command and confirm the UI loads.
+- FINAL STATUS: PARTIAL — the pasted error is fixed and the server boots; the root dependency downgrade and the missing local DB schema are open.
+
+### 2026-11-14 11:27 IST — Host CAP run on a fresh machine: local DB schema, SAP certificate, RFC SDK — PARTIAL
+
+- REQUEST: User pasted the host server log (`npm run watch`, started 11:16 IST) showing `no such table` errors, `node-rfc is not available`, and `self-signed certificate` on every SAP call.
+- ROOT CAUSES (CONFIRMED):
+  1. `db.sqlite` had no schema: a fresh clone has no local database.
+  2. `~/.sap-certs/s4-dev.pem` did not exist, so the `watch` script (`package.json:11`) did not set `NODE_EXTRA_CA_CERTS`. In addition `S4_DESTINATION_URL` in `.env` used an IP address, which the SAP certificate (self-signed, wildcard CN, no SAN) does not cover; see the message at `srv/integration/s4hana/AuthAdapter.js:158`.
+  3. The SAP NW RFC SDK is not on this Mac (`Library not loaded: @rpath/libsapnwrfc.dylib`; `SAPNWRFC_HOME` unset; a Spotlight search found no copy).
+- CHANGED (local only, Git-ignored or outside the repository; no tracked code or configuration), each with the user's approval in this session:
+  - LOCAL DB WRITE: `npx cds deploy --to sqlite:db.sqlite` (command from `docs/runbooks/rollback-and-reconciliation.md:159`): `successfully deployed`, 18 tables.
+  - Created `~/.sap-certs/s4-dev.pem` from the certificate the SAP host presents. SHA-256 `3F:D7:A6:85:…:DE:EE`, the same fingerprint recorded in `docs/archive/WORKSTATUS-archive-2026-10-31.md:5808`.
+  - `.env`: the host in `S4_DESTINATION_URL` changed from the IP to the host name (1 line; no other line contained that IP). The name was found read-only: `RFCHOST2` from `docs/evidence/2026-10-26/261-sap-system-info.raw.json` plus the certificate's domain; DNS resolves it to the same IP and it matches the certificate.
+- AGENT ERROR (disclosed): the cleanup in the 11:15 entry deleted `db.sqlite` just after the user's server (started 11:16:01) had opened it, so that server ran on an unlinked file until `cds watch` restarted the app at 11:23 on the `.env` change. No data was lost: the file had no tables.
+- NOT DONE: the agent's attempt to stop the user's running server was denied by the permission system; the agent did not stop it. The user reported it stopped, but `cds watch` (started 11:16:01) was still running.
+- TEST DECISION: TEST NOT POSSIBLE — local environment setup only; no repository code changed.
+- TESTED / VERIFIED:
+  - READ-ONLY TLS handshakes (no HTTP request, no credentials). Before: `DEPTH_ZERO_SELF_SIGNED_CERT` and the URL host did not match the certificate. After, with Node default validation, `NODE_EXTRA_CA_CERTS` and the `.env` URL: `authorized = true`.
+  - `sqlite3 -readonly db.sqlite`: 18 tables; `cds_outbox_Messages` and `saps4hana_admin_UserPasswordNotification` exist.
+  - Test boot `NODE_EXTRA_CA_CERTS=… LOCK_POLL_INTERVAL_SEC=0 PWD_POLL_INTERVAL_SEC=0 PORT=4099 node node_modules/.bin/cds-serve`: `server listening`, `/health` 200, `/saps4hana-fiori-app/index.html` 200, 0 `no such table` lines. Test server stopped afterwards. No SAP request was made.
+  - `package.json` checksum unchanged by the deploy.
+- NOT VERIFIED: SAP sign-in and data through the app. The user's running `cds watch` was started before the certificate file existed, so it still runs without `NODE_EXTRA_CA_CERTS` and needs a full restart. The certificate fingerprint is still not confirmed with Basis.
+- BLOCKED: RFC features on the host (password-expiry monitor, lock monitor, RFC user reads) until the licensed SAP NW RFC SDK for macOS is installed.
+- OBSERVED: `package.json`, `package-lock.json` and `WORKSTATUS.md` are now staged in Git; the agent did not stage them. The root dependency downgrade from the 11:15 entry is unchanged.
+- ASSUMPTIONS: the presented certificate is the genuine SAP certificate (trust-on-first-use, same fingerprint as on the earlier setup).
+- Next: User stops the running server and starts `npm run watch` again, signs in, and confirms the dashboard loads SAP data. Install the SAP NW RFC SDK only if RFC features are needed on the host.
+- FINAL STATUS: PARTIAL — local DB schema and SAP certificate trust are fixed and verified at TLS level; SAP data through the app is NOT VERIFIED; RFC on the host is BLOCKED.
+
+### 2026-11-14 11:28 IST — Host CAP run: SAP connection verified through the app after restart — PARTIAL
+
+- REQUEST: User: "Next", after restarting the server.
+- CORRECTION: the previous entry is labelled 11:27 IST, but it was written at about 11:25 IST without checking the clock. Its content is unchanged.
+- CHANGED: None (verification only).
+- VERIFIED (READ-ONLY SAP, through the running app on `localhost:4004`, as the mocked development user `khushal` from `package.json`; the app used the SAP credentials in `.env`):
+  - The server process on port 4004 started at 11:25:42 and has `NODE_EXTRA_CA_CERTS` set; `/health` 200.
+  - `GET /odata/v4/auth/getUserInfo()`: 200 (no SAP call).
+  - `GET /odata/v4/purchase-order/PurchaseOrders?$top=1`: 200, 1 row. Run alone first so that a wrong password could not lock the SAP user.
+  - `GET /odata/v4/purchase-order/getDashboardMetrics()`: 200 in 0.64 s, `unavailable` empty, all 12 counts returned: purchase orders 3,052; suppliers 4,377; sales inquiries 693; customers 1,090; open sales orders 584; total sales orders 974; warehouses 2; open reservations 1,250; inbound deliveries 32; orders due 1,244; customer invoices 520; customer returns 186. This is the call that failed with `self-signed certificate` in the user's 11:16 log.
+  - `/saps4hana-fiori-app/index.html`: 200.
+- TEST DECISION: TEST NOT POSSIBLE — verification of local environment setup; no repository code changed.
+- NOT VERIFIED: sign-in and the dashboard in a browser (needs the user's SAP password); the server log after the restart (not visible to the agent); Jest, lint and Playwright (not run, no code changed).
+- BLOCKED: RFC features on the host until the SAP NW RFC SDK for macOS is installed.
+- ASSUMPTIONS: unchanged from the previous entry (certificate trusted on first use, not confirmed with Basis).
+- Next: User signs in in the browser and confirms the dashboard. Open decisions: the staged root dependency downgrade (`@ui5/cli`, `cds-plugin-ui5`, `jest`) and whether RFC is needed on the host.
+- FINAL STATUS: PARTIAL — CAP → S/4 → SAP result is verified read-only; browser sign-in is NOT VERIFIED; RFC on the host is BLOCKED.
+
+### 2026-11-14 11:35 IST — Restore root `package.json` and `package-lock.json` from Git — PARTIAL (In Progress)
+
+- REQUEST: User: "Yes, restore" (restore both root package files from Git and reinstall).
+- CHANGED: `git restore --staged --worktree -- package.json package-lock.json`. The discarded diff was exactly three version lines in `package.json` (`@ui5/cli` ^2.14.20 → ^4.0.71, `cds-plugin-ui5` ^0.13.2 → ^0.17.4, `jest` ^29.7.0 → ^30.5.1) plus the matching lockfile. A backup patch of the discarded diff is in the session scratchpad. Then `npm ci` at the root: exit 0.
+- TEST DECISION: EXISTING TEST SUFFICIENT — the Jest unit suite (`npm run test:unit`); NOT RUN in this session (usage limit reached).
+- TESTED / VERIFIED:
+  - `git status`: only `WORKSTATUS.md` is modified.
+  - Installed: `@ui5/cli` 4.0.71, `cds-plugin-ui5` 0.17.4, `jest` 30.5.2, `@sap/cds` 10.1.1, `@sap/cds-dk` 10.2.0. `npm ls --all`: 0 invalid, missing or extraneous lines.
+  - The user's `cds watch` restarted the app on its own after the reinstall: a listener is on port 4004 and `/health` returns 200.
+- NOT VERIFIED: `npm run test:unit` on Jest 30; a boot log on `cds-plugin-ui5` 0.17.4 and the UI path; `npm run lint`; SAP reads after the reinstall; `mbt` (its install script was blocked by npm and `npx mbt --version` printed no version).
+- WARNINGS: `npm ci` reported `47 vulnerabilities (1 low, 39 moderate, 7 high)` and blocked install scripts for `@parcel/watcher`, `fsevents`, `mbt` and `node-rfc`. Not investigated. `npm audit fix --force` is the INFERRED cause of the original downgrade and should not be run.
+- ASSUMPTIONS: none new.
+- Next: run `npm run test:unit`, restart `npm run watch` once and confirm the UI and dashboard load; check `npm run validate:mta` because the `mbt` install script was blocked.
+- FINAL STATUS: PARTIAL — the files are restored and dependencies reinstalled; tests and a full boot check were not run.
+
+### 2026-11-14 11:48 IST — Install local SAP NW RFC SDK 7.50 PL20 for macOS arm64 — PARTIAL
+
+- REQUEST: User asked why the SDK ZIP was unsupported on macOS and asked to check and fix it.
+- CHANGED: Extracted `~/Downloads/nwrfc750P_20-80008131.zip` to `~/nwrfcsdk`. Updated the ignored local `node_modules/node-rfc/prebuilds/darwin-arm64/node.napi.node` rpath to include `~/nwrfcsdk/lib`; the prebuild only referenced `/usr/local/sap/nwrfcsdk/lib`, and npm removes `DYLD_LIBRARY_PATH` from child processes. No tracked application code or SAP configuration changed.
+- TEST DECISION: TEST NOT POSSIBLE — environment-only setup; no source behavior changed. The native module load was verified directly.
+- TESTED / VERIFIED:
+  - `unzip -t ~/Downloads/nwrfc750P_20-80008131.zip`: PASS, no archive errors.
+  - `file` on `libsapnwrfc.dylib`, `libsapucum.dylib`, and `libicuuc57.dylib` from the archive: all are Mach-O arm64.
+  - `install_name_tool -add_rpath "$HOME/nwrfcsdk/lib" node_modules/node-rfc/prebuilds/darwin-arm64/node.napi.node`: PASS.
+  - `npm exec -- node -e "const rfc = require('node-rfc'); ..."`: PASS; `Client` export is a function.
+- NOT VERIFIED: RFC-backed reservation response through CAP/SAP. `/health` on `localhost:4004` failed with curl exit 7 (connection refused), so the reservation GET was not sent. No SAP request was made.
+- BLOCKERS: None for native module loading; the CAP server must be restarted before endpoint verification. The local prebuild rpath patch is in ignored `node_modules` and will be lost if the package is reinstalled.
+- ASSUMPTIONS: None.
+- NEXT: Start `npm run watch` and retry the read-only `getOpenReservations` request; inspect the new server log if it still returns 502.
+- FINAL STATUS: PARTIAL — the SDK is installed and the native module loads under npm; the SAP-backed endpoint remains unverified.
