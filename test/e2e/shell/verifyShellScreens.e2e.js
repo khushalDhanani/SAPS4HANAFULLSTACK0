@@ -20,7 +20,7 @@ const PHONE = {
     hasTouch: true,
     userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
 };
-const ITEM = { overview: 'sideNavOverview', mm: 'sideNavMM', sd: 'sideNavSD', ewm: 'sideNavEWM', admin: 'sideNavAdmin' };
+const ITEM = { overview: 'sideNavOverview', mm: 'sideNavMM', sd: 'sideNavSD', ewm: 'sideNavEWM', admin: 'sideNavUserMaster' };
 const SECTION = { overview: 'sectionOverview', mm: 'sectionMM', sd: 'sectionSD', ewm: 'sectionEWM', admin: 'sectionAdmin' };
 
 /** The sidebar's highlighted key and the dashboard sections currently on screen. */
@@ -83,8 +83,8 @@ async function verifySidebar(baseUrl) {
         const loaded = metricsCalls;
         for (const key of ['mm', 'sd', 'ewm', 'admin']) {
             if (key === 'admin') {
-                await click('sideNavUserMaster');
-                await page.locator('.sapMPopover').getByText('Administrator', { exact: true }).click();
+                await click('sideNavAdministration');
+                await page.locator('.sapMPopover').getByText('User Master', { exact: true }).click();
                 await session.settle();
             } else {
                 await click(ITEM[key]);
@@ -189,11 +189,11 @@ async function verifySidebar(baseUrl) {
         await openHash(viewer, 'dashboard/admin');
         const seen = await shellState(viewer.page);
         const problems = [];
-        if (await viewer.page.locator(`[id$="--${ITEM.admin}"]`).count()) problems.push('Administrator item is rendered for a non-admin');
-        if (await viewer.page.locator('[id$="--sideNavUserMaster"]').count()) problems.push('User Master group is rendered for a non-admin');
+        if (await viewer.page.locator(`[id$="--${ITEM.admin}"]`).count()) problems.push('User Master item is rendered for a non-admin');
+        if (await viewer.page.locator('[id$="--sideNavAdministration"]').count()) problems.push('Administration group is rendered for a non-admin');
         if (seen.selected !== 'overview') problems.push(`expected highlight overview, got ${seen.selected}`);
         if (seen.sections.join() !== 'overview') problems.push(`expected only section overview, got [${seen.sections}]`);
-        step(errors, details, 'A non-admin sees no User Master group, and the Administrator URL shows the Overview', problems);
+        step(errors, details, 'A non-admin sees no Administration group, and the admin URL shows the Overview', problems);
     } catch (err) {
         step(errors, details, 'Non-admin sidebar', [`${err.name}: ${err.message.split('\n')[0]}`]);
     } finally {
@@ -656,15 +656,15 @@ async function verifyBulkFlow(baseUrl) {
     return { errors, details };
 }
 
-/** The User Master group as rendered: its expansion, the child's visibility and both highlights. */
+/** The Administration group as rendered: its expansion, the User Master item's visibility and both highlights. */
 const groupState = (page) => page.evaluate(() => {
     const Element = window.sap.ui.require('sap/ui/core/Element');
-    const group = document.querySelector('[id$="--sideNavUserMaster"]');
-    const child = document.querySelector('[id$="--sideNavAdmin"]');
+    const group = document.querySelector('[id$="--sideNavAdministration"]');
+    const child = document.querySelector('[id$="--sideNavUserMaster"]');
     return {
         hash: window.location.hash,
         // The control's state: on UI5 1.136.22 the link's aria-expanded stays "true" after a collapse
-        expanded: Element.registry.filter((c) => c.getId().endsWith('--sideNavUserMaster'))[0].getExpanded(),
+        expanded: Element.registry.filter((c) => c.getId().endsWith('--sideNavAdministration'))[0].getExpanded(),
         childShown: !!child && child.getClientRects().length > 0,
         childSelected: !!child && child.classList.contains('sapTntNLISelected'),
         groupSelected: group.querySelector('.sapTntNLIFirstLevel').classList.contains('sapTntNLISelected'),
@@ -672,13 +672,13 @@ const groupState = (page) => page.evaluate(() => {
     };
 });
 
-async function verifyUserMasterGroup(baseUrl) {
-    console.log('\n=== User Master group in the sidebar (READ-ONLY, write guard on) ===');
+async function verifyAdministrationGroup(baseUrl) {
+    console.log('\n=== Administration group with User Master item (READ-ONLY, write guard on) ===');
     const errors = [];
     const details = [];
     const session = await openSession({ baseUrl });
     const { page } = session;
-    const popoverChild = page.locator('.sapMPopover').getByText('Administrator', { exact: true });
+    const popoverChild = page.locator('.sapMPopover').getByText('User Master', { exact: true });
     const pressKey = async (key) => {
         await page.keyboard.press(key);
         await page.waitForTimeout(300); // the expand animation
@@ -690,7 +690,7 @@ async function verifyUserMasterGroup(baseUrl) {
     try {
         await openHash(session, 'dashboard');
 
-        await page.click('[id$="--sideNavUserMaster"]');
+        await page.click('[id$="--sideNavAdministration"]');
         await popoverChild.waitFor();
         step(errors, details, 'Closed sidebar: the group opens a popover and does not navigate', expectGroup(await groupState(page), { hash: '#/dashboard' }));
 
@@ -698,16 +698,16 @@ async function verifyUserMasterGroup(baseUrl) {
         await session.settle();
         const viaPopover = expectGroup(await groupState(page), { hash: '#/dashboard/admin', groupSelected: true });
         if (await page.locator('.sapMPopover:visible').count()) viaPopover.push('the popover stayed open');
-        step(errors, details, 'Closed sidebar: the child routes to the Administrator section and highlights the group', viaPopover);
+        step(errors, details, 'Closed sidebar: the User Master item opens the admin section and highlights the group', viaPopover);
 
         await page.click('[id$="--sideNavOverview"]');
         await session.settle();
-        await page.focus('[id$="--sideNavUserMaster-a"]');
+        await page.focus('[id$="--sideNavAdministration-a"]');
         await pressKey('Enter');
         await popoverChild.waitFor();
         await pressKey('Escape');
         const escaped = (await page.locator('.sapMPopover:visible').count()) ? ['Escape left the popover open'] : [];
-        await page.focus('[id$="--sideNavUserMaster-a"]');
+        await page.focus('[id$="--sideNavAdministration-a"]');
         await pressKey('Enter');
         await popoverChild.waitFor();
         await pressKey('Enter');
@@ -721,10 +721,10 @@ async function verifyUserMasterGroup(baseUrl) {
             hash: '#/dashboard/admin', expanded: true, childShown: true, childSelected: true, groupSelected: false
         }));
 
-        await page.click('[id$="--sideNavUserMaster-a"]');
+        await page.click('[id$="--sideNavAdministration-a"]');
         await page.waitForTimeout(1000); // the collapse animation
         const toggled = expectGroup(await groupState(page), { hash: '#/dashboard/admin', expanded: false, childShown: false });
-        await page.click('[id$="--sideNavUserMaster-a"]');
+        await page.click('[id$="--sideNavAdministration-a"]');
         await page.waitForTimeout(300);
         toggled.push(...expectGroup(await groupState(page), { hash: '#/dashboard/admin', expanded: true, childShown: true }));
         step(errors, details, 'Open sidebar: pressing the group only collapses and expands it', toggled);
@@ -732,14 +732,14 @@ async function verifyUserMasterGroup(baseUrl) {
         await page.click('[id$="--sideNavOverview"]');
         await session.settle();
         const cleared = expectGroup(await groupState(page), { hash: '#/dashboard', childSelected: false });
-        await page.click('[id$="--sideNavAdmin"]');
+        await page.click('[id$="--sideNavUserMaster"]');
         await session.settle();
         cleared.push(...expectGroup(await groupState(page), { hash: '#/dashboard/admin', childSelected: true }));
         step(errors, details, 'Open sidebar: the highlight follows the selection and the child routes by click', cleared);
 
         await page.click('[id$="--sideNavOverview"]');
         await session.settle();
-        await page.focus('[id$="--sideNavUserMaster-a"]');
+        await page.focus('[id$="--sideNavAdministration-a"]');
         await pressKey('Enter');
         const keys = expectGroup(await groupState(page), { hash: '#/dashboard', expanded: false });
         await pressKey('Space');
@@ -750,7 +750,7 @@ async function verifyUserMasterGroup(baseUrl) {
         keys.push(...expectGroup(await groupState(page), { hash: '#/dashboard', expanded: true }));
         await pressKey('ArrowDown');
         const onChild = await groupState(page);
-        if (!/--sideNavAdmin-a$/.test(onChild.focused || '')) keys.push(`ArrowDown moved focus to ${onChild.focused}`);
+        if (!/--sideNavUserMaster-a$/.test(onChild.focused || '')) keys.push(`ArrowDown moved focus to ${onChild.focused}`);
         await pressKey('Enter');
         await session.settle();
         keys.push(...expectGroup(await groupState(page), { hash: '#/dashboard/admin', childSelected: true }));
@@ -991,7 +991,7 @@ async function verifyShellScreens(options = {}) {
     const c = await verifySidebar(baseUrl);
     const d = await verifyThemeSwitcher(baseUrl);
     const e = await verifyAdminTable(baseUrl);
-    const f = await verifyUserMasterGroup(baseUrl);
+    const f = await verifyAdministrationGroup(baseUrl);
     const g = await verifyUserDetailPane(baseUrl);
     const h = await verifyBulkFlow(baseUrl);
     const errors = a.errors.concat(b.errors, c.errors, d.errors, e.errors, f.errors, g.errors, h.errors);

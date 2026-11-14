@@ -17,6 +17,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 - **Host CAP start after fresh clone — PARTIAL (2026-11-14 11:15 IST):** The `Unable to locate module @sap/ux-ui5-tooling` bootstrap error is fixed by `npm ci` in `app/fiori-app` (Git-ignored install only). `cds-serve` boots on the host; `/health` and `/saps4hana-fiori-app/index.html` return 200. Update 11:27 IST: the local `db.sqlite` schema is deployed (18 tables), `~/.sap-certs/s4-dev.pem` is installed and `S4_DESTINATION_URL` in `.env` uses the host name; strict TLS to SAP passes. Update 11:28 IST: after the user's restart, READ-ONLY SAP reads through the app return 200 (one purchase order; all 12 dashboard counts). Update 11:48 IST: SAP NW RFC SDK 7.50 PL20 macOS arm64 is extracted under `~/nwrfcsdk`; the ignored node-rfc prebuild's rpath was updated and `npm exec` can load it. The CAP server was not listening on port 4004, so the RFC-backed reservation endpoint remains NOT VERIFIED. Open: browser sign-in is NOT VERIFIED; root package files were restored to the Git baseline and `npm ci` completed at 11:35 (see the Changes Log).
 - **Purchase Orders Ask AI fragment — PARTIAL (2026-11-14 12:27 IST):** Unsupported UI5 settings were removed, and assistant responses now use a polite `InvisibleMessage` announcement. The updated focused test, full SAP-free unit and integration suites, UI5 lint/build, and isolated SAP-free E2E pass. Browser verification of the Ask AI dialog itself remains NOT VERIFIED; the SAP-free E2E does not exercise that dialog.
+- **Administration sidebar hierarchy — PASS (2026-11-14 12:39 IST):** The admin-only navigation group is labeled Administration and its child is User Master. Existing `admin` route and authorization behavior are preserved. Focused unit, UI5 lint/build, and SAP-free browser tests pass; the rendered hierarchy was verified against an isolated test server.
 
 - **Local Dev Approuter Authentication & Fiori UI Verification — PASS (2026-11-07 17:15 IST):** Verified full end-to-end login, navigation, and SAP S/4HANA data loading at `http://127.0.0.1:5000/saps4hanafiori/index.html`:
   - Resolved local authentication mismatch caused by duplicate `LOCAL_DEV_PASSWORD` definitions in `.env.docker.local`. Unified `LOCAL_DEV_PASSWORD` to align with `S4_PASSWORD`.
@@ -557,6 +558,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 - Fresh clone setup (2026-11-14): root package files were restored to Git and `npm ci` completed (11:35). Update 11:27 IST: the local schema, certificate file and `.env` host name are in place; the server was restarted and SAP reads through the app are verified (11:28 IST). RFC SDK 7.50 PL20 for macOS arm64 is extracted and node-rfc loads through npm after a local ignored-prebuild rpath fix. Remaining: restart `npm run watch`, retry the read-only `getOpenReservations` request, and confirm the browser dashboard.
 - Purchase Orders Ask AI UI5 fix: no further automated validation remains. If the user needs full UI evidence, open the Purchase Orders route and exercise the Ask AI dialog in the browser; its dedicated dialog flow is not covered by the SAP-free E2E suite.
+- Administration sidebar hierarchy: no further automated action. The broader shell E2E suite remains available for a run against the full local application; it was not needed for the menu-only verification.
 
 - CI repair commit: standalone fixes ready; MIB-specific fixes remain with separately staged feature work. Push and rerun hosted CI after commit.
 
@@ -4127,3 +4129,32 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - TEST DECISION: TEST UPDATED — `test/unit/purchase-order/purchaseOrdersAskAI.test.js`; existing suite was also executed.
 - NEXT: If browser proof is required, manually open the Purchase Orders route and exercise the Ask AI dialog; no code fix is indicated by the SAP-free test results.
 - FINAL STATUS: PARTIAL — automated SAP-free tests pass; the specific Ask AI dialog browser flow remains NOT VERIFIED.
+
+### 2026-11-14 12:33 IST — Correct Administration sidebar hierarchy — IN PROGRESS
+
+- REQUEST: User asked to correct the menu so Administration is the main title and User Master is nested under it (screenshot showed the inverse labels).
+- INSPECT: `App.view.xml` confirmed User Master as the group and Administrator as its child; both locale bundles had those labels. `AppController.test.js` and `verifyShellScreens.e2e.js` assert the current hierarchy and IDs. UI5 MCP guidelines were retrieved. UI5 API lookup failed because the MCP server requested unavailable CDN metadata for 1.136.5; this change only adjusts labels and existing navigation IDs.
+- PLAN: Swap group and child semantics (including IDs and locale bindings), preserve admin-only visibility and `key="admin"`, update existing unit/browser assertions, add a focused menu-only flow to the SAP-free Playwright gate, then run unit, UI5 lint/build, and SAP-free browser validation.
+- CHANGED:
+  - `app/fiori-app/webapp/view/App.view.xml`: Administration parent; User Master child retaining the `admin` route key.
+  - `app/fiori-app/webapp/i18n/i18n.properties`, `i18n_en.properties`: Administration and User Master menu labels/tooltips.
+  - `app/fiori-app/webapp/controller/App.controller.js`: align authorization comment with the labels.
+  - `test/unit/controller/AppController.test.js`, `test/e2e/shell/verifyShellScreens.e2e.js`: update hierarchy labels and selectors.
+  - `test/e2e/negative/verifyAdministrationMenu.e2e.js`, `test/e2e/runAllE2E.js`, `test/unit/tools/e2eRunner.test.js`, `docs/e2e-coverage-matrix.md`: add and register a focused SAP-free browser check.
+- TEST DECISION: TEST UPDATED — `test/unit/controller/AppController.test.js` and SAP-free Playwright menu flow.
+- VALIDATION:
+  - `npx jest test/unit/controller/AppController.test.js --runInBand`: PASS, 1 suite / 12 tests.
+  - `npx jest test/unit/controller/AppController.test.js test/unit/tools/e2eRunner.test.js --runInBand`: PASS, 2 suites / 22 tests.
+  - `npm --prefix app/fiori-app run lint`: PASS, no findings; existing linter update check warned that the local `.config` store is not writable.
+  - `npm --prefix app/fiori-app run build`: PASS; existing UI5 CLI update check warned that the local `.config` store is not writable.
+  - UI5 MCP linter for `App.view.xml` and `App.controller.js`: no findings. MCP API lookup was unavailable because its version endpoint requested missing UI5 1.136.5 CDN metadata; no control API was changed.
+  - `npm run test:e2e:sap-free`: PASS, 5/5 suites, including Administration menu; the new flow confirms the group label and nested child in Chromium and observes no blocked writes.
+  - Focused browser run via E2E helpers against `startIsolatedServer()`: PASS, Administration opens a popover containing User Master; `assertSapUnreachable()` returned HTTP 502 before the browser check. No live SAP call or write.
+  - `git diff --check`: PASS.
+  - Full shell E2E was not run: `curl http://localhost:4004/health` returned connection refused, and that suite also loads SAP-backed screens. The new menu-only browser flow ran within the SAP-free gate instead.
+  - Early one-off browser probes failed due to a generated selector escaping error and then a hidden label in the collapsed sidebar; the final check clicks the visible group and passed. These were test-probe errors, not application failures.
+- NOT VERIFIED: The broader shell screens E2E suite; it was not required for this label-only hierarchy change and was unavailable without the full app server.
+- BLOCKED: None.
+- ASSUMPTIONS: None; requested parent/child labels are explicit in the user message.
+- NEXT: No further action for the menu correction. Run the broader shell E2E suite later when the local application server is available if desired.
+- FINAL STATUS: PASS — Administration is the main menu heading, User Master is nested under it, the admin route and visibility remain covered, and focused SAP-free browser verification passed.

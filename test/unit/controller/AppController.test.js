@@ -117,7 +117,7 @@ describe('App shell sidebar', () => {
     expect(router.navTo).toHaveBeenLastCalledWith('dashboard', {});
   });
 
-  test('the User Master group only expands: its press does not navigate or close the phone sidebar', () => {
+  test('the Administration group only expands: its press does not navigate or close the phone sidebar', () => {
     const router = makeRouter();
     const toolPage = { setSideExpanded: jest.fn() };
     const controller = makeController(router);
@@ -130,17 +130,20 @@ describe('App shell sidebar', () => {
     expect(toolPage.setSideExpanded).not.toHaveBeenCalled();
   });
 
-  test('User Master is an Admin-only group holding Administrator, with i18n texts', () => {
+  test('Administration is an Admin-only group holding User Master, with i18n texts', () => {
     const webapp = path.join(__dirname, '../../../app/fiori-app/webapp');
     const view = fs.readFileSync(path.join(webapp, 'view/App.view.xml'), 'utf8');
-    const group = view.match(/<tnt:NavigationListItem id="sideNavUserMaster"([^\n]*)>\s*<tnt:items>([\s\S]*?)<\/tnt:items>/);
+    const group = view.match(/<tnt:NavigationListItem id="sideNavAdministration"([^\n]*)>\s*<tnt:items>([\s\S]*?)<\/tnt:items>/);
     expect(group).not.toBeNull();
     expect(group[1]).toContain('selectable="false"');
     expect(group[1]).toContain("visible=\"{path: 'auth>/user/scopes', formatter: '.isAdmin'}\"");
-    expect(group[2]).toContain('id="sideNavAdmin" key="admin"');
-    expect(view.split('id="sideNavAdmin"')).toHaveLength(2);
+    expect(group[1]).toContain('text="{i18n>tabAdminTitle}"');
+    expect(group[2]).toContain('id="sideNavUserMaster" key="admin"');
+    expect(group[2]).toContain('text="{i18n>tabUserMasterTitle}"');
+    expect(view.split('id="sideNavUserMaster"')).toHaveLength(2);
     ['i18n.properties', 'i18n_en.properties'].forEach((file) => {
       const bundle = fs.readFileSync(path.join(webapp, 'i18n', file), 'utf8');
+      expect(bundle).toContain('tabAdminTitle=Administration\n');
       expect(bundle).toContain('tabUserMasterTitle=User Master\n');
       expect(bundle).toMatch(/^tabUserMasterTooltip=.+$/m);
     });

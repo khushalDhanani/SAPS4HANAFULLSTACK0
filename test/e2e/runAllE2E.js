@@ -13,6 +13,7 @@ const { verifySdScreens } = require('./sd/verifySdScreens.e2e');
 const { verifyLeScreens } = require('./le/verifyLeScreens.e2e');
 const { verifyWmScreens } = require('./wm/verifyWmScreens.e2e');
 const { verifyNegativeUi } = require('./negative/verifyNegativeUi.e2e');
+const { verifyAdministrationMenu } = require('./negative/verifyAdministrationMenu.e2e');
 const { verifyPlantIsolation } = require('./negative/verifyPlantIsolation.e2e');
 const { verifyWriteAuthorization } = require('./negative/verifyWriteAuthorization.e2e');
 const { verifySubmitFailures, SHARDS: SUBMIT_SHARDS } = require('./negative/verifySubmitFailures.e2e');
@@ -102,6 +103,7 @@ async function runSuitesAndSummarize(options) {
     { name: 'WM screens', file: 'wm/verifyWmScreens.e2e.js', fn: verifyWmScreens },
     // Tier B negative paths (write guard on; list failures use a mocked 500, not SAP)
     { name: 'Negative UI paths', file: 'negative/verifyNegativeUi.e2e.js', fn: verifyNegativeUi, sapFree: true },
+    { name: 'Administration menu (isolated server)', file: 'negative/verifyAdministrationMenu.e2e.js', fn: verifyAdministrationMenu, sapFree: true },
     // Authorization: plant isolation as a plant-scoped Viewer (READ-ONLY) and write denial on an isolated server without SAP
     { name: 'Plant isolation', file: 'negative/verifyPlantIsolation.e2e.js', fn: verifyPlantIsolation },
     { name: 'Write authorization (isolated server)', file: 'negative/verifyWriteAuthorization.e2e.js', fn: verifyWriteAuthorization, sapFree: true },

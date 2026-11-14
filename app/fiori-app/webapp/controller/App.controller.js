@@ -302,7 +302,7 @@ sap.ui.define([
         },
 
         /**
-         * Shows the User Master group and its Administrator item. This only hides UI; an admin API still needs its own server check.
+         * Shows the Administration group and its User Master item. This only hides UI; an admin API still needs its own server check.
          */
         isAdmin: function () {
             return AuthService.hasAnyRole(["Admin"]);
