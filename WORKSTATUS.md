@@ -17,9 +17,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 - **HU Stock Transfer feature removal — PASS (local repository; 2026-11-14):** Removed the unproven feature from the local UI, CAP route/service, S/4 adapter, storage configuration, active API/smoke/coverage references, tests, and discovery/ABAP artifacts. Preserved Goods Receipt persistence/recheck and shared Goods Issue posting code. SAP-free browser validation passed 5/5; targeted SAP-mocked tests passed 32/32 after enabling local loopback. SAP-side objects were not changed or verified.
 - **HU stock transfer dry-run selector — SUPERSEDED by feature removal (2026-11-14):** The reported missing-rules diagnosis was stale; approved W01 rules existed, but the READ-ONLY CAP check returned no positive-stock HU candidates and the SAP-persisted round trip remained unproven. The user then directed full local feature removal. See the 13:12 IST removal entry below. No SAP write was sent.
+- **Fresh clone CAP/dashboard check — PARTIAL (2026-11-14 13:36 IST):** The existing `npm run watch` process serves this repository on port 4004 (`/health` HTTP 200; Fiori index HTTP 200). READ-ONLY `getDashboardMetrics()` returned HTTP 200, and Playwright rendered the dashboard with live counts, no console/network errors, and no blocked writes. The browser used the repo's seeded test session. Actual login form sign-in is BLOCKED: no local development password is configured; using the configured SAP credential could trigger a Gateway login and failed-logon lock. No credential was read or used. The previously listed `getOpenReservations` call is no longer available because its HU Stock Transfer service was removed in commit `56b120b0`; no replacement reservation endpoint was called.
 - **Host CAP start after fresh clone — PARTIAL (2026-11-14 11:15 IST):** The `Unable to locate module @sap/ux-ui5-tooling` bootstrap error is fixed by `npm ci` in `app/fiori-app` (Git-ignored install only). `cds-serve` boots on the host; `/health` and `/saps4hana-fiori-app/index.html` return 200. Update 11:27 IST: the local `db.sqlite` schema is deployed (18 tables), `~/.sap-certs/s4-dev.pem` is installed and `S4_DESTINATION_URL` in `.env` uses the host name; strict TLS to SAP passes. Update 11:28 IST: after the user's restart, READ-ONLY SAP reads through the app return 200 (one purchase order; all 12 dashboard counts). Update 11:48 IST: SAP NW RFC SDK 7.50 PL20 macOS arm64 is extracted under `~/nwrfcsdk`; the ignored node-rfc prebuild's rpath was updated and `npm exec` can load it. The CAP server was not listening on port 4004, so the RFC-backed reservation endpoint remains NOT VERIFIED. Open: browser sign-in is NOT VERIFIED; root package files were restored to the Git baseline and `npm ci` completed at 11:35 (see the Changes Log).
-- **Purchase Orders Ask AI fragment — PARTIAL (2026-11-14 12:27 IST):** Unsupported UI5 settings were removed, and assistant responses now use a polite `InvisibleMessage` announcement. The updated focused test, full SAP-free unit and integration suites, UI5 lint/build, and isolated SAP-free E2E pass. Browser verification of the Ask AI dialog itself remains NOT VERIFIED; the SAP-free E2E does not exercise that dialog.
-- **Administration sidebar hierarchy — PASS (2026-11-14 12:39 IST):** The admin-only navigation group is labeled Administration and its child is User Master. Existing `admin` route and authorization behavior are preserved. Focused unit, UI5 lint/build, and SAP-free browser tests pass; the rendered hierarchy was verified against an isolated test server.
+- **Purchase Orders Ask AI fragment — PARTIAL (2026-11-14 13:45 IST):** Unsupported UI5 settings were removed, and assistant responses now use a polite `InvisibleMessage` announcement. Unit/integration suites, UI5 lint/build, and SAP-free E2E pass. A dedicated isolated Playwright flow now verifies the widget opens, its title/input render, and it closes without an AI chat request. Prompt submission, response handling, and provider behavior remain NOT VERIFIED.
+- **Administration sidebar hierarchy — PASS (2026-11-14 13:49 IST):** The admin-only navigation group is labeled Administration and its child is User Master. Existing `admin` route and authorization behavior are preserved. Focused unit, UI5 lint/build, SAP-free browser tests, and the broader shell E2E pass. The shell suite's single live SAP user-detail call was READ-ONLY; all actions remained guarded, canceled, or stubbed.
+- **Smoke-test assertions after HU Stock Transfer removal — PASS locally / hosted CI NOT VERIFIED (2026-11-14 14:01 IST):** The runner has eight retained probes after the HU Stock Transfer metadata check was removed; smoke assertions now expect eight. Focused suite passes 4/4 and the current CI Jest command passes 190 suites / 3,272 tests. Hosted validation still needs a run against the current branch head.
+- **Remaining local CI quality checks — PASS locally / hosted CI NOT VERIFIED (2026-11-14 14:11 IST):** Secret/dependency scans, root/UI5 lint, UI5 build, performance, a11y, monitoring, and MTA validation pass. Root lint's undeclared browser `window` finding in the Administration menu E2E was fixed with a file-level global declaration. Performance passed after rerunning with loopback access. UI5 CLI/linter printed an update-check permission warning despite successful lint/build exits.
+- **Guarded browser E2E — PASS locally (2026-11-14 15:20 IST):** Full suite passes 20/20 on a separate port-4005 server with documented test users. LE plant-scoped and unrestricted users each loaded 178 SAP-backed rows. The ignored local Electron N-API prebuild needed an SDK-library rpath; node-rfc loads after the local repair. Accessibility passed 17/17 routes, performance passed all routes, and SAP-free plant isolation passed. Browser writes remained guarded or mocked; only READ-ONLY SAP reads ran. Hosted CI remains unverified.
 
 - **Local Dev Approuter Authentication & Fiori UI Verification — PASS (2026-11-07 17:15 IST):** Verified full end-to-end login, navigation, and SAP S/4HANA data loading at `http://127.0.0.1:5000/saps4hanafiori/index.html`:
   - Resolved local authentication mismatch caused by duplicate `LOCAL_DEV_PASSWORD` definitions in `.env.docker.local`. Unified `LOCAL_DEV_PASSWORD` to align with `S4_PASSWORD`.
@@ -559,11 +563,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Next Steps
 
 - HU Stock Transfer feature removal: local app removal is validated. If SAP-side transaction/service deletion is required, identify the exact SAP object and obtain explicit per-call authorization before any SAP write/delete; no SAP-side change was made.
-- Fresh clone setup (2026-11-14): root package files were restored to Git and `npm ci` completed (11:35). Update 11:27 IST: the local schema, certificate file and `.env` host name are in place; the server was restarted and SAP reads through the app are verified (11:28 IST). RFC SDK 7.50 PL20 for macOS arm64 is extracted and node-rfc loads through npm after a local ignored-prebuild rpath fix. Remaining: restart `npm run watch`, retry the read-only `getOpenReservations` request, and confirm the browser dashboard.
-- Purchase Orders Ask AI UI5 fix: no further automated validation remains. If the user needs full UI evidence, open the Purchase Orders route and exercise the Ask AI dialog in the browser; its dedicated dialog flow is not covered by the SAP-free E2E suite.
-- Administration sidebar hierarchy: no further automated action. The broader shell E2E suite remains available for a run against the full local application; it was not needed for the menu-only verification.
-
-- CI repair commit: standalone fixes ready; MIB-specific fixes remain with separately staged feature work. Push and rerun hosted CI after commit.
+- Fresh clone setup: dashboard and read-only SAP metrics are verified in a browser session (2026-11-14 13:32 IST). Do not call the former `getOpenReservations` endpoint; its HU Stock Transfer service was removed. Actual browser login form sign-in is BLOCKED until a local development credential is configured or the user explicitly authorizes a specific SAP Gateway login attempt.
+- Purchase Orders Ask AI UI5 fix: dedicated SAP-free open/render/close E2E is registered and passing (2026-11-14 13:45 IST). AI response/provider behavior remains unverified because no prompt was submitted; separately verify it only with authorization to send prompt data.
+- Administration sidebar hierarchy: focused and broader shell E2E coverage pass (2026-11-14 13:49 IST). No additional local verification remains.
+- CI repair: corrected the reproduced smoke-test count mismatch caused by removing the HU Stock Transfer metadata probe; current CI Jest passes locally (2026-11-14 14:01 IST). Hosted CI still must run against the current branch after the focused changes are committed and pushed. Pushing/triggering hosted CI is an external mutation and has not been authorized.
+- Remaining local CI checks: all listed local checks now pass. Hosted CI remains unverified until the current branch is published and the workflow is run.
+- Guarded browser E2E: full local run passes 20/20 (2026-11-14 15:20 IST), including the LE plant-scoped row assertion. No local E2E item remains. Hosted CI still requires publishing the current changes and running the workflow.
 
 - CI remaining findings: review/commit the CI and test-isolation fixes with related status records, preserving independently staged feature work; push and rerun GitHub Actions to verify Ubuntu 24.04/Node 22.
 
@@ -677,6 +682,32 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-14 13:36 IST — Actual browser login verification — BLOCKED
+
+- **Request:** Continue with the next open fresh-clone check: verify actual login form sign-in.
+- **Inspection:** Re-read `AGENTS.md` and `WORKSTATUS.md`; inspected the login handler and auth service. Checked only credential presence (never values) in `.env`, `.env.local`, `.env.docker.local`, and the current shell environment. No local development password is configured. The local auth handler can otherwise validate against SAP Gateway using the configured SAP credential.
+- **Plan:** Attempt only a local-password authentication. Do not use the SAP credential because a failed Gateway login may lock the user account.
+- **Changed:** No application code changed. Updated the current status and next step with the credential blocker.
+- **Test decision:** TEST NOT POSSIBLE — a local development credential is not configured; SAP Gateway authentication was not authorized for this specific attempt.
+- **Validation:** Credential-presence inspection confirmed no `LOCAL_DEV_PASSWORD` in the checked sources and `process.env`. No login request was sent. No password value was printed. Existing dashboard/browser proof remains as recorded at 13:32 IST.
+- **Blocked:** Actual login form sign-in cannot be verified without a safe local credential or explicit written authorization for one SAP Gateway login attempt.
+- **Assumptions:** None; local credential absence was checked, and no SAP login was attempted.
+- **Next action:** Configure `LOCAL_DEV_PASSWORD` in an ignored local environment file and tell me it is ready, or explicitly authorize one SAP Gateway login attempt with the configured credential and target client. Do not send the password in chat.
+- **Final status:** BLOCKED for actual sign-in verification; dashboard display and READ-ONLY metrics remain PASS.
+
+### 2026-11-14 13:32 IST — Fresh clone CAP and dashboard verification — PARTIAL
+
+- **Request:** Continue the fresh clone checks: start/reuse CAP watch, check the read-only reservation data request, and verify the browser dashboard.
+- **Inspection:** `AGENTS.md`, `WORKSTATUS.md`, the current running CAP process, `srv/mm/purchase-order/service.cds` / handler, and the project's Playwright `screenCheck` helper were inspected. The former `getOpenReservations` endpoint belonged to HU Stock Transfer and was removed by commit `56b120b0`; no reservation endpoint remains in the current app model. The dashboard calls `PurchaseOrderService.getDashboardMetrics`.
+- **Plan:** Use the existing local watch server if running, issue a READ-ONLY dashboard metrics GET, and verify the rendered dashboard in Playwright with the write guard enabled. Do not stop or replace an existing listener and do not enter/use an unverified password.
+- **Changed:** No application code changed. This entry records the resumed operational check.
+- **Test decision:** EXISTING TEST SUFFICIENT for this operational verification — project Playwright `screenCheck`/`writeGuard` helpers exercised against the existing local CAP server; no persistent test was added.
+- **Validation:** Sandboxed `npm run watch` — FAIL before serving (`listen EPERM ::1:35729`, then `EMFILE` file watchers). Loopback-enabled `npm run watch` loaded the current CDS model but reported `EADDRINUSE` on port 4004 because the existing watch process was already serving this repository; it was left running. `ps` initially failed under sandbox policy; loopback-enabled process inspection identified the same-repository watch parent (PID 19448, started 11:52) and serving child (PID 33172, started 13:26). `GET http://127.0.0.1:4004/health` — HTTP 200; `GET /fiori-app/webapp/index.html` — HTTP 200. **READ-ONLY SAP call:** CAP `GET /odata/v4/purchase-order/getDashboardMetrics()` using the local test identity — HTTP 200; returned `totalCount=3052`, `supplierCount=4377`, `salesInquiryCount=693`, `customerCount=1090`, `openSalesOrderCount=584`, `totalSalesOrderCount=974`, `warehouseCount=2`, `openReservationCount=1250`, `inboundDeliveryCount=32`, `ordersDueCount=1244`, `customerInvoiceCount=520`, `customerReturnCount=186`, and `unavailable=[]` (as of `2026-11-14T08:01:24.850Z`). Playwright headless dashboard check — PASS: route `dashboard`, title `Enterprise Operations Dashboard`, rendered PO count `3052` and other metric values; 0 console errors, 0 HTTP/network errors, 0 write-guard blocks. No SAP write was attempted.
+- **Not verified:** Actual login form sign-in was not exercised; Playwright used the repository's seeded test session. The previous `getOpenReservations` request was not retried because that endpoint was deleted with HU Stock Transfer.
+- **Assumptions:** Dashboard's existing read-only GET is the appropriate replacement for the now-removed reservation request.
+- **Next action:** If the user needs actual credentialed sign-in proof, run that separately using a confirmed local credential; do not guess or retry an unknown password.
+- **Final status:** PARTIAL — local CAP/dashboard and live read-only metrics are verified; actual login form sign-in is NOT VERIFIED.
 
 ### 2026-11-14 13:12 IST — HU Stock Transfer feature removal — PASS (local repository)
 
@@ -4186,3 +4217,177 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: None; requested parent/child labels are explicit in the user message.
 - NEXT: No further action for the menu correction. Run the broader shell E2E suite later when the local application server is available if desired.
 - FINAL STATUS: PASS — Administration is the main menu heading, User Master is nested under it, the admin route and visibility remain covered, and focused SAP-free browser verification passed.
+
+### 2026-11-14 13:41 IST — Verify Purchase Orders Ask AI dialog rendering — PARTIAL
+
+- REQUEST: Continue to the next open verification item and check the Purchase Orders Ask AI dialog.
+- INSPECT: The Purchase Orders route is `mm/purchase-orders`; the Ask AI widget opens through `onAskAI`, and its fragment includes a header, input, and close button. Existing Playwright `screenCheck` helpers install the repository write guard.
+- PLAN: Open the route with the existing seeded test session, open and dismiss the widget, and verify no AI prompt request is sent. No application code change was needed.
+- CHANGED: `WORKSTATUS.md` only; recorded the browser result and remaining verification scope.
+- TEST DECISION: EXISTING TEST SUFFICIENT — focused Playwright browser verification used `test/e2e/support/screenCheck.js` and the existing write guard; no persistent test was added because this was a runtime verification of the existing dialog implementation.
+- TESTED / VERIFIED:
+  - Focused Playwright check against the existing local CAP server on port 4004: PASS — Purchase Orders route opened; widget and title/input rendered; close button dismissed it; zero console errors, network errors, blocked requests, or `/odata/v4/ai/chat` requests.
+  - The initial sandboxed Chromium launch failed because macOS denied its process rendezvous; the same read-only check passed when rerun with required process permissions.
+  - No prompt was submitted and no AI provider request or SAP write was made.
+  - `git diff --check`: PASS.
+- NOT VERIFIED: AI response rendering/provider flow; deliberately not invoked because it would send prompt data externally.
+- BLOCKED: None for the dialog open/close check.
+- ASSUMPTIONS: None.
+- NEXT: If needed, separately authorize and verify a prompt submission against the configured AI provider.
+- FINAL STATUS: PARTIAL — dialog open/close and basic rendering are verified; AI response behavior remains unverified.
+
+### 2026-11-14 13:45 IST — Add SAP-free Purchase Orders Ask AI browser coverage — PARTIAL
+
+- REQUEST: Continue to the next open item and make the Ask AI dialog's SAP-free browser verification persistent.
+- INSPECT: The route matrix showed `purchaseOrders` had no Ask AI browser flow. The dialog's initialization only creates a local JSON model and loads the fragment; it does not submit a chat request. The isolated E2E server intentionally cannot reach SAP, so the Purchase Orders list displays a load-error dialog before the test can interact with the panel.
+- PLAN: Add a focused Playwright suite that dismisses that expected isolated-server list error, verifies panel open/title/input/close, asserts no AI chat request or guarded write, registers the suite in the SAP-free runner, and cites it in the route matrix.
+- CHANGED:
+  - `test/e2e/negative/verifyPurchaseOrderAskAI.e2e.js`: add open/render/close flow and assert no `/odata/v4/ai/chat` request or blocked write.
+  - `test/e2e/runAllE2E.js`: register the focused flow in the isolated SAP-free gate.
+  - `test/unit/tools/e2eRunner.test.js`: assert the new suite remains in the SAP-free suite list.
+  - `docs/e2e-coverage-matrix.md`: cite the new flow for `purchaseOrders`, with prompt/response behavior noted as untested.
+  - `WORKSTATUS.md`: record this work and update current/next status.
+- TEST DECISION: TEST ADDED — dedicated Playwright flow `test/e2e/negative/verifyPurchaseOrderAskAI.e2e.js`.
+- VALIDATION:
+  - `npx jest test/unit/tools/e2eRunner.test.js test/unit/tools/e2eCoverageMatrix.test.js --runInBand`: PASS, 2 suites / 18 tests.
+  - Initial `npm run test:e2e:sap-free`: FAIL, 5/6 suites passed; Ask AI suite click timed out because the isolated server's expected PO list error dialog intercepted the UI. The screenshot confirmed the load-error dialog was open. The test now closes that expected dialog before opening Ask AI.
+  - `npm run test:e2e:sap-free -- --only=Ask`: PASS, 1/1 suite.
+  - Final `npm run test:e2e:sap-free`: PASS, 6/6 suites, including the Ask AI panel flow.
+  - `npx eslint test/e2e/negative/verifyPurchaseOrderAskAI.e2e.js test/e2e/runAllE2E.js test/unit/tools/e2eRunner.test.js`: PASS, no findings.
+  - `git diff --check`: PASS.
+- NOT VERIFIED: Prompt submission, AI response rendering, and provider connection; no prompt was submitted and no AI provider request or SAP write was made.
+- BLOCKED: None for the focused UI coverage.
+- ASSUMPTIONS: None.
+- NEXT: If provider behavior needs verification, separately authorize sending a specific test prompt to the configured provider.
+- FINAL STATUS: PARTIAL — SAP-free panel behavior is covered and passing; AI response/provider behavior is not verified.
+
+### 2026-11-14 13:49 IST — Run broader shell browser E2E — PASS
+
+- REQUEST: Continue to the next available local verification item from `WORKSTATUS.md`.
+- INSPECT: Read `AGENTS.md`, `WORKSTATUS.md`, and the shell E2E implementation. The suite uses the Playwright write guard; actions are canceled or stubbed. It includes one explicitly READ-ONLY live SAP `BAPI_USER_GET_DETAIL` user-detail read.
+- PLAN: Run only the shell suite against the existing local CAP server. Preserve the guarded write behavior and report the live read separately.
+- CHANGED: `WORKSTATUS.md` only; recorded the suite outcome and cleared the shell E2E next step.
+- TEST DECISION: EXISTING TEST SUFFICIENT — `test/e2e/shell/verifyShellScreens.e2e.js`.
+- VALIDATION:
+  - Initial sandboxed `npm run test:e2e -- --only=Shell --workers=1`: NOT RUN — runner could not reach the existing local CAP server from the sandbox.
+  - Loopback-enabled `npm run test:e2e -- --only=Shell --workers=1`: PASS, 1/1 suite; shell, login, sidebar, phone, theme, User Master, and detail-pane checks all passed.
+  - READ-ONLY SAP check inside the suite: live user detail fetched via `BAPI_USER_GET_DETAIL` and rendered; no SAP writes were sent. Write guard recorded no blocked writes.
+- NOT VERIFIED: Other non-shell browser suites against the live app; outside this focused item.
+- BLOCKED: None for shell verification.
+- ASSUMPTIONS: None.
+- NEXT: No further action for the Administration hierarchy. The next independent backlog items require hosted CI/commit workflow or external authorization/configuration.
+- FINAL STATUS: PASS — broader shell E2E passed with the user-detail read verified and all write paths guarded/canceled/stubbed.
+
+### 2026-11-14 13:53 IST — Reconcile queued hosted CI findings — PARTIAL
+
+- REQUEST: Continue to the next CI item in `WORKSTATUS.md` and verify whether the recorded hosted failures apply to the current branch.
+- INSPECT: Current branch is `feature01`, HEAD `56b120b0`; `origin/feature01` is `aff04bad`, so the local branch is five commits ahead. The only open PR found is PR #7, branch `development`, head `e63bc70c`. Its latest inspected workflow run is #116 (2026-10-17), which failed at the automated test step. The failing tests include reservation/HU files and `db/data/saps4hana.wm-ReservationStatus.csv`, none of which exist in the current tree. `test/unit/controller/uiConsistency.test.js` still exists.
+- PLAN: Run the still-present failed test locally and distinguish historical PR evidence from current-branch validation. Do not push or rerun hosted CI because those actions change external repository state.
+- CHANGED: `WORKSTATUS.md` only; clarified the CI next step and recorded the stale-run investigation.
+- TEST DECISION: EXISTING TEST SUFFICIENT — `test/unit/controller/uiConsistency.test.js`.
+- VALIDATION:
+  - GitHub read-only inspection of PR #7 and workflow run #116: run is on `development`, not current local `feature01`; automated tests failed, so later build/MTA workflow steps were skipped.
+  - Current-tree presence check: `reservationTrack.test.js`, `reservationEntryService.test.js`, `processFixes.test.js`, and `db/data/saps4hana.wm-ReservationStatus.csv` are ABSENT; `uiConsistency.test.js` is PRESENT.
+  - `npx jest test/unit/controller/uiConsistency.test.js --runInBand`: PASS, 1 suite / 8 tests.
+  - No push, commit, or hosted workflow run was initiated.
+  - `git diff --check`: PASS.
+- NOT VERIFIED: Hosted CI for current `feature01` HEAD or for the uncommitted Ask AI E2E changes.
+- BLOCKED: Hosted validation requires committing and pushing the current local changes; remote push/CI trigger has not been authorized in this turn.
+- ASSUMPTIONS: None.
+- NEXT: After explicit authorization to publish `feature01`, commit the focused local changes and trigger CI against that branch. Do not rerun the unrelated historical PR run.
+- FINAL STATUS: PARTIAL — current source's remaining previously failing unit test passes; hosted CI status for current branch remains unverified.
+
+### 2026-11-14 13:58 IST — Fix smoke-test count after HU route removal — PARTIAL
+
+- REQUEST: Fix the current CI test failure reproduced in the full Jest run.
+- INSPECT: `test/smoke/postDeploymentSmoke.test.js` expected nine smoke probes in both healthy and unreachable-server cases. `tools/smoke-test-deployment.js` now defines eight probes because commit `56b120b0` intentionally removed the HU Stock Transfer metadata probe. The remaining health, security, metadata, user-info, UI5, and AI-route checks are still present.
+- PLAN: Align the smoke tests' count assertions and description with the eight retained probes; run the focused smoke suite and then the full CI Jest command.
+- CHANGED:
+  - `test/smoke/postDeploymentSmoke.test.js`: update the success count, result length, unreachable failure count, and case description from nine to eight.
+  - `WORKSTATUS.md`: record this in-progress fix before validation.
+- TEST DECISION: TEST UPDATED — `test/smoke/postDeploymentSmoke.test.js`.
+- VALIDATION:
+  - Initial sandboxed full CI Jest command could not bind loopback. It reported cascading `listen EPERM 127.0.0.1` failures and was stopped; this attempt is not treated as a source regression.
+  - Escalated `npx jest test/smoke/postDeploymentSmoke.test.js --runInBand`: PASS, 1 suite / 4 tests. Healthy test server reported 8/8 smoke probes; unreachable host reported 0 passed / 8 failed as expected.
+  - Escalated CI command `npx jest --runInBand --ci --coverage --json --outputFile=test-results/jest-results.json`: PASS, 190 suites / 3,272 tests, 0 failures. The resulting JSON reports `success: true`.
+  - `npx eslint test/smoke/postDeploymentSmoke.test.js`: PASS, no findings.
+  - `git diff --check`: PASS.
+- NOT VERIFIED: Hosted CI against current local `feature01` HEAD.
+- BLOCKED: Hosted rerun requires committing/pushing the local branch, which has not been authorized.
+- ASSUMPTIONS: None; eight probe definitions were inspected directly in `tools/smoke-test-deployment.js`.
+- NEXT: If hosted confirmation is required, authorize publishing the current `feature01` changes and then trigger CI on that branch.
+- FINAL STATUS: PARTIAL — local smoke fix and full Jest suite pass; hosted CI remains unverified.
+
+### 2026-11-14 14:11 IST — Run remaining local CI quality checks — PARTIAL
+
+- REQUEST: Continue through the remaining local checks after fixing the smoke-test count.
+- INSPECT: Read the current CI workflow and root/Fiori package scripts. The workflow runs secret/dependency scans, root/UI5 lint, UI5 build, Jest, performance, a11y, monitoring, smoke, and MTA validation.
+- PLAN: Run remaining CI checks locally, fix current reproducible code issues, and rerun affected validations. No external push or hosted CI trigger.
+- CHANGED:
+  - `test/e2e/negative/verifyAdministrationMenu.e2e.js`: declare the browser-provided `window` global to satisfy root ESLint.
+  - `WORKSTATUS.md`: record findings before validation.
+- TEST DECISION: EXISTING TEST SUFFICIENT — `test/performance/servicePerformance.test.js`; root ESLint is the static validation for the browser-global declaration.
+- VALIDATION:
+  - `npm run scan:secrets`: PASS, 893 tracked files scanned; no secrets or credentials found.
+  - `npm run scan:dependencies`: PASS, zero production dependency findings for root and Fiori app.
+  - Initial `npm run lint`: FAIL on undeclared `window` at `test/e2e/negative/verifyAdministrationMenu.e2e.js:33`. Added `/* global window */`; rerun `npm run lint`: PASS, no findings.
+  - `npm --prefix app/fiori-app run lint`: PASS, no UI5 findings. UI5 linter's local update-check warning says `.config` is not writable.
+  - `npm --prefix app/fiori-app run build`: PASS. UI5 CLI emitted the same non-blocking local update-check permission warning.
+  - Initial `npm run test:performance`: FAIL because sandbox could not bind `127.0.0.1` (`listen EPERM`). Loopback-enabled rerun: PASS, 1 suite / 3 tests.
+  - `npm run test:a11y`: PASS, 1 suite / 6 tests.
+  - `npm run test:monitoring`: PASS, 1 suite / 5 tests.
+  - `npm run validate:mta`: PASS (exit 0).
+  - `git diff --check`: PASS.
+- NOT VERIFIED: Hosted CI against current local `feature01` HEAD.
+- BLOCKED: Hosted rerun requires committing/pushing the local branch, which has not been authorized.
+- ASSUMPTIONS: None.
+- NEXT: Local CI quality checks pass; publish current `feature01` changes and run hosted CI only after authorization.
+- FINAL STATUS: PARTIAL — all applicable local quality checks pass; hosted CI remains unverified.
+
+### 2026-11-14 14:42 IST — Diagnose remaining guarded browser E2E failures — PARTIAL
+
+- REQUEST: Continue SAP-free/local validation and fix evidence-backed failures.
+- INSPECT: Read the repository instructions and current `WORKSTATUS.md`, checked `git status`, and reviewed the E2E runner, test identity configuration, route baselines, and MIB label view. The guarded full browser run reported 16/20 suites passing. Two failures (LE plant-scoped screen and plant isolation) use test-only user `test-viewer-1120`, but the target development server did not have `CDS_CONFIG` set as documented in `test/testUsers.js`. Accessibility and performance each lacked a `wmMibLabel` baseline entry, though the route is in the UI5 manifest.
+- PLAN: Record the browser run. Verify MIB’s precise a11y findings and collect the documented five timing samples before adding the missing MIB baseline entries. Retest plant isolation against an isolated server using the documented mock-user configuration; SAP writes remain guarded and prohibited.
+- CHANGED:
+  - `test/e2e/a11y/baseline.json`: add the `wmMibLabel` route with its measured shared shell findings and update the shared navigation finding from 4 to 5 nodes across routes based on the focused 17-route scan.
+  - `test/e2e/performance/baseline.json`: add `wmMibLabel` at 699 ms, the median of five fresh-browser samples (1586/690/697/702/699 ms).
+  - `WORKSTATUS.md`: record this investigation and update current/next status.
+- TEST DECISION: EXISTING TEST SUFFICIENT — `test/e2e/a11y/verifyA11yScreens.e2e.js`, `test/e2e/performance/verifyScreenPerformance.e2e.js`, `test/e2e/le/verifyLeScreens.e2e.js`, and `test/e2e/negative/verifyPlantIsolation.e2e.js`.
+- VALIDATION:
+  - `npm run test:e2e -- --workers=1`: FAIL, 16/20 suites passed. LE and plant-isolation suites failed due to test-user authentication on the existing server; MIB route was missing from both route baselines; remaining suites passed. The Playwright write guard stayed enabled; no SAP writes were sent.
+  - Focused READ-ONLY Playwright/axe diagnostic: MIB has five shared shell `aria-allowed-attr` nodes and one shell avatar `label-content-name-mismatch`; these are shared shell findings, not MIB form violations. `npm run test:e2e -- --only=Accessibility --workers=1`: PASS, all 17 routes.
+  - Five fresh MIB performance samples: 1586/690/697/702/699 ms; median 699 ms. `npm run test:e2e -- --only=Performance --workers=1`: PASS, all routes; MIB measured 933 ms (runs 933/926/936), below its 2049 ms limit.
+  - SAP-free plant isolation: `startIsolatedServer()` plus `assertSapUnreachable()` (probe HTTP 502; SAP unreachable) and `verifyPlantIsolation()`: PASS. User `test-viewer-1120` was scoped to plant 1120; entering 1110 was refused without a request.
+  - `npm run test:e2e:sap-free -- --workers=1`: PASS, all 6 SAP-free suites, including negative UI, Administration menu, Ask AI panel, write authorization, quarantine labels, and MIB labels. Isolated server's SAP-unreachable probe returned HTTP 502; write flows stayed guarded or mocked.
+  - Baseline JSON/route check: PASS, both files parse and contain all 17 routes; MIB values are a11y 5 nodes / performance 699 ms.
+  - `git diff --check`: PASS (final review).
+- NOT VERIFIED: LE plant-scoped row loading against a correctly configured SAP-connected read-only target. The expected rows need backend SAP data; the SAP-free isolated server cannot provide them, and the existing development server lacks the configured test identity.
+- BLOCKED: LE row assertion needs a test-auth SAP-connected target with expected plant data. Current evidence does not indicate an application code issue.
+- ASSUMPTIONS: None; observations above are from the runner output, inspected source, and direct READ-ONLY browser inspection.
+- NEXT: Run the LE plant-scoped screen E2E when documented test identities are configured on a read-only SAP-connected target; separately publish the current branch and run hosted CI only when authorized.
+- FINAL STATUS: PARTIAL — MIB route baselines and SAP-free plant-isolation proof pass; LE SAP-backed rows and hosted CI remain unverified.
+
+### 2026-11-14 14:56 IST — Restore local RFC prebuild loading for LE scope read — PASS locally
+
+- REQUEST: Continue with the next open validation item: prove plant-scoped LE row loading using the documented test identity.
+- INSPECT: Read `AGENTS.md`, `WORKSTATUS.md`, checked `git status`, traced `verifyLeScreens` through the CAP handler and S/4 adapter, and inspected the local server log. The LE adapter uses `RfcClient`/TVSTZ to map plant 1120 to authorized shipping points. The SDK and required local RFC key names are present, but local `require('node-rfc')` selects `electron.napi.node` whose only recorded rpath was `/usr/local/sap/nwrfcsdk/lib`; the earlier local repair updated only `node.napi.node`.
+- PLAN: Add the existing SDK lib directory as an rpath to the ignored Electron N-API prebuild, verify `require('node-rfc')` locally, restart only this task's test server on port 4005, then rerun only `le/verifyLeScreens.e2e.js`. The E2E uses READ-ONLY SAP reads; no SAP writes or SAP configuration changes.
+- CHANGED:
+  - `node_modules/node-rfc/prebuilds/darwin-arm64/electron.napi.node` (ignored local dependency binary): added `$HOME/nwrfcsdk/lib` as an `LC_RPATH` so this runtime can load `libsapnwrfc.dylib`. No tracked app code, dependency manifest, SAP contract, or SAP configuration changed.
+  - `WORKSTATUS.md`: recorded the investigation and validation.
+- TEST DECISION: EXISTING TEST SUFFICIENT — `test/e2e/le/verifyLeScreens.e2e.js`; direct native module load is prerequisite validation.
+- VALIDATION:
+  - Test auth server on port 4005: `/health` HTTP 200; GET `getPlantContext()` returned plant `1120`, `unrestricted: false` for `test-viewer-1120`.
+  - Initial `npm run test:e2e -- --only=LE --workers=1 --url=http://localhost:4005`: the LE admin step passed with 300 rows; plant-scoped screen failed with 503 because RFC TVSTZ lookup could not load `libsapnwrfc.dylib`. The substring filter also selected two Sales suites; the Sales order shard failed on the same local node-rfc load issue. No SAP writes occurred.
+  - `install_name_tool -add_rpath "$HOME/nwrfcsdk/lib" node_modules/node-rfc/prebuilds/darwin-arm64/electron.napi.node`; direct `require('node-rfc')`: PASS, `Client` export is a function.
+  - Restarted the task-owned server on port 4005; `/health`: HTTP 200.
+  - Exact focused command `npm run test:e2e -- --only=le/verifyLeScreens.e2e.js --workers=1 --url=http://localhost:4005`: PASS, 1/1 suite; unrestricted and plant-scoped users each loaded 178 rows, plant scope remained 1120, and scrolling passed. E2E write guard stayed active; SAP calls were READ-ONLY.
+  - Full command `npm run test:e2e -- --workers=1 --url=http://localhost:4005`: PASS, 20/20 suites. Accessibility passed all 17 routes and performance passed all 17 routes; MIB measured 916 ms against a 699 ms baseline and 2049 ms limit. Write actions were canceled, guarded, or mocked. No SAP writes were sent.
+  - Stopped the temporary port-4005 server; post-test `/health` returned HTTP 000 as expected.
+  - `git diff --check`: PASS after this status update.
+- NOT VERIFIED: Hosted CI for current local branch changes.
+- BLOCKED: Hosted CI was not run because pushing the local commit publishes changes and triggers an external workflow; push has not been authorized.
+- ASSUMPTIONS: None; the server user scope, native load failure, row counts, suite results, and shutdown were directly observed.
+- NEXT: Authorize a push and hosted CI run for the local commit; preserve the ignored local SDK rpath repair if `node-rfc` is reinstalled.
+- FINAL STATUS: PASS locally — full guarded browser E2E passed 20/20 with the LE scope read verified; hosted CI remains unverified.

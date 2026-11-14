@@ -14,5 +14,6 @@
   "createCustomerReturn": 1688,
   "wmHandlingUnits": 2352,
   "wmPackingInstructions": 1608,
-  "wmQuarantineLabels": 1481
+  "wmQuarantineLabels": 1481,
+  "wmMibLabel": 699
 }

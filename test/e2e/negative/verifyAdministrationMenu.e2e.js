@@ -1,4 +1,5 @@
 'use strict';
+/* global window */
 
 /** Verifies the admin navigation labels without loading SAP data or performing writes. */
 
