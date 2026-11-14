@@ -248,7 +248,8 @@ async function openFirstRow(session, { route, needsList = false, fromFirstRow })
         const item = list && list.getItems()[0];
         return item && item.getDomRef() ? item.getId() : null;
     }, typeof fromFirstRow === 'string' ? fromFirstRow : null);
-    if (!rowId) return { route: null, skipped: 'no list row to open (list empty)', errors: [] };
+    // A failure, not a skip: a detail screen that was never opened must not leave its suite at PASS
+    if (!rowId) return { route: null, errors: ['no list row could be opened (list empty or rows not navigable)'] };
     await page.click(`[id="${rowId}"]`);
     await session.settle();
     return evaluate(session, { route, needsList }, before);

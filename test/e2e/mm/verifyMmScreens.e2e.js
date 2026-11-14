@@ -5,7 +5,7 @@
 const { runScreens } = require('../support/screenCheck');
 
 const STEPS = [
-    { name: 'Purchase order list', hash: 'mm/purchase-orders', route: 'purchaseOrders', needsList: true },
+    { name: 'Purchase order list', hash: 'mm/purchase-orders', route: 'purchaseOrders', needsList: true, expectRows: true },
     { name: 'Purchase order detail (first row)', route: 'purchaseOrderDetail', fromFirstRow: true },
     { name: 'Purchase order create', hash: 'mm/purchase-orders/create', route: 'createPurchaseOrder' }
 ];

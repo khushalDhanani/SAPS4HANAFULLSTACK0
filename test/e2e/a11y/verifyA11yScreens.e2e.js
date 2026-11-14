@@ -4,7 +4,7 @@
 /**
  * Accessibility E2E (P1 item 14): axe-core (WCAG 2.0/2.1 A and AA) runs on every parameterless route of the UI5 app
  * in a real browser, READ-ONLY behind the write guard. Only serious/critical violations count. Existing violations are
- * recorded in baseline.json (route -> rule ids) so the suite fails only on NEW ones; refresh the baseline on purpose
+ * recorded in baseline.json (route -> rule id -> node count) so the suite fails only on a NEW rule or on MORE nodes of a recorded one; refresh the baseline on purpose
  * with E2E_UPDATE_BASELINE=1 (it never removes the reviewer's attention: the diff of baseline.json shows what changed).
  * Routes with a path parameter (detail screens) are not covered here.
  */
@@ -34,6 +34,11 @@ async function scan(page) {
     return Object.fromEntries(found.filter((v) => IMPACTS.has(v.impact)).map((v) => [v.id, v.nodes]));
 }
 
+/** Rule ids of one route that are new, or hit more nodes than its baseline records. */
+function regressions(current, baseline) {
+    return Object.keys(current).filter((id) => !(baseline[id] >= current[id]));
+}
+
 async function verifyA11yScreens(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     const update = process.env.E2E_UPDATE_BASELINE === '1';
@@ -48,10 +53,10 @@ async function verifyA11yScreens(options = {}) {
             const screen = await inspectScreen(session.page);
             if (screen.route !== r.name) throw new Error(`expected route ${r.name}, got ${screen.route}`);
             current[r.name] = await scan(session.page);
-            const fresh = baseline ? Object.keys(current[r.name]).filter((id) => !(baseline[r.name] || {})[id]) : [];
+            const fresh = baseline ? regressions(current[r.name], baseline[r.name] || {}) : [];
             const line = Object.entries(current[r.name]).map(([id, n]) => `${id}×${n}`).join(', ') || 'no serious/critical violations';
             console.log(`  [${fresh.length ? 'FAIL' : 'PASS'}] ${r.name}: ${line}`);
-            fresh.forEach((id) => errors.push(`${r.name}: new violation ${id} (${current[r.name][id]} nodes) not in baseline`));
+            fresh.forEach((id) => errors.push(`${r.name}: violation ${id} (${current[r.name][id]} nodes, baseline ${(baseline[r.name] || {})[id] || 0}) not in baseline`));
         } catch (err) {
             errors.push(`${r.name}: ${err.name}: ${err.message.split('\n')[0]}`);
             console.log(`  [FAIL] ${r.name}: ${err.message.split('\n')[0]}`);
@@ -72,4 +77,4 @@ if (require.main === module) {
     verifyA11yScreens().then((r) => process.exit(r.status === 'PASS' ? 0 : 1));
 }
 
-module.exports = { verifyA11yScreens };
+module.exports = { verifyA11yScreens, regressions };

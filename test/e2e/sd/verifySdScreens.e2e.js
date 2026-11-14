@@ -5,13 +5,13 @@
 const { runScreens } = require('../support/screenCheck');
 
 const STEPS = [
-    { name: 'Sales inquiry list', hash: 'sd/sales-inquiries', route: 'salesInquiries', needsList: true },
+    { name: 'Sales inquiry list', hash: 'sd/sales-inquiries', route: 'salesInquiries', needsList: true, expectRows: true },
     { name: 'Sales inquiry detail (first row)', route: 'salesInquiryDetail', fromFirstRow: true },
     { name: 'Sales inquiry create', hash: 'sd/sales-inquiries/create', route: 'createSalesInquiry' },
-    { name: 'Sales order list', hash: 'sd/sales-orders', route: 'salesOrders', needsList: true },
+    { name: 'Sales order list', hash: 'sd/sales-orders', route: 'salesOrders', needsList: true, expectRows: true },
     { name: 'Sales order create', hash: 'sd/sales-orders/create', route: 'createSalesOrder' },
-    { name: 'Customer invoice list', hash: 'sd/invoices', route: 'customerInvoices', needsList: true },
-    { name: 'Customer return list', hash: 'sd/returns', route: 'customerReturns', needsList: true },
+    { name: 'Customer invoice list', hash: 'sd/invoices', route: 'customerInvoices', needsList: true, expectRows: true },
+    { name: 'Customer return list', hash: 'sd/returns', route: 'customerReturns', needsList: true, expectRows: true },
     { name: 'Customer return create', hash: 'sd/returns/create', route: 'createCustomerReturn' }
 ];
 

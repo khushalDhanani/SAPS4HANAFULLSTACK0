@@ -34,6 +34,7 @@ async function verifyScrollBeforePlant(baseUrl) {
     const name = 'Orders due, no Plant attribute: scrolling before a plant is set raises no error';
     const session = await openSession({ baseUrl });
     const errors = [];
+    const loadMore = { step: 'Orders due: scrolling loads more rows', status: 'PASS' };
     try {
         const { page } = session;
         await page.setViewportSize({ width: 1280, height: 420 });
@@ -48,16 +49,19 @@ async function verifyScrollBeforePlant(baseUrl) {
         await page.waitForFunction(TABLE_ROWS, null, { timeout: 60000 });
         const firstPage = await page.evaluate(TABLE_ROWS);
         await scrollToEnd(page);
-        await page.waitForFunction((n) => (window.sap.ui.require('sap/ui/core/Element').registry
+        // Fewer rows than one page: nothing more to load, so report it as SKIPPED instead of passing silently
+        if (firstPage < 25) loadMore.status = 'SKIPPED';
+        else await page.waitForFunction((n) => (window.sap.ui.require('sap/ui/core/Element').registry
             .filter((e) => e.getId().endsWith('--ordersDueTable'))[0].getItems().length) > n, firstPage, { timeout: 30000 })
-            .catch(() => { if (firstPage >= 25) errors.push(`${name}: scrolling did not load past the first ${firstPage} rows`); });
+            .catch(() => { loadMore.status = 'FAIL'; errors.push(`${loadMore.step}: stayed at the first ${firstPage} rows`); });
         if (pageErrors().length && !errors.length) errors.push(`${name}: ${pageErrors()[0]}`);
     } finally {
         await session.close();
     }
     console.log(`  [${errors.length ? 'FAIL' : 'PASS'}] ${name}`);
+    console.log(`  [${loadMore.status}] ${loadMore.step}`);
     errors.forEach((e) => console.log(`      - ${e}`));
-    return { errors, details: [{ step: name, status: errors.length ? 'FAIL' : 'PASS' }] };
+    return { errors, details: [{ step: name, status: errors.length ? 'FAIL' : 'PASS' }, loadMore] };
 }
 
 async function verifyLeScreens(options = {}) {
