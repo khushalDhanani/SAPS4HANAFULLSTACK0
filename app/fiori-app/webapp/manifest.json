@@ -81,6 +81,10 @@
     }
   },
   "sap.ui5": {
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
     "rootView": {
       "viewName": "saps4hana.fiori.view.App",
       "type": "XML",
@@ -292,21 +296,6 @@
           "name": "wmMibLabel",
           "pattern": "wm/mib-label",
           "target": "TargetMibLabel"
-        },
-        {
-          "name": "wmHuStockTransfer",
-          "pattern": "wm/hu-stock-transfer",
-          "target": "TargetHuStockTransferList"
-        },
-        {
-          "name": "wmHuStockTransferRack",
-          "pattern": "wm/hu-stock-transfer/{reservation}/{item}/rack",
-          "target": "TargetHuStockTransferRack"
-        },
-        {
-          "name": "wmHuStockTransferDetail",
-          "pattern": "wm/hu-stock-transfer/{reservation}/{item}",
-          "target": "TargetHuStockTransferDetail"
         }
       ],
       "targets": {
@@ -414,21 +403,6 @@
           "id": "packingInstructionDetail",
           "name": "PackingInstructionDetail",
           "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
-        },
-        "TargetHuStockTransferList": {
-          "id": "huStockTransferList",
-          "name": "HuStockTransferList",
-          "path": "saps4hana.fiori.modules.wm.hu-stock-transfer.view"
-        },
-        "TargetHuStockTransferRack": {
-          "id": "huStockTransferRack",
-          "name": "HuStockTransferRack",
-          "path": "saps4hana.fiori.modules.wm.hu-stock-transfer.view"
-        },
-        "TargetHuStockTransferDetail": {
-          "id": "huStockTransferDetail",
-          "name": "HuStockTransferDetail",
-          "path": "saps4hana.fiori.modules.wm.hu-stock-transfer.view"
         }
       }
     }

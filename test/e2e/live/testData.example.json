@@ -55,12 +55,6 @@
     "deliveryDocument": "NOT PROVIDED",
     "quantity": "NOT PROVIDED"
   },
-  "huTransfer": {
-    "reservationNo": "NOT PROVIDED",
-    "reservationItem": "NOT PROVIDED",
-    "unitNumber": "NOT PROVIDED",
-    "transferQty": "NOT PROVIDED"
-  },
   "customerReturn": {
     "ReferenceSDDocument": "NOT PROVIDED",
     "SoldToParty": "NOT PROVIDED",

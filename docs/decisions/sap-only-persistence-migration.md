@@ -118,7 +118,6 @@ The user approved removing the local settings table and its unserved admin API.
 | Oversize HU behaviour | Always `BLOCK` |
 | Quarantine label form and size | The wrapper's default form, no size check |
 | Movement 261 blocked-bin rules | **No source.** The rule stays off |
-| HU pickable, hold and interim storage types | `srv/wm/hu-stock-transfer/storage-types.json`, approved by the user for W01. Other warehouses fail closed |
 
 Blocked-bin rules still need a decision on where they should live. Nothing guesses them.
 

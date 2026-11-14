@@ -72,15 +72,6 @@ sap.ui.define([
                 this._updateShell("wmQuarantineLabels");
             } else if (sHash.indexOf("wm/mib-label") === 0) {
                 this._updateShell("wmMibLabel");
-            } else if (sHash.indexOf("wm/hu-stock-transfer/") === 0) {
-                var aHuParts = sHash.replace("wm/hu-stock-transfer/", "").split("/");
-                if (aHuParts.length >= 3 && aHuParts[2] === "rack") {
-                    this._updateShell("wmHuStockTransferRack", { reservation: aHuParts[0], item: aHuParts[1] || "1" });
-                } else {
-                    this._updateShell("wmHuStockTransferDetail", { reservation: aHuParts[0], item: aHuParts[1] || "" });
-                }
-            } else if (sHash.indexOf("wm/hu-stock-transfer") === 0) {
-                this._updateShell("wmHuStockTransfer");
             } else if (sHash.indexOf("le/orders-due") === 0) {
                 this._updateShell("ordersDueForDelivery");
             } else if (sHash.indexOf("sd/invoices") === 0) {
@@ -245,18 +236,6 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("piDetailTitle") : "Packing Instruction";
                     bShowNav = true;
                     break;
-                case "wmHuStockTransfer":
-                    sTitle = oBundle ? oBundle.getText("huTransferTitle") : "HU Stock Transfer";
-                    bShowNav = true;
-                    break;
-                case "wmHuStockTransferRack":
-                    sTitle = oBundle ? oBundle.getText("rackVisualizerTitle") : "HU Stock Transfer — Stock Bins";
-                    bShowNav = true;
-                    break;
-                case "wmHuStockTransferDetail":
-                    sTitle = oBundle ? oBundle.getText("cockpitPageTitle") : "Transfer Cockpit";
-                    bShowNav = true;
-                    break;
                 case "ordersDueForDelivery":
                     sTitle = oBundle ? oBundle.getText("ordersDueForDeliveryTitle") : "Orders Due for Delivery";
                     bShowNav = true;
@@ -370,16 +349,6 @@ sap.ui.define([
                 this.onNavBack("wmHandlingUnits");
             } else if (sRoute === "wmPackingInstructionDetail") {
                 this.onNavBack("wmPackingInstructions");
-            } else if (sRoute === "wmHuStockTransferRack") {
-                var oRackArgs = this._oLastArgs || {};
-                this.getRouter().navTo("wmHuStockTransferDetail", {
-                    reservation: oRackArgs.reservation || "",
-                    item: oRackArgs.item || "1"
-                });
-            } else if (sRoute === "wmHuStockTransferDetail") {
-                this.onNavBack("wmHuStockTransfer");
-            } else if (sRoute === "wmHuStockTransfer") {
-                this.onNavBack("dashboard");
             } else if (sRoute === "purchaseOrders" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {

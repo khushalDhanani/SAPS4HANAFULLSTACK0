@@ -5,7 +5,7 @@ const { openHash } = require('../support/screenCheck');
 
 /**
  * Small helpers shared by the WM Tier C round-trip suites (roundTripHandlingUnit,
- * roundTripPackingInstruction). Same patterns as roundTripHuTransfer.e2e.js:
+ * roundTripPackingInstruction). The suites share these patterns:
  * dry-run = write guard on + page.route stub for exactly the expected action path(s); live = allowWrites with exact
  * path regexes, one submit, never retried. All CAP reads here are GET-only.
  */

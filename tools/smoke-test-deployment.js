@@ -11,7 +11,7 @@
  * Checks:
  * 1. Health & readiness probe (/health) -> 200 OK, { status: 'UP' }, Cache-Control: no-store
  * 2. Unauthenticated endpoint protection -> 401 Unauthorized (proves auth guards are active)
- * 3. Authenticated OData core metadata ($metadata for purchase-order, hu-stock-transfer, auth) -> 200 OK
+ * 3. Authenticated OData core metadata ($metadata for purchase-order, auth) -> 200 OK
  * 4. User info and scope resolution (/odata/v4/auth/getUserInfo()) -> 200 OK
  * 5. UI5 Layered Repository & preload endpoints (/sap/bc/lrep/flex/settings, Component-preload.js) -> 200 OK
  * 6. AI assistant streaming route presence (/ai/chat/stream) -> Not 404
@@ -125,19 +125,6 @@ async function executeSmokeTests(options = {}) {
       validate: (res, body) => {
         if (res.status !== 200) return `Expected 200 OK, got ${res.status}`;
         if (!body.includes('PurchaseOrders') && !body.includes('edmx:Edmx')) {
-          return 'Response does not contain valid EDMX metadata';
-        }
-        return null;
-      }
-    },
-    {
-      name: 'OData V4 HU Stock Transfer Metadata',
-      url: `${baseUrl}/odata/v4/hu-stock-transfer/$metadata`,
-      method: 'GET',
-      headers: { ...authHeader },
-      validate: (res, body) => {
-        if (res.status !== 200) return `Expected 200 OK, got ${res.status}`;
-        if (!body.includes('edmx:Edmx')) {
           return 'Response does not contain valid EDMX metadata';
         }
         return null;

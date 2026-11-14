@@ -3,8 +3,7 @@ const { RfcClient } = require('../RfcClient');
 const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient');
 
 /**
- * Read-only SAP lookups for GoodsIssueAttemptStore.recheck, which resolves HU stock transfer
- * posting attempts whose outcome SAP has not confirmed.
+ * Read-only SAP lookups for reconciling Goods Issue posting attempts whose outcome SAP has not confirmed.
  */
 class GoodsIssueAdapter {
   constructor(options = {}) {

@@ -3,9 +3,6 @@
 
 /**
  * Authorization / plant-isolation E2E (READ-ONLY, write guard on), as CAP mock user `test-viewer-1120` (Viewer, Plant 1120):
- * - the HU stock transfer list shows only rows of the plant the screen asked for. The screen's default filter is 1120
- *   (HuStockTransferList.controller.js:17), so this proves the filter, not authorization; the server's refusal of another
- *   plant is checked in verifyWriteAuthorization.e2e.js;
  * - choosing a plant outside the user's scope on Orders Due is refused and loads no rows.
  */
 
@@ -14,21 +11,6 @@ const { openSession, openHash } = require('../support/screenCheck');
 const OWN_PLANT = '1120';
 
 const open = openHash;
-
-/** Values of the scoping `Plant` property of the loaded rows (not ReceivingPlant etc., which may legitimately differ). */
-function rowPlants(page) {
-    return page.evaluate(() => {
-        const Element = window.sap.ui.require('sap/ui/core/Element');
-        return Element.registry.filter((c) => c.isA('sap.m.ListBase') && c.getDomRef() && c.getDomRef().getClientRects().length > 0 && c.getBinding('items'))
-            .map((list) => {
-                const b = list.getBinding('items');
-                const ctxs = b.getCurrentContexts ? b.getCurrentContexts() : [];
-                const plants = ctxs.map((ctx) => ctx && ctx.getObject && ctx.getObject()).filter(Boolean)
-                    .map((o) => o.Plant).filter((p) => typeof p === 'string' && p);
-                return { id: list.getId().split('--').pop(), rows: ctxs.length, plants: [...new Set(plants)] };
-            });
-    });
-}
 
 /** Server errors (5xx) and guard blocks since `from` are failures; 403/404 are the expected refusals. */
 function serverProblems(session, from) {
@@ -39,19 +21,11 @@ function serverProblems(session, from) {
 
 const mark = (s) => ({ network: s.networkErrors.length, blocked: s.blocked.length, console: s.consoleErrors.length });
 
-async function scopedList(session, hash) {
-    await open(session, hash);
-    const lists = (await rowPlants(session.page)).filter((l) => l.plants.length > 0);
-    if (lists.length === 0) return [`no loaded rows with a plant on ${hash}`];
-    return lists.filter((l) => l.plants.some((p) => p !== OWN_PLANT)).map((l) => `${l.id} shows foreign plant(s) ${l.plants.join(', ')}`);
-}
-
 async function verifyPlantIsolation(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     console.log(`\n=== Plant isolation as test-viewer-1120 (Viewer, Plant ${OWN_PLANT}) — READ-ONLY, write guard on ===`);
 
     const cases = [
-        { name: 'HU stock transfer list shows only the plant of its default filter (1120)', run: (s) => scopedList(s, 'wm/hu-stock-transfer') },
         {
             // The server refuses 1110 with 403 (outboundDeliveryAdapter tests, READ-ONLY curl); the UI refuses it first.
             name: 'Orders due: plant outside scope (1110) is refused, no request, own plant kept',

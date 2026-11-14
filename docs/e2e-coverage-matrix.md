@@ -24,7 +24,6 @@ From each `srv/**/service.cds`; which screen calls which action is **Not verifie
 | `/odata/v4/customer-invoice` | `releaseInvoiceToAccounting`, `cancelBillingDocument` |
 | `/odata/v4/customer-return` | `createCustomerReturn` |
 | `/odata/v4/goods-receipt` | `postGoodsReceipt`, `postGoodsReceiptWithStorageUnit` |
-| `/odata/v4/hu-stock-transfer` | `validateHuStockTransferSelection`, `executeHuStockTransfer`, `executeHuStockTransferSelection` |
 | `/odata/v4/handling-unit` | `labels`, `create`, `pack`, `unpack`, `remove` |
 | `/odata/v4/packing-instruction` | `create` |
 | `/odata/v4/quarantine-label` | `generateLabels` (renders SAP form ZMM_AF_017 via RFC `Z_MM_QUAR_LABEL_PDF`; no posting, no printer) |
@@ -58,11 +57,8 @@ From each `srv/**/service.cds`; which screen calls which action is **Not verifie
 | `wmPackingInstructions` | `wm/packing-instruction` | WM · packing instruction list | `/odata/v4/packing-instruction` | 🟢 | 🟢 | `test/e2e/wm/verifyWmScreens.e2e.js`. Tier C: `test/e2e/wm/roundTripPackingInstruction.e2e.js` — dry-run PASS; live run pending written go. **Live run PASS 2026-10-29 (user go): packing instruction 55 "E2E-PI-LIVE-01" (KG; item 10 packaging 2000000000 x 1 NOS, item 20 material 4000000181 x 25 KG) created through UI → CAP → S/4HANA, read back through CAP (name, weight unit, components) and its header independently from SAP table PACKKP (created today by the RFC user, PACKTYP P, not deleted; read-only RFC).** |
 | `wmQuarantineLabels` | `wm/quarantine-labels` | WM · quarantine labels (ZQUARAN) | `/odata/v4/quarantine-label` | 🟢 | 🔴 | `test/e2e/wm/verifyQuarantineLabels.e2e.js`: route, local validation, PDF preview with print/download, 503 warning, stale preview removed on input change, app-drawn 4x6 PDF + exact-size print (Item Code from Material below Material Name and signed-in Prepared by in single/bulk print; mocked browser verification 2026-10-29), goods-receipt list (Go → ticked rows as one 4x6 PDF → row print) — label action MOCKED in every case. Backend fails closed with 503 until the SAP wrapper exists (READ-ONLY TFDIR check, verified live 2026-10-26). Tier C pending (2026-10-26): `Z_MM_QUAR_LABEL_PDF` not yet activated in SAP; real rendering proof needs activation and a written go. |
 | `wmMibLabel` | `wm/mib-label` | WM · Material Issued Batch Sticker (ZMIB) | `/odata/v4/mib-label` | 🟢 | 🔴 | `test/e2e/wm/verifyMibLabels.e2e.js`: route, local validation, PDF preview with print/download, 503 warning, stale preview removed on input change. Tier C pending (2026-11-07): `Z_MM_MIB_LABEL_PDF` not yet activated in SAP. |
-| `wmHuStockTransfer` | `wm/hu-stock-transfer` | WM · HU stock transfer list | `/odata/v4/hu-stock-transfer` | 🟢 | N/A | `test/e2e/wm/verifyWmScreens.e2e.js`. Never proven live (WORKSTATUS.md). SAP N/A: `HuStockTransferList.controller.js` makes no service calls; posting is on the detail route. Authorization: `test/e2e/negative/verifyPlantIsolation.e2e.js` (plant isolation). |
-| `wmHuStockTransferRack` | `wm/hu-stock-transfer/{reservation}/{item}/rack` | WM · HU rack selection | `/odata/v4/hu-stock-transfer` | 🟢 | N/A | `test/e2e/wm/verifyWmScreens.e2e.js` (first list row opens the rack by design). SAP N/A: `HuStockTransferRack.controller.js` makes no service calls; posting is on the detail route. |
-| `wmHuStockTransferDetail` | `wm/hu-stock-transfer/{reservation}/{item}` | WM · HU stock transfer post | `/odata/v4/hu-stock-transfer` | 🟢 | 🔴 | `test/e2e/wm/verifyWmScreens.e2e.js` (same reservation as the rack step). Posting not exercised. Tier C: `test/e2e/wm/roundTripHuTransfer.e2e.js` — historical dry-run failure selected an HU that validation correctly refused; W01 rules are present in `srv/wm/hu-stock-transfer/storage-types.json` (approved 2026-11-03). Candidate search now checks every positive-stock HU across up to 100 reservations. READ-ONLY CAP check 2026-11-14: 19 open reservations, 36 storage-bin rows, zero positive-stock HUs, so no `validateUnit` candidate was available. Browser Tier C attempt stalled and was interrupted; live run pending written go (no SAP persistence proven). |
 
-Totals, counted from the rows above on 2026-11-04: Browser E2E 🟢 25 / 🟡 0 / 🔴 0. SAP round trip: 5 🟢, 1 🟡, 9 🔴, 10 N/A.
+Totals, counted from the remaining routes on 2026-11-14 after HU Stock Transfer removal: Browser E2E 🟢 22 / 🟡 0 / 🔴 0. SAP round trip: 5 🟢, 1 🟡, 8 🔴, 8 N/A.
 
 ## Tier C SAP round trips
 
@@ -74,7 +70,6 @@ Totals, counted from the rows above on 2026-11-04: Browser E2E 🟢 25 / 🟡 0 
 | Sales inquiry create | `test/e2e/sd/roundTripSalesInquiry.e2e.js` | PASS (after Plant allowlist fix) | attempted 4 times 2026-10-29 (user go): Lean Order service refuses ZIN/ZLIS; RFC BAPI route accepted by TESTRUN but a real create is refused by SAP (`SLS_LORD 009 Document is incomplete`), no document created; blocked on the SAP-side extension for ZIN (`docs/sap-inquiry-service-extension-spec.md`) |
 | Sales order create | `test/e2e/sd/roundTripSalesOrder.e2e.js` | PASS | **PASS 2026-10-29: order 5000534, read-back VERIFIED (CAP + SAP tables)** |
 | Goods receipt post | `test/e2e/wm/roundTripGoodsReceipt.e2e.js` | PASS | **PASS for the post 2026-11-02: delivery 0180000137, document 5000005789/2026, read back from SAP (`MATDOC`, `EKBE`, `MARD`). The suite reported FAIL on a read-back bug, since fixed and rerun read-only; no complete live suite PASS yet** |
-| HU stock transfer 311 | `test/e2e/wm/roundTripHuTransfer.e2e.js` | NOT VERIFIED (2026-11-14) — READ-ONLY CAP query returned 19 open reservations / 36 storage rows / 0 positive-stock HUs, so `validateUnit` had no eligible candidate. Selector updated to search every returned positive-stock HU. Browser Tier C attempt stalled after its banner and was interrupted without result. | pending go |
 | Customer return create | `test/e2e/sd/roundTripCustomerReturn.e2e.js` | PASS (after reference-document value help fix) | **PARTIAL 2026-10-29: return 4500184 created; reason, reference and storage location not persisted (API has no fields)** |
 | Invoice release / cancel | `test/e2e/sd/roundTripCustomerInvoice.e2e.js` | PASS | pending go |
 | Delivery from sales order list | `test/e2e/sd/roundTripSalesOrderDelivery.e2e.js` | PASS (after search / ShippingPoint fix) | pending go |
@@ -90,6 +85,7 @@ Totals, counted from the rows above on 2026-11-04: Browser E2E 🟢 25 / 🟡 0 
 ## Negative E2E cases
 
 Covered:
+- `test/e2e/negative/verifyAdministrationMenu.e2e.js` (write guard on): Admin-only menu visibility and navigation.
 - `test/e2e/negative/verifyNegativeUi.e2e.js` (write guard on): signed-out deep link → login (B1); empty-form double submit on all five create screens shows validation and attempts no write (B2); simulated list read failure (mocked HTTP 500) shows the load-error text without a crash (B3).
 - `verifySubmitFailures.e2e.js` and `verifyActionFailures.e2e.js` also check that a not-confirmed answer (504, action MOCKED) stops a second create on PO, sales inquiry, sales order, customer return, packing instruction, handling unit and both Orders Due deliveries. Passed 2026-11-05 in the READ-ONLY run: UI handling only, the SAP answer is mocked.
 - `test/e2e/negative/verifySubmitFailures.e2e.js` (PO, sales inquiry, sales order and customer return create, write action MOCKED per case — UI handling, not SAP; the return's mocked answers are `$batch` replies): SAP business error 400 shown, stale data (409 "changed by another user") shown, backend unavailable 503 shown, network timeout shown, expired session 401 shown — each with busy indicator cleared, no navigation, no false success; double click while the request is pending sends one create; reload while pending does not resubmit or show success.
@@ -99,7 +95,7 @@ Covered:
 Last full run 2026-11-05 (`npm run test:e2e`, READ-ONLY, `WORKSTATUS.md`): 17 of 17 suites passed, including both `verifyActionFailures` shards. Earlier run:
 2026-10-29 17:04 IST (`WORKSTATUS.md`): both `verifyActionFailures` shards FAIL — machine slept mid-run (invoice cancel 503, Orders Due 409/401/double-click cases) and the HU unpack 400 case picked an HU with nothing to unpack; re-run on an awake machine pending.
 
-Still open: real SAP-persisted round-trip execution for write actions (gated behind user authorization and `testData.json`). HU stock transfer still needs an existing in-stock HU on an open reservation, accepted by `validateUnit`, for dry-run proof; READ-ONLY data check found none, and approved W01 rules already exist.
+Still open: real SAP-persisted round-trip execution for write actions (gated behind user authorization and `testData.json`).
 
 ## Running
 

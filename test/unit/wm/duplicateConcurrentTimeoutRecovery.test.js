@@ -13,19 +13,15 @@
 
 const cds = require('@sap/cds');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
-const HuStockTransferAdapter = require('../../../srv/integration/s4hana/wm/HuStockTransferAdapter');
 const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
 const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
-const { POST } = cds.test(__dirname + '/../../../');
+cds.test(__dirname + '/../../../');
 
 describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout Recovery [mock only]', () => {
-  let huTransferSpy;
   let _s4HttpSpy;
   let _rfcReadTableSpy;
-
-  const authCarol = { auth: { username: 'test-clerk-1120', password: '' } };
 
   beforeEach(async () => {
     jest.restoreAllMocks();
@@ -88,50 +84,10 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       return [];
     });
 
-    // Adapter write spies
-
-
-
-
-    // plant-scope pre-read of the reservation (test-clerk-1120/test-clerk-1130 are plant-scoped users)
-    jest.spyOn(HuStockTransferAdapter.prototype, 'getCockpitDetail').mockResolvedValue({ ReservationNo: '520001', ReservationItem: '1', Plant: '1120', OpenQty: 10 });
-    huTransferSpy = jest.spyOn(HuStockTransferAdapter.prototype, 'executeHuStockTransfer').mockResolvedValue({
-      success: true,
-      huNumber: '1122334455',
-      materialDocument: '4900050999',
-      materialDocYear: '2026',
-      statusText: 'HU Stock Transfer Completed'
-    });
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
-  });
-
-  // ===========================================================================
-  // SECTION 1: Fail Closed If Production Transaction Logging Is Unavailable
-  // ===========================================================================
-  describe('1. Fail closed if production transaction logging is unavailable', () => {
-
-    test('executeHuStockTransfer: aborts with HTTP 503 and NEVER calls SAP when GoodsIssueAttemptStore throws', async () => {
-      jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('Attempt store down'));
-
-      await expect(POST('/odata/v4/hu-stock-transfer/executeHuStockTransfer', {
-        ReservationNo: '520001',
-        ReservationItem: '0001',
-        UnitNumber: '1122334455',
-        TransferQty: 10,
-        IsFullUnit: true,
-        ClientAttemptId: 'test-hu-failclosed-006'
-      }, authCarol)).rejects.toMatchObject({
-        response: {
-          status: 503,
-          data: { error: { message: expect.stringMatching(/production transaction logging is unavailable/i) } }
-        }
-      });
-
-      expect(huTransferSpy).not.toHaveBeenCalled();
-    });
   });
 
   // ===========================================================================

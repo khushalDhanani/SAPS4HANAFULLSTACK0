@@ -64,9 +64,5 @@
   "wmQuarantineLabels": {
     "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
-  },
-  "wmHuStockTransfer": {
-    "aria-allowed-attr": 4,
-    "label-content-name-mismatch": 1
   }
 }

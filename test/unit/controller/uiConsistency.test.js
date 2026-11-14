@@ -28,8 +28,7 @@ test('no sap.m.Page renders its own title or back button (the ShellBar owns both
   }));
 });
 
-// Known defect: app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferList.view.xml:12-14 renders its own DynamicPageTitle heading although the ShellBar owns the title.
-test.failing('no DynamicPage renders its own heading title (the ShellBar owns it)', () => {
+test('no DynamicPage renders its own heading title (the ShellBar owns it)', () => {
   const withOwnTitle = views.filter(({ xml }) => /<(?:\w+:)?heading>\s*<(?:\w+:)?Title\b/.test(xml)).map(({ name }) => name);
   expect(withOwnTitle).toEqual([]);
 });

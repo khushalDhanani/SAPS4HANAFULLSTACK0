@@ -13,7 +13,6 @@
  *     - GoodsIssueAttemptStore: Idempotent replay of identical requests without duplicate SAP posting.
  *     - GoodsIssueAttemptStore: Reference collision detection throws HTTP 409 Conflict.
  *     - GoodsIssueAttemptStore: Generation suffix re-claims (e.g. GI...0 -> GI...1) for safe retry after failure.
- *     - HuStockTransferAdapter: Idempotency caching on ClientAttemptId and BAPI rollback on rejection.
  *
  * All tests use controlled mocks/spies. ZERO live SAP mutations.
  */
@@ -27,7 +26,6 @@ cds.test(__dirname + '/../../../');
 
 const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient');
 const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
-const HuStockTransferAdapter = require('../../../srv/integration/s4hana/wm/HuStockTransferAdapter');
 
 const { DELETE } = cds.ql;
 const ATTEMPT_ENTITY = 'saps4hana.wm.GoodsIssuePostingAttempt';
@@ -245,113 +243,6 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
       expect(history[1].Status).toBe('sending');
     });
 
-    test('HuStockTransferAdapter: posts with the BAPI and leaves repeat protection to the attempt claim', async () => {
-      const mockRfc = {
-        readTable: jest.fn().mockImplementation(async (table) => {
-          if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'HS01', XHUPF: '' }];
-          if (table === 'MATDOC') return [{ MBLNR: '5000000311', MJAHR: '2026', BWART: '311' }];
-          return [];
-        }),
-        call: jest.fn().mockImplementation(async (fm) => {
-          if (fm === 'BAPI_GOODSMVT_CREATE') {
-            return {
-              GOODSMVT_HEADRET: { MAT_DOC: '5000000311', DOC_YEAR: '2026' }
-            };
-          }
-          if (fm === 'BAPI_TRANSACTION_COMMIT') return {};
-          return {};
-        })
-      };
-      mockRfc.session = (fn) => fn(mockRfc.call);
 
-      const adapter = new HuStockTransferAdapter({ rfcClient: mockRfc });
-
-      // Mock validateUnit & getCockpitDetail
-      jest.spyOn(adapter, 'validateUnit').mockResolvedValue({
-        Valid: true,
-        AvailableQuantity: 10,
-        StorageLocation: 'HS01',
-        UnitType: 'Storage Unit (SU)'
-      });
-
-      jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({
-        OpenQty: 10,
-        Plant: '1120',
-        Material: '8000000023',
-        StorageLocation: 'HS01',
-        ReceivingStorageLocation: 'CS01',
-        MovementType: '311',
-        BaseUnit: 'NOS',
-        Requester: 'TESTUSER'
-      });
-
-      const transferPayload = {
-        ReservationNo: '520311',
-        ReservationItem: '0001',
-        UnitNumber: '1030311',
-        TransferQty: 10
-      };
-
-      const res1 = await adapter.executeHuStockTransfer(transferPayload);
-      expect(res1.Success).toBe(true);
-      expect(res1.MaterialDocument).toBe('5000000311');
-      expect(mockRfc.call).toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.any(Object));
-    });
-
-    test('HuStockTransferAdapter: executes BAPI rollback when SAP does not generate Material Document', async () => {
-      const mockRfc = {
-        readTable: jest.fn().mockImplementation(async (table) => {
-          if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'HS01', XHUPF: '' }];
-          if (table === 'MATDOC') return [{ MBLNR: '5000000311', MJAHR: '2026', BWART: '311' }];
-          return [];
-        }),
-        call: jest.fn().mockImplementation(async (fm) => {
-          if (fm === 'BAPI_GOODSMVT_CREATE') {
-            return {
-              GOODSMVT_HEADRET: {}, // Missing MAT_DOC
-              RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '021', MESSAGE: 'Deficit of BA Unrestricted-use stock 10 NOS' }]
-            };
-          }
-          if (fm === 'BAPI_TRANSACTION_ROLLBACK') return {};
-          return {};
-        })
-      };
-      mockRfc.session = (fn) => fn(mockRfc.call);
-
-      const adapter = new HuStockTransferAdapter({ rfcClient: mockRfc });
-
-      jest.spyOn(adapter, 'validateUnit').mockResolvedValue({
-        Valid: true,
-        AvailableQuantity: 10,
-        StorageLocation: 'HS01',
-        UnitType: 'Storage Unit (SU)'
-      });
-
-      jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({
-        OpenQty: 10,
-        Plant: '1120',
-        Material: '8000000023',
-        StorageLocation: 'HS01',
-        ReceivingStorageLocation: 'CS01',
-        MovementType: '311',
-        BaseUnit: 'NOS',
-        Requester: 'TESTUSER'
-      });
-
-      await expect(
-        adapter.executeHuStockTransfer({
-          ReservationNo: '520311',
-          ReservationItem: '0001',
-          UnitNumber: '1030311',
-          TransferQty: 10,
-          ClientAttemptId: 'hu-rollback-key-1'
-        })
-      ).rejects.toMatchObject({
-        status: 422,
-        message: expect.stringMatching(/Deficit of BA Unrestricted-use stock/i)
-      });
-
-      expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
-    });
   });
 });

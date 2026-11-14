@@ -420,10 +420,6 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmMibLabel");
         },
 
-        onNavigateToHuStockTransfer: function () {
-            this.getOwnerComponent().getRouter().navTo("wmHuStockTransfer");
-        },
-
         onNavigateToOrdersDueForDelivery: function () {
             this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
         },

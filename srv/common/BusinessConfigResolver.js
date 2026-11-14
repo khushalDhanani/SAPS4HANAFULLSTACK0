@@ -43,36 +43,6 @@ function parseCsv(csv) {
   return String(csv).split(',').map(v => v.trim()).filter(Boolean);
 }
 
-function validateHuStorageTypeLists(values = {}) {
-  const fields = ['pickableStorageTypes', 'holdStorageTypes', 'interimStorageTypes'];
-  const result = {};
-  for (const field of fields) {
-    const raw = values[field] ?? values[field[0].toUpperCase() + field.slice(1)];
-    const list = Array.isArray(raw) ? raw : parseCsv(raw);
-    if (!list.length) throw new BusinessConfigError(`${field} must be non-empty.`);
-    let normalized;
-    try {
-      normalized = list.map((item) => sapKey(item, 'lgtyp'));
-    } catch (error) {
-      throw new BusinessConfigError(`${field} contains an invalid storage type: ${error.message}`);
-    }
-    if (new Set(normalized).size !== normalized.length) {
-      throw new BusinessConfigError(`${field} contains duplicate storage types.`);
-    }
-    result[field] = normalized;
-  }
-  const seen = new Map();
-  for (const field of fields) {
-    for (const code of result[field]) {
-      if (seen.has(code)) {
-        throw new BusinessConfigError(`Storage type ${code} overlaps ${seen.get(code)} and ${field}.`);
-      }
-      seen.set(code, field);
-    }
-  }
-  return result;
-}
-
 /**
  * Flow-specific required fields mappings.
  * Each flow specifies only the business config fields it actually needs:
@@ -84,7 +54,6 @@ const FLOW_REQUIRED_FIELDS = Object.freeze({
   'delivery-no-ref': Object.freeze(['salesOrganization', 'distributionChannel', 'division']),
   'delivery':        Object.freeze(['salesOrganization', 'distributionChannel', 'division']),
   'scan-to':         Object.freeze(['warehouseNumber', 'plant']),
-  'hu-stock-transfer': Object.freeze(['pickableStorageTypes', 'holdStorageTypes', 'interimStorageTypes']),
   'sd':              Object.freeze([
     'salesOrganization', 'distributionChannel', 'division', 'currency',
     'orderType', 'inquiryType', 'conditionType',
@@ -96,9 +65,6 @@ const FLOW_REQUIRED_FIELDS = Object.freeze({
  * Standard required fields when full resolution is requested.
  */
 const ALL_REQUIRED_FIELDS = FLOW_REQUIRED_FIELDS.sd;
-
-// Warehouse storage type rules, approved per warehouse in this file. A warehouse not listed there fails closed.
-const CONFIGURED_WAREHOUSE_STORAGE_TYPES = new Map(Object.entries(require('../wm/hu-stock-transfer/storage-types.json')));
 
 class BusinessConfigResolver {
   /**
@@ -170,11 +136,6 @@ class BusinessConfigResolver {
   getCacheEntry(plant, warehouse, fields, flow = '') {
     const key = this._getCacheKey(plant, warehouse, fields, flow);
     return this._cache.get(key) || null;
-  }
-
-  /** No setting source exists, so an oversize HU stays blocked. */
-  async resolveOversizeHuSelectionBehavior() {
-    return 'BLOCK';
   }
 
   /**
@@ -453,11 +414,6 @@ class BusinessConfigResolver {
     // ─── Step 4: Throw if required fields remain unresolved ───────────────────
     if (missing.length > 0) {
       const loc = `Plant=${result.plant || plant || '(none)'}, Warehouse=${result.warehouse || warehouse || '(none)'}, StorageLocation=${storageLocation || '(none)'}`;
-      if (flow === 'hu-stock-transfer') {
-        throw new BusinessConfigError(
-          `BusinessConfigResolver could not resolve storage type rules [${missing.join(', ')}] for ${loc}. Storage types must be supplied by business configuration; fail-closed without hardcoded defaults.`
-        );
-      }
       throw new BusinessConfigError(
         `BusinessConfigResolver could not resolve required business config fields [${missing.join(', ')}] for ${loc}. ` +
         `Maintain the values in SAP customizing.` +
@@ -483,81 +439,6 @@ class BusinessConfigResolver {
     return result;
   }
 
-  /**
-   * Registers custom storage type rules for a warehouse (for tests or administrative setup).
-   */
-  static registerWarehouseStorageTypes(warehouse, rules) {
-    if (warehouse && rules) {
-      CONFIGURED_WAREHOUSE_STORAGE_TYPES.set(String(warehouse).trim().toUpperCase(), rules);
-    }
-  }
-
-  /**
-   * Unregisters custom storage type rules for a warehouse.
-   */
-  static unregisterWarehouseStorageTypes(warehouse) {
-    if (warehouse) {
-      CONFIGURED_WAREHOUSE_STORAGE_TYPES.delete(String(warehouse).trim().toUpperCase());
-    }
-  }
-
-  /**
-   * Resolves storage type rules for HU operations.
-   * Fails closed when pickable, hold, or interim storage types are not configured.
-   * Zero hardcoded literals in business logic.
-   *
-   * @param {Object} [context={}]
-   * @returns {Promise<{ pickableStorageTypes: string[], holdStorageTypes: string[], interimStorageTypes: string[], isPickable: Function, isOnHold: Function, isInterim: Function }>}
-   */
-  async resolveHuStorageTypeRules(context = {}) {
-    const isTrusted = context.isTrusted !== false;
-    const wh = String(context.warehouse || context.warehouseNumber || context.lgnum || '').trim().toUpperCase();
-    const configured = CONFIGURED_WAREHOUSE_STORAGE_TYPES.get(wh) || null;
-
-    const res = await this.resolve({
-      ...context,
-      isTrusted,
-      flow: 'hu-stock-transfer',
-      fields: ['pickableStorageTypes', 'holdStorageTypes', 'interimStorageTypes'],
-      ...(configured ? {
-        trustedOverrides: {
-          ...configured,
-          ...(context.trustedOverrides || {})
-        }
-      } : {})
-    });
-
-    let validatedLists;
-    try {
-      validatedLists = validateHuStorageTypeLists(res);
-    } catch (error) {
-      throw new BusinessConfigError(
-        `BusinessConfigResolver could not resolve valid storage type rules for ${context.warehouse || context.plant || 'warehouse'}: ${error.message}`
-      );
-    }
-    const { pickableStorageTypes: pickable, holdStorageTypes: hold, interimStorageTypes: interim } = validatedLists;
-
-    return {
-      pickableStorageTypes: pickable,
-      holdStorageTypes: hold,
-      interimStorageTypes: interim,
-      isPickable(lgtyp) {
-        if (!lgtyp) return false;
-        return pickable.includes(String(lgtyp).trim().toUpperCase());
-      },
-      isOnHold(lgtyp, _lgpla = '') {
-        if (!lgtyp) return false;
-        const type = String(lgtyp).trim().toUpperCase();
-        // Classified as hold only when explicitly included in holdStorageTypes; no string heuristics on bin names
-        return hold.includes(type);
-      },
-      isInterim(lgtyp) {
-        if (!lgtyp) return false;
-        const type = String(lgtyp).trim().toUpperCase();
-        return interim.includes(type);
-      }
-    };
-  }
 }
 
 // Singleton export with class constructors attached
@@ -565,8 +446,4 @@ const instance = new BusinessConfigResolver();
 instance.BusinessConfigResolver = BusinessConfigResolver;
 instance.BusinessConfigError = BusinessConfigError;
 instance.parseCsv = parseCsv;
-instance.validateHuStorageTypeLists = validateHuStorageTypeLists;
-instance.registerWarehouseStorageTypes = BusinessConfigResolver.registerWarehouseStorageTypes;
-instance.unregisterWarehouseStorageTypes = BusinessConfigResolver.unregisterWarehouseStorageTypes;
-
 module.exports = instance;

@@ -90,14 +90,5 @@ describe('Integration: "nothing was posted" stays visible in production', () => 
         });
     });
 
-    it('HU stock transfer: shows why when the posting-attempt log is unavailable', async () => {
-        jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('database down'));
 
-        const res = await call('khushal', '/odata/v4/hu-stock-transfer/executeHuStockTransfer', {
-            ReservationNo: '520311', ReservationItem: '0001', UnitNumber: '1000048321', TransferQty: 10, IsFullUnit: true, ClientAttemptId: 'nothing-posted-log'
-        });
-
-        expect(res.status).toBe(503);
-        expect(res.data.error.message).toBe('HU stock transfer was NOT sent to SAP: production transaction logging is unavailable (database down). Check the document list before retrying.');
-    });
 });

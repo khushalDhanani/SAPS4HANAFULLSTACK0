@@ -7,7 +7,6 @@
  *   specific roles without Viewer must answer 401 when signed out and 403 for the Viewer-only mock users
  *   `test-viewer-1120` (Plant 1120) and `test-viewer-noplant` (no plant). lockUser and unlockUser are also checked by fixed path.
  * - Plant checks: the WarehouseClerk mock user `test-clerk-1130` (Plant 1130) acting on plant 1120 must get 403 before any S/4 call.
- * - Plant read check: open HU reservations of a plant outside the user's scope answer 403 before any S/4 call.
  */
 
 const path = require('path');
@@ -32,8 +31,6 @@ const PLANT_CASES = [
 
 // Written by hand so these two stay checked whatever the CDS scan below finds. They lock real SAP users; no case names a user.
 const ADMIN_ONLY_PATHS = { lockUser: '/odata/v4/user-management/lockUser', unlockUser: '/odata/v4/user-management/unlockUser' };
-const OPEN_RESERVATIONS = (plant) => `/odata/v4/hu-stock-transfer/getOpenReservations(plant='${plant}',storageLocation='',movementType='311',`
-    + "requester='',reservation='',material='',status='open',includeDeleted=false)";
 
 const kebab = (n) => n.replace(/Service$/, '').replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
 
@@ -58,12 +55,6 @@ async function post(server, user, urlPath, body = {}) {
     const headers = { 'Content-Type': 'application/json' };
     if (user) headers.Authorization = 'Basic ' + Buffer.from(`${user}:`).toString('base64');
     const res = await fetch(`${server.baseUrl}${urlPath}`, { method: 'POST', headers, body: JSON.stringify(body) });
-    const text = await res.text();
-    return { status: res.status, message: (text.match(/"message":"([^"]*)"/) || [])[1] || '' };
-}
-
-async function get(server, user, urlPath) {
-    const res = await fetch(`${server.baseUrl}${urlPath}`, { headers: { Authorization: 'Basic ' + Buffer.from(`${user}:`).toString('base64') } });
     const text = await res.text();
     return { status: res.status, message: (text.match(/"message":"([^"]*)"/) || [])[1] || '' };
 }
@@ -103,15 +94,6 @@ async function verifyWriteAuthorization() {
             }
         }
 
-        // The server's own plant rule, which the screen's default filter (HuStockTransferList.controller.js:17) cannot show
-        for (const [user, plant, label] of [['test-viewer-1120', '1130', 'another plant'], ['test-viewer-1120', '', 'no plant'], ['test-viewer-noplant', '1120', 'any plant, having none assigned']]) {
-            const r = await get(server, user, OPEN_RESERVATIONS(plant));
-            record(`Open reservations: ${user} asking for ${label} gets 403`, r.status === 403 ? [] : [`HTTP ${r.status}: ${r.message}`]);
-        }
-        // Control: the same user and read pass the plant rule for their own plant, so the 403s above are not a blanket refusal
-        const own = await get(server, 'test-viewer-1120', OPEN_RESERVATIONS('1120'));
-        console.log(`  own-plant control answered HTTP ${own.status}: ${own.message}`);
-        record('Open reservations: test-viewer-1120 asking for its own plant is not refused with 401/403', own.status === 401 || own.status === 403 ? [`HTTP ${own.status}: ${own.message}`] : []);
 
         for (const c of PLANT_CASES) {
             const r = await post(server, 'test-clerk-1130', c.path, c.body);

@@ -6,7 +6,6 @@ const net = require('node:net');
 const tls = require('node:tls');
 const dns = require('node:dns');
 const { RfcClient } = require('../../srv/integration/s4hana/RfcClient');
-const HuStockTransferAdapter = require('../../srv/integration/s4hana/wm/HuStockTransferAdapter');
 
 describe('Jest outbound network safeguard [MOCK]', () => {
   test('test setup removes SAP credentials and destination bindings', () => {
@@ -52,9 +51,6 @@ describe('Jest outbound network safeguard [MOCK]', () => {
       S4_USERNAME: 'TEST_ONLY',
       S4_PASSWORD: 'TEST_ONLY'
     };
-    const adapterRfc = new HuStockTransferAdapter().rfc;
-    adapterRfc.env = configuredEnv;
-    await expect(adapterRfc.call('RFC_PING')).rejects.toMatchObject({ code: 'JEST_OUTBOUND_NETWORK_BLOCKED' });
     await expect(new RfcClient(configuredEnv).session(async () => 'unreachable'))
       .rejects.toMatchObject({ code: 'JEST_OUTBOUND_NETWORK_BLOCKED' });
 

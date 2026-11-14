@@ -15,7 +15,6 @@ cdsTest.defaults.auth = { username: 'khushal', password: '' };
 const { axios } = cdsTest;
 const returnAdapter = require('../../srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter');
 const inquiryAdapter = require('../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
-const HuStockTransferAdapter = require('../../srv/integration/s4hana/wm/HuStockTransferAdapter');
 const HandlingUnitAdapter = require('../../srv/integration/s4hana/wm/HandlingUnitAdapter');
 const { runCreateBapi } = require('../../srv/integration/s4hana/sd/salesDocBapi');
 const { RfcClient } = require('../../srv/integration/s4hana/RfcClient');
@@ -202,21 +201,6 @@ describe('Integration: a SAP write that reading it back does not confirm (produc
             expect(posts).toHaveLength(1);
         });
 
-        it('HU stock transfer with an unknown outcome: shows the warning not to post again', async () => {
-            jest.spyOn(HuStockTransferAdapter.prototype, 'getCockpitDetail').mockResolvedValue({ ReservationNo: '520311', ReservationItem: '1', Plant: '1120' });
-            jest.spyOn(HuStockTransferAdapter.prototype, 'executeHuStockTransfer').mockImplementation(function () {
-                throw this._unconfirmedError('timeout');
-            });
-
-            const res = await direct({
-                path: '/odata/v4/hu-stock-transfer',
-                action: 'executeHuStockTransfer',
-                body: { ReservationNo: '520311', ReservationItem: '0001', UnitNumber: '1000048321', TransferQty: 10, IsFullUnit: true, ClientAttemptId: `visible-${Date.now()}` }
-            });
-
-            expect(res.status).toBe(502);
-            expect(res.data.error.message).toBe('Stock transfer outcome is NOT confirmed in SAP (timeout). Check it in SAP before trying again.');
-        });
 
         it('handling unit whose read-back fails after the commit: shows the number and the warning', async () => {
             jest.spyOn(RfcClient.prototype, 'session').mockImplementation((fn) => fn(async (fm) => (fm === 'BAPI_HU_CREATE' ? { HUKEY: '00000000002000020166', RETURN: [] } : {})));
