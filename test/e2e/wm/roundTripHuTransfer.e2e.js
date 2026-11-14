@@ -64,6 +64,30 @@ async function getJson(baseUrl, path) {
     return body.value !== undefined ? body.value : body;
 }
 
+/** Search the already loaded reservation rows for an HU that passes the same read-only validation as the UI. */
+async function findValidatedHuCandidate(items, { getBins, validate }) {
+    const candidates = [];
+    const probeErrors = [];
+    for (const it of items.slice(0, 100)) {
+        const bins = await getBins(it).catch(() => []);
+        const hus = bins.filter((b) => b.UnitCategory === 'HU' && Number(b.AvailableStock) > 0);
+        for (const hu of hus) {
+            const cand = { reservationNo: it.ReservationNo, reservationItem: it.ReservationItem, unitNumber: hu.UnitNumber };
+            candidates.push(cand);
+            try {
+                const result = await validate(cand);
+                if (result.Valid) return { ...cand, probe: 'validateUnit Valid' };
+                probeErrors.push(`${cand.reservationNo}/${cand.unitNumber}: ${result.StatusMessage}`);
+            } catch (err) {
+                probeErrors.push(`${cand.reservationNo}/${cand.unitNumber}: ${err.message}`);
+            }
+        }
+    }
+    if (!candidates.length) throw new Error(`no open reservation with an HU in stock among the first ${Math.min(items.length, 100)} list rows`);
+    // Preserve a representative rejection for the UI when SAP has no acceptable candidate in the searched rows.
+    return { ...candidates[0], probe: `no candidate validated: ${probeErrors.join(' | ')}` };
+}
+
 const open = openHash;
 
 /** A named JSON model of the view that owns the control with the given local id. */
@@ -84,26 +108,10 @@ async function pickDryRunData(session) {
     const list = await viewModel(session.page, 'btnRefreshList', 'listView');
     const items = (list && list.items) || [];
     if (!items.length) throw new Error('HU stock transfer list returned no open reservation');
-    const candidates = [];
-    const probeErrors = [];
-    for (const it of items.slice(0, 100)) {
-        const bins = await getJson(session.baseUrl, `${SERVICE}/getStorageBins(reservation='${it.ReservationNo}',item='${it.ReservationItem}')`).catch(() => []);
-        const hu = bins.find((b) => b.UnitCategory === 'HU' && Number(b.AvailableStock) > 0);
-        if (!hu) continue;
-        const cand = { reservationNo: it.ReservationNo, reservationItem: it.ReservationItem, unitNumber: hu.UnitNumber };
-        candidates.push(cand);
-        try {
-            const v = await getJson(session.baseUrl, `${SERVICE}/validateUnit(reservation='${it.ReservationNo}',item='${it.ReservationItem}',unitNumber='${hu.UnitNumber}')`);
-            if (v.Valid) return { ...cand, probe: 'validateUnit Valid' };
-            probeErrors.push(`${cand.reservationNo}/${cand.unitNumber}: ${v.StatusMessage}`);
-        } catch (err) {
-            probeErrors.push(`${cand.reservationNo}/${cand.unitNumber}: ${err.message}`);
-        }
-        if (candidates.length >= 5) break;
-    }
-    if (!candidates.length) throw new Error(`no open reservation with an HU in stock among the first ${Math.min(items.length, 100)} list rows`);
-    // No HU validates: still drive the first one through the UI so the failure is the one a user sees
-    return { ...candidates[0], probe: `no candidate validated: ${probeErrors.join(' | ')}` };
+    return findValidatedHuCandidate(items, {
+        getBins: (it) => getJson(session.baseUrl, `${SERVICE}/getStorageBins(reservation='${it.ReservationNo}',item='${it.ReservationItem}')`),
+        validate: (cand) => getJson(session.baseUrl, `${SERVICE}/validateUnit(reservation='${cand.reservationNo}',item='${cand.reservationItem}',unitNumber='${cand.unitNumber}')`)
+    });
 }
 
 /** Scans and validates the HU like a user, then posts once. Returns what the UI showed. */
@@ -230,4 +238,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { roundTripHuTransfer, driveUi, stubResult, ACTION };
+module.exports = { roundTripHuTransfer, driveUi, stubResult, ACTION, findValidatedHuCandidate };
