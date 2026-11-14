@@ -7,7 +7,6 @@
         icon="sap-icon://ai"
         type="Emphasized"
         tooltip="{i18n>aiDialogTitle}"
-        ariaLabel="{i18n>aiDialogTitle}"
         press=".onAskAI"
         visible="{= !${aiDialog>/open} }"
         class="aiFab" />
@@ -17,9 +16,7 @@
         id="aiWidget"
         class="aiWidget"
         visible="{aiDialog>/open}"
-        renderType="Bare"
-        accessibleRole="Region"
-        ariaLabel="{i18n>aiDialogTitle}">
+        renderType="Bare">
         <!-- Header Toolbar -->
         <Toolbar class="aiWidgetHeader">
             <core:Icon src="sap-icon://ai" class="aiHeaderIcon sapUiTinyMarginBegin sapUiTinyMarginEnd" />
@@ -28,13 +25,11 @@
             <Button
                 icon="sap-icon://clear-all"
                 tooltip="{i18n>aiClear}"
-                ariaLabel="{i18n>aiClear}"
                 press=".onAIClear"
                 type="Transparent" />
             <Button
                 icon="sap-icon://decline"
                 tooltip="{i18n>btnClose}"
-                ariaLabel="{i18n>btnClose}"
                 press=".onAIClose"
                 type="Transparent" />
         </Toolbar>
@@ -47,8 +42,7 @@
             width="100%"
             vertical="true"
             horizontal="false"
-            class="aiChatScroll"
-            ariaLive="Polite">
+            class="aiChatScroll">
             <VBox class="sapUiSmallMargin aiChatBody">
                 <!-- Empty State & Quick Prompts -->
                 <VBox visible="{= ${aiDialog>/messages}.length === 0 }" class="aiChatEmpty">
@@ -60,40 +54,35 @@
                             type="Transparent"
                             icon="sap-icon://activity-individual"
                             class="aiSuggestion"
-                            tooltip="{i18n>aiPresetSummary}"
-                            ariaLabel="{i18n>aiPresetSummary}" />
+                            tooltip="{i18n>aiPresetSummary}" />
                         <Button
                             text="{i18n>aiPresetDelivery}"
                             press=".onAIPreset"
                             type="Transparent"
                             icon="sap-icon://shipping-status"
                             class="aiSuggestion"
-                            tooltip="{i18n>aiPresetDelivery}"
-                            ariaLabel="{i18n>aiPresetDelivery}" />
+                            tooltip="{i18n>aiPresetDelivery}" />
                         <Button
                             text="{i18n>aiPresetSpend}"
                             press=".onAIPreset"
                             type="Transparent"
                             icon="sap-icon://lead"
                             class="aiSuggestion"
-                            tooltip="{i18n>aiPresetSpend}"
-                            ariaLabel="{i18n>aiPresetSpend}" />
+                            tooltip="{i18n>aiPresetSpend}" />
                         <Button
                             text="{i18n>aiPresetRisks}"
                             press=".onAIPreset"
                             type="Transparent"
                             icon="sap-icon://alert"
                             class="aiSuggestion"
-                            tooltip="{i18n>aiPresetRisks}"
-                            ariaLabel="{i18n>aiPresetRisks}" />
+                            tooltip="{i18n>aiPresetRisks}" />
                         <Button
                             text="{i18n>aiPresetSuppliers}"
                             press=".onAIPreset"
                             type="Transparent"
                             icon="sap-icon://supplier"
                             class="aiSuggestion"
-                            tooltip="{i18n>aiPresetSuppliers}"
-                            ariaLabel="{i18n>aiPresetSuppliers}" />
+                            tooltip="{i18n>aiPresetSuppliers}" />
                     </VBox>
                 </VBox>
 
@@ -126,8 +115,7 @@
                                         type="Ghost"
                                         press=".onAIRetry"
                                         class="aiRetryBtn"
-                                        tooltip="{i18n>aiRetry}"
-                                        ariaLabel="{i18n>aiRetry}" />
+                                        tooltip="{i18n>aiRetry}" />
                                 </HBox>
                             </VBox>
                         </VBox>
@@ -147,8 +135,7 @@
                                 type="Reject"
                                 press=".onAIStop"
                                 class="aiStopInlineBtn sapUiTinyMarginBegin"
-                                tooltip="{i18n>aiStop}"
-                                ariaLabel="{i18n>aiStop}" />
+                                tooltip="{i18n>aiStop}" />
                         </HBox>
                     </VBox>
                 </HBox>
@@ -168,19 +155,22 @@
                     type="Transparent"
                     press=".onAIFollowUp"
                     class="aiFollowUpChip"
-                    tooltip="{aiDialog>text}"
-                    ariaLabel="{aiDialog>text}" />
+                    tooltip="{aiDialog>text}" />
             </HBox>
         </VBox>
 
         <!-- Footer Input & Controls -->
         <Toolbar class="aiChatFooter">
+            <Label
+                id="aiInputLabel"
+                text="{i18n>aiQuestionPlaceholder}"
+                labelFor="aiInput"
+                class="sapUiInvisibleText" />
             <Input
                 id="aiInput"
                 value="{aiDialog>/question}"
                 placeholder="{i18n>aiQuestionPlaceholder}"
-                ariaLabel="{i18n>aiQuestionPlaceholder}"
-                showClearButton="true"
+                showClearIcon="true"
                 width="100%"
                 valueLiveUpdate="true"
                 submit=".onAIAsk"
@@ -190,7 +180,6 @@
                 id="aiSendBtn"
                 icon="sap-icon://paper-plane"
                 tooltip="{i18n>aiAsk}"
-                ariaLabel="{i18n>aiAsk}"
                 type="Emphasized"
                 press=".onAIAsk"
                 visible="{= !${aiDialog>/busy} }"
@@ -200,7 +189,6 @@
                 id="aiStopBtn"
                 icon="sap-icon://stop"
                 tooltip="{i18n>aiStop}"
-                ariaLabel="{i18n>aiStop}"
                 type="Reject"
                 press=".onAIStop"
                 visible="{aiDialog>/busy}"

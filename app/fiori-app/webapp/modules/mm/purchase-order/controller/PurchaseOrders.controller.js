@@ -9,6 +9,7 @@ sap.ui.define([
     "saps4hana/fiori/service/ValueHelpService",
     "saps4hana/fiori/service/ODataClient",
     "sap/ui/core/Fragment",
+    "sap/ui/core/InvisibleMessage",
     "saps4hana/fiori/model/formatter"
 ], function (
     BaseController,
@@ -21,6 +22,7 @@ sap.ui.define([
     ValueHelpService,
     ODataClient,
     Fragment,
+    InvisibleMessage,
     formatter
 ) {
     "use strict";
@@ -969,6 +971,10 @@ sap.ui.define([
                 oModel.setProperty("/streaming", false);
                 oModel.setProperty("/loadingStep", "");
                 that._refreshAIMessages(aMessages, true);
+                var oLastMessage = aMessages[aMessages.length - 1];
+                if (oLastMessage && oLastMessage.role === "assistant" && oLastMessage.content) {
+                    InvisibleMessage.getInstance().announce(oLastMessage.content, "Polite");
+                }
             });
         },
 

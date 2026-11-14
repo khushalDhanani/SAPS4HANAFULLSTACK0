@@ -16,6 +16,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Host CAP start after fresh clone — PARTIAL (2026-11-14 11:15 IST):** The `Unable to locate module @sap/ux-ui5-tooling` bootstrap error is fixed by `npm ci` in `app/fiori-app` (Git-ignored install only). `cds-serve` boots on the host; `/health` and `/saps4hana-fiori-app/index.html` return 200. Update 11:27 IST: the local `db.sqlite` schema is deployed (18 tables), `~/.sap-certs/s4-dev.pem` is installed and `S4_DESTINATION_URL` in `.env` uses the host name; strict TLS to SAP passes. Update 11:28 IST: after the user's restart, READ-ONLY SAP reads through the app return 200 (one purchase order; all 12 dashboard counts). Update 11:48 IST: SAP NW RFC SDK 7.50 PL20 macOS arm64 is extracted under `~/nwrfcsdk`; the ignored node-rfc prebuild's rpath was updated and `npm exec` can load it. The CAP server was not listening on port 4004, so the RFC-backed reservation endpoint remains NOT VERIFIED. Open: browser sign-in is NOT VERIFIED; root package files were restored to the Git baseline and `npm ci` completed at 11:35 (see the Changes Log).
+- **Purchase Orders Ask AI fragment — PARTIAL (2026-11-14 12:27 IST):** Unsupported UI5 settings were removed, and assistant responses now use a polite `InvisibleMessage` announcement. The updated focused test, full SAP-free unit and integration suites, UI5 lint/build, and isolated SAP-free E2E pass. Browser verification of the Ask AI dialog itself remains NOT VERIFIED; the SAP-free E2E does not exercise that dialog.
 
 - **Local Dev Approuter Authentication & Fiori UI Verification — PASS (2026-11-07 17:15 IST):** Verified full end-to-end login, navigation, and SAP S/4HANA data loading at `http://127.0.0.1:5000/saps4hanafiori/index.html`:
   - Resolved local authentication mismatch caused by duplicate `LOCAL_DEV_PASSWORD` definitions in `.env.docker.local`. Unified `LOCAL_DEV_PASSWORD` to align with `S4_PASSWORD`.
@@ -555,6 +556,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Next Steps
 
 - Fresh clone setup (2026-11-14): root package files were restored to Git and `npm ci` completed (11:35). Update 11:27 IST: the local schema, certificate file and `.env` host name are in place; the server was restarted and SAP reads through the app are verified (11:28 IST). RFC SDK 7.50 PL20 for macOS arm64 is extracted and node-rfc loads through npm after a local ignored-prebuild rpath fix. Remaining: restart `npm run watch`, retry the read-only `getOpenReservations` request, and confirm the browser dashboard.
+- Purchase Orders Ask AI UI5 fix: no further automated validation remains. If the user needs full UI evidence, open the Purchase Orders route and exercise the Ask AI dialog in the browser; its dedicated dialog flow is not covered by the SAP-free E2E suite.
 
 - CI repair commit: standalone fixes ready; MIB-specific fixes remain with separately staged feature work. Push and rerun hosted CI after commit.
 
@@ -4101,3 +4103,27 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: None.
 - NEXT: Start `npm run watch` and retry the read-only `getOpenReservations` request; inspect the new server log if it still returns 502.
 - FINAL STATUS: PARTIAL — the SDK is installed and the native module loads under npm; the SAP-backed endpoint remains unverified.
+
+### 2026-11-14 11:53 IST — Fix invalid UI5 properties in Purchase Orders Ask AI — IN PROGRESS
+
+- REQUEST: User shared browser console assertions while opening the Purchase Orders route.
+- FINDINGS: The fragment used `ariaLabel` on controls that support `ariaLabelledBy`, `accessibleRole`/`ariaLabel` on `sap.m.VBox`, `ariaLive` on `sap.m.ScrollContainer`, and `showClearButton` on `sap.m.Input`. The app runtime is pinned to UI5 1.136.22. UI5 MCP API lookups failed because the server requested nonexistent 1.136.5 CDN resources; verified the relevant control metadata from official UI5 1.136.22 source instead. The MCP UI5 linter returned no findings on the original fragment.
+- CHANGED:
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/AskAIDialog.fragment.xml`: remove unsupported ARIA settings; icon buttons retain supported tooltips; add an invisible label associated with the question input; use `showClearIcon`.
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`: replace the invalid scroll-container live-region setting with a polite `sap.ui.core.InvisibleMessage` announcement after an assistant response.
+  - `test/unit/purchase-order/purchaseOrdersAskAI.test.js`: assert polite announcements for successful and failed AI responses.
+- TEST DECISION: TEST UPDATED — `test/unit/purchase-order/purchaseOrdersAskAI.test.js`.
+- VALIDATION:
+  - `npx jest test/unit/purchase-order/purchaseOrdersAskAI.test.js --runInBand`: PASS, 1 suite / 54 tests.
+  - `npm --prefix app/fiori-app run lint`: PASS, no findings.
+  - `npm --prefix app/fiori-app run build`: PASS.
+  - UI5 MCP linter on the fragment/controller: no findings.
+  - `npm run test:unit -- --runInBand`: PASS, 177 suites / 3,145 tests.
+  - `npm run test:integration`: PASS, 22 suites / 299 tests.
+  - `npm run test:e2e:sap-free`: PASS, 4/4 suites (Negative UI paths, Write authorization, Quarantine labels, MIB labels); isolated server verified SAP unreachable.
+  - `git diff --check`: PASS.
+  - Initial executions of unit, integration, and E2E in the restricted sandbox failed when tests attempted loopback binds (`listen EPERM 127.0.0.1`); elevated reruns of the same SAP-free commands passed. No live SAP calls were made.
+- NOT VERIFIED: Ask AI dialog runtime rendering/interactions in the user's browser; this dialog is not covered by the SAP-free E2E suite.
+- TEST DECISION: TEST UPDATED — `test/unit/purchase-order/purchaseOrdersAskAI.test.js`; existing suite was also executed.
+- NEXT: If browser proof is required, manually open the Purchase Orders route and exercise the Ask AI dialog; no code fix is indicated by the SAP-free test results.
+- FINAL STATUS: PARTIAL — automated SAP-free tests pass; the specific Ask AI dialog browser flow remains NOT VERIFIED.

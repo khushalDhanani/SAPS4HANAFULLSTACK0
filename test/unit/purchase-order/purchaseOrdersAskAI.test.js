@@ -4,6 +4,7 @@ let ControllerClass;
 const mockPost = jest.fn();
 const mockGet = jest.fn();
 const mockFragmentLoad = jest.fn();
+const mockAnnounce = jest.fn();
 function MockFilter(a, op, v) { if (typeof a === 'object') { this.filters = a.filters; this.and = a.and; } else { this.path = a; this.op = op; this.v = v; } }
 
 global.sap = {
@@ -16,7 +17,9 @@ global.sap = {
                 return Controller;
             };
             ControllerClass = factory(Base, function JSONModel(d) { this.d = d; }, MockFilter, { EQ: 'EQ', NE: 'NE' }, function Sorter(p, d) { this.p = p; this.d = d; }, { SortOrder: {} },
-                { error: jest.fn() }, {}, { post: mockPost, get: mockGet, authHeaders: () => ({ Authorization: 'Bearer t' }) }, { load: mockFragmentLoad }, { statusCodeName: c => ({ '01': 'Draft', '02': 'In Approval', '03': 'Not Yet Sent', '04': 'Sent', '05': 'Follow-On Documents', '08': 'Released', '38': 'Rejected' })[c] });
+                { error: jest.fn() }, {}, { post: mockPost, get: mockGet, authHeaders: () => ({ Authorization: 'Bearer t' }) }, { load: mockFragmentLoad },
+                { getInstance: () => ({ announce: mockAnnounce }) },
+                { statusCodeName: c => ({ '01': 'Draft', '02': 'In Approval', '03': 'Not Yet Sent', '04': 'Sent', '05': 'Follow-On Documents', '08': 'Released', '38': 'Rejected' })[c] });
         }
     }
 };
@@ -175,12 +178,18 @@ describe('PurchaseOrders Ask AI helpers', () => {
         return { c, data };
     }
 
-    beforeEach(() => { mockPost.mockReset(); mockGet.mockReset(); mockGet.mockRejectedValue(new Error('no')); });
+    beforeEach(() => {
+        mockPost.mockReset();
+        mockGet.mockReset();
+        mockAnnounce.mockReset();
+        mockGet.mockRejectedValue(new Error('no'));
+    });
 
     test('onAIAsk sends history + system prompt and appends assistant bubble', async () => {
         const { c, data } = mkController(' hi ');
         mockPost.mockResolvedValue({ answer: 'One PO', model: 'm' });
         await c.onAIAsk();
+        expect(mockAnnounce).toHaveBeenCalledWith('One PO', 'Polite');
         expect(mockPost).toHaveBeenCalledWith('/odata/v4/ai/chat', {
             messages: [{ role: 'user', content: 'hi' }], system: expect.stringContaining('"po":"1"')
         });
@@ -204,6 +213,7 @@ describe('PurchaseOrders Ask AI helpers', () => {
         const { c, data } = mkController('q');
         mockPost.mockRejectedValue(new Error('AI provider error: 429'));
         await c.onAIAsk();
+        expect(mockAnnounce).toHaveBeenCalledWith('AI provider error: 429', 'Polite');
         expect(data.messages[1]).toMatchObject({ role: 'assistant', error: true, content: 'AI provider error: 429' });
         expect(data.busy).toBe(false);
         mockPost.mockClear();
