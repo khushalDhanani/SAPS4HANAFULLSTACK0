@@ -116,6 +116,17 @@ jobs:
       - name: Validate MTA deployment descriptor
         run: npm run validate:mta
 
+      - name: Build MTA archive and check its modules
+        run: |
+          npm run build:mta
+          mtar="$(ls mta_archives/*.mtar)"
+          unzip -l "$mtar" > mtar-contents.txt
+          for module in saps4hana-srv saps4hana-approuter saps4hana-app-deployer saps4hana-db-deployer; do
+            grep -q "$module/" mtar-contents.txt || { echo "MTA archive is missing module $module"; exit 1; }
+          done
+          # The HTML5 app has no module folder of its own: it ships inside the deployer's content
+          grep -q "saps4hana-app-deployer/app/data.zip" mtar-contents.txt || { echo "MTA archive is missing the HTML5 application"; exit 1; }
+
   sap-nonprod-validation:
     name: Non-Production SAP Validation (Separately Controlled)
     needs: ci

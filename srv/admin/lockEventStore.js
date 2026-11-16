@@ -90,7 +90,9 @@ async function lastLockedAt(username) {
  * Stores one cycle's outcome in one transaction, so a crash cannot record a lock without its email or the reverse.
  * Deduplicates events by exact primary key (username, lockedAt), stable SAP historyKey, and active queue reconciliation.
  */
-async function commitCycle({ states = [], removed = [], events = [], usedContexts = [], expiredBefore, historyCursor }, nowIso) {
+async function commitCycle({
+  states = [], removed = [], events = [], usedContexts = [], expiredBefore, historyCursor, eventStatus = 'pending',
+}, nowIso) {
   await inTx(async (tx) => {
     if (states.length) {
       await tx.run(UPSERT.into(SNAPSHOT).entries(states.map(({ username, uflag }) => ({ username, uflag, seenAt: nowIso }))));
@@ -154,10 +156,10 @@ async function commitCycle({ states = [], removed = [], events = [], usedContext
         }
       }
 
-      // 3. Not existing: insert cleanly into the queue
+      // 3. Not existing: insert cleanly into the queue ('recorded' = history only, never claimed for sending)
       await tx.run(INSERT.into(EVENT).entries({
         ...event,
-        status: 'pending',
+        status: eventStatus,
         attempts: 0,
         failureAudited: false,
         claimOwner: null,

@@ -1023,11 +1023,16 @@ sap.ui.define([
                     ? this._text("adminLockMonitorFailedWithError", "Lock monitor: Last check failed \u00b7 {0} \u00b7 {1}", [sTime, oStatus.errorMessage])
                     : this._text("adminLockMonitorFailed", "Lock monitor: Last check failed \u00b7 {0}", [sTime]),
                 stale: this._text("adminLockMonitorStale", "Lock monitor: Not checking \u00b7 Last checked {0}", [sTime]),
-                off: this._text("adminLockMonitorOff", "Lock monitor: Off (email not configured)")
+                off: this._text("adminLockMonitorOff", "Lock monitor: Off")
             };
+            var sText = mLook[oStatus.state];
+            // Detection runs without email; say so, because no alert will arrive
+            if (sText && oStatus.state !== "off" && oStatus.emailEnabled === false) {
+                sText += this._text("adminLockMonitorEmailOff", " \u00b7 Email off (not configured)");
+            }
             var mState = { ok: "Success", starting: "Success", failed: "Error", stale: "Error", off: "None" };
             return {
-                text: mLook[oStatus.state] || this._text("adminLockMonitorUnknown", "Lock monitor: Status not available"),
+                text: sText || this._text("adminLockMonitorUnknown", "Lock monitor: Status not available"),
                 state: mState[oStatus.state] || "Error",
                 recipient: oStatus.recipient,
                 intervalText: this._text("adminNotifyIntervalValue", "{0} seconds", [String(oStatus.pollIntervalSec)]),

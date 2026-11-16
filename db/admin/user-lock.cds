@@ -33,7 +33,7 @@ entity UserLockNotification {
     source         : String(30);
     reason         : String(500);
     bulkRunId      : String(64);
-    status         : String(20);   // pending | processing | sent | failed
+    status         : String(20);   // pending | processing | sent | failed | recorded (detected while email was off; never mailed)
     attempts       : Integer;
     failureAudited : Boolean;
     detectedAt     : Timestamp;

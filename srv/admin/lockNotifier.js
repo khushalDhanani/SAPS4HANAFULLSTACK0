@@ -38,6 +38,7 @@ const LOCK_LABELS = [
 ];
 
 const recipients = (env = process.env) => String(env.LOCK_NOTIFY_TO || '').split(',').map((s) => s.trim()).filter(Boolean);
+// Email only. Detection and storage of locks run without it; see startJob and pollOnce.
 const isEnabled = () => mailer.isConfigured() && recipients().length > 0;
 
 function positiveInt(value, fallback, { allowZero = false } = {}) {
@@ -283,6 +284,7 @@ async function sendPending({
 /**
  * One cycle: one read of all users, compare, store, one email.
  * If SAP cannot be read, the snapshot stays as it was and nothing is sent.
+ * Without email (no SMTP or no recipient) locks are still detected and stored, as 'recorded': history that is never mailed.
  */
 async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
   const startMs = Date.now();
@@ -429,6 +431,7 @@ async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
       ...events.filter((event) => event.source === SOURCE_APP).map(({ username }) => username),
     ])],
     expiredBefore: new Date(now.getTime() - CONTEXT_WINDOW_MS).toISOString(),
+    eventStatus: isEnabled() ? 'pending' : 'recorded',
     ...(nextHistoryCursor ? { historyCursor: nextHistoryCursor } : {}),
   }, nowIso);
   await store.saveMonitor({
@@ -438,7 +441,7 @@ async function pollOnce(adapter, { now = new Date(), retryDelays } = {}) {
     ...monitorHealth,
   });
 
-  const email = await sendPending({ retryDelays, now });
+  const email = isEnabled() ? await sendPending({ retryDelays, now }) : 'off';
   const heldUsers = new Set([...held, ...heldHistoryLocks].map(({ username }) => username));
   return { newlyLocked: events.length, held: heldUsers.size, email };
 }
@@ -459,11 +462,14 @@ async function runCycle(adapter, options) {
   }
 }
 
-/** Runs on one instance only: production's 2 instances would otherwise each send the same cycle. */
+/**
+ * Runs on one instance only: production's 2 instances would otherwise each send the same cycle.
+ * Starts without SMTP too: detection must not depend on the mail server.
+ */
 function startJob(getAdapter, env = process.env) {
   const everySec = pollIntervalSec(env);
   const instance = env.CF_INSTANCE_INDEX;
-  if (isTestProfile(env) || everySec <= 0 || !isEnabled() || (instance !== undefined && String(instance) !== '0')) {
+  if (isTestProfile(env) || everySec <= 0 || (instance !== undefined && String(instance) !== '0')) {
     return null;
   }
   const timer = setInterval(() => runCycle(getAdapter()), everySec * 1000);
@@ -473,7 +479,7 @@ function startJob(getAdapter, env = process.env) {
 
 /** The app is about to lock this user. Never throws: a note must not stop the lock. */
 async function recordAppLock({ username, actor, reason, bulkRunId }) {
-  if (!isEnabled()) return;
+  if (pollIntervalSec() <= 0) return;
   try {
     await store.writeContext({ username, actor, reason, bulkRunId, at: new Date().toISOString(), historyKey: '' });
   } catch (e) {
@@ -482,7 +488,7 @@ async function recordAppLock({ username, actor, reason, bulkRunId }) {
 }
 
 async function recordAppLockHistory(username, historyKey) {
-  if (!isEnabled() || !historyKey) return;
+  if (pollIntervalSec() <= 0 || !historyKey) return;
   try {
     await store.setContextHistoryKey(username, historyKey);
   } catch (e) {
@@ -492,7 +498,7 @@ async function recordAppLockHistory(username, historyKey) {
 
 /** A failed app lock must not leave a note that can explain a later lock by someone else. */
 async function discardAppLock(username) {
-  if (!isEnabled()) return;
+  if (pollIntervalSec() <= 0) return;
   try {
     await store.discardContext(username);
   } catch (e) {
@@ -565,6 +571,7 @@ async function monitorStatus(now = new Date()) {
     recipient: recipients().join(', '),
     pollIntervalSec: pollIntervalSec(),
     maxPerEmail: maxPerEmail(),
+    emailEnabled: isEnabled(),
   };
   const baseHealth = {
     lastSuccessfulPollAt: null,
@@ -574,7 +581,7 @@ async function monitorStatus(now = new Date()) {
     pendingNotificationCount: 0,
     failedNotificationCount: 0,
   };
-  if (!isEnabled() || settings.pollIntervalSec <= 0) {
+  if (settings.pollIntervalSec <= 0) {
     return { state: 'off', lastCheckedAt: null, pendingEmails: 0, ...settings, ...baseHealth };
   }
   try {

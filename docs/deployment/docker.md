@@ -44,8 +44,10 @@ architecture (e.g. `linux/arm64` on Apple Silicon) so it runs natively without e
 The default local profile cannot load real SAP dashboard data. To enable OData
 and RFC reads, set `S4_DESTINATION_URL`, `S4_USERNAME`, `S4_PASSWORD`, `S4_CLIENT`,
 and the verified `S4_RFC_SYSNR` in
-the ignored `.env.docker.local`, and export `SAP_DEV_CA_FILE` with the absolute
-path to your trusted SAP CA PEM file. Set `RFC_SDK_HOST_PATH` to your existing
+the ignored `.env.docker.local`, and place the approved SAP CA bundle (PEM) at
+`certs/ca-bundle.pem`. Compose mounts `./certs` read-only at `/run/certs`, and
+`compose.sap-dev.yaml` sets `CUSTOM_CA_CERT_FILE=/run/certs/ca-bundle.pem`, so
+the file must exist before the connected profile starts. Set `RFC_SDK_HOST_PATH` to your existing
 Linux x86-64 SDK directory (including `include/` and `lib/`). Use `PLATFORM=linux/amd64`
 for the packaged node-rfc 3.3.1 Linux prebuilt binary. macOS dylib libraries are not compatible.
 Do not disable TLS verification.

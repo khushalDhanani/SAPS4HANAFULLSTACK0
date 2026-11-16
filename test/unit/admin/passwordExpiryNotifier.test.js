@@ -212,4 +212,27 @@ describe('passwordExpiryNotifier pollOnce', () => {
     notifier.stopJob();
     expect(notifier.monitorStatus()).toBeNull();
   });
+
+  test('PASSWORD_EXPIRY_MONITOR_IN_TEST=1 starts the daemon under the test profile; any other value does not', () => {
+    jest.useFakeTimers();
+    const interval = jest.spyOn(global, 'setInterval');
+    try {
+      for (const value of [undefined, '', 'true', '0']) {
+        if (value === undefined) delete process.env.PASSWORD_EXPIRY_MONITOR_IN_TEST;
+        else process.env.PASSWORD_EXPIRY_MONITOR_IN_TEST = value;
+        notifier.startJob(() => mockAdapter);
+      }
+      expect(interval).not.toHaveBeenCalled();
+
+      process.env.PASSWORD_EXPIRY_MONITOR_IN_TEST = '1';
+      notifier.startJob(() => mockAdapter);
+      expect(interval).toHaveBeenCalledTimes(1);
+    } finally {
+      notifier.stopJob();
+      delete process.env.PASSWORD_EXPIRY_MONITOR_IN_TEST;
+      jest.clearAllTimers();
+      interval.mockRestore();
+      jest.useRealTimers();
+    }
+  });
 });

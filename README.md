@@ -73,7 +73,7 @@ npm run watch
 ```
 
 The local Fiori app is served at `http://localhost:4004/fiori-app/webapp/index.html`. The health
-endpoint is `http://localhost:4004/health`. SAP-backed operations require working connection
+endpoint is `http://localhost:4004/health` (also `/health/live`, `/health/ready` and `/health/dependencies`). SAP-backed operations require working connection
 configuration and appropriate authorization.
 
 To run the UI5 development server separately:

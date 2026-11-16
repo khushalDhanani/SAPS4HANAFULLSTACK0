@@ -15,6 +15,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Health endpoints split (P1 item 9) — PARTIAL (2026-11-16 10:08 IST):** New unauthenticated `/health/live`, `/health/ready` (503 when the app database does not answer) and `/health/dependencies` (database, S/4 destination resolution, RFC SDK; status words only, cached 15 s). `/health` is unchanged and is still the Cloud Foundry and Docker check. SAP OData reachability is reported as `NOT_CHECKED` (no live probe; user's decision pending). Jest 192 suites / 3,289 tests and lint pass; the four endpoints answer on the local server. Hosted CI, HANA and BTP are NOT VERIFIED. Uncommitted.
+- **Lock detection decoupled from SMTP (P1 item 4) — PARTIAL (2026-11-16 10:05 IST):** The lock monitor now starts and stores locks without SMTP or a recipient; locks found while email is off are stored with status `recorded` and are never mailed (user's decision). `getLockMonitor` reports `emailEnabled`, and the User Master header adds "Email off (not configured)". Jest 192 suites / 3,284 tests, lints, CDS compile and the shell browser suite (1/1) pass. NOT VERIFIED against live SAP with SMTP off, in Docker, or in hosted CI. Behavior change: any non-test server with `LOCK_POLL_INTERVAL_SEC` > 0 now reads `USR02`/`USH02` on every cycle even without SMTP. Uncommitted.
+- **P1 review quick fixes (items 5, 7, 8) — PARTIAL (2026-11-16 09:55 IST):** `PASSWORD_EXPIRY_MONITOR_IN_TEST=1` opt-in added (default off), the Docker guide now names `certs/ca-bundle.pem` instead of `SAP_DEV_CA_FILE`, the MTA HTML5 build uses `npm ci`, and CI gains an MTA archive build with a module check. Unit suite 167 suites / 2,969 tests, lint and a local `mbt build` pass. Hosted CI, the Docker profile run and a QA deployment are NOT VERIFIED. Items 4, 9 and 10 are confirmed findings, not started; item 6 needs a written go. Uncommitted.
 - **User Master URL renamed to `#/dashboard/user-master` — PASS locally / hosted CI NOT VERIFIED (2026-11-16 09:48 IST):** The section key `admin` is now `user-master` in the sidebar, the dashboard and the lock and password-expiry email links; the route pattern is unchanged. Old `#/dashboard/admin` links show the Overview (user's decision: no redirect). Unit suite 167 suites / 2,968 tests, lint and UI5 lint pass. The shell browser suite failed one step on its first run (a live `listUsers` read exceeded 30 s) and passed 1/1 on the rerun; only READ-ONLY SAP reads ran. Uncommitted.
 - **HU Stock Transfer feature removal — PASS (local repository; 2026-11-14):** Removed the unproven feature from the local UI, CAP route/service, S/4 adapter, storage configuration, active API/smoke/coverage references, tests, and discovery/ABAP artifacts. Preserved Goods Receipt persistence/recheck and shared Goods Issue posting code. SAP-free browser validation passed 5/5; targeted SAP-mocked tests passed 32/32 after enabling local loopback. SAP-side objects were not changed or verified.
 - **HU stock transfer dry-run selector — SUPERSEDED by feature removal (2026-11-14):** The reported missing-rules diagnosis was stale; approved W01 rules existed, but the READ-ONLY CAP check returned no positive-stock HU candidates and the SAP-persisted round trip remained unproven. The user then directed full local feature removal. See the 13:12 IST removal entry below. No SAP write was sent.
@@ -4503,3 +4506,77 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: none open, apart from the inferred cause of the first-run failure above.
 - Next: User reviews and commits the 12 changed files and this file; push and check hosted CI. If `listUsers` is slow again on a first read, inspect the server log before changing anything.
 - FINAL STATUS: PASS locally — the URL is renamed and verified in the browser; hosted CI is NOT VERIFIED. Not committed.
+
+### 2026-11-16 09:55 IST — P1 review items 5, 7, 8: password expiry test opt-in, Docker CA docs, MTA `npm ci` and CI archive build — PARTIAL
+
+- REQUEST: User pasted a review list (P1 items 4–10) and chose "Quick fixes: 5, 7, 8" when asked for scope.
+- INSPECT: `git status` clean at `11e8f809`. Each finding was checked in code (CONFIRMED):
+  - 4: `srv/admin/lockNotifier.js:41,466` — `startJob` does not start without SMTP and a recipient.
+  - 5: `srv/admin/passwordExpiryNotifier.js` `startJob` returned on `NODE_ENV === 'test'` with no opt-in.
+  - 7: `docs/deployment/docker.md:47` named `SAP_DEV_CA_FILE`; no other file uses it. `compose.sap-dev.yaml:12` sets `CUSTOM_CA_CERT_FILE=/run/certs/ca-bundle.pem`; `compose.yaml` mounts `./certs` at `/run/certs`.
+  - 8: `mta.yaml:75` used `npm install` for the HTML5 module (`app/fiori-app/package-lock.json` exists); `.github/workflows/ci.yml:117` only ran `validate:mta`.
+  - 9: `server.js:72` `/health` returns a fixed `{ status: 'UP' }`; used by `mta.yaml:24`, `compose.yaml` and `tools/smoke-test-deployment.js`.
+  - 10: `srv/integration/s4hana/admin/UserManagementAdapter.js:532-544` reads user details one by one.
+- CHANGED:
+  - `srv/admin/passwordExpiryNotifier.js`: the scheduled monitor runs under `NODE_ENV=test` only when `PASSWORD_EXPIRY_MONITOR_IN_TEST` is exactly `1` (same rule as `LOCK_MONITOR_IN_TEST`). Default stays off.
+  - `.env.example`, `.env.docker.local.example`: the new variable, empty.
+  - `docs/deployment/docker.md`: the `SAP_DEV_CA_FILE` instruction is replaced by placing the CA bundle at `certs/ca-bundle.pem`, with the mount and the must-exist rule. TLS verification text is unchanged.
+  - `mta.yaml`: HTML5 module build uses `npm ci`.
+  - `.github/workflows/ci.yml`: new step after descriptor validation runs `npm run build:mta` and fails unless the archive contains `saps4hana-srv`, `saps4hana-approuter`, `saps4hana-app-deployer`, `saps4hana-db-deployer` and the HTML5 content `saps4hana-app-deployer/app/data.zip`.
+- TEST DECISION: TEST ADDED — `test/unit/admin/passwordExpiryNotifier.test.js` (opt-in starts the daemon only for the value `1`). Docs, `mta.yaml` and CI: TEST NOT POSSIBLE as a unit test; checked by a local archive build, hosted CI not run.
+- TESTED:
+  - `npx jest test/unit/admin/passwordExpiryNotifier.test.js`: 13 tests PASS. `npm run test:unit`: 167 suites / 2,969 tests PASS. `npm run lint`: exit 0. `git diff --check`: clean. Both YAML files parse.
+  - `npm run build:mta`: **FAIL** locally. The build's own root `npm ci` removed the local Homebrew link `node_modules/mbt/unpacked_bin/mbt` (a known local limitation, see the 2026-11-14 17:08 entry), and the generated Makefile then could not find it.
+  - `/opt/homebrew/bin/mbt build` (mbt 1.2.52): PASS, exit 0. The log shows `npm ci` for the HTML5 module. The archive `SAPS4HANAFULLSTACK_1.0.0.mtar` (28 MB) contained the four module folders and `saps4hana-app-deployer/app/data.zip`, the entries the new CI step checks. The archive was deleted afterwards.
+  - `npm run validate:mta` after restoring the link: exit 0.
+- SIDE EFFECT, repaired: the build's `npm ci` reinstalled root `node_modules`, which removed the local node-rfc rpath repair and the mbt link. Both were restored with the commands recorded on 2026-11-14 (`install_name_tool -add_rpath "$HOME/nwrfcsdk/lib"` on both prebuilds; link to `/opt/homebrew/bin/mbt`). `require('node-rfc')` loads again. The server on port 4004 was not restarted.
+- NOT VERIFIED: hosted CI, including whether the runner's `mbt` binary survives the build's `npm ci` (INFERRED that its install script restores it); the scheduled password expiry monitor actually running in the Docker `cap-dev` profile (no container was started); the Docker guide followed end to end; the archive built with the pinned mbt 1.2.49; any deployment.
+- NOT DONE (user's scope choice): item 4 (decouple lock detection from SMTP; the user chose "store as history only" for events detected without SMTP), item 9 (health endpoints), item 10 (user list performance). Item 6 (real SMTP delivery) and the QA deployment in item 8 are live external actions and need the user's written go.
+- ASSUMPTIONS: none beyond the CI inference above.
+- Next: User reviews and commits; push and check the new CI step. Then decide on items 4, 9 and 10.
+- FINAL STATUS: PARTIAL — the three fixes are implemented and pass locally; hosted CI and the Docker profile run are NOT VERIFIED. Not committed.
+
+### 2026-11-16 10:05 IST — P1 review item 4: decouple lock detection from SMTP — PARTIAL
+
+- REQUEST: User: "Start item 4". Earlier decision in the session: locks detected while SMTP is not configured are "stored as history only".
+- INSPECT: `git status` showed only the uncommitted item 5/7/8 files. Read `srv/admin/lockNotifier.js`, `srv/admin/lockEventStore.js`, `srv/admin/service.js:196-250`, `db/admin/user-lock.cds`, `srv/admin/service.cds:120-137`, `Dashboard.controller.js` `_lockMonitorView`, and the lock tests. cds-mcp `search_docs` was consulted for structured return types; the CDS change is one added element.
+- ROOT CAUSE (CONFIRMED): one predicate, `isEnabled()` (SMTP configured and a recipient), gated the scheduler (`startJob`), the app-lock notes, and the monitor status, so detection could not run without email.
+- CHANGED:
+  - `srv/admin/lockNotifier.js`: `startJob` no longer requires email. `pollOnce` stores new locks as `recorded` and skips sending (result `email: 'off'`) when email is off. App-lock notes (`recordAppLock`, `recordAppLockHistory`, `discardAppLock`) now depend on the poll interval, not on email. `monitorStatus` is `off` only when the interval is 0 and returns `emailEnabled`. `isEnabled()` keeps its name and now means email only.
+  - `srv/admin/lockEventStore.js`: `commitCycle` takes `eventStatus` (default `pending`).
+  - `db/admin/user-lock.cds`: comment only, the new status value `recorded` (the column is `String(20)`; no schema change). `srv/admin/service.cds`: `emailEnabled : Boolean` added to `getLockMonitor`.
+  - UI: `Dashboard.controller.js` appends "· Email off (not configured)" when detection runs without email; `adminLockMonitorOff` now reads "Lock monitor: Off"; new key `adminLockMonitorEmailOff` in both i18n files.
+  - `.env.example`: comment corrected.
+- NOT CHANGED: `srv/admin/service.js` (the extra SAP history reads and the immediate email for an app lock stay tied to email); the claim, retry and send logic; `getBulkLockEmailStatus` (`not_configured` without email); the password expiry monitor.
+- BEHAVIOR CHANGE: every server that is not under the test profile and has `LOCK_POLL_INTERVAL_SEC` > 0 (default 5) on instance 0 now reads `USR02`/`USH02` each cycle even without SMTP (READ-ONLY RFC). `LOCK_POLL_INTERVAL_SEC=0` turns it off. The local server on port 4004 reloads on `srv/` edits, so this applies to it already; its poll state was not inspected.
+- TEST DECISION: TEST ADDED and TEST UPDATED — `test/integration/lockNotification.test.js` (3 tests: detection and storage without email; a `recorded` lock is not mailed after email is configured; an app lock is noted and attributed without email; these replace the test that pinned "off when email is not configured"), `test/unit/admin/lockNotifierRules.test.js` (job starts without a recipient), `test/unit/admin/adminDashboardList.test.js` (header texts).
+- TESTED:
+  - First run of the admin and lock suites: **FAIL**, 1 test — my new unit test used a `mailer` variable that the file does not import. Fixed in the test.
+  - `npm test` (all Jest, SAP mocked): 192 suites / 3,284 tests PASS. `npm run lint`: exit 0. UI5 lint: no findings. `npx cds compile srv db --to csn`: exit 0. `git diff --check`: clean.
+  - `npm run test:e2e -- --only=shell/verifyShellScreens.e2e.js --workers=1 --url=http://localhost:4004` (READ-ONLY SAP reads, write guard on): PASS 1/1, 71 steps, including the lock monitor header step (SAP stubbed in that step).
+- NOT VERIFIED: the monitor polling live SAP with SMTP off; the "Email off" header text against a real server response in the browser (unit-tested only); Docker `cap-dev`; HANA (tests run on SQLite); hosted CI.
+- NOT DONE from the review's item 4: a separate notification dispatcher process and separate SMTP health reporting beyond `emailEnabled`; the existing in-cycle dispatch is kept.
+- ASSUMPTIONS: the status name `recorded` and the header wording are my choices (not specified by the user).
+- Next: User reviews and commits items 4, 5, 7, 8. Then items 9 and 10; item 6 needs a written go.
+- FINAL STATUS: PARTIAL — implemented and passing locally with mocked SAP; live behavior with SMTP off and hosted CI are NOT VERIFIED. Not committed.
+
+### 2026-11-16 10:08 IST — P1 review item 9: liveness, readiness and dependency health endpoints — PARTIAL
+
+- REQUEST: User: "Start item 9".
+- INSPECT: `server.js:72` `/health` returns a fixed `{ status: 'UP' }` before authentication. Consumers: `mta.yaml:24` (`readiness-health-check-http-endpoint`), `compose.yaml:51,101`, `tools/smoke-test-deployment.js`, `.github/workflows/ci.yml:243`, `test/integration/health.test.js`. Existing checks reused: `RfcClient.isAvailable()` (`srv/integration/s4hana/RfcClient.js:101`) and `S4HttpClient.resolveDestination()` (`srv/integration/s4hana/S4HttpClient.js:202`). No existing liveness/readiness code.
+- CHANGED:
+  - `srv/common/health.js` (new): `/health/live` (always 200), `/health/ready` (200, or 503 when a one-row read of the app database fails), `/health/dependencies` (always 200; `database`, `s4Destination` = CONFIGURED / NOT_CONFIGURED / DOWN, `rfcSdk` = UP / DOWN, `sapOData` = NOT_CHECKED; overall UP or DEGRADED). Results are cached for 15 s; responses carry status words only, no hosts, users or error text.
+  - `server.js`: registers the three routes next to `/health`, before authentication.
+  - `README.md`: names the new endpoints.
+- NOT CHANGED: `/health` and everything that calls it (`mta.yaml`, Compose, CI, smoke test). Switching the platform check to `/health/ready` changes deployment behavior and is the user's decision.
+- DESIGN LIMIT (open decision): SAP OData reachability and a live RFC connection are not probed. These endpoints are unauthenticated, and a probe would log on to SAP with the service user on anonymous request; with a wrong password that can lock the SAP user. `s4Destination` only says a destination resolves, `rfcSdk` only says the native module loads.
+- TEST DECISION: TEST ADDED — `test/integration/health.test.js` (5 new tests: no auth and no caching; real checks through the CAP test server; 503 readiness with liveness 200; SAP-side trouble degrades the report but not readiness; cache window runs checks once).
+- TESTED:
+  - First run: the 7 tests passed but Jest reported a suite error (my `afterAll` returned the server while also using `done`). Fixed.
+  - `npm test`: 192 suites / 3,289 tests PASS. `npm run lint`: exit 0. `git diff --check`: clean.
+  - Local server on port 4004 (no SAP call made by these endpoints): the first call to `/health/dependencies` showed `s4Destination` and `rfcSdk` as DOWN. ROOT CAUSE (CONFIRMED): I imported both client modules as the class instead of destructuring their exports, and the checks turned the error into DOWN. Fixed, and the test now asserts the real values. After the fix: `/health`, `/health/live`, `/health/ready` return 200 `{"status":"UP"}`; `/health/dependencies` returns 200 with `database: UP`, `s4Destination: CONFIGURED`, `rfcSdk: UP`, `sapOData: NOT_CHECKED`, overall `UP`.
+  - After that fix only `npx jest test/integration/health.test.js` (7 tests PASS) and lint were rerun, not the whole suite.
+- NOT VERIFIED: HANA and a bound Destination service (tests and the local run use SQLite and env configuration); behavior in Cloud Foundry or Docker; hosted CI; a browser E2E (no UI change; not applicable).
+- ASSUMPTIONS: readiness means "the app's own database answers" (my definition; SAP outages deliberately do not fail it, as the review asks). The 15 s cache and the status words are my choices.
+- Next: User decides whether to (a) point the platform readiness check at `/health/ready`, (b) add an authenticated or rate-limited live SAP probe. Then item 10.
+- FINAL STATUS: PARTIAL — endpoints work locally and are tested; platform use and live SAP reachability are open. Not committed.

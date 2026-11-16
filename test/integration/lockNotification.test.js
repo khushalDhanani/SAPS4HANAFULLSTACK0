@@ -899,14 +899,46 @@ describe('Integration: lock monitor', () => {
       expect(firstResult).not.toEqual({ skipped: true });
     });
 
-    test('is off when email is not configured, and no SAP read happens on a lock', async () => {
+    test('without email the monitor still detects and stores locks, and reports email as off', async () => {
       mailer.isConfigured.mockReturnValue(false);
+      await poll();
+      setLock('ALICE', 64);
 
-      expect((await status()).data).toMatchObject({ state: 'off' });
+      expect(await poll()).toMatchObject({ newlyLocked: 1, email: 'off' });
 
-      await lock('ALICE');
-      expect(await cds.db.run(SELECT.from(CONTEXT))).toEqual([]);
+      expect(mailer.sendMail).not.toHaveBeenCalled();
+      expect((await events())[0]).toMatchObject({ username: 'ALICE', lockedBy: 'SAPADMIN', status: 'recorded' });
+      expect((await status()).data).toMatchObject({ state: 'ok', emailEnabled: false, pendingEmails: 0 });
+    });
+
+    test('a lock stored while email was off is never mailed once email is configured', async () => {
+      mailer.isConfigured.mockReturnValue(false);
+      await poll();
+      setLock('ALICE', 64);
+      await poll();
+
+      mailer.isConfigured.mockReturnValue(true);
+      expect((await status()).data).toMatchObject({ state: 'ok', emailEnabled: true });
+      setLock('BOB', 64);
+      expect(await poll()).toMatchObject({ newlyLocked: 1, email: 'sent' });
+
+      expect(mailed()).toHaveLength(1);
+      expect(mailed()[0].subject).toBe('[SAP Alert] User BOB locked');
+      expect((await events()).map(({ username, status: s }) => [username, s])).toEqual([['ALICE', 'recorded'], ['BOB', 'sent']]);
+    });
+
+    test('without email an app lock is noted and attributed by the next poll, with no extra SAP history read', async () => {
+      mailer.isConfigured.mockReturnValue(false);
+      await poll();
+      sap.calls.length = 0;
+
+      await lock('ALICE', { reason: 'Left the company' });
       expect(sap.calls.filter((c) => c.fm === 'RFC_READ_TABLE')).toEqual([]);
+      expect(await cds.db.run(SELECT.from(CONTEXT))).toHaveLength(1);
+
+      await poll();
+      expect(mailer.sendMail).not.toHaveBeenCalled();
+      expect((await events())[0]).toMatchObject({ username: 'ALICE', source: 'Fiori app', reason: 'Left the company', status: 'recorded' });
     });
 
     test('is off when the interval is 0', async () => {

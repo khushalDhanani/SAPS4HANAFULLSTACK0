@@ -232,7 +232,9 @@ describe('Admin dashboard user list', () => {
             [{ state: 'failed', lastCheckedAt: '2026-11-05T10:15:00.000Z' }, /^Lock monitor: Last check failed · .+/, 'Error'],
             [{ state: 'failed', lastCheckedAt: '2026-11-05T10:15:00.000Z', errorMessage: 'USH02 cursor did not advance' }, /^Lock monitor: Last check failed · .+ · USH02 cursor did not advance$/, 'Error'],
             [{ state: 'stale', lastCheckedAt: '2026-11-05T10:15:00.000Z' }, /^Lock monitor: Not checking · Last checked .+/, 'Error'],
-            [{ state: 'off' }, /^Lock monitor: Off \(email not configured\)$/, 'None'],
+            [{ state: 'ok', lastCheckedAt: '2026-11-05T10:15:00.000Z', emailEnabled: false }, /^Lock monitor: Active · Last checked \d{2}:\d{2} · Email off \(not configured\)$/, 'Success'],
+            [{ state: 'ok', lastCheckedAt: '2026-11-05T10:15:00.000Z', emailEnabled: true }, /^Lock monitor: Active · Last checked \d{2}:\d{2}$/, 'Success'],
+            [{ state: 'off', emailEnabled: false }, /^Lock monitor: Off$/, 'None'],
             [{}, /^Lock monitor: Status not available$/, 'Error']
         ])('the monitor status %j shows the right text and dot', (status, text, state) => {
             const { controller } = makeController([]);

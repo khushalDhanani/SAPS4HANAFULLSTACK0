@@ -119,6 +119,7 @@ service UserManagementService @(path: '/odata/v4/user-management') {
 
     /**
      * The lock monitor, for the SU01 header. State is off, starting, ok, failed, or stale.
+     * emailEnabled is separate: detection runs without SMTP, and locks found then are stored but not mailed.
      */
     function getLockMonitor() returns {
         state                       : String;
@@ -127,6 +128,7 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         recipient                   : String;
         pollIntervalSec             : Integer;
         maxPerEmail                 : Integer;
+        emailEnabled                : Boolean;
         pendingEmails               : Integer;
         lastSuccessfulPollAt        : Timestamp;
         lastFailedPollAt            : Timestamp;

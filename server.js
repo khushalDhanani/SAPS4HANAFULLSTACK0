@@ -72,6 +72,8 @@ cds.on('bootstrap', (app) => {
     app.get('/health', (req, res) => {
         res.set('Cache-Control', 'no-store').status(200).json({ status: 'UP' });
     });
+    // /health/live, /health/ready and /health/dependencies; /health above stays as the platform's check.
+    require('./srv/common/health').registerHealth(app);
 
     // Set Permissions-Policy header to eliminate Chromium 'unload is not allowed' violation warnings
     app.use((req, res, next) => {

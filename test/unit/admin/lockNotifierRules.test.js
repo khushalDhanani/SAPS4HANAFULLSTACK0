@@ -321,11 +321,15 @@ describe('job start conditions', () => {
     expect(timer).not.toBeNull();
   });
 
-  test('does not run under test or without a recipient', () => {
+  test('does not run under test', () => {
     expect(startJob(jest.fn(), { ...env, NODE_ENV: 'test' })).toBeNull();
     expect(startJob(jest.fn(), { ...env, NODE_ENV: 'test', LOCK_MONITOR_IN_TEST: 'true' })).toBeNull();
+  });
+
+  test('runs without a recipient: detection does not depend on email', () => {
     delete process.env.LOCK_NOTIFY_TO;
-    expect(startJob(jest.fn(), env)).toBeNull();
+    timer = startJob(jest.fn(), env);
+    expect(timer).not.toBeNull();
   });
 });
 

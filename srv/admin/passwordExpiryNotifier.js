@@ -196,7 +196,8 @@ function startJob(getAdapter) {
     return;
   }
 
-  if (process.env.NODE_ENV === 'test') {
+  // The local Docker dev profile runs NODE_ENV=test; PASSWORD_EXPIRY_MONITOR_IN_TEST=1 lets the monitor run there.
+  if (process.env.NODE_ENV === 'test' && String(process.env.PASSWORD_EXPIRY_MONITOR_IN_TEST || '').trim() !== '1') {
     LOG.info('Password expiry monitor daemon skipped in test environment');
     return;
   }
