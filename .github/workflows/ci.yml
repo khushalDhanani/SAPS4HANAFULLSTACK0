@@ -251,7 +251,7 @@ jobs:
           ALLOW_LIVE_SAP_TOOLS: '1'
         run: npm run preflight:rfc -- --allow-live-sap
 
-      - name: Start CAP server and wait for /health
+      - name: Start CAP server and wait for database readiness (/health/ready)
         run: |
           mkdir -p test-results
           CDS_CONFIG="$(node -p "require('./test/testUsers').cdsConfig")" npx cds-serve > test-results/cap-server.log 2>&1 &

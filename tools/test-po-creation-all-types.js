@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-require('./live-sap-gate')();
 /**
  * test-po-creation-all-types.js
  * Comprehensive automated verification tool for Purchase Order creation across all 16 PO types.
@@ -8,23 +7,25 @@ require('./live-sap-gate')();
  *   ZCAP, ZDIA, ZDIS, ZDOM, ZDOS, ZHSA, ZHSS, ZIMP,
  *   ZIMS, ZINT, ZLOG, ZNVM, ZRTV, ZSER, ZSTO, ZSUB
  *
- * IMPORTANT: every valid configured type creates a live SAP draft, even without --activate.
- * --activate additionally attempts to activate drafts into SAP purchase orders. This is not a dry-run.
- * Always scope with --type <type>; without it, all configured types may be drafted/activated.
+ * Default execution is read-only: it validates and maps payloads without calling SAP.
+ * --go enables live draft creation (also requires ALLOW_LIVE_SAP_TOOLS=1 and --allow-live-sap).
+ * Activation additionally requires --activate --confirm-activation and --type <type>.
  * Execution Modes:
  *   1. Full Test Suite (all 16 types):
  *        node tools/test-po-creation-all-types.js
  *   2. Single Type Test:
  *        node tools/test-po-creation-all-types.js --type ZDOM
- *   3. Full S/4HANA Activation Proof (creates real document in SAP and reads back):
- *        node tools/test-po-creation-all-types.js --type ZDOM --activate
+ *   3. Create a SAP draft (live write):
+ *        ALLOW_LIVE_SAP_TOOLS=1 node tools/test-po-creation-all-types.js --allow-live-sap --type ZDOM --go
+ *   4. Activate that draft (separate confirmation; live write):
+ *        ALLOW_LIVE_SAP_TOOLS=1 node tools/test-po-creation-all-types.js --allow-live-sap --type ZDOM --go --activate --confirm-activation
  *
  * Architecture & Validation Pipeline for each PO Type:
  *   [1] CAP Domain Validation (validateCreatePurchaseOrderPayload)
  *   [2] UI5 Model Validation (PurchaseOrderValidator.validateUI)
  *   [3] Technical S/4 Mapping (PurchaseOrderMapper.mapToS4Payload)
- *   [4] Live SAP Gateway Draft Creation (MM_PUR_PO_MAINT_V2_SRV / C_PurchaseOrderTP)
- *   [5] (Optional) Live SAP Activation (C_PurchaseOrderTPActivation) + Readback (C_PurchaseOrderFs)
+ *   [4] Optional live SAP Gateway Draft Creation (MM_PUR_PO_MAINT_V2_SRV / C_PurchaseOrderTP)
+ *   [5] Separately confirmed SAP Activation + Readback (C_PurchaseOrderFs)
  */
 
 const path = require('path');
@@ -37,15 +38,22 @@ const { mapToS4Payload } = require('../srv/integration/s4hana/mm/purchase-order/
 const { validateCreatePurchaseOrderPayload } = require('../srv/mm/purchase-order/validation/purchaseOrder.validation');
 const PurchaseOrderValidator = require('../app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator');
 
-// Helper for CLI arguments
-function getArg(flag, fallback) {
-    const idx = process.argv.indexOf(flag);
-    return idx !== -1 && process.argv[idx + 1] ? process.argv[idx + 1] : fallback;
-}
-const hasFlag = (flag) => process.argv.includes(flag);
+function resolveExecutionMode(argv) {
+    const has = (flag) => argv.includes(flag);
+    const typeIndex = argv.indexOf('--type');
+    const type = typeIndex >= 0 ? argv[typeIndex + 1] : null;
+    const createDraft = has('--go');
+    const activate = has('--activate');
+    const confirmActivation = has('--confirm-activation');
 
-const FILTER_TYPE = getArg('--type', null);
-const DO_ACTIVATE = hasFlag('--activate');
+    if (activate && !createDraft) throw new Error('--activate requires --go to create the draft first');
+    if (activate && !confirmActivation) throw new Error('--activate requires the separate --confirm-activation flag');
+    if (confirmActivation && !activate) throw new Error('--confirm-activation requires --activate');
+    if (activate && !type) throw new Error('--activate requires --type <type> to limit activation to one PO type');
+    if (typeIndex >= 0 && (!type || type.startsWith('--'))) throw new Error('--type requires a PO type value');
+
+    return { type, createDraft, activate };
+}
 
 /**
  * 16 PO Type test configurations grounded in live SAP S/4HANA DS4 Client 220 master data.
@@ -416,6 +424,15 @@ const PO_TYPE_CONFIGS = [
 ];
 
 async function run() {
+    let mode;
+    try {
+        mode = resolveExecutionMode(process.argv.slice(2));
+        if (mode.createDraft) require('./live-sap-gate')();
+    } catch (error) {
+        console.error(`Usage error: ${error.message}`);
+        process.exit(2);
+    }
+
     console.log('================================================================================');
     console.log('SAP S/4HANA Purchase Order Creation Verification — All 16 PO Types');
     console.log('System: DS4 Client 220 | Gateway: MM_PUR_PO_MAINT_V2_SRV');
@@ -423,12 +440,12 @@ async function run() {
     console.log('================================================================================\n');
 
     const s4Client = new S4HttpClient();
-    const targetConfigs = FILTER_TYPE
-        ? PO_TYPE_CONFIGS.filter(c => c.type.toUpperCase() === FILTER_TYPE.toUpperCase())
+    const targetConfigs = mode.type
+        ? PO_TYPE_CONFIGS.filter(c => c.type.toUpperCase() === mode.type.toUpperCase())
         : PO_TYPE_CONFIGS;
 
     if (targetConfigs.length === 0) {
-        console.error(`Error: PO Type '${FILTER_TYPE}' not found in known 16 PO types.`);
+        console.error(`Error: PO Type '${mode.type}' not found in known 16 PO types.`);
         process.exit(1);
     }
 
@@ -526,6 +543,12 @@ async function run() {
             continue;
         }
 
+        if (!mode.createDraft) {
+            console.log('  4. S/4 Draft Creation:  ⏭️  SKIPPED (read-only default; pass --go to create a draft)');
+            results.push(resEntry);
+            continue;
+        }
+
         // STEP 4: Live SAP Draft Creation
         let session;
         try {
@@ -542,7 +565,7 @@ async function run() {
         }
 
         // STEP 5: (Optional) Live SAP Draft Activation + Readback
-        if (DO_ACTIVATE) {
+        if (mode.activate) {
             if (cfg.skipActivationReason) {
                 console.log(`  5. S/4 Activation:      ⚠️  SKIPPED (${cfg.skipActivationReason})`);
                 resEntry.skipReason = cfg.skipActivationReason;
@@ -580,7 +603,7 @@ async function run() {
 
     // SUMMARY REPORT TABLE
     console.log('\n================================================================================');
-    console.log('FINAL 16-PO-TYPE VERIFICATION SUMMARY:');
+    console.log(mode.createDraft ? 'FINAL SAP WRITE VERIFICATION SUMMARY:' : 'FINAL LOCAL VALIDATION SUMMARY:');
     console.log('================================================================================');
     console.log(
         '| ' + 'Type'.padEnd(5) +
@@ -588,21 +611,21 @@ async function run() {
         '| ' + 'CAP Val'.padEnd(8) +
         '| ' + 'UI Val'.padEnd(7) +
         '| ' + 'S/4 Draft'.padEnd(10) +
-        '| ' + (DO_ACTIVATE ? 'Live SAP PO'.padEnd(16) : 'DraftUUID'.padEnd(38)) +
+        '| ' + (mode.activate ? 'Live SAP PO'.padEnd(16) : 'DraftUUID'.padEnd(38)) +
         '| ' + 'Status'.padEnd(8) + '|'
     );
-    console.log('+' + '-'.repeat(7) + '+' + '-'.repeat(25) + '+' + '-'.repeat(10) + '+' + '-'.repeat(9) + '+' + '-'.repeat(12) + '+' + '-'.repeat(DO_ACTIVATE ? 18 : 40) + '+' + '-'.repeat(10) + '+');
+    console.log('+' + '-'.repeat(7) + '+' + '-'.repeat(25) + '+' + '-'.repeat(10) + '+' + '-'.repeat(9) + '+' + '-'.repeat(12) + '+' + '-'.repeat(mode.activate ? 18 : 40) + '+' + '-'.repeat(10) + '+');
 
     let allOk = true;
     for (const r of results) {
-        const ok = r.capValid && r.uiValid && r.mapped && r.draftOk && (!DO_ACTIVATE || (r.activatedPo && (r.readBack || r.skipReason)));
+        const ok = r.capValid && r.uiValid && r.mapped && (!mode.createDraft || r.draftOk) && (!mode.activate || (r.activatedPo && (r.readBack || r.skipReason)));
         if (!ok) allOk = false;
         const typeCol = r.type.padEnd(5);
         const descCol = r.desc.slice(0, 22).padEnd(23);
         const capCol = (r.capValid ? 'PASS' : 'FAIL').padEnd(8);
         const uiCol = (r.uiValid ? 'PASS' : 'FAIL').padEnd(7);
-        const draftCol = (r.draftOk ? 'HTTP 201' : 'FAIL').padEnd(10);
-        const idCol = DO_ACTIVATE
+        const draftCol = (r.draftOk ? 'HTTP 201' : mode.createDraft ? 'FAIL' : 'SKIPPED').padEnd(10);
+        const idCol = mode.activate
             ? (r.activatedPo || 'N/A').padEnd(16)
             : (r.draftUUID || (r.error ? r.error.slice(0, 36) : 'N/A')).padEnd(38);
         const statusCol = (ok ? 'SUCCESS' : 'FAILED').padEnd(8);
@@ -610,8 +633,8 @@ async function run() {
         console.log(`| ${typeCol}| ${descCol}| ${capCol}| ${uiCol}| ${draftCol}| ${idCol}| ${statusCol}|`);
     }
     console.log('================================================================================');
-    console.log(`Total Types Tested: ${results.length} | Passed: ${results.filter(r => r.draftOk).length}/${results.length}`);
-    console.log(`Overall Status: ${allOk ? 'ALL 16 PO TYPES VERIFIED & WORKING' : 'SOME CHECKS FAILED'}`);
+    console.log(`Total Types Validated: ${results.length} | SAP Drafts Created: ${results.filter(r => r.draftOk).length}`);
+    console.log(`Overall Status: ${allOk ? (mode.createDraft ? 'CHECKS PASSED' : 'LOCAL VALIDATION PASSED; SAP NOT CALLED') : 'SOME CHECKS FAILED'}`);
     console.log('================================================================================\n');
 
     if (!allOk) {
@@ -619,7 +642,11 @@ async function run() {
     }
 }
 
-run().catch(err => {
-    console.error('Fatal execution error:', err);
-    process.exit(1);
-});
+if (require.main === module) {
+    run().catch(err => {
+        console.error('Fatal execution error:', err);
+        process.exit(1);
+    });
+}
+
+module.exports = { resolveExecutionMode };

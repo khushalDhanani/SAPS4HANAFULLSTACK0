@@ -9,6 +9,7 @@
 
 const { executeSmokeTests, waitForServer } = require('../../tools/smoke-test-deployment');
 const { startIsolatedServer } = require('../e2e/support/isolatedServer');
+const http = require('http');
 
 describe('Post-Deployment Smoke Test Suite', () => {
   // Own test-profile server (no SAP) on a free port: the suite must not depend on a server someone left on :4004.
@@ -16,7 +17,7 @@ describe('Post-Deployment Smoke Test Suite', () => {
   beforeAll(async () => { server = await startIsolatedServer(); }, 90000);
   afterAll(() => server && server.stop());
 
-  it('executes smoke tests against the running server and validates all 8 endpoints pass', async () => {
+  it('executes smoke tests against the running server and validates all 9 endpoints pass', async () => {
     const summary = await executeSmokeTests({
       baseUrl: server.baseUrl,
       authUser: 'khushal:'
@@ -24,12 +25,14 @@ describe('Post-Deployment Smoke Test Suite', () => {
 
     expect(summary.isSuccess).toBe(true);
     expect(summary.failed).toBe(0);
-    expect(summary.passed).toBe(8);
-    expect(summary.results.length).toBe(8);
+    expect(summary.passed).toBe(9);
+    expect(summary.results.length).toBe(9);
 
-    const healthResult = summary.results.find(r => r.name.includes('/health'));
-    expect(healthResult).toBeDefined();
-    expect(healthResult.status).toBe('PASSED');
+    for (const endpoint of ['/health)', '/health/ready)']) {
+      const healthResult = summary.results.find(r => r.name.includes(endpoint));
+      expect(healthResult).toBeDefined();
+      expect(healthResult.status).toBe('PASSED');
+    }
 
     const authResult = summary.results.find(r => r.name.includes('Auth Service Metadata'));
     expect(authResult).toBeDefined();
@@ -47,7 +50,7 @@ describe('Post-Deployment Smoke Test Suite', () => {
     });
 
     expect(summary.isSuccess).toBe(false);
-    expect(summary.failed).toBe(8);
+    expect(summary.failed).toBe(9);
     expect(summary.passed).toBe(0);
     expect(summary.results[0].status).toBe('ERROR');
   });
@@ -55,6 +58,32 @@ describe('Post-Deployment Smoke Test Suite', () => {
   it('validates bounded readiness wait against a healthy server', async () => {
     const isReady = await waitForServer(server.baseUrl, 5000, 200);
     expect(isReady).toBe(true);
+  });
+
+  it('waits for database readiness even while process liveness is UP', async () => {
+    let ready = false;
+    let readinessRequests = 0;
+    const probe = http.createServer((req, res) => {
+      res.setHeader('content-type', 'application/json');
+      if (req.url === '/health') {
+        res.writeHead(200).end(JSON.stringify({ status: 'UP' }));
+      } else if (req.url === '/health/ready') {
+        readinessRequests++;
+        res.writeHead(ready ? 200 : 503).end(JSON.stringify({ status: ready ? 'UP' : 'DOWN' }));
+      } else {
+        res.writeHead(404).end();
+      }
+    });
+    await new Promise((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const baseUrl = `http://127.0.0.1:${probe.address().port}`;
+    const readyTimer = setTimeout(() => { ready = true; }, 100);
+    try {
+      expect(await waitForServer(baseUrl, 2000, 20)).toBe(true);
+      expect(readinessRequests).toBeGreaterThan(1);
+    } finally {
+      clearTimeout(readyTimer);
+      await new Promise((resolve) => probe.close(resolve));
+    }
   });
 
   it('enforces bounded timeout when waiting for an unreachable host', async () => {

@@ -7,7 +7,7 @@ const { RfcClient } = require('../../srv/integration/s4hana/RfcClient');
  * /health is the plain "process answers" check used by Docker, CI and the smoke test.
  * Cloud Foundry's readiness check (mta.yaml) calls /health/ready, also without credentials, and expects HTTP 200.
  */
-describe('Integration: /health readiness endpoint', () => {
+describe('Integration: /health process liveness endpoint', () => {
 
     it('should answer GET /health with 200 and status UP without authentication', async () => {
         const { status, data, headers } = await GET('/health');

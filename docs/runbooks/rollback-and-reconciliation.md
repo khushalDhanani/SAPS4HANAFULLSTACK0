@@ -24,23 +24,24 @@ Following any Cloud Foundry deployment, MTA upgrade, or maintenance window, exec
 
 ### 2.1 Automated Smoke Test Runner (`tools/smoke-test-deployment.js`)
 
-Run the smoke test runner against the target deployment URL:
+Run the smoke test runner against the CAP service route. The health endpoints are registered on the CAP service; the current approuter routes do not forward `/health` or `/health/ready`. Find the deployed service route with `cf app saps4hana-srv`.
 
 ```bash
 # Local development or port-forwarded deployment:
 npm run test:smoke
 
-# Remote Cloud Foundry staging or production approuter:
-node tools/smoke-test-deployment.js --url=https://saps4hana-approuter-<space>.cfapps.<region>.hana.ondemand.com
+# Remote Cloud Foundry CAP service route (see `cf app saps4hana-srv`):
+node tools/smoke-test-deployment.js --url=https://<saps4hana-srv-route>
 ```
 
 #### Readiness Assertions:
-1. **Readiness Probe (`GET /health`)**: Returns `HTTP 200 OK`, JSON payload `{"status":"UP"}`, and header `Cache-Control: no-store`.
-2. **Unauthenticated Security Gating**: Accessing `/odata/v4/purchase-order/$metadata` without credentials returns `HTTP 401 Unauthorized`.
-3. **Core OData Metadata Availability**: Authenticated reads of `$metadata` for `purchase-order`, `tr-to`, and `auth` return valid EDMX XML schemas.
-4. **Session & Scope Resolution (`GET /odata/v4/auth/getUserInfo()`)**: Resolves caller principal, role collections, and system identifier without errors.
-5. **UI5 Flexibility & Preload Assets**: Confirms `/sap/bc/lrep/flex/settings` and `/Component-preload.js` respond with `HTTP 200`.
-6. **AI Assistant Streaming Route**: Validates `/ai/chat/stream` is mounted and responsive.
+1. **Process liveness (`GET /health`)**: Returns `HTTP 200 OK`, `{"status":"UP"}`, and `Cache-Control: no-store`; this endpoint does not check dependencies.
+2. **Database readiness (`GET /health/ready`)**: Returns `HTTP 200 OK`, `{"status":"UP"}`, and `Cache-Control: no-store` when the database responds; returns 503 when it does not. This is the Cloud Foundry readiness endpoint configured in `mta.yaml`; its dependency result is cached for up to 15 seconds.
+3. **Unauthenticated Security Gating**: Accessing `/odata/v4/purchase-order/$metadata` without credentials returns `HTTP 401/403`.
+4. **Core OData Metadata Availability**: Authenticated reads of `$metadata` for `purchase-order`, `tr-to`, and `auth` return valid EDMX XML schemas.
+5. **Session & Scope Resolution (`GET /odata/v4/auth/getUserInfo()`)**: Resolves caller principal, role collections, and system identifier without errors.
+6. **UI5 Flexibility & Preload Assets**: Confirms `/sap/bc/lrep/flex/settings` and `/Component-preload.js` respond with `HTTP 200`.
+7. **AI Assistant Streaming Route**: Validates `/ai/chat/stream` is mounted and responsive.
 
 ### 2.2 Service Connectivity & Security Guard Verification (`tools/check-service-connectivity.js`)
 
@@ -112,6 +113,7 @@ cf rollback SAPS4HANAFULLSTACK-srv
 # 3. Verify previous instances are healthy
 cf app SAPS4HANAFULLSTACK-srv
 curl -s https://<app-domain>/health
+curl -s https://<app-domain>/health/ready
 ```
 
 ### 4.2 Multi-Target Application (MTA) Archive Rollback

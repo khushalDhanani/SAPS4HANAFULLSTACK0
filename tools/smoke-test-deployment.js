@@ -6,15 +6,16 @@
  *
  * Post-Deployment Smoke Test Runner.
  * Executes non-destructive, read-only smoke tests against a running CAP / Fiori deployment
- * (local server, Cloud Foundry staging, or production approuter).
+ * (local server or the deployed CAP service route).
  *
  * Checks:
- * 1. Health & readiness probe (/health) -> 200 OK, { status: 'UP' }, Cache-Control: no-store
- * 2. Unauthenticated endpoint protection -> 401 Unauthorized (proves auth guards are active)
- * 3. Authenticated OData core metadata ($metadata for purchase-order, auth) -> 200 OK
- * 4. User info and scope resolution (/odata/v4/auth/getUserInfo()) -> 200 OK
- * 5. UI5 Layered Repository & preload endpoints (/sap/bc/lrep/flex/settings, Component-preload.js) -> 200 OK
- * 6. AI assistant streaming route presence (/ai/chat/stream) -> Not 404
+ * 1. Process liveness (/health) -> 200 OK, { status: 'UP' }, Cache-Control: no-store
+ * 2. Database readiness (/health/ready) -> 200 OK, { status: 'UP' }, Cache-Control: no-store
+ * 3. Unauthenticated endpoint protection -> 401/403 (proves auth guards are active)
+ * 4. Authenticated OData core metadata ($metadata for purchase-order, auth) -> 200 OK
+ * 5. User info and scope resolution (/odata/v4/auth/getUserInfo()) -> 200 OK
+ * 6. UI5 Layered Repository & preload endpoints (/sap/bc/lrep/flex/settings, Component-preload.js) -> 200 OK
+ * 7. AI assistant streaming route presence (/ai/chat/stream) -> Not 404
  *
  * Zero data mutations. Zero credentials logged.
  */
@@ -33,11 +34,11 @@ const waitArg = process.argv.find(a => a.startsWith('--wait=') || a === '--wait'
 const waitSecs = waitArg ? (waitArg.includes('=') ? parseInt(waitArg.split('=')[1], 10) : 30) : 0;
 
 /**
- * Polls the server health endpoint with bounded backoff until ready or timeout expires.
+ * Polls database readiness with bounded backoff until ready or timeout expires.
  */
 async function waitForServer(baseUrl, timeoutMs = 30000, intervalMs = 1000) {
   const target = (baseUrl || 'http://localhost:4004').replace(/\/+$/, '');
-  const healthUrl = `${target}/health`;
+  const readinessUrl = `${target}/health/ready`;
   const startTime = Date.now();
   let lastError = null;
 
@@ -45,7 +46,7 @@ async function waitForServer(baseUrl, timeoutMs = 30000, intervalMs = 1000) {
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      const res = await fetch(healthUrl, { method: 'GET', signal: AbortSignal.timeout(3000) });
+      const res = await fetch(readinessUrl, { method: 'GET', signal: AbortSignal.timeout(3000) });
       if (res.status === 200) {
         const body = await res.text();
         let json = null;
@@ -91,8 +92,23 @@ async function executeSmokeTests(options = {}) {
 
   const tests = [
     {
-      name: 'CF Readiness Health Check (/health)',
+      name: 'Process Liveness Health Check (/health)',
       url: `${baseUrl}/health`,
+      method: 'GET',
+      headers: {},
+      validate: (res, body) => {
+        if (res.status !== 200) return `Expected status 200, got ${res.status}`;
+        let json;
+        try { json = JSON.parse(body); } catch (_) { return 'Body is not valid JSON'; }
+        if (json.status !== 'UP') return `Expected status 'UP', got '${json.status}'`;
+        const cc = res.headers.get('cache-control') || '';
+        if (!cc.includes('no-store')) return `Expected cache-control: no-store, got '${cc}'`;
+        return null;
+      }
+    },
+    {
+      name: 'Database Readiness Health Check (/health/ready)',
+      url: `${baseUrl}/health/ready`,
       method: 'GET',
       headers: {},
       validate: (res, body) => {
