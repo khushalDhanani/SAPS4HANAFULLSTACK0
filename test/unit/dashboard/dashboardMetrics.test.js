@@ -354,13 +354,13 @@ describe('Unit: Dashboard Controller live figures', () => {
 
                 mockAuthService.hasAnyRole.mockReturnValueOnce(false);
                 controller._watchLockMonitor = jest.fn(); // polls the server; has its own tests
-                controller._onDashboardMatched(matched('admin'));
+                controller._onDashboardMatched(matched('user-master'));
                 expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
                 expect(mockAuthService.hasAnyRole).toHaveBeenLastCalledWith(['Admin']);
 
                 mockAuthService.hasAnyRole.mockReturnValueOnce(true);
-                controller._onDashboardMatched(matched('admin'));
-                expect(oViewModel.getProperty('/selectedTab')).toBe('admin');
+                controller._onDashboardMatched(matched('user-master'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('user-master');
             });
 
             test('navigating directly to the Administrator section does not load overview metrics (performance optimization)', () => {
@@ -369,7 +369,7 @@ describe('Unit: Dashboard Controller live figures', () => {
                 controller._watchLockMonitor = jest.fn();
                 controller._loadAdminUsers = jest.fn();
 
-                controller._onDashboardMatched(matched('admin'));
+                controller._onDashboardMatched(matched('user-master'));
 
                 expect(controller._loadMetrics).not.toHaveBeenCalled();
                 expect(controller._loadAdminUsers).toHaveBeenCalledTimes(1);
@@ -485,9 +485,9 @@ describe('Unit: Dashboard view binds only live figures', () => {
 
     test('the sidebar items and the dashboard sections offer the same keys, in order', () => {
         const appViewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/App.view.xml'), 'utf8');
-        const navKeys = [...appViewXml.matchAll(/<tnt:NavigationListItem[^>]*?key="([a-zA-Z]+)"/g)].map((m) => m[1]);
-        const sectionKeys = [...viewXml.matchAll(/dashboardView>\/selectedTab\} === '([a-zA-Z]+)'/g)].map((m) => m[1]);
-        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm', 'admin']);
+        const navKeys = [...appViewXml.matchAll(/<tnt:NavigationListItem[^>]*?key="([a-zA-Z-]+)"/g)].map((m) => m[1]);
+        const sectionKeys = [...viewXml.matchAll(/dashboardView>\/selectedTab\} === '([a-zA-Z-]+)'/g)].map((m) => m[1]);
+        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm', 'user-master']);
         expect(sectionKeys).toEqual(navKeys);
     });
 

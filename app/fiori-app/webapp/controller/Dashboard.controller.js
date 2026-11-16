@@ -156,12 +156,12 @@ sap.ui.define([
 
         _onDashboardMatched: function (oEvent) {
             var sSection = oEvent ? oEvent.getParameter("arguments").section : "";
-            var bAllowed = sSection === "admin" ? AuthService.hasAnyRole(["Admin"]) : SECTIONS.indexOf(sSection) !== -1;
+            var bAllowed = sSection === "user-master" ? AuthService.hasAnyRole(["Admin"]) : SECTIONS.indexOf(sSection) !== -1;
             this.getView().getModel("dashboardView").setProperty("/selectedTab", bAllowed ? sSection : "overview");
-            if (sSection === "admin" && bAllowed && !this._bAdminUsersLoaded) {
+            if (sSection === "user-master" && bAllowed && !this._bAdminUsersLoaded) {
                 this._loadAdminUsers();
             }
-            if (sSection === "admin" && bAllowed) {
+            if (sSection === "user-master" && bAllowed) {
                 this._watchLockMonitor();
                 var oQuery = oEvent.getParameter("arguments")["?query"];
                 if (oQuery && oQuery.search) {
@@ -1053,7 +1053,7 @@ sap.ui.define([
             this._refreshLockMonitor();
             clearInterval(this._iLockMonitorTimer);
             this._iLockMonitorTimer = setInterval(function () {
-                if (that.getView().getModel("dashboardView").getProperty("/selectedTab") === "admin") {
+                if (that.getView().getModel("dashboardView").getProperty("/selectedTab") === "user-master") {
                     that._refreshLockMonitor();
                 }
             }, LOCK_MONITOR_REFRESH_MS);

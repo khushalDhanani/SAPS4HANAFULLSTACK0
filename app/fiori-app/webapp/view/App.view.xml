@@ -25,7 +25,7 @@
                         <tnt:NavigationListItem id="sideNavEWM" key="ewm" icon="sap-icon://inventory" text="{i18n>tabEWMTitle}" tooltip="{i18n>tabEWMTooltip}" />
                         <tnt:NavigationListItem id="sideNavAdministration" icon="sap-icon://group" text="{i18n>tabAdminTitle}" tooltip="{i18n>tabAdminTooltip}" selectable="false" visible="{path: 'auth>/user/scopes', formatter: '.isAdmin'}">
                             <tnt:items>
-                                <tnt:NavigationListItem id="sideNavUserMaster" key="admin" text="{i18n>tabUserMasterTitle}" tooltip="{i18n>tabUserMasterTooltip}" />
+                                <tnt:NavigationListItem id="sideNavUserMaster" key="user-master" text="{i18n>tabUserMasterTitle}" tooltip="{i18n>tabUserMasterTooltip}" />
                             </tnt:items>
                         </tnt:NavigationListItem>
                     </tnt:NavigationList>

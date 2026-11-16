@@ -20,8 +20,8 @@ const PHONE = {
     hasTouch: true,
     userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
 };
-const ITEM = { overview: 'sideNavOverview', mm: 'sideNavMM', sd: 'sideNavSD', ewm: 'sideNavEWM', admin: 'sideNavUserMaster' };
-const SECTION = { overview: 'sectionOverview', mm: 'sectionMM', sd: 'sectionSD', ewm: 'sectionEWM', admin: 'sectionAdmin' };
+const ITEM = { overview: 'sideNavOverview', mm: 'sideNavMM', sd: 'sideNavSD', ewm: 'sideNavEWM', 'user-master': 'sideNavUserMaster' };
+const SECTION = { overview: 'sectionOverview', mm: 'sectionMM', sd: 'sectionSD', ewm: 'sectionEWM', 'user-master': 'sectionAdmin' };
 
 /** The sidebar's highlighted key and the dashboard sections currently on screen. */
 const shellState = (page) => page.evaluate((sections) => {
@@ -81,8 +81,8 @@ async function verifySidebar(baseUrl) {
 
         // Everything below also runs on the closed sidebar's icons, so the closed state stays usable
         const loaded = metricsCalls;
-        for (const key of ['mm', 'sd', 'ewm', 'admin']) {
-            if (key === 'admin') {
+        for (const key of ['mm', 'sd', 'ewm', 'user-master']) {
+            if (key === 'user-master') {
                 await click('sideNavAdministration');
                 await page.locator('.sapMPopover').getByText('User Master', { exact: true }).click();
                 await session.settle();
@@ -93,7 +93,7 @@ async function verifySidebar(baseUrl) {
             if (key === 'mm' && !(await page.locator('[id$="--btnMMCreatePO"]').isVisible() && await page.locator('[id$="--btnMMManagePOs"]').isVisible())) {
                 step(errors, details, 'Procurement keeps Create PO and Manage Orders', ['a button is not visible']);
             }
-            if (key === 'admin') {
+            if (key === 'user-master') {
                 const adminList = await page.evaluate(() => {
                     const Element = window.sap.ui.require('sap/ui/core/Element');
                     const table = Element.registry.filter((control) => control.getId().endsWith('--adminUsersTable'))[0];
@@ -186,7 +186,7 @@ async function verifySidebar(baseUrl) {
 
     const viewer = await openSession({ baseUrl, user: 'test-viewer-1120' });
     try {
-        await openHash(viewer, 'dashboard/admin');
+        await openHash(viewer, 'dashboard/user-master');
         const seen = await shellState(viewer.page);
         const problems = [];
         if (await viewer.page.locator(`[id$="--${ITEM.admin}"]`).count()) problems.push('User Master item is rendered for a non-admin');
@@ -316,7 +316,7 @@ async function verifyUserDetailPane(baseUrl) {
             if (username === 'BROKEN') return route.fulfill({ status: 502, json: { error: { code: '502', message: 'SAP read failed' } } });
             return route.fulfill({ json: paneDetail(username, username === 'BETA') });
         });
-        await openHash(session, 'dashboard/admin');
+        await openHash(session, 'dashboard/user-master');
 
         step(errors, details, 'The list starts alone, with no pane', expect(await paneState(page), { layout: 'OneColumn', listShown: true, paneShown: false }));
 
@@ -355,7 +355,7 @@ async function verifyUserDetailPane(baseUrl) {
         await page.waitForTimeout(600);
         step(errors, details, 'Close returns the list to full width', expect(await paneState(page), { layout: 'OneColumn', paneShown: false, navigated: '' }));
 
-        await openHash(session, 'dashboard/admin?search=BETA');
+        await openHash(session, 'dashboard/user-master?search=BETA');
         await session.settle();
         const searched = await adminLinkState(page);
         const linked = searched.search === 'BETA' && searched.rows.join() === 'BETA' ? [] : [`search "${searched.search}", rows [${searched.rows}]`];
@@ -373,7 +373,7 @@ async function verifyUserDetailPane(baseUrl) {
 
     const live = await openSession({ baseUrl });
     try {
-        await openHash(live, 'dashboard/admin');
+        await openHash(live, 'dashboard/user-master');
         const username = await live.page.evaluate(() => {
             const Element = window.sap.ui.require('sap/ui/core/Element');
             const table = Element.registry.filter((c) => c.getId().endsWith('--adminUsersTable'))[0];
@@ -493,7 +493,7 @@ async function verifyBulkFlow(baseUrl) {
             return route.fulfill({ json: { success: true, status: 'success', messages: [], message: `User ${body.username} done` } });
         });
         await page.evaluate(() => window.sessionStorage.clear()).catch(() => {});
-        await openHash(session, 'dashboard/admin');
+        await openHash(session, 'dashboard/user-master');
 
         await page.waitForFunction(() => {
             const Element = window.sap.ui.require('sap/ui/core/Element');
@@ -696,7 +696,7 @@ async function verifyAdministrationGroup(baseUrl) {
 
         await popoverChild.click();
         await session.settle();
-        const viaPopover = expectGroup(await groupState(page), { hash: '#/dashboard/admin', groupSelected: true });
+        const viaPopover = expectGroup(await groupState(page), { hash: '#/dashboard/user-master', groupSelected: true });
         if (await page.locator('.sapMPopover:visible').count()) viaPopover.push('the popover stayed open');
         step(errors, details, 'Closed sidebar: the User Master item opens the admin section and highlights the group', viaPopover);
 
@@ -712,21 +712,21 @@ async function verifyAdministrationGroup(baseUrl) {
         await popoverChild.waitFor();
         await pressKey('Enter');
         await session.settle();
-        escaped.push(...expectGroup(await groupState(page), { hash: '#/dashboard/admin' }));
+        escaped.push(...expectGroup(await groupState(page), { hash: '#/dashboard/user-master' }));
         step(errors, details, 'Closed sidebar: Enter opens the popover, Escape closes it, Enter selects the child', escaped);
 
         await page.click('.sapFShellBar button[title="Menu"]');
         await page.waitForTimeout(500); // the sidebar slides open
         step(errors, details, 'Open sidebar: the group shows its selected child with the child highlighted', expectGroup(await groupState(page), {
-            hash: '#/dashboard/admin', expanded: true, childShown: true, childSelected: true, groupSelected: false
+            hash: '#/dashboard/user-master', expanded: true, childShown: true, childSelected: true, groupSelected: false
         }));
 
         await page.click('[id$="--sideNavAdministration-a"]');
         await page.waitForTimeout(1000); // the collapse animation
-        const toggled = expectGroup(await groupState(page), { hash: '#/dashboard/admin', expanded: false, childShown: false });
+        const toggled = expectGroup(await groupState(page), { hash: '#/dashboard/user-master', expanded: false, childShown: false });
         await page.click('[id$="--sideNavAdministration-a"]');
         await page.waitForTimeout(300);
-        toggled.push(...expectGroup(await groupState(page), { hash: '#/dashboard/admin', expanded: true, childShown: true }));
+        toggled.push(...expectGroup(await groupState(page), { hash: '#/dashboard/user-master', expanded: true, childShown: true }));
         step(errors, details, 'Open sidebar: pressing the group only collapses and expands it', toggled);
 
         await page.click('[id$="--sideNavOverview"]');
@@ -734,7 +734,7 @@ async function verifyAdministrationGroup(baseUrl) {
         const cleared = expectGroup(await groupState(page), { hash: '#/dashboard', childSelected: false });
         await page.click('[id$="--sideNavUserMaster"]');
         await session.settle();
-        cleared.push(...expectGroup(await groupState(page), { hash: '#/dashboard/admin', childSelected: true }));
+        cleared.push(...expectGroup(await groupState(page), { hash: '#/dashboard/user-master', childSelected: true }));
         step(errors, details, 'Open sidebar: the highlight follows the selection and the child routes by click', cleared);
 
         await page.click('[id$="--sideNavOverview"]');
@@ -753,7 +753,7 @@ async function verifyAdministrationGroup(baseUrl) {
         if (!/--sideNavUserMaster-a$/.test(onChild.focused || '')) keys.push(`ArrowDown moved focus to ${onChild.focused}`);
         await pressKey('Enter');
         await session.settle();
-        keys.push(...expectGroup(await groupState(page), { hash: '#/dashboard/admin', childSelected: true }));
+        keys.push(...expectGroup(await groupState(page), { hash: '#/dashboard/user-master', childSelected: true }));
         step(errors, details, 'Open sidebar: Enter, Space and arrows work the group; Enter selects the child', keys);
 
         const failed = session.consoleErrors.concat(session.networkErrors.map((e) => `HTTP ${e.status} ${e.url}`), session.blocked.map((b) => `write guard blocked ${b.reason}`));
@@ -825,7 +825,7 @@ async function verifyAdminTable(baseUrl) {
             await new Promise((resolve) => setTimeout(resolve, 300)); // long enough to see the busy state
             await route.fulfill({ json: { value: ADMIN_ROWS.filter((row) => row.username.includes(query)) } });
         });
-        await openHash(session, 'dashboard/admin');
+        await openHash(session, 'dashboard/user-master');
 
         const initial = await adminTableState(page);
         const problems = expectRows(initial, 'Sub-User Master (3)', ['BETA', 'ALPHA', 'GAMMA']);

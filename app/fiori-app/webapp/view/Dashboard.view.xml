@@ -282,7 +282,7 @@
                         </VBox>
 
                         <!-- ADMINISTRATOR -->
-                        <VBox id="sectionAdmin" visible="{= ${dashboardView>/selectedTab} === 'admin' }">
+                        <VBox id="sectionAdmin" visible="{= ${dashboardView>/selectedTab} === 'user-master' }">
                             <VBox class="sapUiSmallMarginTop">
                                 <HBox justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" class="sapUiSmallMarginBottom">
                                     <VBox>

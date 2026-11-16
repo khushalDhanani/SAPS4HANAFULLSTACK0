@@ -50,8 +50,8 @@ describe('passwordExpiryEmail helpers', () => {
 
   describe('adminLink', () => {
     test('builds dashboard link with encoded filter parameter', () => {
-      expect(adminLink('https://app.test/index.html')).toBe('https://app.test/index.html#/dashboard/admin?filter=expiring');
-      expect(adminLink('https://app.test/index.html#somewhere', 'expired')).toBe('https://app.test/index.html#/dashboard/admin?filter=expired');
+      expect(adminLink('https://app.test/index.html')).toBe('https://app.test/index.html#/dashboard/user-master?filter=expiring');
+      expect(adminLink('https://app.test/index.html#somewhere', 'expired')).toBe('https://app.test/index.html#/dashboard/user-master?filter=expired');
       expect(adminLink('')).toBe('');
       expect(adminLink(null)).toBe('');
     });
@@ -84,12 +84,12 @@ describe('buildPasswordExpiryEmail', () => {
     expect(email.html).toContain('EXPIRING SOON');
     expect(email.html).toContain('90-day');
     expect(email.html).toContain('Open Sub-User Master &rarr;');
-    expect(email.html).toContain('https://app.test/index.html#/dashboard/admin?filter=expiring');
+    expect(email.html).toContain('https://app.test/index.html#/dashboard/user-master?filter=expiring');
 
     expect(email.text).toContain('SAP Security Advisory: Password Expiry Monitoring');
     expect(email.text).toContain('User: DIPEN (DIPEN Full Name)');
     expect(email.text).toContain('Days Remaining: 14');
-    expect(email.text).toContain('Review in Sub-User Master: https://app.test/index.html#/dashboard/admin?filter=expiring');
+    expect(email.text).toContain('Review in Sub-User Master: https://app.test/index.html#/dashboard/user-master?filter=expiring');
   });
 
   test('single user expired: subject indicates Expired', () => {

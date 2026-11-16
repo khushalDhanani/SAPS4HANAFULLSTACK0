@@ -100,10 +100,10 @@ describe('App shell sidebar', () => {
 
   test('the Administrator section is highlighted only for the Admin role', () => {
     const controller = makeController();
-    expect(controller._getSideNavKey('dashboard', { section: 'admin' })).toBe('overview');
+    expect(controller._getSideNavKey('dashboard', { section: 'user-master' })).toBe('overview');
     expect(mockAuthService.hasAnyRole).toHaveBeenLastCalledWith(['Admin']);
     mockAuthService.hasAnyRole.mockReturnValueOnce(true);
-    expect(controller._getSideNavKey('dashboard', { section: 'admin' })).toBe('admin');
+    expect(controller._getSideNavKey('dashboard', { section: 'user-master' })).toBe('user-master');
   });
 
   test('an item opens its dashboard section; Overview opens the plain dashboard URL', () => {
@@ -138,7 +138,7 @@ describe('App shell sidebar', () => {
     expect(group[1]).toContain('selectable="false"');
     expect(group[1]).toContain("visible=\"{path: 'auth>/user/scopes', formatter: '.isAdmin'}\"");
     expect(group[1]).toContain('text="{i18n>tabAdminTitle}"');
-    expect(group[2]).toContain('id="sideNavUserMaster" key="admin"');
+    expect(group[2]).toContain('id="sideNavUserMaster" key="user-master"');
     expect(group[2]).toContain('text="{i18n>tabUserMasterTitle}"');
     expect(view.split('id="sideNavUserMaster"')).toHaveLength(2);
     ['i18n.properties', 'i18n_en.properties'].forEach((file) => {

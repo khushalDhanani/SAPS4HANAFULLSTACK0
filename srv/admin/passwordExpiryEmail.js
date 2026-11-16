@@ -53,7 +53,7 @@ function statusBadge(status) {
 function adminLink(appUrl, filter = 'expiring') {
   const base = String(appUrl || '').trim().replace(/#.*$/, '');
   if (!base) return '';
-  return `${base}#/dashboard/admin?filter=${encodeURIComponent(filter)}`;
+  return `${base}#/dashboard/user-master?filter=${encodeURIComponent(filter)}`;
 }
 
 /**

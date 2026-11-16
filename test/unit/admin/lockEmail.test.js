@@ -18,7 +18,7 @@ describe('buildLockEmail', () => {
     const mail = buildLockEmail([event('ALICE', { reason: 'Left the company' })], { appUrl: 'https://app.test/index.html' });
 
     expect(mail.subject).toBe('[SAP Alert] User ALICE locked');
-    ['ALICE', 'ALICE Name', 'Locked by administrator', 'ADMIN', 'Fiori app', 'Left the company', '2026-11-05 10:15:00 UTC', 'https://app.test/index.html#/dashboard/admin?search=ALICE']
+    ['ALICE', 'ALICE Name', 'Locked by administrator', 'ADMIN', 'Fiori app', 'Left the company', '2026-11-05 10:15:00 UTC', 'https://app.test/index.html#/dashboard/user-master?search=ALICE']
       .forEach((text) => {
         expect(mail.text).toContain(text);
         expect(mail.html).toContain(text);
@@ -30,8 +30,8 @@ describe('buildLockEmail', () => {
     expect(mail.html).toContain('Aether Industries Limited Logo');
     expect(mail.html).toContain('Open in App &rarr;');
     expect(mail.html).toContain('Unlock User &rarr;');
-    expect(mail.html).toContain('https://app.test/index.html#/dashboard/admin?search=ALICE&amp;action=unlock');
-    expect(mail.text).toContain('Unlock in app: https://app.test/index.html#/dashboard/admin?search=ALICE&action=unlock');
+    expect(mail.html).toContain('https://app.test/index.html#/dashboard/user-master?search=ALICE&amp;action=unlock');
+    expect(mail.text).toContain('Unlock in app: https://app.test/index.html#/dashboard/user-master?search=ALICE&action=unlock');
   });
 
   test('shows a history timestamp without assigning a timezone', () => {
@@ -117,8 +117,8 @@ describe('buildLockEmail', () => {
   });
 
   test('the link encodes the username and replaces any fragment in the base URL', () => {
-    expect(userLink('A/B#C', 'https://app.test/#/old')).toBe('https://app.test/#/dashboard/admin?search=A%2FB%23C');
-    expect(userLink('A/B#C', 'https://app.test/#/old', 'unlock')).toBe('https://app.test/#/dashboard/admin?search=A%2FB%23C&action=unlock');
+    expect(userLink('A/B#C', 'https://app.test/#/old')).toBe('https://app.test/#/dashboard/user-master?search=A%2FB%23C');
+    expect(userLink('A/B#C', 'https://app.test/#/old', 'unlock')).toBe('https://app.test/#/dashboard/user-master?search=A%2FB%23C&action=unlock');
     expect(userLink('A', '  ')).toBe('');
   });
 

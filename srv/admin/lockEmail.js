@@ -41,9 +41,9 @@ function getFieldValue(event, field) {
 function userLink(username, appUrl, action = '') {
   const base = String(appUrl || '').trim().replace(/#.*$/, '');
   if (!base) return '';
-  if (!username) return `${base}#/dashboard/admin`;
+  if (!username) return `${base}#/dashboard/user-master`;
   const actionParam = action ? `&action=${encodeURIComponent(action)}` : '';
-  return `${base}#/dashboard/admin?search=${encodeURIComponent(username)}${actionParam}`;
+  return `${base}#/dashboard/user-master?search=${encodeURIComponent(username)}${actionParam}`;
 }
 
 function buildUserTableHtml(event) {

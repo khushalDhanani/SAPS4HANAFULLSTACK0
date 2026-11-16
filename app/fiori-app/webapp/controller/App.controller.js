@@ -271,8 +271,8 @@ sap.ui.define([
         _getSideNavKey: function (sRouteName, oArgs) {
             if (sRouteName === "dashboard") {
                 var sSection = oArgs && oArgs.section;
-                if (sSection === "admin") {
-                    return this.isAdmin() ? "admin" : "overview";
+                if (sSection === "user-master") {
+                    return this.isAdmin() ? "user-master" : "overview";
                 }
                 return ["mm", "sd", "ewm"].indexOf(sSection) === -1 ? "overview" : sSection;
             }

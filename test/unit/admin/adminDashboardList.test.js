@@ -178,17 +178,17 @@ describe('Admin dashboard user list', () => {
             const matched = (section, query) => ({ getParameter: () => ({ section, '?query': query }) });
 
             mockAuthService.hasAnyRole.mockReturnValue(true);
-            controller._onDashboardMatched(matched('admin', { search: 'ALICE' }));
+            controller._onDashboardMatched(matched('user-master', { search: 'ALICE' }));
             expect(model.getProperty('/filters/search')).toBe('ALICE');
             expect(model.getProperty('/searchInput')).toBe('ALICE');
             expect(controller._watchLockMonitor).toHaveBeenCalled();
 
             controller._setAdminFilters(Logic.emptyFilters());
-            controller._onDashboardMatched(matched('admin'));
+            controller._onDashboardMatched(matched('user-master'));
             expect(model.getProperty('/filters/search')).toBe('');
 
             mockAuthService.hasAnyRole.mockReturnValue(false);
-            controller._onDashboardMatched(matched('admin', { search: 'ALICE' }));
+            controller._onDashboardMatched(matched('user-master', { search: 'ALICE' }));
             expect(model.getProperty('/filters/search')).toBe('');
         });
 
@@ -203,7 +203,7 @@ describe('Admin dashboard user list', () => {
             const matched = (section, query) => ({ getParameter: () => ({ section, '?query': query }) });
 
             mockAuthService.hasAnyRole.mockReturnValue(true);
-            controller._onDashboardMatched(matched('admin', { search: 'ALICE', action: 'unlock' }));
+            controller._onDashboardMatched(matched('user-master', { search: 'ALICE', action: 'unlock' }));
 
             expect(model.getProperty('/filters/search')).toBe('ALICE');
             expect(controller._confirmUnlockUser).toHaveBeenCalledWith('ALICE');
@@ -219,10 +219,10 @@ describe('Admin dashboard user list', () => {
             const matched = (section, query) => ({ getParameter: () => ({ section, '?query': query }) });
 
             mockAuthService.hasAnyRole.mockReturnValue(true);
-            controller._onDashboardMatched(matched('admin', { filter: 'expiring' }));
+            controller._onDashboardMatched(matched('user-master', { filter: 'expiring' }));
             expect(model.getProperty('/filters/pwdStatus')).toBe('expiring_soon');
 
-            controller._onDashboardMatched(matched('admin', { filter: 'expired' }));
+            controller._onDashboardMatched(matched('user-master', { filter: 'expired' }));
             expect(model.getProperty('/filters/pwdStatus')).toBe('expired');
         });
 
