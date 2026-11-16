@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 /**
  * test-sales-order-phase0.js
  * Phase 0 S/4HANA live proof-of-concept for Sales Order creation using LORD_ODATA_ORDER_SRV.
@@ -16,11 +16,11 @@ require('./live-sap-gate')();
  */
 
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env.local') });
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 
-const { S4HttpClient } = require('../srv/integration/s4hana/S4HttpClient');
-const s4Config = require('../srv/common/s4Config');
+const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
+const s4Config = require('../../../srv/common/s4Config');
 
 const SERVICE_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
 const INCOMP_PATH = '/sap/opu/odata/sap/SD_F2430_INCOMP_SRV';

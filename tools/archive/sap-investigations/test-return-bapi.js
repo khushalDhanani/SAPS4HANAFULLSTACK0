@@ -10,21 +10,21 @@
  * --print-only builds and prints the input (two read-only table reads for the sales area) and makes no BAPI call.
  */
 
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
-const { assertTarget } = require('../test/e2e/support/liveWriteGate');
-const s4Config = require('../srv/integration/s4hana/s4Config');
-const adapter = require('../srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter');
-const { buildInput } = require('../srv/integration/s4hana/sd/customer-return/CustomerReturnRfcCreator');
-const { resolveCustomerSalesArea } = require('../srv/integration/s4hana/sd/customerSalesArea');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env.local'), quiet: true });
+const { assertTarget } = require('../../../test/e2e/support/liveWriteGate');
+const s4Config = require('../../../srv/integration/s4hana/s4Config');
+const adapter = require('../../../srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter');
+const { buildInput } = require('../../../srv/integration/s4hana/sd/customer-return/CustomerReturnRfcCreator');
+const { resolveCustomerSalesArea } = require('../../../srv/integration/s4hana/sd/customerSalesArea');
 
 const line = (m) => `  [${m.type}] ${m.id || ''} ${m.number || ''} ${m.text} | vars=${JSON.stringify(m.vars)} parameter=${m.parameter || '-'} row=${m.row || '-'} field=${m.field || '-'}`;
 
 async function main() {
     assertTarget(s4Config.getSystemLabel(), process.env);
-    const d = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../test/e2e/live/testData.json'), 'utf8')).customerReturn;
+    const d = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../test/e2e/live/testData.json'), 'utf8')).customerReturn;
     if (!d) throw new Error('test/e2e/live/testData.json has no "customerReturn" section');
     const payload = {
         CustomerReturnType: 'ZRET', SoldToParty: d.SoldToParty, ReturnsOrderReason: d.ReturnsOrderReason,

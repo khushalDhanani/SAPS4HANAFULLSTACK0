@@ -9,18 +9,18 @@
  *   ALLOW_LIVE_SAP_TOOLS=1 E2E_SAP_LIVE_TARGET='<system label>' node tools/test-inquiry-bapi.js --allow-live-sap
  */
 
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
-const { assertTarget } = require('../test/e2e/support/liveWriteGate');
-const { mapToS4InquiryPayload } = require('../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper');
-const { SalesInquiryRfcCreator, buildInput } = require('../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryRfcCreator');
-const s4Config = require('../srv/integration/s4hana/s4Config');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env.local'), quiet: true });
+const { assertTarget } = require('../../../test/e2e/support/liveWriteGate');
+const { mapToS4InquiryPayload } = require('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper');
+const { SalesInquiryRfcCreator, buildInput } = require('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryRfcCreator');
+const s4Config = require('../../../srv/integration/s4hana/s4Config');
 
 async function main() {
     assertTarget(s4Config.getSystemLabel(), process.env);
-    const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../test/e2e/live/testData.json'), 'utf8')).salesInquiry;
+    const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../test/e2e/live/testData.json'), 'utf8')).salesInquiry;
     const today = new Date().toISOString().slice(0, 10);
     const { header, items } = mapToS4InquiryPayload(
         { ...data.header, ShipToParty: data.header.SoldToParty, SalesInquiryDate: today, CustomerPurchaseOrderDate: today, BindingPeriodValidityStartDate: today },

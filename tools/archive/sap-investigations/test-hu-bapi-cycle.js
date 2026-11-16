@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 // Supervised live proof of the HU BAPIs (BAPI_HU_CREATE / PACK / UNPACK / DELETE + BAPI_TRANSACTION_COMMIT).
 // WRITE commands change SAP; they run only with the trailing flag --go (one SAP write per invocation, then a
 // read-back). Stops at the first error; never retries. Read-only commands: candidates, read.
@@ -13,10 +13,10 @@ require('./live-sap-gate')();
 //   node tools/test-hu-bapi-cycle.js cancel <materialDocument> <year> --go                                          # WRITE: API Cancel (312)
 // --adapter routes the write through HandlingUnitAdapter.create/pack/unpack/remove instead of raw BAPI calls.
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });
-const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
-const { S4HttpClient } = require('../srv/integration/s4hana/S4HttpClient');
-const HandlingUnitAdapter = require('../srv/integration/s4hana/wm/HandlingUnitAdapter');
-const { buildBaseItem, buildHeaderEnvelope } = require('../srv/integration/s4hana/wm/goods-issue/s4common');
+const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
+const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
+const HandlingUnitAdapter = require('../../../srv/integration/s4hana/wm/HandlingUnitAdapter');
+const { buildBaseItem, buildHeaderEnvelope } = require('../../../srv/integration/s4hana/wm/goods-issue/s4common');
 const MATDOC_API = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV';
 
 const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith('--')));

@@ -1,9 +1,9 @@
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 'use strict';
 
 require('dotenv').config({ path: '.env.local' });
 require('dotenv').config({ path: '.env' });
-const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
+const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
 async function testStepByStep() {
   const rfc = new RfcClient();

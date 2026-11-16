@@ -1,8 +1,8 @@
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 'use strict';
 
 const path = require('path');
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(__dirname, '../../..');
 require(path.join(root, 'node_modules/dotenv')).config({ path: path.join(root, '.env.local') });
 
 const { RfcClient } = require(path.join(root, 'srv/integration/s4hana/RfcClient'));

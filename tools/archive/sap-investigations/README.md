@@ -1,0 +1,20 @@
+# Archived SAP investigation tools
+
+These scripts preserve one-off SAP discovery and proof logic. They are not application entry points, supported operations commands, or CI tasks. They have no callers in the application or package scripts. Their source paths and assumptions reflect the investigation date; service contracts, sample documents, authorizations, and configuration may have changed.
+
+Do not run an archived tool against SAP based on this README. Inspect the exact script and current contract/data first. A technical flag such as `--allow-live-sap` or `--go` is only a code guard; it does not replace the explicit written authorization required by `AGENTS.md` for each live write and data scope. No tool in this directory was run as part of this archival change.
+
+| Tool | Purpose and effect | Evidence / repeatability notes |
+| --- | --- | --- |
+| `investigate-l3-866.js` | READ-ONLY RFC table inspection of message L3/866, related metadata, and HU/material/delivery records. | Investigation logic retained; no dedicated generated evidence file was found in the repository. SAP records and message texts are time-dependent. |
+| `test-chunk2-live.js` | WRITES a 311 reservation and then a W01 transfer requirement; commits both; has no cleanup/rollback step for completed writes. | One-off code retained for history. Do not repeat without a new reviewed plan and explicit authorization. |
+| `test-delivery-phase0.js` | READS delivery/order data and can POST a referenced outbound delivery. | Source records the historical endpoint/payload finding and created document; duplicate execution may create another delivery. |
+| `test-delivery-no-ref-phase0.js` | READ-ONLY value-help GET requests for the no-reference delivery service. | Repeatable as a diagnostic only after current service/authorization verification; no SAP result file is generated. |
+| `test-hu-bapi-cycle.js` | Reads HU data and supports HU create/pack/unpack/delete plus material-document move/cancel writes. Write commands require `--go` and read back results. | Preserved because it supports the separate Handling Unit feature. Historical live proof is in the WORKSTATUS archives; the movement commands are not evidence that the removed HU Stock Transfer feature is available in the app. |
+| `test-inquiry-bapi.js` | Calls the inquiry BAPI in `TESTRUN` mode; no commit. It is still a write-class RFC call. | Historical SAP refusals and payload iterations are recorded in the WORKSTATUS archive. Requires fresh target/data/contract checks and per-call go before invocation. |
+| `test-return-bapi.js` | Calls customer-return BAPI in `TESTRUN` mode; no commit. Optional print-only mode avoids the BAPI call. | Historical BAPI route and incomplete pricing results are recorded in the WORKSTATUS archive. Requires fresh target/data/contract checks and per-call go before invocation. |
+| `test-sales-order-phase0.js` | Can POST a deep-insert sales order and read back its header/items/pricing. | Historical service/payload investigation is recorded in the WORKSTATUS archive. Duplicate execution can create a new order. |
+| `test-step2-assign-serial.js` | Can assign a serial number to a hard-coded delivery/item via BAPI and commit, then read back serial records. | One-off delivery/serial pair and default serial are historical assumptions; verify current delivery state and serial ownership before any use. |
+| `check-hu-fm-rfc.js` | READ-ONLY metadata probe for `HU_CREATE_GOODS_MOVEMENT`; rejects sensitive output and writes a local evidence file after its read-only gate. | Restored from Git history in this archive. Captured outputs remain in `docs/evidence/2026-10-26/`; focused unit coverage remains at `test/unit/tools/checkHuFmRfc.test.js`. The probe established the function was not RFC-enabled in the investigated client, not that the proposed wrapper existed. |
+
+Archived tools remain executable source code, not validated current procedures. Do not infer that the historical SAP contracts or document identifiers still apply.

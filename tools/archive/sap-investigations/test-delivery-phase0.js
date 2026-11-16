@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 /**
  * test-delivery-phase0.js
  * Phase 0 S/4HANA live proof-of-concept for Outbound Delivery creation using LE_SHP_QC_DLVREF_SRV.
@@ -22,10 +22,10 @@ require('./live-sap-gate')();
  */
 
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env.local') });
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 
-const { S4HttpClient } = require('../srv/integration/s4hana/S4HttpClient');
+const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
 
 const SERVICE_PATH = '/sap/opu/odata/sap/LE_SHP_QC_DLVREF_SRV';
 const OD_LIST_PATH = '/sap/opu/odata/sap/LE_SHP_OD_LIST_SRV';

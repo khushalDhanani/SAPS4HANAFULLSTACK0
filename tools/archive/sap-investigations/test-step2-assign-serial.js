@@ -1,4 +1,4 @@
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 'use strict';
 /**
  * Step 2 live execution: Assign Serial Number to Outbound Delivery 0080000134 item 000010
@@ -8,7 +8,7 @@ require('./live-sap-gate')();
  *   ALLOW_LIVE_SAP_TOOLS=1 node tools/test-step2-assign-serial.js --allow-live-sap <serialNo>
  */
 const path = require('path');
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(__dirname, '../../..');
 require(path.join(root, 'node_modules/dotenv')).config({ path: path.join(root, '.env.local') });
 
 const { RfcClient } = require(path.join(root, 'srv/integration/s4hana/RfcClient'));
