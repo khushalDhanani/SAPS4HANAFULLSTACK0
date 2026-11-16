@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Additional SAP investigation scripts archived — PARTIAL (2026-11-16):** Four earlier candidates and the 15 candidates from the final cleanup plan are under `tools/archive/sap-investigations/`; source and gates are retained, path references are repaired, and the archive README records risks. Syntax, path, and reference checks passed. The historical live scripts have no direct unit suites and were not executed against SAP.
+- **SAP investigation script dispositions — PARTIAL (2026-11-16):** The four initial candidates and 13 of the later 15 candidates remain under `tools/archive/sap-investigations/`. Per the user’s later instruction, `test-po-creation-all-types.js` and `test-gr-su-post-cycle.js` were restored to active `tools/`. Historical HU/311 files under `docs/evidence/2026-10-26/` remain untouched. The PO tool always creates drafts for valid configured types; `--activate` additionally activates them. Static checks pass; no SAP execution occurred.
 
 - **Documentation audit — PASS for scoped edits (2026-11-16):** Stale creatable-services catalog/status summaries are labeled historical, current SAP capability is explicitly unverified, and matrix SAP counts now classify the incomplete goods-receipt suite as partial. Historical evidence remains dated and traceable. Validation details are in the change entry below.
 
@@ -4731,7 +4731,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Next: No further archival action is supported by the current in-repository references; external copies or undocumented operator workflows cannot be ruled out. The known PGI guard defects should be fixed and separately validated before any future use.
 - FINAL STATUS: PASS for the repository move; no SAP behavior was tested.
 
-### 2026-11-16 — Archive remaining unreferenced SAP investigation scripts — PARTIAL
+### 2026-11-16 — Archive remaining unreferenced SAP investigation scripts — SUPERSEDED IN PART by user keep instruction
 
 - REQUEST: User approved the exact cleanup plan with “Go”: archive the 15 reviewed one-off SAP investigation tools, retain evidence and gates, and repair move-dependent paths. No SAP or app behavior changes.
 - INSPECT: Read `AGENTS.md`, `WORKSTATUS.md`, the 15 candidate scripts, current Git status, `package.json`, CI workflow references, repository consumers, docs/runbooks, and existing archive README. None of these 15 candidates is a package script or CI command. `test-gr-su-post-cycle.js` has only a historical WORKSTATUS reference; other references are absent. The shared dependencies are used elsewhere; no dependency removal is planned. No SAP call was made.
@@ -4743,3 +4743,29 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: Repository searches identify in-repository use but cannot rule out external or undocumented use.
 - Next: No remaining active tool candidates from the reviewed 49-file inventory were identified for removal without further evidence. The static archival checks passed; executing the historical scripts is deliberately not part of validation.
 - FINAL STATUS: PARTIAL — repository archival and static validation completed; dynamic SAP behavior was not tested.
+
+### 2026-11-16 — Restore supervised SAP validation tools to active tools — IN PROGRESS
+
+- REQUEST: User clarified that `test-po-creation-all-types.js` and `test-gr-su-post-cycle.js` should remain active tools; preserve the HU/311 evidence under `docs/evidence/2026-10-26/`; review the PO tool's live activation behavior.
+- INSPECT: Read `AGENTS.md`, `WORKSTATUS.md`, current Git status, both archived scripts, the archive inventory, and `docs/evidence/2026-10-26/`. The PO script calls `adapter.createDraft()` for each valid configured PO type on every run; `--activate` only gates the subsequent activation and SAP read-back. Therefore the default mode is still live SAP draft creation, not a local/dry-run test. `--activate` can activate multiple configured types unless `--type` is supplied. The GR/SU script requires `--go` for post/cancel plus the live-tool gate. The historical evidence remains in `docs/evidence/2026-10-26/`; it is evidence, not active HU Stock Transfer implementation.
+- PLAN: Move both scripts back to `tools/`, restore their root-relative paths and CLI usage text, remove their entries from the archive inventory, and record the PO mode finding. Preserve all HU evidence and do not execute either script against SAP.
+- CHANGED: Pending.
+- TEST DECISION: TEST NOT POSSIBLE — neither script has a dedicated unit suite and running either against SAP could create or post documents. Validate syntax and relative path resolution only.
+- VALIDATION: Pending.
+- NOT VERIFIED: Current SAP validity of hard-coded PO test data, delivery/HU identifiers, service metadata, or resulting documents. No SAP call is authorized by this documentation/tool-location correction.
+- ASSUMPTIONS: User's “Keep” recommendation authorizes restoring the two scripts to active `tools/`, not executing their SAP operations.
+- Next: Restore paths, inspect the evidence directory and final diff, run static checks.
+- FINAL STATUS: IN PROGRESS.
+
+### 2026-11-16 — Restore supervised SAP validation tools to active tools — PARTIAL
+
+- REQUEST: User clarified that `test-po-creation-all-types.js` and `test-gr-su-post-cycle.js` should remain active tools; preserve HU/311 investigation evidence under `docs/evidence/2026-10-26/`; review the PO tool's live activation behavior.
+- INSPECT: Read `AGENTS.md`, `WORKSTATUS.md`, current Git status, both archived scripts, the archive inventory, and the evidence directory. `test-po-creation-all-types.js` calls `adapter.createDraft()` for every valid configured type on every run; `--activate` only gates subsequent activation and read-back. Without `--type`, it can draft (and with `--activate`, activate) all configured types. The shared live-tool gate still applies. `test-gr-su-post-cycle.js` requires `--go` on post/cancel plus the live-tool gate. No SAP operation was run.
+- PLAN: Restore both scripts to `tools/`, restore their root-relative imports/CLI paths, remove their archive inventory entries, clarify the PO tool's live behavior in its header, preserve the evidence directory unchanged, and update this status.
+- CHANGED: Restored `tools/test-po-creation-all-types.js` and `tools/test-gr-su-post-cycle.js`; repaired their paths to the shared gate, env files, and integration code. The PO script header now says that default execution creates SAP drafts and `--activate` adds document activation; no runtime behavior was changed. Removed both entries from the archive README. Left all evidence files in `docs/evidence/2026-10-26/` untouched.
+- TEST DECISION: TEST NOT POSSIBLE — there are no dedicated unit tests for either manual SAP tool; executing them can create or post documents.
+- VALIDATION: `node --check` passed for both scripts. Relative CommonJS import checks passed for both. Static source review confirmed draft creation is unconditional per valid type and `--activate` gates the activation block. `git diff --check` passed. The evidence directory remains unchanged. No SAP calls were made.
+- NOT VERIFIED: Current SAP validity of the hard-coded PO test data and GR/SU identifiers, current service metadata, and actual activation/posting behavior.
+- ASSUMPTIONS: The user's “Keep” recommendation authorizes active placement and review, not running live SAP actions.
+- Next: Before any future execution, provide per-call written go with target and data scope. For PO runs, explicitly scope with `--type`; even without `--activate`, the tool creates SAP drafts.
+- FINAL STATUS: PARTIAL — restored and reviewed; no live SAP behavior was tested.
