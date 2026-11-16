@@ -265,6 +265,12 @@ async function readUserDetail(call, username) {
   return mapDetail(username, res);
 }
 
+// List enrichment: at most this many RFC connections read user details at once (measured on DS4/220:
+// 278 users took ~17 s on one connection). One more connection is opened per this many uncached users,
+// so a short list stays on the single connection that read it.
+const LIST_DETAIL_CONNECTIONS = 4;
+const LIST_USERS_PER_EXTRA_CONNECTION = 25;
+
 const PWD_POLICY_DEFAULT_DAYS = 90;
 const PWD_WARNING_DEFAULT_DAYS = 14;
 
@@ -444,6 +450,7 @@ class UserManagementAdapter {
     this._listCache = new Map();   // `${search}|${maxRows}` -> { data, expiresAt }
     this._detailCacheTtlMs = options.detailCacheTtlMs || 60000;
     this._listCacheTtlMs = options.listCacheTtlMs || 30000;
+    this._listDetailConnections = options.listDetailConnections || LIST_DETAIL_CONNECTIONS;
   }
 
   _getCachedDetail(username) {
@@ -480,7 +487,7 @@ class UserManagementAdapter {
 
   /**
    * List SAP users via BAPI_USER_GETLIST.
-   * Returns up to maxRows users, enriched with BAPI_USER_GET_DETAIL reads in the same RFC session.
+   * Returns up to maxRows users, enriched with BAPI_USER_GET_DETAIL reads on a small, bounded number of RFC connections.
    * Leverages in-memory caching to avoid redundant round-trips on subsequent calls.
    * A failed detail read leaves its base user row visible with detailsAvailable=false.
    * Client-side search filter applied when provided.
@@ -528,8 +535,7 @@ class UserManagementAdapter {
           ? userList.filter(u => (u.USERNAME || '').toLowerCase().includes(needle))
           : userList;
 
-        const enriched = [];
-        for (const user of filtered) {
+        const enrichOne = async (rfcCall, user) => {
           const username = String(user.USERNAME || '').trim();
           const listedUser = {
             username,
@@ -541,13 +547,13 @@ class UserManagementAdapter {
           try {
             let detail = !forceRefresh ? this._getCachedDetail(username) : null;
             if (!detail) {
-              detail = await readUserDetail(call, username.toUpperCase());
+              detail = await readUserDetail(rfcCall, username.toUpperCase());
               this._setCachedDetail(username, detail);
             }
             const fullName = detail.fullName
               || listedUser.fullName
               || [detail.firstName || listedUser.firstName, detail.lastName || listedUser.lastName].filter(Boolean).join(' ');
-            enriched.push({
+            return {
               ...listedUser,
               fullName,
               detailsAvailable: true,
@@ -557,10 +563,10 @@ class UserManagementAdapter {
               validTo: detail.validTo,
               lastChanged: detail.lastChanged,
               lastChangedBy: detail.lastChangedBy,
-            });
+            };
           } catch (e) {
             LOG.warn('Could not enrich SAP user list row:', username, e.message);
-            enriched.push({
+            return {
               ...listedUser,
               detailsAvailable: false,
               isLocked: null,
@@ -569,9 +575,34 @@ class UserManagementAdapter {
               validTo: null,
               lastChanged: null,
               lastChangedBy: null,
-            });
+            };
           }
-        }
+        };
+
+        // Workers share one queue, so a slow read or a connection that fails to open never loses a row:
+        // the connection that read the list always drains whatever is left.
+        const enriched = new Array(filtered.length);
+        let next = 0;
+        const worker = async (rfcCall) => {
+          while (next < filtered.length) {
+            const index = next++;
+            enriched[index] = await enrichOne(rfcCall, filtered[index]);
+          }
+        };
+        const uncached = forceRefresh
+          ? filtered.length
+          : filtered.filter((user) => !this._getCachedDetail(String(user.USERNAME || '').trim())).length;
+        const extraConnections = Math.min(this._listDetailConnections - 1, Math.floor(uncached / LIST_USERS_PER_EXTRA_CONNECTION));
+        const startedAt = Date.now();
+        await Promise.all([
+          worker(call),
+          ...Array.from({ length: Math.max(0, extraConnections) }, () => this._rfc.session(worker).catch((e) => {
+            LOG.warn('Extra RFC connection for the user list failed; the remaining connections continue:', e.message);
+          })),
+        ]);
+        LOG.info('listUsers details read', {
+          users: filtered.length, detailReads: uncached, connections: 1 + Math.max(0, extraConnections), ms: Date.now() - startedAt,
+        });
         this._listCache.set(cacheKey, {
           data: enriched,
           expiresAt: Date.now() + this._listCacheTtlMs,

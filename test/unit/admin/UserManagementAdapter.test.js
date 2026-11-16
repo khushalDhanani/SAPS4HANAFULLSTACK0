@@ -228,6 +228,87 @@ describe('UserManagementAdapter.listUsers', () => {
   });
 });
 
+describe('UserManagementAdapter.listUsers detail reads on bounded connections', () => {
+  const manyUsers = (count) => ({
+    USERLIST: Array.from({ length: count }, (_, i) => ({ USERNAME: `U${String(i).padStart(3, '0')}` })),
+    RETURN: [],
+  });
+
+  /** Each session is one connection; tracks how many are open at once and which user each one read. */
+  function makeConnections(count, { failOpenOn = [] } = {}) {
+    const stats = { opened: 0, open: 0, maxOpen: 0, readsPerConnection: [], detailReads: 0 };
+    const rfcClient = {
+      session: jest.fn().mockImplementation(async (fn) => {
+        const id = stats.opened++;
+        if (failOpenOn.includes(id)) throw new Error('RFC_COMMUNICATION_FAILURE');
+        stats.open++;
+        stats.maxOpen = Math.max(stats.maxOpen, stats.open);
+        stats.readsPerConnection[id] = 0;
+        try {
+          return await fn(async (fm) => {
+            if (fm === 'BAPI_USER_GETLIST') return manyUsers(count);
+            await new Promise((resolve) => setImmediate(resolve));
+            stats.readsPerConnection[id]++;
+            stats.detailReads++;
+            return DETAIL_RESULT;
+          });
+        } finally {
+          stats.open--;
+        }
+      }),
+    };
+    return { adapter: new UserManagementAdapter({ rfcClient }), stats, rfcClient };
+  }
+
+  test('a long list is read on at most 4 connections, each user once, in SAP order', async () => {
+    const { adapter, stats } = makeConnections(120);
+
+    const result = await adapter.listUsers({ maxRows: 1000 });
+
+    expect(result.map((u) => u.username)).toEqual(manyUsers(120).USERLIST.map((u) => u.USERNAME));
+    expect(result.every((u) => u.detailsAvailable)).toBe(true);
+    expect(stats.detailReads).toBe(120);
+    expect(stats.opened).toBe(4);
+    expect(stats.maxOpen).toBe(4);
+    expect(stats.readsPerConnection.every((reads) => reads > 0)).toBe(true);
+  });
+
+  test('a short list stays on the one connection that read it', async () => {
+    const { adapter, stats } = makeConnections(24);
+    await adapter.listUsers();
+    expect(stats.opened).toBe(1);
+    expect(stats.detailReads).toBe(24);
+  });
+
+  test('connections grow with the list: 30 users use 2', async () => {
+    const { adapter, stats } = makeConnections(30);
+    await adapter.listUsers();
+    expect(stats.opened).toBe(2);
+  });
+
+  test('an extra connection that cannot open loses no row', async () => {
+    const { adapter, stats } = makeConnections(120, { failOpenOn: [1, 2] });
+
+    const result = await adapter.listUsers({ maxRows: 1000 });
+
+    expect(result).toHaveLength(120);
+    expect(result.every((u) => u && u.detailsAvailable)).toBe(true);
+    expect(stats.detailReads).toBe(120);
+  });
+
+  test('cached details open no extra connection', async () => {
+    const { adapter, stats } = makeConnections(120);
+    await adapter.listUsers({ maxRows: 1000 });
+    adapter._listCache.clear();
+    const openedBefore = stats.opened;
+
+    await adapter.listUsers({ maxRows: 1000 });
+
+    expect(stats.opened - openedBefore).toBe(1);
+    expect(stats.detailReads).toBe(120);
+  });
+});
+
 describe('UserManagementAdapter.readLockHistory', () => {
   const row = (date, time, actor, flag, repid = 'SAPMSYST') => ({
     MANDT: '220',
