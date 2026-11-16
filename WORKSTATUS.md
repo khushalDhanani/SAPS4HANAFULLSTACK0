@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Additional SAP investigation scripts archived — PASS for repository move (2026-11-16):** Four scripts with no in-repo package/CI/runbook callers are under `tools/archive/sap-investigations/`; their source and guards are retained, the PGI unit-test import follows the new path, and the archive README documents write risk and known guard limitations. No SAP calls were made.
+
 - **Documentation audit — PASS for scoped edits (2026-11-16):** Stale creatable-services catalog/status summaries are labeled historical, current SAP capability is explicitly unverified, and matrix SAP counts now classify the incomplete goods-receipt suite as partial. Historical evidence remains dated and traceable. Validation details are in the change entry below.
 
 - Entries dated 2026-11-14 and earlier below are time-specific snapshots. Their current relevance is superseded by the dated reconciliation notes in this section; preserve them as historical evidence, not present-state claims.
@@ -4715,3 +4717,16 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - NOT VERIFIED: Current metadata freshness and SAP behavior; a fresh catalog scan or live round trip was outside this documentation-only scope.
 - Next: Run a current approved metadata scan before treating workbook classifications as current; run Tier C live checks only with per-call written authorization and test data.
 - FINAL STATUS: PASS for documentation reconciliation; current SAP/catalog status remains NOT VERIFIED.
+
+### 2026-11-16 — Archive remaining one-off delivery/warehouse probes — PASS for repository move
+
+- REQUEST: Review `tools/test-customers-dlvnoref.js`, `tools/probe-delivery-no-ref.js`, `tools/execute-delivery-pgi.js`, and `tools/check-wm-live.py`; preserve source, historical payloads/findings, and safety controls while removing them from active `tools/`.
+- INSPECT: Read `AGENTS.md`, `WORKSTATUS.md`, Git status, each script, its gates/callers, package/CI/runbook references, existing archive README, and the PGI unit suite. No active package/CI/runbook consumers were found. `execute-delivery-pgi.js` has an existing unit suite; the two no-reference scripts make SAP create POSTs; the PGI script calls a write BAPI; the warehouse Python script uses guarded ADT data-preview requests (HTTP POST query transport, read-only query intent). No SAP calls were made.
+- PLAN: Move all four into `tools/archive/sap-investigations/`, repair only path resolution needed after the move, update the existing PGI test import, and document evidence status, write risk, and known PGI guard defects. Do not modify business logic or execute SAP calls.
+- CHANGED: Moved the two no-reference delivery POST scripts, the one-shot PGI BAPI tool, and the read-only ADT warehouse probe into `tools/archive/sap-investigations/`. Adjusted only repository-relative paths and Python env-file resolution after the move; updated the existing PGI test import. Added archive README entries describing effects, evidence limits, and known PGI guard defects.
+- TEST DECISION: TEST UPDATED — existing `test/unit/wm/executeDeliveryPgi.test.js` continues to exercise the archived tool.
+- VALIDATION: `npx jest test/unit/wm/executeDeliveryPgi.test.js --runInBand` — PASS, 1 suite / 23 tests (the known failing assertion is marked `test.failing`). `node --check` passed for all three moved JavaScript scripts. Python in-memory `compile()` passed and created no cache files. Relocated path assertions passed for all four tools. Active reference search found only the updated PGI test; no package/CI/runbook callers. `git diff --check` — PASS. An initial `python3 -m py_compile` attempt failed because the sandbox could not create its cache directory under the managed home path; the no-cache in-memory compile succeeded. No SAP calls were made.
+- NOT VERIFIED: Current validity of historical service contracts, delivery/customer/material identifiers, SAP configuration, and warehouse data. No current runbook dependency was found in the repository; external use cannot be ruled out.
+- ASSUMPTIONS: Repository search is sufficient to identify in-repo callers/runbooks, but not external operator copies or undocumented workflows.
+- Next: No further archival action is supported by the current in-repository references; external copies or undocumented operator workflows cannot be ruled out. The known PGI guard defects should be fixed and separately validated before any future use.
+- FINAL STATUS: PASS for the repository move; no SAP behavior was tested.

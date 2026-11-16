@@ -23,7 +23,7 @@
  */
 
 const path = require('path');
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(__dirname, '../../..');
 require(path.join(root, 'node_modules/dotenv')).config({ path: path.join(root, '.env.local') });
 
 const { sapKey } = require(path.join(root, 'srv/integration/s4hana/sapKey'));
@@ -287,7 +287,7 @@ async function runPgiFlow(rfc, options = {}) {
 
 // CLI Execution gate
 if (require.main === module) {
-  require('./live-sap-gate')();
+  require('../../live-sap-gate')();
   const { RfcClient } = require(path.join(root, 'srv/integration/s4hana/RfcClient'));
   const args = parseArgs(process.argv);
   const rfc = new RfcClient();

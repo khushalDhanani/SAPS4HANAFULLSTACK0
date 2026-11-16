@@ -6,7 +6,7 @@ const {
   validateLikpStatus,
   validateTransport,
   runPgiFlow
-} = require('../../../tools/execute-delivery-pgi');
+} = require('../../../tools/archive/sap-investigations/execute-delivery-pgi');
 
 describe('execute-delivery-pgi CLI & Guard Unit Tests', () => {
   describe('parseArgs', () => {
@@ -97,7 +97,7 @@ describe('execute-delivery-pgi CLI & Guard Unit Tests', () => {
       expect(() => validateTransport(e071, [], 'DS4K905282')).toThrow("[ABORT] Transport 'DS4K905282' does not appear");
     });
 
-    // Known defect: tools/execute-delivery-pgi.js:89 accepts any VDAT or TABU object in the transport, though its own abort message requires table/view T319A/V_T319A.
+    // Known defect: tools/archive/sap-investigations/execute-delivery-pgi.js:89 accepts any VDAT or TABU object in the transport, though its own abort message requires table/view T319A/V_T319A.
     test.failing('aborts when the transport holds a view other than T319A', () => {
       const e071 = [{ TRKORR: 'DS4K905282', OBJECT: 'VDAT', OBJ_NAME: 'V_MARA' }];
       expect(() => validateTransport(e071, [], 'DS4K905282')).toThrow('[ABORT]');

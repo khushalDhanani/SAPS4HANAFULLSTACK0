@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
+import os, base64, sys, urllib.request, xml.etree.ElementTree as ET
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # tools/
 from live_sap_gate import require_live_sap_tool
 require_live_sap_tool()
-import os, base64, urllib.request, xml.etree.ElementTree as ET
+ROOT = Path(__file__).resolve().parents[3]
 
-for line in open('.env.local'):
+for line in open(ROOT / '.env.local'):
     if line.split('=', 1)[0] in ('S4_USERNAME', 'S4_PASSWORD', 'S4_DESTINATION_URL', 'S4_CLIENT'):
         k, v = line.strip().split('=', 1)
         os.environ[k] = v.strip(' "\'')
