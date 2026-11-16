@@ -1,12 +1,13 @@
-# SAP S/4HANA Creatable Services — Live Metadata Report
+# SAP S/4HANA Creatable Services — Historical Metadata Report
 
+> **Snapshot:** live `$metadata` scan performed 2026-09-23 12:05 IST against DS4 client 220. The catalog, classifications, blocker counts, owners, pending actions and environment notes below are historical observations from that scan and its contemporaneous follow-up; they are not current-state claims. Later dated evidence and corrections are recorded at the end of this document. No current full catalog rescan is recorded here.
 > **Source**: Live `$metadata` scan of **1,237 services** on DS4 client 220 — 23 Sep 2026 12:05 IST
 > **Errors**: 0 (previous scan had 1 timeout on `MD_CUSTOMER_MASTER_SRV_01` — now resolved)
 > **Tooling**: `python3 tools/find-creatable.py` → `catalog-creatable.csv` → `python3 tools/build-creatable-xlsx.py` → [`creatable-services.xlsx`](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/creatable-services.xlsx)
 
 ---
 
-## Scan Summary
+## Scan summary (2026-09-23 snapshot)
 
 | Metric | Count |
 |---|---|
@@ -19,7 +20,7 @@
 
 ---
 
-## Creatable Services by Module
+## Creatable services by module (historical scan counts)
 
 | Module | Total | API_* | Fiori | Entity Sets | POST Actions |
 |---|---|---|---|---|---|
@@ -46,11 +47,11 @@
 
 ---
 
-## Services Used by This App — Status &amp; Pending
+## App services — historical status at the 2026-09-23 scan
 
-These are the SAP OData services actually referenced in `srv/integration/s4hana/`. Each has its CREATE capability verified from live `$metadata`.
+These are the SAP OData services listed as referenced in `srv/integration/s4hana/` at the report snapshot. The metadata claims below are scan-time observations; they are not revalidated here.
 
-### Fully Implemented &amp; Proven Live
+### Recorded live evidence (not current validation)
 
 | Service | Module | Create Capability | App Usage | Status |
 |---|---|---|---|---|
@@ -59,14 +60,14 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 | `MM_PUR_PO_MAINT_V2_SRV` | MM | 13 creatable entity sets + 57 POST actions (`C_PurchaseOrderTP`, items, notes, scheduling) | Purchase Order create/maintain | **Proven live** (POs created) |
 | `MMIM_GR4PO_DL_SRV` | WM | `GR4PO_DL_Headers` + items, sub-items, serial numbers, batch create | Goods Receipt posting | **Not proven through this service** (corrected 2026-11-03): see the correction at the end of this report |
 
-### Implemented but Awaiting First Live POST
+### Recorded as awaiting live POST at the snapshot date
 
 | Service | Module | Create Capability | App Usage | Pending |
 |---|---|---|---|---|
 | `SD_SOFM_CREDIT_BLOCK_SRV` | SD | `PostGoodsIssue(DeliveryNumber)` + credit release/reject actions (7 POST actions) | Post Goods Issue from delivery | **Code done**, awaiting supervised PGI on a picked delivery (candidate: 13000515) |
 | `SD_CUSTOMER_INVOICES_CREATE` | SD | `CreateBillingDocuments(...)` + `GetBillingDocumentTypes(...)` | Create Billing Document | **Code done**, awaiting supervised billing test on a goods-issued delivery (candidate: 13000522) |
 
-### Used for READ Only (Metadata Declares Creatable, Not Used for CREATE)
+### Recorded READ-only app use (metadata declared creatable in the snapshot)
 
 | Service | Module | Declared Create Capability | App Usage (READ only) | Pending |
 |---|---|---|---|---|
@@ -78,7 +79,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 | `SD_SOF` | SD | `ItemCollection` + 4 POST actions (`CreateDeliveryForOrderItems`, `CheckATP`, `createInvoice`, `postToAccount`) | Delivery status lookup | Alternative delivery/billing path — not yet wired |
 | `UI_RESERVATION_ITM_MNG_V2` | MM | 0 entity sets but 10 POST actions (`CreateDraft`, `MarkAsCompleted`, `Copy`, etc.) | Reservation lookup for Goods Issue | Reservation creation not yet built |
 
-### Used for READ Only (Not Creatable per Metadata)
+### Recorded READ-only app use (metadata declared non-creatable in the snapshot)
 
 | Service | Module | App Usage | Notes |
 |---|---|---|---|
@@ -91,7 +92,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 | `MMIM_MULTIPLE_MATERIAL_SRV` | MM | Multiple material lookup | Read-only |
 | `ZAPI_GETBUPA_SRV` | MD | Business partner lookup | Read-only custom service |
 
-### Blocked — Not Registered on Gateway
+### Historical Gateway registration observations (later evidence may supersede)
 
 | Service | Module | Needed For | Blocker | Ticket |
 |---|---|---|---|---|
@@ -100,7 +101,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 ---
 
-## Key Creatable Services NOT Yet Used by the App
+## Services listed as not yet used by the app at the snapshot date
 
 ### SD - Sales (38 additional creatable services)
 
@@ -143,7 +144,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 ---
 
-## Blocked Services Summary (Gateway Remediation)
+## Historical blocked-services summary (Gateway remediation)
 
 | Blocker | Count | Ticket Item | Key Services Affected |
 |---|---|---|---|
@@ -154,9 +155,9 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 ---
 
-## Pending Action Items
+## Historical pending action items (as recorded in September 2026)
 
-### Critical (Blocks Current Features)
+### Historically marked critical (claimed to block features at the snapshot date)
 
 | # | Action | Owner | Status |
 |---|---|---|---|
@@ -164,7 +165,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 | 2 | **Supervised PGI test** on delivery 13000515 | User/Dev | Code ready, needs explicit go-ahead |
 | 3 | **Supervised billing test** on delivery 13000522 | User/Dev | Code ready, needs explicit go-ahead |
 
-### Important (Unlocks New Capabilities)
+### Historically marked important (snapshot action list)
 
 | # | Action | Owner | Status |
 |---|---|---|---|
@@ -173,7 +174,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 | 6 | **Fix empty alias** on `LE_SHP_OD_CREATE_SRV` | Basis team | Ticket Item 1b raised |
 | 7 | **Confirm V4 enablement** on DS4 hub | Basis team | Ticket Item 3 raised |
 
-### Development Ready (No Blockers)
+### Historically marked development-ready (not a current readiness assessment)
 
 | # | Feature | Service | Notes |
 |---|---|---|---|
@@ -188,7 +189,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 ---
 
-## Environment Items (Person-Dependent)
+## Historical environment notes (September 2026)
 
 | Item | Owner | Status |
 |---|---|---|
@@ -203,6 +204,8 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 ## Subsequent SAP Readiness Probe — 2026-10-24 16:45 IST
 
+This later probe supersedes relevant reachability statements in the September snapshot above, but does not prove a write or full-catalog refresh.
+
 This is a later, focused probe; it does not rewrite the dated 23 September catalog snapshot or claim that a goods movement was posted.
 
 - **READ-ONLY OData metadata GET:** `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/$metadata` succeeded against Client 220. The response was 38,620 characters and the current metadata declares `A_MaterialDocumentHeader` creation, its `to_MaterialDocumentItem` navigation, and `GoodsMovementType`. Authentication succeeded for this GET through the project's existing `S4HttpClient` destination resolution. The active local runtime resolved its environment URL credentials (`BasicAuthentication`) and client 220; no credential or URL value is recorded here.
@@ -213,11 +216,15 @@ This is a later, focused probe; it does not rewrite the dated 23 September catal
 
 ## READ-ONLY Readiness Recheck — 2026-10-26 09:35 IST
 
+This is a dated readiness observation only; it does not establish current connectivity or authorize a write.
+
 - The automated 261 capability preflight passed again against the current local non-production configuration: exact `API_MATERIAL_DOCUMENT_SRV` metadata GET and read-only RFC access to `MATDOC` fields `MBLNR`, `MJAHR`, and `BWART`; SAP client 220 resolved.
 - `ALLOW_LIVE_SAP_TOOLS=1 npm run check:connectivity` passed the production guardrails, S/4 configuration, and live RFC client check for Client 220.
 - No SAP POST or other write was performed. Create authorization, generated document persistence, and exact post-write `BWART=261` remain unverified.
 
 ## Correction — 2026-11-03
+
+This correction supersedes contradictory September snapshot rows above. The dated evidence remains historical and does not establish current system state.
 
 Two rows under "Fully Implemented & Proven Live" claimed more than the repo's evidence supports. The all-module count of proper services is in `docs/creatable-services-classification.md`.
 

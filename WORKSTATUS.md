@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Documentation audit — PASS for scoped edits (2026-11-16):** Stale creatable-services catalog/status summaries are labeled historical, current SAP capability is explicitly unverified, and matrix SAP counts now classify the incomplete goods-receipt suite as partial. Historical evidence remains dated and traceable. Validation details are in the change entry below.
+
 - Entries dated 2026-11-14 and earlier below are time-specific snapshots. Their current relevance is superseded by the dated reconciliation notes in this section; preserve them as historical evidence, not present-state claims.
 - **SAP investigation tools archive — PASS (2026-11-16 11:18 IST):** All nine listed tools plus the previously removed HU metadata probe are preserved under `tools/archive/sap-investigations/` with write-risk and evidence notes. The archived probe's focused unit suite passes (9/9); all 10 scripts pass syntax checks and relative-import resolution. No SAP calls were made.
 - **HU Stock Transfer proposal cleanup — SUPERSEDED (2026-11-16 11:11 IST):** The three stale ABAP proposal files remain removed. That entry also removed the read-only probe/test; the later 11:18 IST audit restored them inside the investigation archive, preserving the evidence and probe logic. No SAP objects were changed.
@@ -4699,3 +4701,17 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: The archive path indicates historical/manual tooling, not supported production CLI. This will be stated in the README.
 - Next: None for the requested archive. Before any future SAP use, re-verify the exact current service contract, target, data, and user authorization; archived gates do not replace written go.
 - FINAL STATUS: PASS for archive/reachability cleanup; live SAP behavior and current validity of historical configuration/data remain NOT VERIFIED.
+
+### 2026-11-16 — Reconcile creatable-services and E2E documentation — PASS (documentation scope)
+
+- REQUEST: Review `WORKSTATUS.md`, `docs/creatable-services-classification.md`, `docs/creatable_services_report.md`, and `docs/e2e-coverage-matrix.md`; retain the documents and traceable historical evidence while removing obsolete current-state claims, duplicate summaries, and unsupported PASS statements.
+- INSPECT: Read `AGENTS.md`, `WORKSTATUS.md`, all four requested documents, relevant matrix test references, and current Git status. The initial tree already contained unrelated SAP-tool archival edits and removals; these are preserved. No current full creatable-services scan or current-HEAD live SAP round trip is recorded.
+- PLAN: Date-label the existing catalog and run evidence; mark stale September report summaries and blocker/action sections as historical; preserve subsequent readiness probes and correction; make the goods-receipt matrix status partial because the recorded live suite itself failed during read-back; retain other live records as dated historical evidence. No SAP calls.
+- CHANGED: Updated all three requested documentation files to label dated classification/metadata evidence, historical blocker/pending lists, and dated test results. Corrected goods receipt SAP round-trip status from green to yellow in both route rows and the Tier C evidence summary; the complete live suite did not pass. Retained the recorded post/read-back evidence and later probe corrections. Updated this WORKSTATUS current summary and appended this entry.
+- TEST DECISION: TEST UPDATED — existing `test/unit/tools/e2eCoverageMatrix.test.js` validates route-to-suite mapping and status counts.
+- VALIDATION: `npx jest test/unit/tools/e2eCoverageMatrix.test.js --runInBand` — PASS, 1 suite / 8 tests. `git diff --check` — PASS. Final diff/status review completed; four requested docs are modified. No SAP calls or browser E2E runs.
+- NOT VERIFIED: Current SAP metadata/catalog state, current system configuration, current-HEAD live round trips, and current full browser E2E run.
+- ASSUMPTIONS: Dated evidence in the repository is treated as evidence of those historical runs only.
+- NOT VERIFIED: Current metadata freshness and SAP behavior; a fresh catalog scan or live round trip was outside this documentation-only scope.
+- Next: Run a current approved metadata scan before treating workbook classifications as current; run Tier C live checks only with per-call written authorization and test data.
+- FINAL STATUS: PASS for documentation reconciliation; current SAP/catalog status remains NOT VERIFIED.

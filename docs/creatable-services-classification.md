@@ -1,11 +1,11 @@
 # Creatable Services Classification
 
-> **Date:** 2026-11-03. **Source:** `creatable-services.xlsx`, generated 2026-10-06 from a live `$metadata` scan of DS4 client 220.
-> **Method:** repo evidence only. No SAP call was made for this document, and the workbook was not changed.
+> **Classification snapshot:** 2026-11-03. **Workbook source:** `creatable-services.xlsx`, generated 2026-10-06 from a live `$metadata` scan of DS4 client 220.
+> **Method:** repo evidence only. No SAP call was made for this document, and the workbook was not changed. This is a historical classification of that workbook, not a current service catalog or current SAP capability check.
 
-This document answers how many of the workbook's 497 services are proper creatable services. "Proper" follows `docs/sd-creatable-services.md`: the service really creates or posts a business document.
+This document classifies how many of the snapshot workbook's 497 services appeared to be proper creatable services. "Proper" follows `docs/sd-creatable-services.md`: the service really creates or posts a business document.
 
-**Evidence level:** the "Proven" bucket is **CONFIRMED** by recorded live runs. Every other bucket is **INFERRED** from service and entity set names. A service outside "Proven" has not been shown to create anything on this system.
+**Evidence level at the snapshot date:** the four entries in "Proven" have recorded live document/read-back evidence in this repository. Those records prove the dated runs only; they do not establish current-branch behavior, current system configuration, or current create capability. The API_MATERIAL_DOCUMENT_SRV route attribution is INFERRED from code because the cited run records the CAP action, not the SAP service. Every other bucket is INFERRED from service and entity-set names. No service outside the four has documented successful create/read-back evidence in the reviewed sources.
 
 ## Result
 
@@ -20,7 +20,7 @@ This document answers how many of the workbook's 497 services are proper creatab
 
 Proper services: about **73** (4 proven + 69 likely). This is not a final count. Some of the 69 may fail when tested, and the workbook leaves out POST-only services (see below).
 
-## Proven services
+## Services with recorded live evidence (historical)
 
 | Service | Live proof | Evidence |
 |---|---|---|
@@ -80,7 +80,7 @@ Four services the SD reference lists as proper are among them: `SD_CUSTOMER_INVO
 
 "Sets" is creatable entity sets and "POST" is POST actions, both as the workbook reports them.
 
-### Proven live with read-back (4)
+### Historical live evidence with read-back (4)
 
 | Module | Service | Type | Sets | POST | Reason |
 |---|---|---|---|---|---|
