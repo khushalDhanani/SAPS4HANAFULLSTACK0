@@ -15,6 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **`feature01` pushed; hosted CI PASS at `880048fb` (2026-11-16 10:35 IST):** Run 43806107926 succeeded: "Build, Test & Validate" (including "Validate MTA deployment descriptor" and the new "Build MTA archive and check its modules") and "Browser E2E, SAP-free suites (PR gate)". The full browser suite and the non-production SAP validation jobs were skipped (separately controlled). This supersedes the "not pushed" / "hosted CI NOT VERIFIED" wording for the URL rename and review items 4–10 below. Still NOT VERIFIED: live SMTP, Docker profile, any deployment.
 - **Commits for the URL rename and P1 review items 4–10 (2026-11-16 10:25 IST):** On `feature01`, local only: `11e8f809` (User Master URL rename), `92467b35` (items 4, 5, 7, 8, 9), `b688913d` (item 10), `b80d8553` (item 6). The "Uncommitted" / "Not committed" wording in the entries below predates these commits. Not pushed (4 commits ahead of `origin/feature01` at `11eb8dd2`); hosted CI NOT VERIFIED. Only the final tree was tested (Jest 192 suites / 3,298 tests, lint); the commits were not tested one by one.
 - **SMTP delivery (P1 item 6) — PARTIAL, live verification BLOCKED (2026-11-16 10:20 IST):** Two defects fixed: the password expiry notifier called `mailer.send`, which the mailer does not export, so its email could never be sent; and a lock email that SMTP accepted was resent up to 3 more times in the same cycle when recording it failed. Delivery is now documented in code as at-least-once. Jest 192 suites / 3,298 tests and lint pass. Live SMTP is NOT VERIFIED: from this shell the configured SMTP host does not resolve (cause UNKNOWN). No email was sent. Uncommitted.
 - **User list detail reads on bounded parallel connections (P1 item 10) — PARTIAL (2026-11-16 10:12 IST):** `listUsers` reads user details on up to 4 RFC connections (one extra per 25 uncached users) instead of one. Measured READ-ONLY on the local SAP connection: 278 users, 279 RFC calls, 16.97 s before; 6.85 s and 7.17 s after. Result rows and call count are unchanged. Jest 192 suites / 3,294 tests and lint pass. Bulk retrieval, pagination and server-side filtering are NOT DONE (open findings). Browser E2E and hosted CI not run. Uncommitted.
@@ -4634,3 +4635,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - NOT VERIFIED: hosted CI (nothing pushed).
 - Next: User pushes `feature01` and checks hosted CI, in particular the new MTA archive step.
 - FINAL STATUS: PASS for the commits; hosted CI NOT VERIFIED.
+
+### 2026-11-16 10:35 IST — Push `feature01` and check hosted CI — PASS
+
+- REQUEST: User: "Push feature01".
+- DONE: `git push origin feature01`: `11eb8dd2..880048fb` (5 commits: `11e8f809`, `92467b35`, `b688913d`, `b80d8553`, `880048fb`).
+- VERIFIED (GitHub CLI, run 43806107926 on `880048fb`): conclusion success. Jobs: "Build, Test & Validate" success, "Browser E2E, SAP-free suites (PR gate)" success, "Browser E2E, full suite (Separately Controlled)" skipped, "Non-Production SAP Validation (Separately Controlled)" skipped. Steps "Validate MTA deployment descriptor" and "Build MTA archive and check its modules" both success, so the runner's `mbt` binary survives the build's `npm ci` (the earlier inference is now CONFIRMED).
+- NOT VERIFIED: the two skipped jobs; live SMTP delivery; the Docker profile; any deployment.
+- Next: User decides the open items (SMTP live check with a written go, readiness endpoint, bulk source for last-changed data).
+- FINAL STATUS: PASS — pushed, hosted CI green on the pushed head. This entry itself is not committed.
