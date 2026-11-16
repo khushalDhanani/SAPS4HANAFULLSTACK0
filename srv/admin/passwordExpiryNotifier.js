@@ -110,8 +110,8 @@ async function pollOnce(getAdapter, now = new Date()) {
             policyDays: expirationDays()
           });
 
-          await mailer.send({
-            to: recipients(),
+          await mailer.sendMail({
+            to: recipients().join(', '),
             subject: email.subject,
             text: email.text,
             html: email.html
@@ -119,8 +119,13 @@ async function pollOnce(getAdapter, now = new Date()) {
 
           dispatchedAt = new Date().toISOString();
           dispatchedCount = claimed.length;
-          await store.completeEvents(claimed, { sentAt: dispatchedAt });
           LOG.info('Password expiry notification sent for', claimed.length, 'users');
+          try {
+            await store.completeEvents(claimed, { sentAt: dispatchedAt });
+          } catch (recordErr) {
+            // Not released for retry: the mail is out. SMTP cannot be undone, so the worst case is one repeat later.
+            LOG.error('Password expiry email was sent but could not be recorded as sent; it may be sent again:', recordErr.message);
+          }
         } catch (mailErr) {
           LOG.error('Failed to send password expiry notification email:', mailErr.message);
           const nextRetry = new Date(Date.now() + 60 * 1000).toISOString();

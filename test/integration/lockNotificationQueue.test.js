@@ -182,6 +182,40 @@ describe('Integration: Reliable User Lock Notification Queue', () => {
     });
   });
 
+  describe('2b. Uncertain send result', () => {
+    const seed = () => cds.db.run(INSERT.into(EVENT).entries({
+      username: 'UNCERTAIN_USER', lockedAt: '20261106100000', status: 'pending', attempts: 0,
+      detectedAt: clock.toISOString(), uflag: 64, lockType: 'Locked by administrator',
+    }));
+
+    test('a mail SMTP accepted is not resent in the same cycle when recording it fails', async () => {
+      await seed();
+      jest.spyOn(store, 'completeEvents').mockRejectedValueOnce(new Error('database down'));
+
+      const result = await monitor.sendPending({ workerId: 'worker-1', now: clock, retryDelays: NO_WAIT });
+
+      expect(result).toBe('sent-unrecorded');
+      expect(mailer.sendMail).toHaveBeenCalledTimes(1);
+      const [row] = await cds.db.run(SELECT.from(EVENT));
+      expect(row.status).toBe('processing');
+    });
+
+    test('the unrecorded mail stays claimed until its lease expires, then repeats at most once', async () => {
+      await seed();
+      jest.spyOn(store, 'completeEvents').mockRejectedValueOnce(new Error('database down'));
+      await monitor.sendPending({ workerId: 'worker-1', now: clock, retryDelays: NO_WAIT, leaseDurationMs: 60000 });
+
+      expect(await monitor.sendPending({ workerId: 'worker-2', now: tick(30000), retryDelays: NO_WAIT })).toBe('none');
+      expect(mailer.sendMail).toHaveBeenCalledTimes(1);
+
+      expect(await monitor.sendPending({ workerId: 'worker-2', now: tick(60000), retryDelays: NO_WAIT })).toBe('sent');
+      expect(await monitor.sendPending({ workerId: 'worker-2', now: tick(60000), retryDelays: NO_WAIT })).toBe('none');
+      expect(mailer.sendMail).toHaveBeenCalledTimes(2);
+      const [row] = await cds.db.run(SELECT.from(EVENT));
+      expect(row.status).toBe('sent');
+    });
+  });
+
   describe('3. Expired lease recovery', () => {
     test('a worker that crashed leaves an expired lease which is recovered by another worker', async () => {
       const pastTime = new Date(clock.getTime() - 10000); // 10s in the past

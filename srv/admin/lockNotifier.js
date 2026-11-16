@@ -221,7 +221,8 @@ function calculateNextRetry(attempts, now = new Date()) {
 
 /**
  * Sends everything waiting in one email: a first attempt and 3 retries, then the events stay queued for the next
- * cycle. Uses atomic database-backed claiming to ensure that two workers or instances never send the same email concurrently.
+ * cycle. Delivery is at-least-once, not exactly-once: SMTP accepting a mail and the database recording it are two
+ * steps, and a crash or database failure between them can repeat that one email. The notification table is the history. Uses atomic database-backed claiming to ensure that two workers or instances never send the same email concurrently.
  * Never throws, so a mail failure cannot affect the poller, and it cannot reach a lock at all.
  */
 async function sendPending({
@@ -252,18 +253,26 @@ async function sendPending({
     tries++;
     try {
       await mailer.sendMail(mail);
-      const sentAt = new Date().toISOString();
+    } catch (e) {
+      lastError = errorCode(e);
+      LOG.warn('Lock email attempt failed:', lastError);
+      continue;
+    }
+    // The mail is out. A failure from here on must never resend it in this cycle: delivery is at-least-once, and
+    // an unrecorded send can repeat once, when the claim lease expires and another cycle picks the events up.
+    const sentAt = new Date().toISOString();
+    auditLocks(events, 'notification sent');
+    try {
       await store.completeEvents(events, {
         attempts: (event) => (event.attempts || 0) + tries,
         sentAt,
         lastError: '',
       });
       await store.saveMonitor({ lastNotificationDispatchedAt: sentAt });
-      auditLocks(events, 'notification sent');
       return 'sent';
     } catch (e) {
-      lastError = errorCode(e);
-      LOG.warn('Lock email attempt failed:', lastError);
+      LOG.error('Lock email was sent but could not be recorded as sent; it may be sent again after the lease expires:', errorCode(e));
+      return 'sent-unrecorded';
     }
   }
 

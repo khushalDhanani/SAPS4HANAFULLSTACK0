@@ -2,7 +2,7 @@
 
 jest.mock('../../../srv/common/mailer', () => ({
   isConfigured: jest.fn(() => true),
-  send: jest.fn().mockResolvedValue({ accepted: ['admin@aether.co.in'] })
+  sendMail: jest.fn().mockResolvedValue({ accepted: ['admin@aether.co.in'] })
 }));
 
 const mailer = require('../../../srv/common/mailer');
@@ -66,7 +66,7 @@ describe('passwordExpiryNotifier pollOnce', () => {
       await cds.db.run(cds.ql.DELETE.from(entity));
     }
 
-    mailer.send.mockClear();
+    mailer.sendMail.mockClear();
     mailer.isConfigured.mockReturnValue(true);
 
     mockAdapter = {
@@ -144,10 +144,10 @@ describe('passwordExpiryNotifier pollOnce', () => {
     });
     expect(result.dispatchedCount).toBe(3); // ALICE (expiring_soon), BOB (expired), INITIAL_USER (initial)
 
-    // Verify mailer.send was invoked with correct arguments
-    expect(mailer.send).toHaveBeenCalledTimes(1);
-    const mailArgs = mailer.send.mock.calls[0][0];
-    expect(mailArgs.to).toEqual(['security@aether.co.in']);
+    // Verify mailer.sendMail was invoked with correct arguments
+    expect(mailer.sendMail).toHaveBeenCalledTimes(1);
+    const mailArgs = mailer.sendMail.mock.calls[0][0];
+    expect(mailArgs.to).toBe('security@aether.co.in');
     expect(mailArgs.subject).toContain('[SAP Security Alert] 3 User Passwords Expired & Expiring Soon');
     expect(mailArgs.html).toContain('Alice Smith');
     expect(mailArgs.html).toContain('Bob Jones');
@@ -167,16 +167,36 @@ describe('passwordExpiryNotifier pollOnce', () => {
 
     expect(result.status).toBe('ok');
     expect(result.dispatchedCount).toBe(0);
-    expect(mailer.send).not.toHaveBeenCalled();
+    expect(mailer.sendMail).not.toHaveBeenCalled();
 
     // Events are queued in DB with status pending
     const events = await cds.db.run(cds.ql.SELECT.from(store.EVENT).where({ status: 'pending' }));
     expect(events.length).toBeGreaterThan(0);
   });
 
+  test('the mocked mailer has the functions the real mailer exports', () => {
+    const real = jest.requireActual('../../../srv/common/mailer');
+    expect(Object.keys(mailer).sort()).toEqual(Object.keys(real).sort());
+  });
+
+  test('a mail that was sent but could not be recorded is not released for an immediate resend', async () => {
+    process.env.PWD_NOTIFY_TO = 'security@aether.co.in';
+    const complete = jest.spyOn(store, 'completeEvents').mockRejectedValueOnce(new Error('database down'));
+    const release = jest.spyOn(store, 'releaseOrFailEvents');
+    try {
+      const result = await notifier.pollOnce(() => mockAdapter, new Date('2026-11-06T10:00:00.000Z'));
+      expect(result.status).toBe('ok');
+      expect(mailer.sendMail).toHaveBeenCalledTimes(1);
+      expect(release).not.toHaveBeenCalled();
+    } finally {
+      complete.mockRestore();
+      release.mockRestore();
+    }
+  });
+
   test('handles SMTP dispatch failure by releasing claimed events with retry backoff', async () => {
     process.env.PWD_NOTIFY_TO = 'security@aether.co.in';
-    mailer.send.mockRejectedValueOnce(new Error('SMTP connection refused'));
+    mailer.sendMail.mockRejectedValueOnce(new Error('SMTP connection refused'));
 
     const result = await notifier.pollOnce(() => mockAdapter, new Date('2026-11-06T10:00:00.000Z'));
 
