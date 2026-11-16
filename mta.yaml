@@ -21,7 +21,7 @@ modules:
     parameters:
       buildpack: nodejs_buildpack
       readiness-health-check-type: http
-      readiness-health-check-http-endpoint: /health
+      readiness-health-check-http-endpoint: /health/ready
     build-parameters:
       builder: npm-ci
     provides:

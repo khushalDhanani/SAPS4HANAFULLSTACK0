@@ -15,6 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Cloud Foundry readiness check points at `/health/ready` — PARTIAL (2026-11-16 10:40 IST):** `mta.yaml` now uses `/health/ready` (200 only when the app database answers) instead of `/health`. Takes effect on the next deployment. Jest and MTA descriptor validation pass locally; behavior on Cloud Foundry with HANA is NOT VERIFIED (no deployment). Uncommitted.
 - **`feature01` pushed; hosted CI PASS at `880048fb` (2026-11-16 10:35 IST):** Run 43806107926 succeeded: "Build, Test & Validate" (including "Validate MTA deployment descriptor" and the new "Build MTA archive and check its modules") and "Browser E2E, SAP-free suites (PR gate)". The full browser suite and the non-production SAP validation jobs were skipped (separately controlled). This supersedes the "not pushed" / "hosted CI NOT VERIFIED" wording for the URL rename and review items 4–10 below. Still NOT VERIFIED: live SMTP, Docker profile, any deployment.
 - **Commits for the URL rename and P1 review items 4–10 (2026-11-16 10:25 IST):** On `feature01`, local only: `11e8f809` (User Master URL rename), `92467b35` (items 4, 5, 7, 8, 9), `b688913d` (item 10), `b80d8553` (item 6). The "Uncommitted" / "Not committed" wording in the entries below predates these commits. Not pushed (4 commits ahead of `origin/feature01` at `11eb8dd2`); hosted CI NOT VERIFIED. Only the final tree was tested (Jest 192 suites / 3,298 tests, lint); the commits were not tested one by one.
 - **SMTP delivery (P1 item 6) — PARTIAL, live verification BLOCKED (2026-11-16 10:20 IST):** Two defects fixed: the password expiry notifier called `mailer.send`, which the mailer does not export, so its email could never be sent; and a lock email that SMTP accepted was resent up to 3 more times in the same cycle when recording it failed. Delivery is now documented in code as at-least-once. Jest 192 suites / 3,298 tests and lint pass. Live SMTP is NOT VERIFIED: from this shell the configured SMTP host does not resolve (cause UNKNOWN). No email was sent. Uncommitted.
@@ -4644,3 +4645,16 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - NOT VERIFIED: the two skipped jobs; live SMTP delivery; the Docker profile; any deployment.
 - Next: User decides the open items (SMTP live check with a written go, readiness endpoint, bulk source for last-changed data).
 - FINAL STATUS: PASS — pushed, hosted CI green on the pushed head. This entry itself is not committed.
+
+### 2026-11-16 10:40 IST — Point the Cloud Foundry readiness check at `/health/ready` — PARTIAL
+
+- REQUEST: User chose "Readiness to /health/ready".
+- INSPECT: `git status` clean at `6e25c719`. The only readiness setting is `mta.yaml:24` on module `saps4hana-srv` (`readiness-health-check-type: http`); no `mta/extensions` file overrides it. `/health` stays in use by `compose.yaml`, `.github/workflows/ci.yml` and `tools/smoke-test-deployment.js`.
+- CHANGED: `mta.yaml`: `readiness-health-check-http-endpoint: /health/ready`. Comments in `server.js` and `test/integration/health.test.js` corrected. New test: the endpoint named in `mta.yaml` is `/health/ready` and the server answers it with 200.
+- BEHAVIOR CHANGE (on the next deployment): an instance whose database read fails answers 503 and Cloud Foundry stops routing to it until the read works again (result cached up to 15 s). If every instance loses the database, users get the platform's error instead of the app's. An SAP outage does not affect readiness.
+- TEST DECISION: TEST ADDED — `test/integration/health.test.js` (1 test).
+- TESTED: `npx jest test/integration/health.test.js`: 8 tests PASS. `npm test`: result recorded below. `npm run validate:mta`: exit 0. `npm run lint`: exit 0. `git diff --check`: clean.
+- NOT VERIFIED: the check on Cloud Foundry with HANA (no deployment was made; the readiness read uses `saps4hana.admin.UserLockMonitor`, tested on SQLite only); hosted CI for this change.
+- ASSUMPTIONS: none.
+- Next: User commits and pushes; verify readiness on the next QA deployment (needs the user's written go).
+- FINAL STATUS: PARTIAL — configured and tested locally; platform behavior NOT VERIFIED. Not committed.

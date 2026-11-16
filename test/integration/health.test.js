@@ -4,8 +4,8 @@ const { GET, axios } = cdsTest;
 const { RfcClient } = require('../../srv/integration/s4hana/RfcClient');
 
 /**
- * Cloud Foundry readiness check (mta.yaml: readiness-health-check-http-endpoint: /health).
- * The platform calls this endpoint without credentials and expects HTTP 200.
+ * /health is the plain "process answers" check used by Docker, CI and the smoke test.
+ * Cloud Foundry's readiness check (mta.yaml) calls /health/ready, also without credentials, and expects HTTP 200.
  */
 describe('Integration: /health readiness endpoint', () => {
 
@@ -31,6 +31,13 @@ describe('Integration: /health readiness endpoint', () => {
 
 describe('Integration: /health/live, /health/ready and /health/dependencies', () => {
     const open = (path) => axios.get(path, { maxRedirects: 0, validateStatus: () => true });
+
+    it('the Cloud Foundry readiness check in mta.yaml points at /health/ready, which this server serves', async () => {
+        const mta = require('fs').readFileSync(require('path').join(__dirname, '../../mta.yaml'), 'utf8');
+        const endpoints = [...mta.matchAll(/readiness-health-check-http-endpoint:\s*(\S+)/g)].map((m) => m[1]);
+        expect(endpoints).toEqual(['/health/ready']);
+        expect((await open(endpoints[0])).status).toBe(200);
+    });
 
     it('answers all three without authentication and without caching', async () => {
         for (const path of ['/health/live', '/health/ready', '/health/dependencies']) {

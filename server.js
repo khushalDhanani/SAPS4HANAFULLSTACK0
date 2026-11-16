@@ -66,8 +66,8 @@ const localTokenUtil = require('./srv/auth/localTokenUtil');
 
 // Local development bootstrap handlers
 cds.on('bootstrap', (app) => {
-    // Readiness endpoint for the Cloud Foundry HTTP health check declared in mta.yaml
-    // (readiness-health-check-http-endpoint: /health). Registered before CAP mounts its
+    // Plain "the process answers" endpoint, used by Docker, CI and the smoke test. The Cloud Foundry readiness
+    // check declared in mta.yaml uses /health/ready (srv/common/health.js). Registered before CAP mounts its
     // protocol adapters and auth middleware, so it needs no credentials and never touches S/4HANA.
     app.get('/health', (req, res) => {
         res.set('Cache-Control', 'no-store').status(200).json({ status: 'UP' });
