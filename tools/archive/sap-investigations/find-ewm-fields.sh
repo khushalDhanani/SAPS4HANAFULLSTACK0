@@ -4,7 +4,7 @@ if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
   exit 2
 fi
 # What does SAP really call the 7 fields EwmMapper reads but never receives?
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 set -a
 [ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
 set +a

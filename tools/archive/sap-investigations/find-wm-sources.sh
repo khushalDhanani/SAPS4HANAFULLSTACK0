@@ -5,7 +5,7 @@ if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
 fi
 # Read-only discovery for the TR/SU RF screen. Writes raw results to docs/wm-discovery/.
 # Usage: P='USER:PASS' bash tools/find-wm-sources.sh   (or omit P to use .env.local)
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../.."
 set -a; [ -f ./.env.local ] && . ./.env.local; set +a
 [ -z "$P" ] && P="$S4_USERNAME:$S4_PASSWORD"
 H="${S4_DESTINATION_URL}"; C="${S4_CLIENT:-220}"

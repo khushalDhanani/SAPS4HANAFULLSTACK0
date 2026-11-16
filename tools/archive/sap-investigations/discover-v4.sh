@@ -4,7 +4,7 @@ if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
   exit 2
 fi
 # Find OData V4 services. The v=2 catalog cannot see these.
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 set -a
 [ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
 set +a

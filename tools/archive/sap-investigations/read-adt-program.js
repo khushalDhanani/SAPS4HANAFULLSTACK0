@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env.local') });
 
 const base = (process.env.S4_DESTINATION_URL || '').replace(/\/sap\/opu\/odata.*$/i, '').replace(/\/$/, '');
 const client = process.env.S4_CLIENT || '';

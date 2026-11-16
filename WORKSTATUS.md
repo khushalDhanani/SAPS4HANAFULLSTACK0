@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Additional SAP investigation scripts archived — PASS for repository move (2026-11-16):** Four scripts with no in-repo package/CI/runbook callers are under `tools/archive/sap-investigations/`; their source and guards are retained, the PGI unit-test import follows the new path, and the archive README documents write risk and known guard limitations. No SAP calls were made.
+- **Additional SAP investigation scripts archived — PARTIAL (2026-11-16):** Four earlier candidates and the 15 candidates from the final cleanup plan are under `tools/archive/sap-investigations/`; source and gates are retained, path references are repaired, and the archive README records risks. Syntax, path, and reference checks passed. The historical live scripts have no direct unit suites and were not executed against SAP.
 
 - **Documentation audit — PASS for scoped edits (2026-11-16):** Stale creatable-services catalog/status summaries are labeled historical, current SAP capability is explicitly unverified, and matrix SAP counts now classify the incomplete goods-receipt suite as partial. Historical evidence remains dated and traceable. Validation details are in the change entry below.
 
@@ -4730,3 +4730,16 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: Repository search is sufficient to identify in-repo callers/runbooks, but not external operator copies or undocumented workflows.
 - Next: No further archival action is supported by the current in-repository references; external copies or undocumented operator workflows cannot be ruled out. The known PGI guard defects should be fixed and separately validated before any future use.
 - FINAL STATUS: PASS for the repository move; no SAP behavior was tested.
+
+### 2026-11-16 — Archive remaining unreferenced SAP investigation scripts — PARTIAL
+
+- REQUEST: User approved the exact cleanup plan with “Go”: archive the 15 reviewed one-off SAP investigation tools, retain evidence and gates, and repair move-dependent paths. No SAP or app behavior changes.
+- INSPECT: Read `AGENTS.md`, `WORKSTATUS.md`, the 15 candidate scripts, current Git status, `package.json`, CI workflow references, repository consumers, docs/runbooks, and existing archive README. None of these 15 candidates is a package script or CI command. `test-gr-su-post-cycle.js` has only a historical WORKSTATUS reference; other references are absent. The shared dependencies are used elsewhere; no dependency removal is planned. No SAP call was made.
+- PLAN: Move candidates into `tools/archive/sap-investigations/`; repair project-root, gate, env, and integration imports needed for relocation; preserve `docs/wm-discovery/` outputs and historical WORKSTATUS evidence; extend the README. No deleting candidate source, no SAP calls, and no product architecture changes.
+- CHANGED: Pending.
+- TEST DECISION: TEST NOT POSSIBLE — no direct unit tests consume these 15 manual SAP probes; executing them would make live SAP requests and may create documents. No test abstraction was added because behavior is unchanged and this scope is archival.
+- VALIDATION: Bash syntax checks passed for all six moved shell scripts. `node --check` passed for all six moved JavaScript scripts. In-memory Python `compile()` passed for both moved Python scripts without generating cache files. Relative CommonJS import resolution passed for all six moved JavaScript scripts. Reference searches found no package-script, CI, or test consumers; the only nonhistorical repository references are the archive inventory, and the previously recorded goods-receipt note remains historical. No npm dependency or lockfile changes. `git diff --check` passed. No SAP calls were made.
+- NOT VERIFIED: External operator copies or undocumented external runbooks; validity of historical SAP service contracts, payloads, and identifiers.
+- ASSUMPTIONS: Repository searches identify in-repository use but cannot rule out external or undocumented use.
+- Next: No remaining active tool candidates from the reviewed 49-file inventory were identified for removal without further evidence. The static archival checks passed; executing the historical scripts is deliberately not part of validation.
+- FINAL STATUS: PARTIAL — repository archival and static validation completed; dynamic SAP behavior was not tested.

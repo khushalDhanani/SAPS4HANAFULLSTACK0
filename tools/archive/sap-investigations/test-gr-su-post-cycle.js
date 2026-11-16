@@ -1,16 +1,18 @@
 #!/usr/bin/env node
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 // Supervised live proof of Goods Receipt against Storage Unit (Movement Type 101).
 // WRITE commands change SAP; they run only with the trailing flag --go (one SAP write per invocation,
 // followed immediately by read-back). Stops at the first error; never retries.
 // Usage:
-//   node tools/test-gr-su-post-cycle.js read     <delivery>
-//   node tools/test-gr-su-post-cycle.js simulate <delivery> [SU]
-//   node tools/test-gr-su-post-cycle.js post     <delivery> <SU> --go     # REAL SAP WRITE
-//   node tools/test-gr-su-post-cycle.js cancel   <matDoc> <year> --go     # REVERSE VIA 102
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });
-const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
-const { S4HttpClient } = require('../srv/integration/s4hana/S4HttpClient');
+//   node tools/archive/sap-investigations/test-gr-su-post-cycle.js read     <delivery>
+//   node tools/archive/sap-investigations/test-gr-su-post-cycle.js simulate <delivery> [SU]
+//   node tools/archive/sap-investigations/test-gr-su-post-cycle.js post     <delivery> <SU> --go     # REAL SAP WRITE
+//   node tools/archive/sap-investigations/test-gr-su-post-cycle.js cancel   <matDoc> <year> --go     # REVERSE VIA 102
+const path = require('path');
+const root = path.resolve(__dirname, '../../..');
+require('dotenv').config({ path: path.join(root, '.env.local') });
+const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
+const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
 const MATDOC_API = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV';
 
 const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith('--')));
@@ -43,10 +45,10 @@ async function inspectDelivery(delivNo) {
 (async () => {
   if (!cmd || cmd === 'help') {
     console.log('Usage:');
-    console.log('  node tools/test-gr-su-post-cycle.js read     <delivery>');
-    console.log('  node tools/test-gr-su-post-cycle.js simulate <delivery> [SU]');
-    console.log('  node tools/test-gr-su-post-cycle.js post     <delivery> <SU> --go');
-    console.log('  node tools/test-gr-su-post-cycle.js cancel   <matDoc> <year> --go');
+    console.log('  node tools/archive/sap-investigations/test-gr-su-post-cycle.js read     <delivery>');
+    console.log('  node tools/archive/sap-investigations/test-gr-su-post-cycle.js simulate <delivery> [SU]');
+    console.log('  node tools/archive/sap-investigations/test-gr-su-post-cycle.js post     <delivery> <SU> --go');
+    console.log('  node tools/archive/sap-investigations/test-gr-su-post-cycle.js cancel   <matDoc> <year> --go');
     return;
   }
 

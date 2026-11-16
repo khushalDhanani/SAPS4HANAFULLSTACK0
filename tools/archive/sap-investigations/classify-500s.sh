@@ -5,7 +5,7 @@ if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
 fi
 # Read the ERROR BODY of every service that returned 500, and group by SAP error
 # code. A status code alone does not identify the fault - proven twice today.
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 set -a
 [ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
 set +a

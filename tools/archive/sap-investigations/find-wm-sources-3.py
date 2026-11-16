@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
+"""Pass 3 (read-only): find the RF screen program, RFC flags of the TR FMs, OData projects,
+live WM table samples. Output: docs/wm-discovery/pass3/.  Usage: P='USER:PASS' python3 tools/archive/sap-investigations/find-wm-sources-3.py"""
+import os, re, base64, sys, urllib.request, urllib.error
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "tools"))
 from live_sap_gate import require_live_sap_tool
 require_live_sap_tool()
-"""Pass 3 (read-only): find the RF screen program, RFC flags of the TR FMs, OData projects,
-live WM table samples. Output: docs/wm-discovery/pass3/.  Usage: P='USER:PASS' python3 tools/find-wm-sources-3.py"""
-import os, re, base64, urllib.request, urllib.error
+os.chdir(ROOT)
 H, C = os.environ['S4_DESTINATION_URL'], os.environ.get('S4_CLIENT', '220')
 AUTH = 'Basic ' + base64.b64encode(os.environ['P'].encode()).decode()
 O = 'docs/wm-discovery/pass3'; os.makedirs(O, exist_ok=True)

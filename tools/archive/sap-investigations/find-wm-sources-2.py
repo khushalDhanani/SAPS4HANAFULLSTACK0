@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-from live_sap_gate import require_live_sap_tool
-require_live_sap_tool()
 """Pass 2 (read-only): source of the candidate Z objects + WM CDS views, tcode->program map,
 and live WM table samples via ADT data preview. Output: docs/wm-discovery/pass2/.
-Usage: P='USER:PASS' python3 tools/find-wm-sources-2.py"""
-import os, re, base64, urllib.request, urllib.error, http.cookiejar
+Usage: P='USER:PASS' python3 tools/archive/sap-investigations/find-wm-sources-2.py"""
+import os, re, base64, sys, urllib.request, urllib.error, http.cookiejar
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "tools"))
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
+os.chdir(ROOT)
 H, C = os.environ['S4_DESTINATION_URL'], os.environ.get('S4_CLIENT', '220')
 user, pw = os.environ['P'].split(':', 1)
 O = 'docs/wm-discovery/pass2'; os.makedirs(O, exist_ok=True)

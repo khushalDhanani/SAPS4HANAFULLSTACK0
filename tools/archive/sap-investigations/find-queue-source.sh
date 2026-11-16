@@ -5,7 +5,7 @@ if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
 fi
 # Which registered EWM service exposes warehouse-order queue, assigned user,
 # bin max weight, or resource type? Searches candidates from the live catalog.
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 set -a
 [ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
 set +a

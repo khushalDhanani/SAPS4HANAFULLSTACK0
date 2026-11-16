@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-require('./live-sap-gate')();
+require('../../live-sap-gate')();
 /**
  * test-po-creation-all-types.js
  * Comprehensive automated verification tool for Purchase Order creation across all 16 PO types.
@@ -10,11 +10,11 @@ require('./live-sap-gate')();
  *
  * Execution Modes:
  *   1. Full Test Suite (all 16 types):
- *        node tools/test-po-creation-all-types.js
+ *        node tools/archive/sap-investigations/test-po-creation-all-types.js
  *   2. Single Type Test:
- *        node tools/test-po-creation-all-types.js --type ZDOM
+ *        node tools/archive/sap-investigations/test-po-creation-all-types.js --type ZDOM
  *   3. Full S/4HANA Activation Proof (creates real document in SAP and reads back):
- *        node tools/test-po-creation-all-types.js --type ZDOM --activate
+ *        node tools/archive/sap-investigations/test-po-creation-all-types.js --type ZDOM --activate
  *
  * Architecture & Validation Pipeline for each PO Type:
  *   [1] CAP Domain Validation (validateCreatePurchaseOrderPayload)
@@ -25,14 +25,15 @@ require('./live-sap-gate')();
  */
 
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const root = path.resolve(__dirname, '../../..');
+require('dotenv').config({ path: path.join(root, '.env.local') });
+require('dotenv').config({ path: path.join(root, '.env') });
 
-const adapter = require('../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
-const { S4HttpClient } = require('../srv/integration/s4hana/S4HttpClient');
-const { mapToS4Payload } = require('../srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
-const { validateCreatePurchaseOrderPayload } = require('../srv/mm/purchase-order/validation/purchaseOrder.validation');
-const PurchaseOrderValidator = require('../app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator');
+const adapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
+const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
+const { mapToS4Payload } = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
+const { validateCreatePurchaseOrderPayload } = require('../../../srv/mm/purchase-order/validation/purchaseOrder.validation');
+const PurchaseOrderValidator = require('../../../app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator');
 
 // Helper for CLI arguments
 function getArg(flag, fallback) {

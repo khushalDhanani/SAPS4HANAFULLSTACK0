@@ -5,7 +5,7 @@ if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
 fi
 # Existence is not reality. This counts ROWS behind every entity set the code reads.
 # A service can answer 200 on $metadata and hold nothing - EWM does exactly that.
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 set -a
 [ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
 set +a
