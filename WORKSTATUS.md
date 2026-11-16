@@ -15,6 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Commits for the URL rename and P1 review items 4–10 (2026-11-16 10:25 IST):** On `feature01`, local only: `11e8f809` (User Master URL rename), `92467b35` (items 4, 5, 7, 8, 9), `b688913d` (item 10), `b80d8553` (item 6). The "Uncommitted" / "Not committed" wording in the entries below predates these commits. Not pushed (4 commits ahead of `origin/feature01` at `11eb8dd2`); hosted CI NOT VERIFIED. Only the final tree was tested (Jest 192 suites / 3,298 tests, lint); the commits were not tested one by one.
 - **SMTP delivery (P1 item 6) — PARTIAL, live verification BLOCKED (2026-11-16 10:20 IST):** Two defects fixed: the password expiry notifier called `mailer.send`, which the mailer does not export, so its email could never be sent; and a lock email that SMTP accepted was resent up to 3 more times in the same cycle when recording it failed. Delivery is now documented in code as at-least-once. Jest 192 suites / 3,298 tests and lint pass. Live SMTP is NOT VERIFIED: from this shell the configured SMTP host does not resolve (cause UNKNOWN). No email was sent. Uncommitted.
 - **User list detail reads on bounded parallel connections (P1 item 10) — PARTIAL (2026-11-16 10:12 IST):** `listUsers` reads user details on up to 4 RFC connections (one extra per 25 uncached users) instead of one. Measured READ-ONLY on the local SAP connection: 278 users, 279 RFC calls, 16.97 s before; 6.85 s and 7.17 s after. Result rows and call count are unchanged. Jest 192 suites / 3,294 tests and lint pass. Bulk retrieval, pagination and server-side filtering are NOT DONE (open findings). Browser E2E and hosted CI not run. Uncommitted.
 - **Health endpoints split (P1 item 9) — PARTIAL (2026-11-16 10:08 IST):** New unauthenticated `/health/live`, `/health/ready` (503 when the app database does not answer) and `/health/dependencies` (database, S/4 destination resolution, RFC SDK; status words only, cached 15 s). `/health` is unchanged and is still the Cloud Foundry and Docker check. SAP OData reachability is reported as `NOT_CHECKED` (no live probe; user's decision pending). Jest 192 suites / 3,289 tests and lint pass; the four endpoints answer on the local server. Hosted CI, HANA and BTP are NOT VERIFIED. Uncommitted.
@@ -4623,3 +4624,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: "Next" meant item 6.
 - Next: User runs or authorizes the SMTP check from a network that reaches the mail server, then gives a written go naming the test inbox for one test email. Review and commit items 4–10.
 - FINAL STATUS: PARTIAL — two delivery defects fixed and tested with mocks; live SMTP verification is BLOCKED and no email was sent. Not committed.
+
+### 2026-11-16 10:25 IST — Commit the URL rename and P1 review items 4–10 — PASS (local commits)
+
+- REQUEST: User: "Commit the working tree changes with a sensible message" (rename), later the choice "Commit items 4–10".
+- DONE: `11e8f809` refactor: rename User Master URL; `92467b35` feat: P1 review items 4, 5, 7, 8, 9; `b688913d` perf(admin): item 10; `b80d8553` fix(admin): item 6 plus the WORKSTATUS entries for items 6 and 10.
+- DEVIATION: one commit per item was offered. Most files were already staged when the first commit ran, so it took items 4, 5, 7, 8 and 9 together under a message that named only 7 and 8. The commit was local and unpushed; its message was amended to match its content. It was not split further.
+- TESTED: nothing new. The final tree is the state validated in the item 6 entry (`npm test` 192 suites / 3,298 tests, lint exit 0). Individual commits were not tested on their own; `92467b35` alone may not pass.
+- NOT VERIFIED: hosted CI (nothing pushed).
+- Next: User pushes `feature01` and checks hosted CI, in particular the new MTA archive step.
+- FINAL STATUS: PASS for the commits; hosted CI NOT VERIFIED.
