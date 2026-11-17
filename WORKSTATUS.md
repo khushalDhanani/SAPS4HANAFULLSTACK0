@@ -17,13 +17,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`, `HEAD` `6b688fc5`; the worktree contains uncommitted smoke-test/readiness changes, PO-tool guard, and Phase 2 of SM21/SM20 Log Monitoring. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
-- **SM21 & SM20 Log Monitoring (Phase 2 & Review Fixes Round 4) — PARTIAL:** Read-only adapters (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`), CAP service (`srv/admin/sap-logs-service.cds`, `srv/admin/sapLogsService.js`), and live test harness updated and validated.
-  1. *Timezone & Offset Coupling:* Decoupled `SecurityAuditLogAdapter.js` offset resolution from SM21 (`resolveSm20TzOffset()`). In `sapLogsLive.test.js`, server offset is derived independently from live SM20 kernel pairs (`SAL_DATE`/`SAL_TIME` vs `LOG_TSTMP`), breaking previous circularity. Proved failure with `SAPLOGS_SM21_TZ_OFFSET_MINUTES=0`: all 4 SM21 live tests + cross-check failed (5 failed, 2 passed), proving non-circular test validity. Verified pass with configured offset (330): 7/7 live tests passed in 8.272s.
-  2. *Slot Map & Redaction for `message`:* Implemented `sanitizeSyslogData()` with slot mapping for `AB1` (chars 44+ user, chars 12-44 instance), `Q04` (slot 0 user), `AB6` (slot 0 user), instance pattern scrubbers (`_DS4_00`, `vheudds4*`, `app-server-*`, `knownInstances`), and `SLGUSER` token scrubbers when `includeUser=false`. Scrubbed all 10 fixtures in `SystemLogAdapter.test.js`.
-  3. *Strict Message Text Formatting:* Tagged `messageText` as EXPERIMENTAL / UNVERIFIED in CDS doc comments and `SAP_SYSLOG_DISCOVERY.md`. Implemented strict mode: returns `null` for `Q04`, `AB0`, `D01`, `S23`, `R47`, `R48`. Removed unverified "Dropped Parts" justifications. Disclosed that "Severity" labels were inferred from 1st char of `SLGTYPE` (tagged UNVERIFIED).
-  4. *Scope & Authorization:* Mocked users placed in `test/testUsers.js` (`CDS_CONFIG`), keeping `package.json` with `khushal` only. `xs-security.json` configured with `SapLogsReader` scope, role template, and `SAPS4HANA_LogAuditor` role collection. Proposed dedicated role template separation for `SapLogsReader`.
-  5. *Evidence Clean-Up:* Tagged "ET_LOG_UTC only in DB format" claim as UNVERIFIED; inspected `RSAU_API_GET_AUDIT_CONFIG` live and documented actual fields. Reconciled all test counts. Confirmed `git restore --staged .` and verified strictly 0 staged files. Sanitized all `scratch/` files.
-  6. *Full Test Verification & Live HTTP E2E:* 4 unit suites: 90 passed. Live suite: `sapLogsLive.test.js` (7 passed). Dedicated live HTTP E2E suite (`sapLogsHttpLive.test.js`): 6 passed against live DS4/220 (`test-logs-reader` gets 200, 24h scan confirms zero leaks in `AB1`/`Q04`, `test-logs-viewer` gets 403, anonymous gets 401). Full repo suite (`npm test`): 199 suites passed (3396 passed, 13 skipped, 0 failed, 78.321 s).
+- **SM21 & SM20 Log Monitoring (UI Implementation & Phase 2) — PARTIAL:** SAPUI5 user interface implemented following official Fiori Design Guidelines.
+  1. *Fiori Views & Navigation:* Added `sideNavSapLogs` under `sideNavAdministration` in `App.view.xml` (visible to `Admin` and `SapLogsReader`). Added `sectionSapLogs` in `Dashboard.view.xml` rendering `SapLogs.fragment.xml` with two tabs via `IconTabBar`: Tab 1 System Log (SM21, icon `sap-icon://log`), Tab 2 Security Audit Log (SM20, icon `sap-icon://shield`). Added `SapLogsDetailDialog.fragment.xml` for full technical record inspection.
+  2. *Logic & Service Integration:* Created `saps4hana/fiori/modules/admin/sap-logs/util/SapLogsLogic.js`. Manages `sapLogsView` JSON model, computes UTC query windows (15m, 1h, 4h, 24h for SM21; 15m, 1h, 4h, 6h for SM20) with a 5s past buffer guarding against future-window rejection, queries CAP `/odata/v4/sap-logs/getSystemLog` and `/odata/v4/sap-logs/getSecurityAuditLog` via `ODataClient.get()`, filters loaded logs client-side via `SearchField`, and maps severity states/icons. Mounted `SapLogsService` in `srv/service.cds`.
+  3. *i18n & Static Consistency:* Added 43 i18n keys to both `i18n.properties` and `i18n_en.properties`. Passed all 8 assertions in `test/unit/controller/uiConsistency.test.js` (no page title, no DynamicPage title, every table has `noDataText`, no pixel sizing, all CSS defined, all text from i18n). Passed `ui5lint` with 0 findings.
+  4. *Validation & Tests:* Added unit suite `test/unit/admin/SapLogsLogic.test.js` (16 passed). Updated `test/unit/dashboard/dashboardMetrics.test.js` (45 passed). `AppController.test.js` (12 passed). Full repository test suite (`npm test`): 200 suites passed (3412 passed, 13 skipped, 3425 total, 78.924 s). Strictly 0 staged files.
 - **PO validation tool — PARTIAL:** `tools/test-po-creation-all-types.js` now validates/maps locally by default. Draft creation requires `--go` plus the shared `ALLOW_LIVE_SAP_TOOLS=1` and `--allow-live-sap` gate. Activation also requires `--activate`, `--confirm-activation`, and one `--type`. Four unit tests, lint, syntax check, and a local `ZDOM` invocation pass; SAP was not called. Current SAP data validity and live draft/activation behavior remain NOT VERIFIED.
 - **Health smoke checks — PARTIAL:** The runner checks `/health` for process liveness and `/health/ready` for database readiness, waiting on readiness. Targeted local tests passed. Deployment/Cloud Foundry behavior remains NOT VERIFIED.
 - **SAP-only persistence migration — BLOCKED:** `docs/decisions/sap-only-persistence-migration.md` states the SAP-side atomic claim/status/read implementation is not proven. Keep `db/`, HANA dependencies and the HDI deployer until atomicity, durability, concurrency, restart recovery, authorization and SAP read-back are demonstrated.
@@ -42,6 +40,39 @@ All historical change logs and past milestone statuses are preserved verbatim in
 5. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-17 16:55 IST — Implement SAP SM21 & SM20 Log Monitoring in UI — PARTIAL
+
+- REQUEST: Implement SAP System Log (SM21) and Security Audit Log (SM20) monitoring in UI.
+- INSPECT:
+  - Reviewed `AGENTS.md` and `WORKSTATUS.md`.
+  - Queried UI5 MCP server (`ui5-mcp`) for development guidelines: async loading, XML views/fragments, `sap.ui.define`, no pixel sizing, all strings in `i18n.properties` / `i18n_en.properties`, `sap.ui.layout.form.Form` with `ColumnLayout`.
+  - Inspected existing navigation architecture (`App.view.xml`, `App.controller.js`, `Dashboard.view.xml`, `Dashboard.controller.js`, `uiConsistency.test.js`, `AppController.test.js`, `dashboardMetrics.test.js`).
+  - Identified affected flows: SideNavigation under Administration group (`sideNavSapLogs`), dashboard section `sap-logs` (`sectionSapLogs`), and CAP service mounting in `srv/service.cds`.
+- CHANGED:
+  - `srv/service.cds`: Added `using from './admin/sap-logs-service';` to mount `SapLogsService` at `/odata/v4/sap-logs`.
+  - `app/fiori-app/webapp/view/App.view.xml`: Added `<tnt:NavigationListItem id="sideNavSapLogs" key="sap-logs" icon="sap-icon://log" text="{i18n>tabSapLogsTitle}" tooltip="{i18n>tabSapLogsTooltip}" />` under `sideNavAdministration`.
+  - `app/fiori-app/webapp/controller/App.controller.js`: Added `canReadLogs()` role check (`['Admin', 'SapLogsReader']`) and mapped `sSection === 'sap-logs'` to `sap-logs` key in `_getSideNavKey`.
+  - `app/fiori-app/webapp/view/Dashboard.view.xml`: Added `sectionSapLogs` embedding `<core:Fragment fragmentName="saps4hana.fiori.modules.admin.sap-logs.view.SapLogs" type="XML" />` and added `SapLogsDetailDialog.fragment.xml` in dependents.
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`: Imported `SapLogsLogic`; initialized `sapLogsView` model in `onInit`; supported `sap-logs` section in `_onDashboardMatched`; added handlers for tab selection, presets, search, refresh, and detail dialog.
+  - `app/fiori-app/webapp/modules/admin/sap-logs/view/SapLogs.fragment.xml`: Created Fiori-compliant fragment with `IconTabBar` (SM21 System Log & SM20 Security Audit Log), filter toolbars with time presets (15m, 1h, 4h, 24h/6h), instance input, user filter, max rows selector, search field, and responsive tables with semantic severity statuses.
+  - `app/fiori-app/webapp/modules/admin/sap-logs/view/SapLogsDetailDialog.fragment.xml`: Created detail inspection dialog using `sap.ui.layout.form.Form` with `ColumnLayout`.
+  - `app/fiori-app/webapp/modules/admin/sap-logs/util/SapLogsLogic.js`: Created UI logic module handling model state, UTC window calculation (with 5s buffer avoiding future-window guard), OData V4 function URL construction, client-side search filtering, data loading via `ODataClient.get()`, and status formatters.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added 43 i18n keys for all user-facing labels, placeholders, and tooltips.
+  - `test/unit/admin/SapLogsLogic.test.js`: Added comprehensive unit test suite covering model creation, window calculations, URL construction, search filtering, formatters, and data fetching with mock client (16 passed).
+  - `test/unit/dashboard/dashboardMetrics.test.js`: Updated expected `navKeys` to include `sap-logs` (45 passed).
+- TEST DECISION: TEST ADDED (`test/unit/admin/SapLogsLogic.test.js`) / TEST UPDATED (`test/unit/dashboard/dashboardMetrics.test.js`).
+- TESTED:
+  - `npx jest test/unit/admin/SapLogsLogic.test.js`: 1 suite / 16 tests PASS.
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 1 suite / 8 tests PASS.
+  - `npx jest test/unit/controller/AppController.test.js`: 1 suite / 12 tests PASS.
+  - `npx jest test/unit/dashboard/dashboardMetrics.test.js`: 1 suite / 45 tests PASS.
+  - `npm --prefix app/fiori-app run lint` (ui5lint): Success! No findings detected.
+  - Full repo suite `npm test`: 200 suites passed, 0 failed (3412 passed, 13 skipped, 3425 total, 78.924 s).
+- NOT VERIFIED: Full browser Playwright execution with live backend requires deployed/running server session.
+- ASSUMPTIONS: None.
+- Next: User reviews UI implementation and commits when ready.
+- FINAL STATUS: PARTIAL — UI implementation and unit verification complete; uncommitted and strictly unstaged (0 staged files).
 
 ### 2026-11-17 16:15 IST — SM21 & SM20 Log Monitoring Phase 2 Round 4 Review Fixes — PARTIAL
 

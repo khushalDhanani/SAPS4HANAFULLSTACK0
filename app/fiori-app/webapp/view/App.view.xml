@@ -26,6 +26,7 @@
                         <tnt:NavigationListItem id="sideNavAdministration" icon="sap-icon://group" text="{i18n>tabAdminTitle}" tooltip="{i18n>tabAdminTooltip}" selectable="false" visible="{path: 'auth>/user/scopes', formatter: '.isAdmin'}">
                             <tnt:items>
                                 <tnt:NavigationListItem id="sideNavUserMaster" key="user-master" text="{i18n>tabUserMasterTitle}" tooltip="{i18n>tabUserMasterTooltip}" />
+                                <tnt:NavigationListItem id="sideNavSapLogs" key="sap-logs" icon="sap-icon://log" text="{i18n>tabSapLogsTitle}" tooltip="{i18n>tabSapLogsTooltip}" />
                             </tnt:items>
                         </tnt:NavigationListItem>
                     </tnt:NavigationList>

@@ -274,6 +274,9 @@ sap.ui.define([
                 if (sSection === "user-master") {
                     return this.isAdmin() ? "user-master" : "overview";
                 }
+                if (sSection === "sap-logs") {
+                    return this.canReadLogs() ? "sap-logs" : "overview";
+                }
                 return ["mm", "sd", "ewm"].indexOf(sSection) === -1 ? "overview" : sSection;
             }
             var oRoute = this.getOwnerComponent().getRouter().getRoute(sRouteName);
@@ -285,6 +288,10 @@ sap.ui.define([
          */
         isAdmin: function () {
             return AuthService.hasAnyRole(["Admin"]);
+        },
+
+        canReadLogs: function () {
+            return AuthService.hasAnyRole(["Admin", "SapLogsReader"]);
         },
 
         /**

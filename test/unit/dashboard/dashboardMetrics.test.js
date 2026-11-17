@@ -487,7 +487,7 @@ describe('Unit: Dashboard view binds only live figures', () => {
         const appViewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/App.view.xml'), 'utf8');
         const navKeys = [...appViewXml.matchAll(/<tnt:NavigationListItem[^>]*?key="([a-zA-Z-]+)"/g)].map((m) => m[1]);
         const sectionKeys = [...viewXml.matchAll(/dashboardView>\/selectedTab\} === '([a-zA-Z-]+)'/g)].map((m) => m[1]);
-        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm', 'user-master']);
+        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm', 'user-master', 'sap-logs']);
         expect(sectionKeys).toEqual(navKeys);
     });
 

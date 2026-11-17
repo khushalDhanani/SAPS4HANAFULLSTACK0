@@ -724,12 +724,18 @@
                                 </VBox>
                             </VBox>
                         </VBox>
+
+                        <!-- SAP SYSTEM & SECURITY LOGS (ADMIN) -->
+                        <VBox id="sectionSapLogs" visible="{= ${dashboardView>/selectedTab} === 'sap-logs' }">
+                            <core:Fragment fragmentName="saps4hana.fiori.modules.admin.sap-logs.view.SapLogs" type="XML" />
+                        </VBox>
                     </items>
                 </VBox>
             </VBox>
         </content>
         <dependents>
             <core:Fragment fragmentName="saps4hana.fiori.fragment.UserBulkDialogs" type="XML" />
+            <core:Fragment fragmentName="saps4hana.fiori.modules.admin.sap-logs.view.SapLogsDetailDialog" type="XML" />
         </dependents>
     </Page>
 </mvc:View>

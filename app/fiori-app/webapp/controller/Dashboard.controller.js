@@ -10,7 +10,8 @@ sap.ui.define([
     "sap/ui/core/library",
     "saps4hana/fiori/modules/admin/user-management/util/UserListLogic",
     "sap/ui/core/util/File",
-    "sap/base/util/uid"
+    "sap/base/util/uid",
+    "saps4hana/fiori/modules/admin/sap-logs/util/SapLogsLogic"
 ], function (
     BaseController,
     JSONModel,
@@ -23,7 +24,8 @@ sap.ui.define([
     coreLibrary,
     UserListLogic,
     FileUtil,
-    uid
+    uid,
+    SapLogsLogic
 ) {
     "use strict";
 
@@ -110,6 +112,12 @@ sap.ui.define([
             });
             this.getView().setModel(oViewModel, "dashboardView");
 
+            if (SapLogsLogic && typeof SapLogsLogic.createModel === "function") {
+                this._oSapLogsModel = SapLogsLogic.createModel();
+                this.getView().setModel(this._oSapLogsModel, "sapLogsView");
+            }
+            this._bSapLogsLoaded = false;
+
             var oOwnerComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
             var oRouter = oOwnerComp ? oOwnerComp.getRouter() : null;
             if (oRouter) {
@@ -156,10 +164,16 @@ sap.ui.define([
 
         _onDashboardMatched: function (oEvent) {
             var sSection = oEvent ? oEvent.getParameter("arguments").section : "";
-            var bAllowed = sSection === "user-master" ? AuthService.hasAnyRole(["Admin"]) : SECTIONS.indexOf(sSection) !== -1;
+            var bAllowed = sSection === "user-master" ? AuthService.hasAnyRole(["Admin"]) :
+                sSection === "sap-logs" ? AuthService.hasAnyRole(["Admin", "SapLogsReader"]) :
+                SECTIONS.indexOf(sSection) !== -1;
             this.getView().getModel("dashboardView").setProperty("/selectedTab", bAllowed ? sSection : "overview");
             if (sSection === "user-master" && bAllowed && !this._bAdminUsersLoaded) {
                 this._loadAdminUsers();
+            }
+            if (sSection === "sap-logs" && bAllowed && !this._bSapLogsLoaded) {
+                this._bSapLogsLoaded = true;
+                this._loadActiveSapLogsTab();
             }
             if (sSection === "user-master" && bAllowed) {
                 this._watchLockMonitor();
@@ -1371,6 +1385,80 @@ sap.ui.define([
                 .finally(function () {
                     oAdminModel.setProperty("/detailBusy", false);
                 });
+        },
+
+        _loadActiveSapLogsTab: function () {
+            if (!this._oSapLogsModel) return;
+            var sTab = this._oSapLogsModel.getProperty("/selectedTab");
+            if (sTab === "sm21") {
+                SapLogsLogic.loadSystemLogs(this._oSapLogsModel);
+            } else {
+                SapLogsLogic.loadSecurityAuditLogs(this._oSapLogsModel);
+            }
+        },
+
+        onSapLogsTabSelect: function (oEvent) {
+            var sKey = oEvent.getParameter("key");
+            this._oSapLogsModel.setProperty("/selectedTab", sKey);
+            this._loadActiveSapLogsTab();
+        },
+
+        onRefreshSapLogs: function () {
+            this._loadActiveSapLogsTab();
+        },
+
+        onSapLogsSm21PresetChange: function () {
+            SapLogsLogic.loadSystemLogs(this._oSapLogsModel);
+        },
+
+        onSapLogsSm20PresetChange: function () {
+            SapLogsLogic.loadSecurityAuditLogs(this._oSapLogsModel);
+        },
+
+        onSearchSapLogs: function (oEvent) {
+            var sQuery = oEvent.getParameter("newValue");
+            var sTab = this._oSapLogsModel.getProperty("/selectedTab");
+            if (sTab === "sm21") {
+                var aSm21 = this._oSapLogsModel.getProperty("/sm21/entries");
+                this._oSapLogsModel.setProperty("/sm21/filteredEntries", SapLogsLogic.filterEntries(aSm21, sQuery));
+            } else {
+                var aSm20 = this._oSapLogsModel.getProperty("/sm20/entries");
+                this._oSapLogsModel.setProperty("/sm20/filteredEntries", SapLogsLogic.filterEntries(aSm20, sQuery));
+            }
+        },
+
+        onOpenSapLogsDetail: function (oEvent) {
+            var oContext = oEvent.getSource().getBindingContext("sapLogsView");
+            if (!oContext) return;
+            var oEntry = oContext.getObject();
+            this._oSapLogsModel.setProperty("/selectedEntry", oEntry);
+            var oDialog = this.byId("sapLogsDetailDialog");
+            if (oDialog) {
+                oDialog.open();
+            }
+        },
+
+        onCloseSapLogsDetailDialog: function () {
+            var oDialog = this.byId("sapLogsDetailDialog");
+            if (oDialog) {
+                oDialog.close();
+            }
+        },
+
+        formatSapLogsSeverityState: function (sEntryType, iSeverity) {
+            return SapLogsLogic.formatSeverityState(sEntryType, iSeverity);
+        },
+
+        formatSapLogsSeverityIcon: function (sEntryType, iSeverity) {
+            return SapLogsLogic.formatSeverityIcon(sEntryType, iSeverity);
+        },
+
+        formatSapLogsUtc: function (sIso) {
+            return SapLogsLogic.formatUtcTimestamp(sIso);
+        },
+
+        onNavigateToSapLogs: function () {
+            this.getOwnerComponent().getRouter().navTo("dashboard", { section: "sap-logs" });
         },
 
         onExit: function () {
