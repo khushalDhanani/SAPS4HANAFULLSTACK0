@@ -1,0 +1,348 @@
+{
+  "allCandidates": [
+    {
+      "name": "RSLG_EXPLAIN_ERRNO",
+      "group": "SLO5",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_FILEINFO_INIT",
+      "group": "SLO2",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_FILEINFO_INIT_ALV",
+      "group": "SLO2_ALV",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_INIT_TAB_CACHES",
+      "group": "SLO3",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_INIT_TAB_CACHES_ALV",
+      "group": "SLO3_ALV",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_READ_FILE",
+      "group": "SLO2",
+      "text": "Import system log file into an internal table",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_READ_FILE_ALV",
+      "group": "SLO2_ALV",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_READ_SLG",
+      "group": "RSLG",
+      "text": "Read raw syslog from any instance.",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_STORE_OPSYS",
+      "group": "SLO5",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_TAB_CACHE_ACCESS",
+      "group": "SLO3",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_TAB_CACHE_ACCESS_ALV",
+      "group": "SLO3_ALV",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_WRITE_TAB_CACHE_STAT",
+      "group": "SLO3",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSLG_WRITE_TAB_CACHE_STAT_ALV",
+      "group": "SLO3_ALV",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "/ISDFPS/RFC_RSLG_WRITE_SYSLOG",
+      "group": "/ISDFPS/LOG_REMOTE",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "/SDF/SYSLOG_EXTRACTOR",
+      "group": "/SDF/SMD_E2E",
+      "text": "BI extractor for syslog",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "ARCHIV_WRITE_SYSLOG",
+      "group": "OPTB",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RLFW_WRITE_SYSLOG",
+      "group": "RLFW",
+      "text": "Write message to sys log",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "SALC_MSC_READ_SYSLOG",
+      "group": "SALC",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "SALS_SYSLOG_MAPPING_WRITE",
+      "group": "SALS",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "SXMI_XMB_SYSLOG_READ",
+      "group": "SXMB",
+      "text": "Reading a System Log Section",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_API_GET_ALERTS",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_API_GET_AUDIT_CONFIG",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_API_GET_LOG_DATA",
+      "group": "RSAU_LOG",
+      "text": "Get log data of security audit log",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_API_GET_PARAM",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_API_GET_PROFILE",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_API_SET_LOG_DATA",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_API_SET_PARAM",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_API_SET_PROFILE",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_CHECK_FILES_LOCAL",
+      "group": "RSAU_FILES",
+      "text": "Check File Readibility and export logdata preview",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_CHECK_INTEGRITY",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_CLEAR_AUDIT_LOG",
+      "group": "SECU",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_CONFIG_INFO",
+      "group": "SLO6",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_GET_AUDIT_CONFIG",
+      "group": "SECU",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_LIST_AUDIT_FILES",
+      "group": "SECU",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_READ_FILE",
+      "group": "SLO6",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_READ_LOG",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_SET_DEFAULT_ENV",
+      "group": "RSAU_SET_ENV",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_SET_DEFAULT_HEC",
+      "group": "SECU_VISUAL",
+      "text": "Check and Compare SAL Default Environment (SAP INTERNALY ONLY)",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_SET_FILTER",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_SET_PARAM",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_SET_SBD",
+      "group": "RSAU_LOG",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_UPD_AUDIT_CONFIG",
+      "group": "SECU",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "RSAU_WRITE_TEST_EVENT",
+      "group": "SECU_MSG_WRAPPER_01",
+      "text": "Special Trigger to send a Still Alive Event (AU0)",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "DB6_ADM_READ_AUDIT_LOG",
+      "group": "SDBAADM",
+      "text": "DB6: read audit log entries",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "DB6_ADM_READ_AUDIT_LOG_DETAILS",
+      "group": "SDBAADM",
+      "text": "DB6: read audit log entries",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "DB6_ADM_WRITE_AUDIT_LOG",
+      "group": "SDBAADM",
+      "text": "DB6: write audit log entry",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "ISU_C4C_V2_AUDIT_LOG_CREATE",
+      "group": "ISU_C4C_V2_AUDIT_LOG",
+      "text": "Create audit log asynchronously",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "ISU_C4C_V2_P2P_AUDIT_LOG_CRT",
+      "group": "ISU_C4C_V2_PROMISE_TO_PAY",
+      "text": "Audit log for Promise to pay service",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    },
+    {
+      "name": "MS_READ_MS_AUDIT_LOG",
+      "group": "MSGSERVER",
+      "text": "",
+      "fmode": "UNKNOWN",
+      "isRemote": false
+    }
+  ],
+  "remoteCandidates": []
+}
