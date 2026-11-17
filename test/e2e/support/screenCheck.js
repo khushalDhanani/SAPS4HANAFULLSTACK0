@@ -15,7 +15,7 @@ const { createRequestTracker } = require('./requestTracker');
 
 // CAP users (package.json cds.requires.auth.users, test/testUsers.js); the UI session mirrors their roles.
 const USERS = {
-    khushal: ['Admin', 'Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'],
+    khushal: ['Admin', 'Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'SapLogsReader'],
     'test-viewer-1120': ['Viewer']
 };
 

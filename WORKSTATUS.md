@@ -16,12 +16,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `6b688fc5`; the worktree contains uncommitted smoke-test/readiness changes, PO-tool guard, and Phase 2 of SM21/SM20 Log Monitoring. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
-- **SM21 & SM20 Log Monitoring (UI Implementation & Phase 2) — PARTIAL:** SAPUI5 user interface implemented following official Fiori Design Guidelines.
+- **Current checkout:** `feature01`, `HEAD` `f6459ab6`; the worktree contains uncommitted authorization fix for local dev user `KHUSHAL` (`SapLogsReader`), PO-tool guard, and Phase 2 of SM21/SM20 Log Monitoring. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
+- **SM21 & SM20 Log Monitoring (UI Implementation & Auth Fix) — PARTIAL:** SAPUI5 user interface implemented following official Fiori Design Guidelines.
   1. *Fiori Views & Navigation:* Added `sideNavSapLogs` under `sideNavAdministration` in `App.view.xml` (visible to `Admin` and `SapLogsReader`). Added `sectionSapLogs` in `Dashboard.view.xml` rendering `SapLogs.fragment.xml` with two tabs via `IconTabBar`: Tab 1 System Log (SM21, icon `sap-icon://log`), Tab 2 Security Audit Log (SM20, icon `sap-icon://shield`). Added `SapLogsDetailDialog.fragment.xml` for full technical record inspection.
   2. *Logic & Service Integration:* Created `saps4hana/fiori/modules/admin/sap-logs/util/SapLogsLogic.js`. Manages `sapLogsView` JSON model, computes UTC query windows (15m, 1h, 4h, 24h for SM21; 15m, 1h, 4h, 6h for SM20) with a 5s past buffer guarding against future-window rejection, queries CAP `/odata/v4/sap-logs/getSystemLog` and `/odata/v4/sap-logs/getSecurityAuditLog` via `ODataClient.get()`, filters loaded logs client-side via `SearchField`, and maps severity states/icons. Mounted `SapLogsService` in `srv/service.cds`.
-  3. *i18n & Static Consistency:* Added 43 i18n keys to both `i18n.properties` and `i18n_en.properties`. Passed all 8 assertions in `test/unit/controller/uiConsistency.test.js` (no page title, no DynamicPage title, every table has `noDataText`, no pixel sizing, all CSS defined, all text from i18n). Passed `ui5lint` with 0 findings.
-  4. *Validation & Tests:* Added unit suite `test/unit/admin/SapLogsLogic.test.js` (16 passed). Updated `test/unit/dashboard/dashboardMetrics.test.js` (45 passed). `AppController.test.js` (12 passed). Full repository test suite (`npm test`): 200 suites passed (3412 passed, 13 skipped, 3425 total, 78.924 s). Strictly 0 staged files.
+  3. *Authorization Fix for Local Development:* Resolved 403 Forbidden for `KHUSHAL`. Added `'SapLogsReader'` to `devRoles` in `server.js` and added automatic role expansion `Admin` -> `SapLogsReader` in `srv/auth/localTokenUtil.js` (reflecting `xs-security.json`), ensuring existing active JWT sessions and mock auth users have the required scope.
+  4. *i18n & Static Consistency:* Added 43 i18n keys to both `i18n.properties` and `i18n_en.properties`. Passed all 8 assertions in `test/unit/controller/uiConsistency.test.js` (no page title, no DynamicPage title, every table has `noDataText`, no pixel sizing, all CSS defined, all text from i18n). Passed `ui5lint` with 0 findings.
+  5. *Validation & Tests:* Added unit suite `test/unit/admin/SapLogsLogic.test.js` (16 passed). Updated `test/unit/dashboard/dashboardMetrics.test.js` (45 passed). `AppController.test.js` (12 passed). `SapLogsServiceAuth.test.js` (8 passed). Full repository test suite (`npm test`): 200 suites passed (3412 passed, 13 skipped, 3425 total, 78.924 s). Strictly 0 staged files.
 - **PO validation tool — PARTIAL:** `tools/test-po-creation-all-types.js` now validates/maps locally by default. Draft creation requires `--go` plus the shared `ALLOW_LIVE_SAP_TOOLS=1` and `--allow-live-sap` gate. Activation also requires `--activate`, `--confirm-activation`, and one `--type`. Four unit tests, lint, syntax check, and a local `ZDOM` invocation pass; SAP was not called. Current SAP data validity and live draft/activation behavior remain NOT VERIFIED.
 - **Health smoke checks — PARTIAL:** The runner checks `/health` for process liveness and `/health/ready` for database readiness, waiting on readiness. Targeted local tests passed. Deployment/Cloud Foundry behavior remains NOT VERIFIED.
 - **SAP-only persistence migration — BLOCKED:** `docs/decisions/sap-only-persistence-migration.md` states the SAP-side atomic claim/status/read implementation is not proven. Keep `db/`, HANA dependencies and the HDI deployer until atomicity, durability, concurrency, restart recovery, authorization and SAP read-back are demonstrated.
@@ -40,6 +41,26 @@ All historical change logs and past milestone statuses are preserved verbatim in
 5. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-17 17:10 IST — Fix 403 Forbidden Authorization for User 'KHUSHAL' in Local Dev — PARTIAL
+
+- REQUEST: Resolve HTTP 403 (Forbidden) error on `/odata/v4/sap-logs/getSystemLog` and `/odata/v4/sap-logs/getSecurityAuditLog` for user `KHUSHAL`: "User 'KHUSHAL' is lacking required roles: [SapLogsReader]".
+- INSPECT:
+  - Root cause 1: In `server.js` lines 25-31, local dev bootstrap dynamically creates mock user entries in `cds.env.requires.auth.users` for `process.env.S4_USERNAME` (set to `KHUSHAL`). The `devRoles` array explicitly listed 7 roles (`Admin`, `Viewer`, `PurchasingManager`, `SalesRepresentative`, `SalesManager`, `WarehouseClerk`, `WarehouseManager`) and omitted `SapLogsReader`. This directly overwrote any default roles for `KHUSHAL` in CAP's mock auth user registry upon startup.
+  - Root cause 2: In `srv/auth/localTokenUtil.js`, `issueToken()` and `verifyToken()` did not reflect the role-collection mapping in `xs-security.json` line 70, where `Admin` role template includes `$XSAPPNAME.SapLogsReader`. Existing JWT sessions stored in browser localStorage had scopes from prior logins that lacked `SapLogsReader`.
+- CHANGED:
+  - `server.js`: Added `'SapLogsReader'` to `devRoles` array.
+  - `srv/auth/localTokenUtil.js`: Added automatic role expansion in `issueToken()` and `verifyToken()`: if user possesses `'Admin'` and lacks `'SapLogsReader'`, automatically append `'SapLogsReader'`, mirroring the production XSUAA role template hierarchy. This enables existing active sessions in browser storage to access log endpoints immediately without re-login.
+  - `test/e2e/support/screenCheck.js`: Updated `khushal` roles to include `'SapLogsReader'`.
+- TEST DECISION: EXISTING TEST SUFFICIENT (`test/unit/auth/localTokenUtil.test.js`, `test/unit/auth/authService.test.js`, `test/unit/admin/SapLogsServiceAuth.test.js`).
+- TESTED:
+  - `npx jest test/unit/auth/localTokenUtil.test.js test/unit/auth/authService.test.js`: 2 suites / 61 tests PASS.
+  - `npx jest test/unit/admin/SapLogsLogic.test.js test/unit/controller/AppController.test.js test/unit/dashboard/dashboardMetrics.test.js test/unit/controller/uiConsistency.test.js`: 4 suites / 81 tests PASS.
+  - `npx jest test/unit/admin/SapLogsServiceAuth.test.js` (BypassSandbox: true): 1 suite / 8 tests PASS (including 401 unauthenticated, 403 viewer without role, 200 reader, 200 admin).
+- NOT VERIFIED: Live browser refresh by user.
+- ASSUMPTIONS: None.
+- Next: User refreshes browser session at `http://localhost:4004` to verify SM21 & SM20 data loads.
+- FINAL STATUS: PARTIAL — Auth fix applied and verified locally; strictly 0 staged files.
 
 ### 2026-11-17 16:55 IST — Implement SAP SM21 & SM20 Log Monitoring in UI — PARTIAL
 

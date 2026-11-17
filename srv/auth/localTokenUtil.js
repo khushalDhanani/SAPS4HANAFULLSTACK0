@@ -95,6 +95,9 @@ function issueToken(username, roles = ['PurchasingManager', 'Viewer'], options =
     } else {
         aRoles = ['PurchasingManager', 'Viewer'];
     }
+    if (aRoles.includes('Admin') && !aRoles.includes('SapLogsReader')) {
+        aRoles.push('SapLogsReader');
+    }
     const aScopes = aRoles.map(r => `$XSAPPNAME.${r}`);
     const now = Math.floor(Date.now() / 1000);
     const exp = now + (options.expiresInSeconds || LOCAL_DEV_EXPIRY_SECONDS);
@@ -165,6 +168,9 @@ function verifyToken(token) {
     // Map XSUAA scopes ($XSAPPNAME.<Role>) to CAP roles (<Role>)
     const aScopes = Array.isArray(payload.scope) ? payload.scope : [];
     const aRoles = aScopes.map(s => s.replace(/^\$XSAPPNAME\./, ''));
+    if (aRoles.includes('Admin') && !aRoles.includes('SapLogsReader')) {
+        aRoles.push('SapLogsReader');
+    }
 
     return new cds.User({
         id: payload.user_name,
