@@ -3432,9 +3432,9 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 - **Fix: Auto TR Creation Deferred / Note 2295840 RFC Blacklist Handling & ZWM_TR_CREATE Wrapper Spec — Resolved & Validated (2026-10-10):**
   - **Issue Reported:** Reservation creation succeeded in SAP S/4HANA (e.g. `0000525273`), but the automated second step (Transfer Requirement creation) failed with:
-    `Auto TR creation deferred/failed: Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATECPROG:nodeDEST:vheudds4a`
+    `Auto TR creation deferred/failed: Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATECPROG:nodeDEST:[s4-host]`
   - **Root Cause & Technical Analysis:**
-    1. Under SAP S/4HANA (Note 2295840 / UCON), classic function module `L_TR_CREATE` is placed on the SAP RFC Blacklist for external RFC clients (`node-rfc` calling `CPROG:nodeDEST:vheudds4a`). External execution is blocked by the SAP RFC Gateway to prevent incompatible calls.
+    1. Under SAP S/4HANA (Note 2295840 / UCON), classic function module `L_TR_CREATE` is placed on the SAP RFC Blacklist for external RFC clients (`node-rfc` calling `CPROG:nodeDEST:[s4-host]`). External execution is blocked by the SAP RFC Gateway to prevent incompatible calls.
     2. Internal ABAP execution of `L_TR_CREATE` inside SAP remains 100% supported. This mirrors how `L_TO_CREATE_TR` was resolved on this system: by creating remote-enabled wrapper `ZWM_TO_CREATE_FROM_TR` in Function Group `ZWM_FINISHEDGOODS`.
     3. The reservation itself (`RSNUM 0000525273`) is completely valid, committed and persisted in SAP (`DS4CLNT220`).
   - **Resolution:**
@@ -8057,7 +8057,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ### 2026-10-10 12:30 IST — Fix: Auto TR Creation Note 2295840 RFC Blacklist Handling & ZWM_TR_CREATE Wrapper Spec
 - **Issue.** While creating a reservation at `/wm/reservation-entry/create`, the reservation was created in SAP S/4HANA (e.g. `0000525273`), but the automated second step (Transfer Requirement creation) failed with:
-  `Auto TR creation deferred/failed: Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATECPROG:nodeDEST:vheudds4a`
+  `Auto TR creation deferred/failed: Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATECPROG:nodeDEST:[s4-host]`
 - **Root Cause.**
   1. In SAP S/4HANA, classic function module `L_TR_CREATE` is placed on the SAP RFC Blacklist for external RFC callers (Unified Connectivity / UCON, SAP Note 2295840). When node-rfc calls `L_TR_CREATE`, the SAP Gateway blocks execution.
   2. Internal ABAP calls to `L_TR_CREATE` are permitted. This mirrors the existing solution in this repository for `L_TO_CREATE_TR`, which was wrapped by customer RFC module `ZWM_TO_CREATE_FROM_TR` in Function Group `ZWM_FINISHEDGOODS`.
@@ -8395,7 +8395,7 @@ Test the manual flow once in the sandbox: MB21 → LB01 → LT04 → LT12 → MI
 Output: Working manual baseline + config checklist`
 - **1. Release Confirmation (Live SAP DS4 / Client 220 Evidence):**
   - Queried `RFC_SYSTEM_INFO` and SAP system component table `CVERS`:
-    - System ID: `DS4`, Database: `HDB` (SAP HANA), Release: `816`, Host: `vheudds4`.
+    - System ID: `DS4`, Database: `HDB` (SAP HANA), Release: `816`, Host: `[s4-host]`.
     - Component `S4CORE`: Release `109`, Extension `0001` (**SAP S/4HANA 2023 FPS01**).
     - Component `SAP_BASIS`: Release `816`, Extension `0001` (ABAP Platform 2023).
     - Component `SAP_GWFND`: Release `816`, Extension `0001`.

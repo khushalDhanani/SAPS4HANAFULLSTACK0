@@ -17,13 +17,24 @@ const unavailable = (msg) => Object.assign(new Error(msg), { status: 503 });
 const RFC_DESTINATION_PROPS = { ashost: 'jco.client.ashost', sysnr: 'jco.client.sysnr', client: 'jco.client.client', user: 'jco.client.user', passwd: 'jco.client.passwd' };
 const DESTINATION_PARAMS_TTL_MS = 5 * 60 * 1000;
 
+const defaultLoader = () => {
+  if (process.env.ALLOW_LIVE_SAP_TOOLS === '1') {
+    try {
+      return require('../../../node_modules/node-rfc');
+    } catch {
+      return require('node-rfc');
+    }
+  }
+  return require('node-rfc');
+};
+
 class RfcClient {
   /**
    * @param {object} [env] - process.env
    * @param {Function} [loader] - node-rfc loader (tests)
    * @param {Function} [getDestination] - Cloud SDK destination lookup (tests); used when S4_RFC_DESTINATION_NAME is set
    */
-  constructor(env = process.env, loader = () => require('node-rfc'), getDestination) {
+  constructor(env = process.env, loader = defaultLoader, getDestination) {
     this.env = env;
     this.loader = loader;
     this._getDestination = getDestination;

@@ -85,7 +85,8 @@
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
-                "WarehouseManager"
+                "WarehouseManager",
+                "SapLogsReader"
               ]
             },
             "alice": false,
@@ -110,7 +111,8 @@
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
-                "WarehouseManager"
+                "WarehouseManager",
+                "SapLogsReader"
               ]
             },
             "alice": false,

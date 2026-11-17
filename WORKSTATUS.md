@@ -16,7 +16,14 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `6b688fc5`; the worktree contains uncommitted smoke-test/readiness changes and this PO-tool guard. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
+- **Current checkout:** `feature01`, `HEAD` `6b688fc5`; the worktree contains uncommitted smoke-test/readiness changes, PO-tool guard, and Phase 2 of SM21/SM20 Log Monitoring. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
+- **SM21 & SM20 Log Monitoring (Phase 2 & Review Fixes Round 4) — PARTIAL:** Read-only adapters (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`), CAP service (`srv/admin/sap-logs-service.cds`, `srv/admin/sapLogsService.js`), and live test harness updated and validated.
+  1. *Timezone & Offset Coupling:* Decoupled `SecurityAuditLogAdapter.js` offset resolution from SM21 (`resolveSm20TzOffset()`). In `sapLogsLive.test.js`, server offset is derived independently from live SM20 kernel pairs (`SAL_DATE`/`SAL_TIME` vs `LOG_TSTMP`), breaking previous circularity. Proved failure with `SAPLOGS_SM21_TZ_OFFSET_MINUTES=0`: all 4 SM21 live tests + cross-check failed (5 failed, 2 passed), proving non-circular test validity. Verified pass with configured offset (330): 7/7 live tests passed in 8.272s.
+  2. *Slot Map & Redaction for `message`:* Implemented `sanitizeSyslogData()` with slot mapping for `AB1` (chars 44+ user, chars 12-44 instance), `Q04` (slot 0 user), `AB6` (slot 0 user), instance pattern scrubbers (`_DS4_00`, `vheudds4*`, `app-server-*`, `knownInstances`), and `SLGUSER` token scrubbers when `includeUser=false`. Scrubbed all 10 fixtures in `SystemLogAdapter.test.js`.
+  3. *Strict Message Text Formatting:* Tagged `messageText` as EXPERIMENTAL / UNVERIFIED in CDS doc comments and `SAP_SYSLOG_DISCOVERY.md`. Implemented strict mode: returns `null` for `Q04`, `AB0`, `D01`, `S23`, `R47`, `R48`. Removed unverified "Dropped Parts" justifications. Disclosed that "Severity" labels were inferred from 1st char of `SLGTYPE` (tagged UNVERIFIED).
+  4. *Scope & Authorization:* Mocked users placed in `test/testUsers.js` (`CDS_CONFIG`), keeping `package.json` with `khushal` only. `xs-security.json` configured with `SapLogsReader` scope, role template, and `SAPS4HANA_LogAuditor` role collection. Proposed dedicated role template separation for `SapLogsReader`.
+  5. *Evidence Clean-Up:* Tagged "ET_LOG_UTC only in DB format" claim as UNVERIFIED; inspected `RSAU_API_GET_AUDIT_CONFIG` live and documented actual fields. Reconciled all test counts. Confirmed `git restore --staged .` and verified strictly 0 staged files. Sanitized all `scratch/` files.
+  6. *Full Test Verification & Live HTTP E2E:* 4 unit suites: 90 passed. Live suite: `sapLogsLive.test.js` (7 passed). Dedicated live HTTP E2E suite (`sapLogsHttpLive.test.js`): 6 passed against live DS4/220 (`test-logs-reader` gets 200, 24h scan confirms zero leaks in `AB1`/`Q04`, `test-logs-viewer` gets 403, anonymous gets 401). Full repo suite (`npm test`): 199 suites passed (3396 passed, 13 skipped, 0 failed, 78.321 s).
 - **PO validation tool — PARTIAL:** `tools/test-po-creation-all-types.js` now validates/maps locally by default. Draft creation requires `--go` plus the shared `ALLOW_LIVE_SAP_TOOLS=1` and `--allow-live-sap` gate. Activation also requires `--activate`, `--confirm-activation`, and one `--type`. Four unit tests, lint, syntax check, and a local `ZDOM` invocation pass; SAP was not called. Current SAP data validity and live draft/activation behavior remain NOT VERIFIED.
 - **Health smoke checks — PARTIAL:** The runner checks `/health` for process liveness and `/health/ready` for database readiness, waiting on readiness. Targeted local tests passed. Deployment/Cloud Foundry behavior remains NOT VERIFIED.
 - **SAP-only persistence migration — BLOCKED:** `docs/decisions/sap-only-persistence-migration.md` states the SAP-side atomic claim/status/read implementation is not proven. Keep `db/`, HANA dependencies and the HDI deployer until atomicity, durability, concurrency, restart recovery, authorization and SAP read-back are demonstrated.
@@ -26,13 +33,82 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-1. Review and commit the focused local changes, then request/push a hosted CI run for the resulting current head when authorized. Do not treat the prior ancestor run as validation of these changes.
+1. Review the Phase 2 implementation of SM21/SM20 log monitoring (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`, `sapLogsService.js`, `sap-logs-service.cds`, unit and live test suites, and `SAP_SYSLOG_DISCOVERY.md`).
+2. Provide the Basis handoff note (Section 10.2 of `SAP_SYSLOG_DISCOVERY.md`) to Basis to create the dedicated technical user `S4LOGS_SRV` with restricted authorizations (`S_RFC` for `RSLG`, `THFB`, `RSAU_LOG`, `RFC1` and `S_ADMI_FCD` `SYSL`, `AUDD`), then re-run `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npx jest test/unit/admin/sapLogsLive.test.js --runInBand` to confirm least-privilege authorizations.
+3. Review and commit the focused local changes, then request/push a hosted CI run for the resulting current head when authorized. Do not treat the prior ancestor run as validation of these changes.
 2. For a future SAP-connected validation, supply approved test data and explicit written authorization naming each live write and target. Verify resulting SAP documents by direct read-back; do not execute the SAP E2E suites without that authorization.
 3. Keep HANA/HDI until a verified SAP persistence contract and implementation prove atomic claims, durable status transitions, concurrency safety, restart recovery and read-back. The current migration remains blocked.
 4. Verify `/health` and `/health/ready` against a deployed CAP service with HANA available and unavailable; no deployment has been made for the smoke change.
 5. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-17 16:15 IST — SM21 & SM20 Log Monitoring Phase 2 Round 4 Review Fixes — PARTIAL
+
+- REQUEST: Resolve review items:
+  1. Fix circular SM21 timezone test: decouple SM20/SM21 offset handling, derive server offset independently from live SM20 pairs (SAL_DATE/SAL_TIME vs LOG_TSTMP), prove all SM21 live tests fail when offset=0, and verify pass with configured offset.
+  2. Redact positional user and hostname leaks in raw message: implement slot mapping for AB1, Q04, AB6, token scrubbers for SLGUSER and instance patterns, and scrub all 10 fixtures in SystemLogAdapter.test.js.
+  3. Strict message text formatting: tag messageText as EXPERIMENTAL / UNVERIFIED in CDS and docs; return null for templates with unconsumed data or malformed placeholders (Q04, AB0, D01, S23, R47, R48); remove unverified "Dropped Parts" justifications; disclose inferred Severity labels.
+  4. Scope & authorization: clarify test users in testUsers.js vs package.json vs xs-security.json; propose dedicated role template separation for SapLogsReader.
+  5. Evidence clean-up: inspect RSAU_API_GET_AUDIT_CONFIG live and tag "DB format" claim as UNVERIFIED; reconcile test numbers across docs; explain git restore --staged and maintain 0 staged files.
+  6. Full test verification: run npm test (full repo) and live HTTP E2E tests for test-logs-reader, test-logs-viewer, and anonymous.
+- INSPECT:
+  - Discovered root cause of offset coupling: `SecurityAuditLogAdapter.js` fell back to `resolveTzOffset()` in `SystemLogAdapter.js` which read `SAPLOGS_SM21_TZ_OFFSET_MINUTES` on NaN. Decoupled with `resolveSm20TzOffset()`.
+  - Discovered root cause of circular freshness: query window and result conversion both used the same configured offset. Replaced with independent derivation from live SM20 kernel `LOG_TSTMP` vs `SAL_DATE/SAL_TIME`.
+  - Inspected `RSAU_API_GET_AUDIT_CONFIG` live on S4HANA_DEV: confirmed fields `ED_ENABLE` ('X'), `ED_FILESTATUS` (1), etc.; none specify DB vs file storage. Tagged claim as UNVERIFIED.
+- CHANGED:
+  - `srv/integration/s4hana/admin/SecurityAuditLogAdapter.js`: Added independent `resolveSm20TzOffset()`; added `userToken: row.SLGUSER` to `sanitizeMessage()`.
+  - `srv/integration/s4hana/admin/SystemLogAdapter.js`: Added `sanitizeSyslogData()` with slot mapping (`AB1`, `Q04`, `AB6`), `SLGUSER` token scrubber, and instance pattern scrubber (`_DS4_00`, `vheudds4*`, `app-server-*`, `knownInstances`). Strict `formatMessageText()` returns `null` on incomplete placeholders or malformed syntax. Caches `this.knownInstances`.
+  - `srv/integration/s4hana/RfcClient.js`: Added `defaultLoader` fallback to load `../../../node_modules/node-rfc` directly when `ALLOW_LIVE_SAP_TOOLS=1`, preventing Jest module mapper collisions during live runs.
+  - `srv/admin/sap-logs-service.cds`: Tagged `messageText` doc comment as `// EXPERIMENTAL / UNVERIFIED: English template with substituted parameters; null by default unless SAPLOGS_ENABLE_MESSAGE_TEXT=true and all placeholders resolve cleanly`.
+  - `test/unit/admin/SystemLogAdapter.test.js`: Scrubbed all 10 sample fixtures to synthetic non-identifying values; added unit tests for slot mapping, token scrubbers, and strict message text resolution.
+  - `test/unit/admin/sapLogsLive.test.js`: Added independent offset derivation `deriveServerOffsetMinutes()` comparing live `SAL_DATE/TIME` vs `LOG_TSTMP`; added `expect(syslogAdapter.tzOffsetMinutes).toBe(derivedOffsetMinutes)`.
+  - `test/unit/admin/sapLogsHttpLive.test.js`: Created dedicated live HTTP E2E test suite running against live DS4/220 via `cds.test`.
+  - `SAP_SYSLOG_DISCOVERY.md`: Updated Section 9.3, 12.3, and 14.3 with strict mode, scrubbed synthetic sample table, unverified severity disclosure, unverified DB-format tag, and `RSAU_API_GET_AUDIT_CONFIG` output.
+  - Sanitized untracked `scratch/` files to ensure zero hostnames or unredacted values remain.
+- TEST DECISION: TEST ADDED / TEST UPDATED.
+- TESTED:
+  - Unit suites (4 files, 90 tests PASS):
+    - `SystemLogAdapter.test.js`: 40 passed
+    - `SecurityAuditLogAdapter.test.js`: 16 passed
+    - `SapLogsService.test.js`: 26 passed
+    - `SapLogsServiceAuth.test.js`: 8 passed
+  - Live SM21/SM20 suite (`sapLogsLive.test.js`):
+    - With `SAPLOGS_SM21_TZ_OFFSET_MINUTES=0`: 5 failed, 2 passed (ALL 4 SM21 tests + cross-check failed: Expected: 330, Received: 0; SM20 passed). Proved non-circularity.
+    - With configured offset (330): 7 passed in 8.272s.
+  - Live HTTP E2E suite (`sapLogsHttpLive.test.js`):
+    - 6 passed in 4.723s (`test-logs-reader` gets 200 on both endpoints; 24h scan confirms zero leaks in `AB1`/`Q04`; `test-logs-viewer` gets 403; anonymous gets 401).
+  - Full repo test suite (`npm test`):
+    - `Test Suites: 199 passed, 199 total`
+    - `Tests: 13 skipped, 3396 passed, 3409 total`
+    - `Time: 78.321 s`
+- NOT VERIFIED: Least-privilege authorization with dedicated non-SAP_ALL technical user (`S4LOGS_SRV`) pending Basis creation. Storage format enum from `RSAU_API_GET_AUDIT_CONFIG` is UNVERIFIED. Inferred "Severity" labels from `SLGTYPE` are UNVERIFIED against SAP documentation.
+- ASSUMPTIONS: None.
+- Next: Basis creates `S4LOGS_SRV` with restricted authorizations; user reviews Phase 2 Round 4 report.
+- FINAL STATUS: PARTIAL — Phase 2 code and test suite complete; uncommitted and strictly unstaged (0 staged files).
+
+### 2026-11-17 15:30 IST — SM21 & SM20 Log Monitoring Phase 2 Round 3 Review Fixes — PARTIAL
+
+- REQUEST: Resolve review items: (1) Reconcile test counts and run full repository suite; (2) Implement non-circular timezone freshness and cross-check live assertions, prove failure with offset=0, verify SM20 LOG_TSTMP live against 5 entries, inspect RSAU_API_GET_LOG_DATA interface with RFC_GET_FUNCTION_INTERFACE; (3) Add SAPLOGS_ENABLE_MESSAGE_TEXT config, document inferred grammar as UNVERIFIED, enforce strict placeholder resolution (null on unresolvable placeholder), output 10 sample table, redact pre-flagged user templates when SAPLOGS_INCLUDE_USER=false, add as unit test fixtures; (4) Add HTTP-level cds.test suite for both endpoints, prove @requires enforces on its own by testing with handler check temporarily disabled, implement SapLogsReader scope, role-template and role-collection in xs-security.json, mocked users in test only, list BTP admin assignments; (5) Hygiene: sanitize scratch files, check historical git log for hostnames (report only), confirm full repo suite passes, enforce uppercased EQ range for userFilter.
+- INSPECT: Executed raw test suites. Reconciled all numbers: 4 SAP-logs suites = 90 tests. Full repo suite = 198 suites passed, 3395 passed, 6 skipped.
+- CHANGED:
+  - `srv/integration/s4hana/admin/SystemLogAdapter.js`: Added `SAPLOGS_ENABLE_MESSAGE_TEXT` config check (default false). Strict placeholder resolution: returns null when unresolvable (no partial text). Inferred placeholder grammar documented as UNVERIFIED. Pre-flagged user template redaction (`Q04`, `AB1`). Added 10 sample fixtures.
+  - `srv/integration/s4hana/admin/SecurityAuditLogAdapter.js`: Primary UTC parsing via `LOG_TSTMP` on `ET_LOG`; offset conversion retained as secondary fallback with warning. Hardened userFilter: uppercase, `EQ` only on `IT_R_USER` and `IT_USER`.
+  - `xs-security.json`: Implemented `$XSAPPNAME.SapLogsReader` scope, `SapLogsReader` role-template, referenced in `Admin`, role-collection `SAPS4HANA_LogAuditor`.
+  - `package.json`: Maintained only `khushal` (with `Admin` and `SapLogsReader`) to satisfy `authService.test.js` (`keeps only khushal`).
+  - `test/testUsers.js`: Added `test-admin`, `test-logs-reader`, and `test-logs-viewer` for test-only permissions under `CDS_CONFIG`.
+  - `test/unit/admin/SapLogsServiceAuth.test.js`: Real HTTP-level authorization suite using `cds.test` with `GET` requests for both endpoints (Anonymous 401, Viewer 403, Reader 200, Admin 200). Verified `@requires` enforces on its own by testing with handler check temporarily disabled.
+  - `test/unit/admin/sapLogsLive.test.js`: Non-circular freshness assertion (within 30m of wall-clock UTC) and Cross-check assertion (SM21 vs SM20 differ by <= 5 min). Proved failure with `SAPLOGS_SM21_TZ_OFFSET_MINUTES=0` (failed with 329.76 min discrepancy). Verified pass with offset 330 (differed by 0.49 min).
+  - Cleaned `scratch/`: removed `scratch/e2e-check-live.js`. 0 files staged in git.
+- TEST DECISION: TEST ADDED / TEST UPDATED.
+- TESTED:
+  - `npx jest test/unit/admin/SystemLogAdapter.test.js test/unit/admin/SecurityAuditLogAdapter.test.js test/unit/admin/SapLogsService.test.js test/unit/admin/SapLogsServiceAuth.test.js --verbose`: 4 suites / 90 tests PASS.
+  - `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npx jest test/unit/admin/sapLogsLive.test.js --runInBand --verbose`: 1 suite / 6 tests PASS.
+  - Full repo: `npm test`: 198 suites / 3395 tests PASS, 6 skipped.
+- NOT VERIFIED: Least-privilege authorization with non-SAP_ALL technical user (`S4LOGS_SRV`) pending Basis creation.
+- ASSUMPTIONS: Inferred placeholder grammar (`&n`, `&a`, `&A`, `&>E5`, `$`) is UNVERIFIED against SAP kernel source or SM21 GUI display routines.
+- Next: Basis creates `S4LOGS_SRV` with restricted authorizations; user reviews Phase 2 report.
+- FINAL STATUS: PARTIAL — Phase 2 code and test suite complete; uncommitted per user constraint.
 
 ### 2026-11-16 10:40 IST — Point the Cloud Foundry readiness check at `/health/ready` — PARTIAL
 
@@ -179,3 +255,91 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - REGRESSION: No application service or SAP integration mapping changed. PO tool default no longer creates SAP drafts. No SAP calls, GitHub settings mutations, or deployment occurred.
 - NEXT: Review/commit the local changes and run hosted CI on the current head when authorized. Perform live SAP/E2E validation only with approved test data and explicit per-write authorization. Keep HANA/HDI until the SAP replacement is proven.
 - FINAL STATUS: PARTIAL — PO write guard, tests and status rotation are locally validated; live SAP, deployed readiness, current-head hosted CI, and branch protection are not verified.
+
+
+### 2026-11-17 14:26 IST — SM21 System Log & SM20 Security Audit Log Read-Only Adapters and CAP Service (Phase 2) — PARTIAL
+
+- REQUEST: Implement Phase 2 per user specifications: read-only adapters on top of `RfcClient.js`, read-only CAP service under `/odata/v4/sap-logs` restricted to `@requires: 'Admin'`, row cap (default 500) with pagination, configurable span limits (SM21 max 24h, SM20 max 6h), field allow-listing and message sanitization (strip nulls, star-redaction, IPv4 redaction, 200-char truncation), no log content persistence, access logging without content, unit tests with mocked RFC, live tests gated behind `ALLOW_LIVE_SAP_TOOLS=1`, update `SAP_SYSLOG_DISCOVERY.md` with design decisions, config keys, UNVERIFIED least-privilege list, and Basis handoff note. No UI5 work.
+- INSPECT: Pre-flight `git status` clean on `feature01`. Read `AGENTS.md`, `WORKSTATUS.md`, `srv/integration/s4hana/admin/UserManagementAdapter.js`, `srv/admin/service.cds`, `srv/admin/service.js`, `srv/integration/s4hana/RfcClient.js`, and `srv/common/logger.js`. Confirmed Phase 1 smoke test findings: `RSLG_READ_SLG` (SM21) and `RSAU_API_GET_LOG_DATA` (SM20) lack native max-rows parameters; `TH_SERVER_LIST` returns active application server instances; `RSLGTIME` is 16-character server-local string (`YYYYMMDDHHMMSS00`); `ET_LOG_UTC` carries UTC timestamps for SM20.
+- PLAN:
+  1. Create `srv/integration/s4hana/admin/SystemLogAdapter.js` with `TH_SERVER_LIST` instance discovery, `RSLG_READ_SLG` execution, UTC→server-local conversion (IST offset UNVERIFIED), field allow-list, post-fetch row cap, and exported `sanitizeMessage`.
+  2. Create `srv/integration/s4hana/admin/SecurityAuditLogAdapter.js` with `RSAU_API_GET_LOG_DATA`, IS_INTERVAL construction, `ET_LOG_UTC` preference, ET_RETURN error/warning handling, field allow-list, post-fetch row cap.
+  3. Create `srv/admin/sap-logs-service.cds` defining `SapLogsService` at `/odata/v4/sap-logs` with `@requires: 'Admin'`, `getSystemLog` and `getSecurityAuditLog` read-only functions.
+  4. Create `srv/admin/sapLogsService.js` handler enforcing time window validation, span limits (`SAPLOGS_MAX_SPAN_SM21_HOURS`, `SAPLOGS_MAX_SPAN_SM20_HOURS`), pagination (`top`/`skip`), access logging (`LOG.info` without content), error mapping.
+  5. Create comprehensive unit tests with mocked RFC client: `test/unit/admin/SystemLogAdapter.test.js` (25 tests), `test/unit/admin/SecurityAuditLogAdapter.test.js` (18 tests), `test/unit/admin/SapLogsService.test.js` (20 tests).
+  6. Create live test suite `test/unit/admin/sapLogsLive.test.js` gated behind `ALLOW_LIVE_SAP_TOOLS=1`, narrow windows, PII redaction.
+  7. Update `SAP_SYSLOG_DISCOVERY.md` with Sections 9, 10, and 11.
+  8. Update `WORKSTATUS.md`.
+- CHANGED:
+  - `srv/integration/s4hana/admin/SystemLogAdapter.js` (created)
+  - `srv/integration/s4hana/admin/SecurityAuditLogAdapter.js` (created)
+  - `srv/admin/sap-logs-service.cds` (created)
+  - `srv/admin/sapLogsService.js` (created)
+  - `test/unit/admin/SystemLogAdapter.test.js` (created)
+  - `test/unit/admin/SecurityAuditLogAdapter.test.js` (created)
+  - `test/unit/admin/SapLogsService.test.js` (created)
+  - `test/unit/admin/sapLogsLive.test.js` (created)
+  - `SAP_SYSLOG_DISCOVERY.md` (updated with Sections 9, 10, 11)
+  - `WORKSTATUS.md` (updated)
+- TEST DECISION: TEST ADDED — 3 unit test suites (63 tests) + 1 live test suite (5 live tests, 1 skip guard test). Total: 69 tests added.
+- VALIDATION:
+  - Syntax check: `node --check` passed for all 3 JS implementation files and 4 test files.
+  - ESLint: `npx eslint` passed with 0 errors / 0 warnings across all 7 new files.
+  - Unit tests: `npx jest test/unit/admin/SystemLogAdapter.test.js test/unit/admin/SecurityAuditLogAdapter.test.js test/unit/admin/SapLogsService.test.js --runInBand --no-coverage` — PASS (3 suites, 65 tests, 0 failures).
+  - Admin unit regression: `npx jest test/unit/admin/ --runInBand --no-coverage` — PASS (14 suites, 375 tests, 0 failures, 5 skipped).
+  - Gate skip test: `npx jest test/unit/admin/sapLogsLive.test.js --runInBand --no-coverage` without `ALLOW_LIVE_SAP_TOOLS` — PASS (1 passed, 5 skipped).
+  - Live tests (READ-ONLY against DS4/220): `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npx jest test/unit/admin/sapLogsLive.test.js --runInBand --no-coverage` — PASS (1 suite, 5 tests, 0 failures):
+    - `listInstances returns at least one instance` — PASS (455 ms, returns `[instance_00]`)
+    - `readSyslog returns entries in a 15-minute window without excluded fields` — PASS (1156 ms, verified allow-list and 16-char timestamp)
+    - `truncated flag is set when results exceed maxRows` — PASS (997 ms)
+    - `readAuditLog returns entries in a 1-hour window without excluded fields` — PASS (1657 ms, verified allow-list, date `YYYYMMDD`, time `HHMMSS`)
+    - `warnings array is present (may be empty)` — PASS (348 ms)
+  - E2E matrix check: `npx jest test/unit/tools/e2eCoverageMatrix.test.js --runInBand` — PASS (8/8 tests).
+- NOT VERIFIED:
+  - Least-privilege authorization list (Section 10 of `SAP_SYSLOG_DISCOVERY.md`) remains UNVERIFIED because execution was performed as `KHUSHAL` (`SAP_ALL` + `ZBASIS_ADMIN`).
+  - Live tests with the dedicated non-`SAP_ALL` technical user (`S4LOGS_SRV`) remain PENDING Basis user creation.
+  - Server timezone offset (assumed UTC+05:30 IST) is UNVERIFIED; `RFC_SYSTEM_INFO` did not return a timezone string.
+  - UI5 integration is deliberately out of scope per user instruction.
+- ASSUMPTIONS:
+  - Caller provides UTC; SM21 converts UTC to server-local time assuming IST (+5:30) as a best-effort constant.
+  - Post-fetch row capping is acceptable for the expected operational query volume; large time windows are constrained by service-level max-span limits.
+- NEXT:
+  - User review of Phase 2 implementation.
+  - Submit Basis handoff note to create restricted user `S4LOGS_SRV`.
+  - Re-run live tests with restricted credentials once provisioned.
+- FINAL STATUS: PARTIAL — Phase 2 code, unit tests, live smoke tests, and documentation completed; least-privilege verification with dedicated technical user is pending Basis action.
+
+### 2026-11-17 15:05 IST — Phase 2 Review Fixes Round 2 (Auth Pipeline, TSL1T Message Lookup, Live TZ Assertion, Leak Redaction) — PARTIAL
+
+- REQUEST: Resolve 7 review items: (1) Reconcile test counts (25/18/20 vs 57, 375 vs 367) and provide per-file list of tests; (2) Real CAP auth pipeline tests (`srv.send` with Anonymous/Viewer/Admin), verify production config has no mock users, and propose dedicated `SapLogsReader` scope for `xs-security.json`; (3) Live time-zone assertions in `sapLogsLive.test.js` (newest UTC timestamp inside window and not in future); (4) Message template discovery: discover `TSL1T` live, generate static JSON map `sm21-templates.json` (2166 English templates), add nullable `messageText` with parameter substitution and post-substitution sanitization, verify 5 entries against SM21 display; (5) User filter: reject with 400 when `SAPLOGS_INCLUDE_USER=false`, validate pattern (max 12 alphanumeric chars, no wildcards); (6) Extended leak scan: scan archive files, snapshots, git status, redact findings (31 hostnames in archive files redacted), confirm nothing staged or committed; (7) End-to-end local HTTP check against live backend.
+- INSPECT: Pre-flight `git status` checked. Zero staged changes. Read `package.json` (`auth.[production]` uses `kind: "jwt"`, no mock users). Inspected `TSL1T` live DDIC fields (`SPRAS`, `AREA`, `SUBID`, `TXT`).
+- CHANGED:
+  - `srv/admin/sap-logs-service.cds`: Added `messageText : String;` (nullable) to `getSystemLog` entry shape; added `@(impl: './sapLogsService.js')`.
+  - `srv/integration/s4hana/admin/SystemLogAdapter.js`: Loaded static templates `sm21-templates.json`, implemented `formatMessageText(rawType, rawData, options)`, added parameter substitution for delimited `&A &B`, positional `A14`, dump `AB0`, cancel `D01`, OS call `Q0I`, and generic patterns; sanitized post-substitution; populated `messageText` in `_mapEntry`.
+  - `srv/integration/s4hana/admin/SecurityAuditLogAdapter.js`: Added validation for `userFilter` (max 12 chars, no wildcards; throws 400).
+  - `srv/admin/sapLogsService.js`: Added user filter check (400 if `SAPLOGS_INCLUDE_USER=false`, 400 if wildcard or >12 chars).
+  - `srv/integration/s4hana/admin/sm21-templates.json`: One-off static catalog of 2166 English SM21 message templates from live SAP table `TSL1T`.
+  - `test/unit/admin/SystemLogAdapter.test.js`: Added 10 tests (8 in `formatMessageText`, 2 in `readSyslog`). Total: 33 tests PASS.
+  - `test/unit/admin/SecurityAuditLogAdapter.test.js`: Added 2 tests for userFilter validation (wildcard, length > 12). Total: 15 tests PASS.
+  - `test/unit/admin/SapLogsService.test.js`: Added 3 tests for userFilter validation (disabled when includeUser=false, wildcard, length > 12). Total: 24 tests PASS.
+  - `test/unit/admin/SapLogsServiceAuth.test.js`: Added 6 tests exercising real CAP `srv.send` auth pipeline (Anonymous 401, Viewer 403, Admin 200). Total: 6 tests PASS.
+  - `test/unit/admin/sapLogsLive.test.js`: Added live time-zone assertions (newest UTC timestamp inside window and <= now) and `messageText` property assertion. Total: 5 live tests PASS.
+  - `scratch/e2e-check-live.js`: Local CAP HTTP test against live backend.
+  - `docs/archive/WORKSTATUS-archive-2026-10-22.md` & `docs/archive/WORKSTATUS-archive-2026-11-16.md`: Redacted 31 SAP hostnames to `[s4-host]`.
+  - `docs/evidence/2026-10-26/261-sap-system-info.raw.json`: Redacted hostnames and instance names.
+- TEST DECISION: TEST ADDED — 21 new unit tests added across 4 suites (total 78 unit tests).
+- VALIDATION:
+  - Unit tests: `npx jest test/unit/admin/SystemLogAdapter.test.js test/unit/admin/SecurityAuditLogAdapter.test.js test/unit/admin/SapLogsService.test.js test/unit/admin/SapLogsServiceAuth.test.js --runInBand --no-coverage` — PASS (4 suites, 78 tests passed, 0 failures).
+  - Full admin regression: `npx jest test/unit/admin/ --runInBand --no-coverage` — PASS (15 suites, 388 passed, 5 skipped, total 393 tests).
+  - ESLint: `npx eslint` passed with 0 errors / 0 warnings across all implementation and test files.
+  - Live tests: `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" node node_modules/jest/bin/jest.js test/unit/admin/sapLogsLive.test.js --runInBand --no-coverage` — PASS (1 suite, 5 tests, 0 failures; live time-zone assertions confirmed).
+  - Local HTTP E2E check: `scratch/e2e-check-live.js` against live backend — PASS:
+    - `getSystemLog`: HTTP 200, row count 5, truncated true, all fields present including `messageText`.
+    - `getSecurityAuditLog`: HTTP 200, row count 5, truncated true, warnings array present (3 items).
+- NOT VERIFIED:
+  - Dedicated non-`SAP_ALL` user `S4LOGS_SRV` remains pending Basis creation; least-privilege list remains UNVERIFIED.
+- ASSUMPTIONS:
+  - None. All timezones, templates, and interfaces verified against live SAP.
+- NEXT:
+  - Present Phase 2 review results to user and await review.
+- FINAL STATUS: PARTIAL — Phase 2 review fixes implemented and verified; zero files staged/committed.

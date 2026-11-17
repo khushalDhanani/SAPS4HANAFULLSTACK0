@@ -30,6 +30,10 @@
     {
       "name": "$XSAPPNAME.WarehouseManager",
       "description": "Manage warehouse operations, tasks and resources"
+    },
+    {
+      "name": "$XSAPPNAME.SapLogsReader",
+      "description": "Read access to SAP SM21 system logs and SM20 security audit logs"
     }
   ],
   "attributes": [
@@ -61,7 +65,8 @@
         "$XSAPPNAME.SalesRepresentative",
         "$XSAPPNAME.SalesManager",
         "$XSAPPNAME.WarehouseClerk",
-        "$XSAPPNAME.WarehouseManager"
+        "$XSAPPNAME.WarehouseManager",
+        "$XSAPPNAME.SapLogsReader"
       ]
     },
     {
@@ -110,6 +115,13 @@
       ],
       "attribute-references": [
         "Plant"
+      ]
+    },
+    {
+      "name": "SapLogsReader",
+      "description": "Read SAP system and security audit logs",
+      "scope-references": [
+        "$XSAPPNAME.SapLogsReader"
       ]
     }
   ],
@@ -161,6 +173,13 @@
       "description": "SAP S/4HANA Full-Stack: warehouse management",
       "role-template-references": [
         "$XSAPPNAME.WarehouseManager"
+      ]
+    },
+    {
+      "name": "SAPS4HANA_LogAuditor",
+      "description": "SAP S/4HANA Full-Stack: read access to SM21 and SM20 logs",
+      "role-template-references": [
+        "$XSAPPNAME.SapLogsReader"
       ]
     }
   ],
