@@ -77,7 +77,25 @@ sap.ui.define(["sap/base/Log"], function (Log) {
         /** Authorization header from the stored login session ({} when none / unreadable). */
         authHeaders: function () {
             try {
-                var sSession = sessionStorage.getItem("saps4hana_fiori_auth_session") || localStorage.getItem("saps4hana_fiori_auth_session");
+                var sSession = null;
+                if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                    sSession = sessionStorage.getItem("saps4hana_fiori_auth_session");
+                }
+                // Fallback & sanitization: if found in legacy localStorage, migrate to sessionStorage and purge localStorage
+                if (!sSession && typeof localStorage !== "undefined" && localStorage) {
+                    var sLegacy = localStorage.getItem("saps4hana_fiori_auth_session");
+                    if (sLegacy) {
+                        sSession = sLegacy;
+                        try {
+                            if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                                sessionStorage.setItem("saps4hana_fiori_auth_session", sLegacy);
+                            }
+                            localStorage.removeItem("saps4hana_fiori_auth_session");
+                        } catch (err) {
+                            // ignore
+                        }
+                    }
+                }
                 if (sSession) {
                     var oParsed = JSON.parse(sSession);
                     var sAuthToken = (oParsed && oParsed.user && oParsed.user.token) || (oParsed && oParsed.token) || null;

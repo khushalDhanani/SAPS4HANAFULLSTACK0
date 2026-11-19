@@ -126,9 +126,11 @@ async function openSession({ baseUrl, user = 'khushal', allowWrites = [], contex
 
     if (user) {
         await page.addInitScript(([username, scopes]) => {
-            window.localStorage.setItem('saps4hana_fiori_auth_session', JSON.stringify({
+            const sessionData = JSON.stringify({
                 user: { username, avatarInitials: username.slice(0, 2).toUpperCase(), system: 'E2E', loginTimestamp: '', token: null, scopes }
-            }));
+            });
+            window.sessionStorage.setItem('saps4hana_fiori_auth_session', sessionData);
+            window.localStorage.setItem('saps4hana_fiori_auth_session', sessionData);
         }, [user, USERS[user] || []]);
     }
 

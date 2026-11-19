@@ -147,15 +147,60 @@ sap.ui.define([
         },
 
         _restoreSession: function () {
-            // Restore saved username for remember me
-            var sSavedUser = localStorage.getItem(REMEMBER_KEY);
+            // Restore saved username for remember me (non-sensitive identity hint)
+            var sSavedUser = null;
+            try {
+                if (typeof localStorage !== "undefined" && localStorage) {
+                    sSavedUser = localStorage.getItem(REMEMBER_KEY);
+                }
+            } catch (e) {
+                // Storage may be disabled or blocked (private browsing)
+            }
+
             if (sSavedUser) {
                 this._oModel.setProperty("/savedUsername", sSavedUser);
                 this._oModel.setProperty("/rememberMe", true);
+            } else {
+                this._oModel.setProperty("/savedUsername", "");
+                this._oModel.setProperty("/rememberMe", false);
             }
 
-            // Check active session in sessionStorage or localStorage
-            var sRawSession = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+            // Check active session in volatile sessionStorage
+            var sRawSession = null;
+            try {
+                if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                    sRawSession = sessionStorage.getItem(STORAGE_KEY);
+                }
+            } catch (e) {
+                // Storage unavailable
+            }
+
+            // Sanitization & Migration Guard:
+            // Bearer tokens and active session objects MUST NEVER persist in localStorage.
+            // If legacy session exists in localStorage (e.g. from prior versions or test runner),
+            // migrate it to sessionStorage for this tab, and IMMEDIATELY PURGE it from localStorage.
+            try {
+                if (typeof localStorage !== "undefined" && localStorage) {
+                    var sLegacySession = localStorage.getItem(STORAGE_KEY);
+                    if (sLegacySession) {
+                        if (!sRawSession) {
+                            sRawSession = sLegacySession;
+                            if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                                try {
+                                    sessionStorage.setItem(STORAGE_KEY, sLegacySession);
+                                } catch (err) {
+                                    // SessionStorage quota / blocked
+                                }
+                            }
+                        }
+                        // Purge legacy session from persistent disk storage
+                        localStorage.removeItem(STORAGE_KEY);
+                    }
+                }
+            } catch (e) {
+                // Storage error
+            }
+
             if (sRawSession) {
                 try {
                     var oSession = JSON.parse(sRawSession);
@@ -166,8 +211,13 @@ sap.ui.define([
 
                         // Validate token expiration before restoring session
                         if (oSession.user.token && this._isTokenExpired(oSession.user.token)) {
-                            sessionStorage.removeItem(STORAGE_KEY);
-                            localStorage.removeItem(STORAGE_KEY);
+                            try {
+                                if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                                    sessionStorage.removeItem(STORAGE_KEY);
+                                }
+                            } catch (e) {
+                                // ignore
+                            }
                             return false;
                         }
 
@@ -176,8 +226,13 @@ sap.ui.define([
                         return true;
                     }
                 } catch (e) {
-                    sessionStorage.removeItem(STORAGE_KEY);
-                    localStorage.removeItem(STORAGE_KEY);
+                    try {
+                        if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                            sessionStorage.removeItem(STORAGE_KEY);
+                        }
+                    } catch (err) {
+                        // ignore
+                    }
                 }
             }
             return false;
@@ -230,17 +285,48 @@ sap.ui.define([
                             token: oUserSession.token
                         };
 
-                        if (bRememberMe) {
-                            localStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
-                            localStorage.setItem(REMEMBER_KEY, oUserSession.username);
-                        } else {
-                            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
-                            localStorage.removeItem(REMEMBER_KEY);
+                        // Security: Active session tokens MUST NEVER be stored in localStorage.
+                        // Active session always resides in sessionStorage (volatile, tab-scoped).
+                        try {
+                            if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                                sessionStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
+                            }
+                        } catch (e) {
+                            if (Log && typeof Log.warning === "function") {
+                                Log.warning("AuthService: Unable to persist session to sessionStorage: " + (e && e.message));
+                            }
+                        }
+
+                        // Explicitly ensure localStorage never retains persistent session tokens
+                        try {
+                            if (typeof localStorage !== "undefined" && localStorage) {
+                                localStorage.removeItem(STORAGE_KEY);
+                            }
+                        } catch (e) {
+                            // Storage error
+                        }
+
+                        // Remember Me ONLY stores the username identity hint in localStorage, NEVER credentials or tokens
+                        try {
+                            if (typeof localStorage !== "undefined" && localStorage) {
+                                if (bRememberMe) {
+                                    localStorage.setItem(REMEMBER_KEY, oUserSession.username);
+                                } else {
+                                    localStorage.removeItem(REMEMBER_KEY);
+                                }
+                            }
+                        } catch (e) {
+                            if (Log && typeof Log.warning === "function") {
+                                Log.warning("AuthService: Unable to update rememberMe preference: " + (e && e.message));
+                            }
                         }
 
                         that._oModel.setProperty("/isAuthenticated", true);
                         that._oModel.setProperty("/user", oUserSession);
-                        that._oModel.setProperty("/rememberMe", bRememberMe);
+                        that._oModel.setProperty("/rememberMe", Boolean(bRememberMe));
+                        if (bRememberMe) {
+                            that._oModel.setProperty("/savedUsername", oUserSession.username);
+                        }
                         that.syncModelHeaders();
 
                         resolve(oUserSession);
@@ -257,10 +343,29 @@ sap.ui.define([
         },
 
         logout: function () {
-            sessionStorage.removeItem(STORAGE_KEY);
-            localStorage.removeItem(STORAGE_KEY);
+            try {
+                if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                    sessionStorage.removeItem(STORAGE_KEY);
+                }
+            } catch (e) {
+                // Storage error
+            }
+            try {
+                if (typeof localStorage !== "undefined" && localStorage) {
+                    localStorage.removeItem(STORAGE_KEY);
+                }
+            } catch (e) {
+                // Storage error
+            }
 
-            var sSaved = localStorage.getItem(REMEMBER_KEY) || "";
+            var sSaved = "";
+            try {
+                if (typeof localStorage !== "undefined" && localStorage) {
+                    sSaved = localStorage.getItem(REMEMBER_KEY) || "";
+                }
+            } catch (e) {
+                // Storage error
+            }
 
             this._oModel.setProperty("/isAuthenticated", false);
             this._oModel.setProperty("/user", null);
@@ -330,7 +435,25 @@ sap.ui.define([
                 return oUser.token;
             }
             try {
-                var sRaw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+                var sRaw = null;
+                if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                    sRaw = sessionStorage.getItem(STORAGE_KEY);
+                }
+                // Fallback & sanitization: if in localStorage, migrate and purge
+                if (!sRaw && typeof localStorage !== "undefined" && localStorage) {
+                    var sLegacy = localStorage.getItem(STORAGE_KEY);
+                    if (sLegacy) {
+                        sRaw = sLegacy;
+                        try {
+                            if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                                sessionStorage.setItem(STORAGE_KEY, sLegacy);
+                            }
+                            localStorage.removeItem(STORAGE_KEY);
+                        } catch (e) {
+                            // ignore
+                        }
+                    }
+                }
                 if (sRaw) {
                     var parsed = JSON.parse(sRaw);
                     return (parsed && parsed.user && parsed.user.token) || (parsed && parsed.token) || null;
