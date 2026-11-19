@@ -48,10 +48,37 @@ describe('Attempt store with a database: the database is the only source', () =>
 });
 
 describe('Attempt store with no database: memory is the fallback', () => {
-  it('still records and resolves attempts', async () => {
+  it('still records and resolves attempts in isolated unit test', async () => {
     const store = new GoodsIssueAttemptStore({ db: null });
+    expect(store.isAvailable()).toBe(true);
     await store.create(ATTEMPT);
     await store.setStatus(ATTEMPT.ReferenceDocument, 'posted');
     expect(await store.getByReference(ATTEMPT.ReferenceDocument)).toMatchObject({ Status: 'posted' });
+  });
+});
+
+describe('Production mode: durable database is mandatory and memory store is strictly forbidden', () => {
+  const originalEnv = process.env.NODE_ENV;
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('fails closed when no database is bound in production, rejecting attempt creation with 503', async () => {
+    process.env.NODE_ENV = 'production';
+    const store = new GoodsIssueAttemptStore({ db: null, useMemoryStore: true });
+    expect(store.isAvailable()).toBe(false);
+    await expect(store.create(ATTEMPT)).rejects.toMatchObject({
+      status: 503,
+      code: 'DB_UNAVAILABLE'
+    });
+    await expect(store.createOrGet(ATTEMPT)).rejects.toMatchObject({
+      status: 503,
+      code: 'DB_UNAVAILABLE'
+    });
+    await expect(store.setStatus(ATTEMPT.ReferenceDocument, 'posted')).rejects.toMatchObject({
+      status: 503,
+      code: 'DB_UNAVAILABLE'
+    });
   });
 });

@@ -34,9 +34,20 @@ class GoodsIssueAttemptStore {
   /**
    * @param {Object} [options]
    * @param {Object|null} [options.db] - Database service to use (tests); default: cds.db at call time
+   * @param {boolean} [options.useMemoryStore=false] - Explicit opt-in for isolated unit tests without a DB
+   * @param {boolean} [options.allowMemoryFallback=false] - Backward-compatible opt-in for isolated unit tests
    */
   constructor(options = {}) {
     this._dbProvider = options.db !== undefined ? () => options.db : () => cds.db;
+    // Memory store is strictly restricted to explicitly isolated test instances in non-production.
+    // In production (NODE_ENV=production), memory store is NEVER permitted under any circumstances.
+    const isExplicitTestOptIn = Boolean(
+      options.useMemoryStore ||
+      options.allowMemoryFallback ||
+      (options.db === null && process.env.NODE_ENV === 'test') ||
+      (options.db === undefined && process.env.NODE_ENV === 'test' && !cds.db)
+    );
+    this._useMemoryStore = isExplicitTestOptIn && process.env.NODE_ENV !== 'production';
     this._memoryStore = new Map();
   }
 
@@ -45,7 +56,11 @@ class GoodsIssueAttemptStore {
   }
 
   isAvailable() {
-    return Boolean(this.db) || this._memoryStore.size >= 0;
+    if (this.db) {
+      return true;
+    }
+    // Memory fallback is strictly restricted to non-production isolated unit tests that explicitly enabled it
+    return Boolean(this._useMemoryStore && process.env.NODE_ENV !== 'production');
   }
 
   clearMemoryStore() {
@@ -68,8 +83,10 @@ class GoodsIssueAttemptStore {
   _run(query) {
     const db = this.db;
     if (!db) {
-      const err = new Error('Goods Issue posting-attempt log is not available: no database is bound to this deployment.');
+      const err = new Error('Goods Issue posting-attempt log is not available: durable database persistence (SAP HANA) is required for transactional posting guarantees.');
       err.status = 503;
+      err.statusCode = 503;
+      err.code = 'DB_UNAVAILABLE';
       throw err;
     }
     return db.tx({ user: cds.User.privileged }, (tx) => tx.run(query));
@@ -106,12 +123,20 @@ class GoodsIssueAttemptStore {
       createdAt: new Date().toISOString()
     };
     if (!row.ReferenceDocument) throw new Error('ReferenceDocument is required to record a posting attempt');
-    // Memory is only the fallback with no database: instances do not share it, and it would only grow.
-    if (this.db) {
-      await this._run(INSERT.into(ATTEMPT_ENTITY).entries(row));
-    } else {
-      this._memoryStore.set(row.ReferenceDocument, { ...row });
+
+    if (!this.db) {
+      if (this._useMemoryStore && process.env.NODE_ENV !== 'production') {
+        this._memoryStore.set(row.ReferenceDocument, { ...row });
+        return row;
+      }
+      const err = new Error('Goods Issue posting-attempt log is unavailable: durable database persistence (SAP HANA) is required for transactional posting guarantees.');
+      err.status = 503;
+      err.statusCode = 503;
+      err.code = 'DB_UNAVAILABLE';
+      throw err;
     }
+
+    await this._run(INSERT.into(ATTEMPT_ENTITY).entries(row));
     return row;
   }
 
@@ -126,8 +151,14 @@ class GoodsIssueAttemptStore {
     let rows = [];
     if (this.db) {
       rows = await this._run(SELECT.from(ATTEMPT_ENTITY).where({ RequestHash: hash }));
-    } else {
+    } else if (this._useMemoryStore && process.env.NODE_ENV !== 'production') {
       rows = Array.from(this._memoryStore.values()).filter((r) => String(r.RequestHash || '') === hash);
+    } else {
+      const err = new Error('Goods Issue posting-attempt log is unavailable: durable database persistence (SAP HANA) is required for transactional posting guarantees.');
+      err.status = 503;
+      err.statusCode = 503;
+      err.code = 'DB_UNAVAILABLE';
+      throw err;
     }
     return (Array.isArray(rows) ? rows : []).slice().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
   }
@@ -150,6 +181,14 @@ class GoodsIssueAttemptStore {
   async createOrGet(data, reclaim = null) {
     const ref = String(data.ReferenceDocument || '').trim();
     if (!ref) throw new Error('ReferenceDocument is required to claim a posting attempt');
+
+    if (!this.db && !(this._useMemoryStore && process.env.NODE_ENV !== 'production')) {
+      const err = new Error('Goods Issue posting-attempt log is unavailable: durable database persistence (SAP HANA) is required for transactional posting guarantees.');
+      err.status = 503;
+      err.statusCode = 503;
+      err.code = 'DB_UNAVAILABLE';
+      throw err;
+    }
 
     const assertSameRequest = (row) => {
       if (String(row.RequestHash || '') !== String(data.RequestHash || '')) {
@@ -192,10 +231,17 @@ class GoodsIssueAttemptStore {
     }
 
     if (!this.db) {
-      const existing = this._memoryStore.get(ref);
-      if (existing) return assertSameRequest(existing);
-      const row = await this.create(data);
-      return { created: true, row };
+      if (this._useMemoryStore && process.env.NODE_ENV !== 'production') {
+        const existing = this._memoryStore.get(ref);
+        if (existing) return assertSameRequest(existing);
+        const row = await this.create(data);
+        return { created: true, row };
+      }
+      const err = new Error('Goods Issue posting-attempt log is unavailable: durable database persistence (SAP HANA) is required for transactional posting guarantees.');
+      err.status = 503;
+      err.statusCode = 503;
+      err.code = 'DB_UNAVAILABLE';
+      throw err;
     }
 
     const existing = await this.getByReference(ref);
@@ -217,7 +263,10 @@ class GoodsIssueAttemptStore {
     if (this.db) {
       return (await this._run(SELECT.one.from(ATTEMPT_ENTITY).where({ ReferenceDocument: ref }))) || null;
     }
-    return this._memoryStore.get(ref) || null;
+    if (this._useMemoryStore && process.env.NODE_ENV !== 'production') {
+      return this._memoryStore.get(ref) || null;
+    }
+    return null;
   }
 
   /**
@@ -239,10 +288,18 @@ class GoodsIssueAttemptStore {
       await this._run(UPDATE(ATTEMPT_ENTITY).set(updates).where({ ReferenceDocument: ref }));
       return;
     }
-    const mem = this._memoryStore.get(ref);
-    if (mem) {
-      Object.assign(mem, updates);
+    if (this._useMemoryStore && process.env.NODE_ENV !== 'production') {
+      const mem = this._memoryStore.get(ref);
+      if (mem) {
+        Object.assign(mem, updates);
+      }
+      return;
     }
+    const err = new Error('Goods Issue posting-attempt log is unavailable: durable database persistence (SAP HANA) is required for transactional posting guarantees.');
+    err.status = 503;
+    err.statusCode = 503;
+    err.code = 'DB_UNAVAILABLE';
+    throw err;
   }
 
   /**

@@ -11,7 +11,7 @@ using { cuid, managed } from '@sap/cds/common';
  */
 @assert.unique: { referenceDocument: [ReferenceDocument] }
 entity GoodsIssuePostingAttempt : cuid, managed {
-    ReferenceDocument : String(16);   // sent to SAP as the material document header ReferenceDocument
+    ReferenceDocument : String(16) not null;   // sent to SAP as the material document header ReferenceDocument
     RequestHash       : String(64);
     MovementType      : String(3);
     ReservationNo     : String(10);

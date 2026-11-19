@@ -16,7 +16,16 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `f6459ab6`; the worktree contains uncommitted Material Issued To Batch Sticker (`#/wm/mib-label`) UX and feature alignment with Quarantine Labels (`#/wm/quarantine-labels`), authorization fix for local dev user `KHUSHAL` (`SapLogsReader`), PO-tool guard, Phase 2 of SM21/SM20 Log Monitoring, Finding SAP-01 RFC production readiness remediation, Finding UI-01 Purchase Order Creation Screen-Load Baseline remediation, and Finding UI-02 Persistent Browser Token Storage remediation. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
+- **Current checkout:** `feature01`, `HEAD` `f6459ab6`; the worktree contains uncommitted Material Issued To Batch Sticker (`#/wm/mib-label`) UX and feature alignment with Quarantine Labels (`#/wm/quarantine-labels`), authorization fix for local dev user `KHUSHAL` (`SapLogsReader`), PO-tool guard, Phase 2 of SM21/SM20 Log Monitoring, Finding SAP-01 RFC production readiness remediation, Finding UI-01 Purchase Order Creation Screen-Load Baseline remediation, Finding UI-02 Persistent Browser Token Storage remediation, and Finding DB-01 Posting-Attempt In-Memory Fallback remediation. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
+- **Finding DB-01: In-memory fallback can undermine posting-attempt guarantees — PASS:** Remediated all aspects of P1 Finding DB-01 across `db/wm/goods-issue-attempt.cds`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `test/unit/wm/goodsIssueAttemptInstances.test.js`, and `test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js`:
+  1. *Mandatory Durable Persistence:* Enforced mandatory durable database persistence (SAP HANA in production) for all posting attempt operations (`create`, `createOrGet`, `setStatus`, and re-checks).
+  2. *Fail-Closed Protection:* If the durable database is unavailable in production (`NODE_ENV=production`), operations fail closed immediately by throwing HTTP 503 (`DB_UNAVAILABLE`), preventing any unlogged, in-memory, or non-distributed SAP writes.
+  3. *Strictly Restricted Memory Store:* Restricted in-memory store (`_memoryStore`) strictly to isolated test instances in non-production environments when explicitly opted in via constructor options. In production, memory fallback is strictly forbidden and disabled.
+  4. *Corrected `isAvailable()`:* Removed the tautological bug `this._memoryStore.size >= 0`. `isAvailable()` now returns `true` only when `this.db` is bound (or in non-production isolated unit tests with explicit memory store opt-in), returning `false` in production if HANA is not bound.
+  5. *Enforced Unique ReferenceDocument Constraint:* Added `not null` constraint to `ReferenceDocument` in `db/wm/goods-issue-attempt.cds` alongside `@assert.unique: { referenceDocument: [ReferenceDocument] }`. Verified generated SAP HANA DDL generates `UNIQUE INVERTED INDEX` and `NOT NULL`.
+  6. *Transaction Isolation & Multi-Instance Deduplication:* Verified `_run()` uses root independent transactions (`db.tx({ user: cds.User.privileged }, ...)`). Verified two store instances sharing the database enforce atomic claims and prevent duplicate SAP calls.
+  7. *Reconciliation Guard Against Blind Retries:* Enforced that attempts with uncertain outcome (`sending`, `unconfirmed`) cannot be re-claimed until reconciled via `recheck()` / `reconfirmUnconfirmed()`, preventing duplicate transactions against SAP.
+  8. *Validation Results:* Executed all 4 specified test suites: `goodsIssueAttempt.test.js` (5 tests PASS), `goodsIssueAttemptInstances.test.js` (6 tests PASS), `transactionPersistenceAndRetry.test.js` (6 tests PASS), `duplicateConcurrentTimeoutRecovery.test.js` (9 tests PASS). Total 26/26 tests PASS. Verified integration test `nothingPostedVisible.test.js` (9/9 PASS), `goodsReceiptAttempt.test.js` (38/38 PASS), ESLint (0 errors), and UI5 linter (0 findings).
 - **Finding UI-02: Review Persistent Browser Token Storage (SEC-02 Frontend Security Architecture) — PASS:** Audited, redesigned, and secured browser authentication storage architecture across `app/fiori-app/webapp/service/AuthService.js`, `app/fiori-app/webapp/service/ODataClient.js`, `app/fiori-app/webapp/controller/Login.controller.js`, and `test/e2e/support/screenCheck.js`:
   1. *Volatile Session Token Storage:* Eliminated the vulnerability where checking "Remember Me" persisted bearer tokens (`oUserSession.token`) indefinitely to client disk in `localStorage`. Active session objects and live Bearer tokens now reside strictly in volatile `sessionStorage` (scoped to browser tab/window, automatically cleared on window/tab close) and in-memory (`this._oModel`).
   2. *Secure "Remember Me" Semantics:* Re-aligned "Remember Me" semantics with enterprise SAP security standards: "Remember Me" strictly persists only the non-sensitive identity hint string (`username`) in `localStorage` under `REMEMBER_KEY = "saps4hana_fiori_remember_user"`, never live credentials, tokens, or session payloads. When "Remember Me" is unchecked, `REMEMBER_KEY` is purged from `localStorage`.
@@ -84,6 +93,49 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-19 13:05 IST — Remediation for Finding DB-01: In-Memory Fallback Undermining Posting-Attempt Guarantees — PASS
+
+- REQUEST: Remediate Finding DB-01 (In-memory fallback can undermine posting-attempt guarantees, P1; Files: `db/wm/goods-issue-attempt.cds`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `db/schema.cds`). Make durable database availability mandatory for production posting operations, fail closed if HANA is not available, restrict memory implementation to explicitly isolated unit tests, correct `isAvailable()`, keep unique ReferenceDocument constraint, verify transaction isolation and concurrent claims, and prevent retrying uncertain SAP postings until reconciled. Validate via specified test suites.
+- INSPECT:
+  - Audited `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `db/wm/goods-issue-attempt.cds`, `db/schema.cds`, and associated test suites.
+  - Confirmed evidence:
+    1. `isAvailable()` contained the tautology `return Boolean(this.db) || this._memoryStore.size >= 0;`, which unconditionally evaluated to `true` even when no database was bound.
+    2. When `this.db` was null, `create()`, `createOrGet()`, and `setStatus()` quietly fell back to a process-local `this._memoryStore = new Map()`.
+    3. In a multi-instance Cloud Foundry deployment (such as standard dual-instance HA topology), two CF instances running separate processes do not share process memory. An in-memory attempt log means:
+       - Application restart loses in-flight attempt tracking.
+       - A second instance cannot see claims made by the first, allowing duplicate SAP postings.
+       - Duplicate detection is not distributed across nodes.
+       - Post-timeout reconciliation becomes impossible if the process restarts or another instance handles the re-check.
+    4. S/4HANA transactional protection strictly requires that posting attempts are persisted in a shared durable database (SAP HANA via HDI container) before SAP is called.
+- CHANGED:
+  - `srv/wm/goods-issue/GoodsIssueAttemptStore.js`:
+    - Constructor: Memory store is strictly restricted to non-production isolated unit tests when explicitly opted in via constructor options (`useMemoryStore: true`, `allowMemoryFallback: true`, or `db === null` in `test` environment). In production (`process.env.NODE_ENV === 'production'`), `this._useMemoryStore` is unconditionally `false`.
+    - Corrected `isAvailable()`: Returns `true` only when `this.db` is bound, or in non-production isolated test instances with explicit memory store opt-in. Returns `false` in production whenever the durable database is unavailable.
+    - Enforced Fail-Closed Behavior: In `_run()`, `create()`, `_attemptsByRequestHash()`, `createOrGet()`, and `setStatus()`, if durable database persistence is unavailable and memory store is not permitted, the store immediately throws an explicit HTTP 503 (`DB_UNAVAILABLE`) error: `'Goods Issue posting-attempt log is unavailable: durable database persistence (SAP HANA) is required for transactional posting guarantees.'`.
+    - Protected SAP Writes: Confirmed that goods issue and goods receipt handlers catch 503 from the attempt store and reject before calling S/4HANA (0 SAP writes).
+    - Preserved Atomic Generation Suffix Re-claims: In `createOrGet()`, attempts in `sending` or `unconfirmed` status cannot be re-claimed until reconciled, returning `created: false` (409 Conflict) to block blind retries.
+  - `db/wm/goods-issue-attempt.cds`:
+    - Added `not null` constraint to `ReferenceDocument : String(16) not null;` alongside `@assert.unique: { referenceDocument: [ReferenceDocument] }`.
+    - Verified generated SAP HANA DDL produces `COLUMN TABLE saps4hana_wm_GoodsIssuePostingAttempt (ReferenceDocument NVARCHAR(16) NOT NULL)` and `UNIQUE INVERTED INDEX saps4hana_wm_GoodsIssuePostingAttempt_referenceDocument ON saps4hana_wm_GoodsIssuePostingAttempt (ReferenceDocument)`.
+  - `test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js`:
+    - Implemented Section 1 tests: `isAvailable` returns false in production when db is null; `create`, `createOrGet`, and `setStatus` fail closed with HTTP 503 (`DB_UNAVAILABLE`) in production.
+    - Implemented Section 2 tests: Two store instances sharing a database enforce atomic claims (second claim returns `created: false`, reference collision on different hash throws 409 Conflict, posted document returns existing SAP document).
+    - Verified Section 3 tests: Blind retry of unconfirmed / sending attempt is blocked until reconciled; `reconfirmUnconfirmed` promotes verified document to `posted`.
+  - `test/unit/wm/goodsIssueAttemptInstances.test.js`:
+    - Added tests verifying production mode (`NODE_ENV=production`) strictly forbids memory store and fails closed with HTTP 503 when db is null.
+- TEST DECISION: TEST UPDATED (`test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js`, `test/unit/wm/goodsIssueAttemptInstances.test.js`); EXISTING TEST SUFFICIENT (`test/unit/wm/goodsIssueAttempt.test.js`, `test/unit/wm/transactionPersistenceAndRetry.test.js`, `test/unit/wm/goodsReceiptAttempt.test.js`, `test/integration/nothingPostedVisible.test.js`).
+- TESTED:
+  - `npx jest test/unit/wm/goodsIssueAttempt.test.js test/unit/wm/goodsIssueAttemptInstances.test.js test/unit/wm/transactionPersistenceAndRetry.test.js test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js --runInBand`: 4 suites / 26 tests PASS.
+  - `npx jest test/unit/wm/goodsReceiptAttempt.test.js test/unit/tools/postAttemptAbapSource.test.js test/unit/monitoring/monitoringAlerting.test.js --runInBand`: 3 suites / 52 tests PASS.
+  - `npx jest test/integration/nothingPostedVisible.test.js`: 1 suite / 9 tests PASS (fail-closed posting attempt log returns 503 in production).
+  - `npx cds compile db --to hana`: PASS (verified `NOT NULL` and `UNIQUE INVERTED INDEX` on `ReferenceDocument`).
+  - `npm run lint`: PASS (0 errors).
+  - `npm --prefix app/fiori-app run lint`: PASS (`ui5lint`: 0 findings).
+- NOT VERIFIED: Multi-instance Cloud Foundry deployment with live SAP HANA HDI service binding (requires deployed BTP Cloud Foundry environment).
+- ASSUMPTIONS: None.
+- Next: Maintain durable SAP HANA persistence for posting attempts and keep memory store strictly restricted to isolated unit tests.
+- FINAL STATUS: PASS — Mandatory durable database persistence enforced, fail-closed 503 implemented for missing HANA database, memory fallback strictly restricted to non-production isolated tests, tautological `isAvailable()` corrected, unique ReferenceDocument constraint preserved in CDS and verified in HANA DDL, transaction isolation verified, and blind retries of unconfirmed postings prevented.
 
 ### 2026-11-19 12:45 IST — Remediation for Finding UI-02: Review Persistent Browser Token Storage (SEC-02 Frontend Security Architecture) — PASS
 
