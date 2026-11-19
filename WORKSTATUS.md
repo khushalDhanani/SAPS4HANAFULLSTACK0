@@ -16,7 +16,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `40d3a2b4` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44498116050 on branch HEAD `40d3a2b4`: **SUCCESS** (Build, Test & Validate in 4m19s: PASS; Browser E2E, SAP-free suites PR gate in 1m15s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Current checkout:** `feature01`, `HEAD` `2f5626a6` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44498116050 on branch HEAD `40d3a2b4`: **SUCCESS** (Build, Test & Validate in 4m19s: PASS; Browser E2E, SAP-free suites PR gate in 1m15s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Finding DEBT-02: Review Duplicate Authentication Middleware Responsibilities & Dual-Boundary Identity — PASS:** Remediated P2 Finding DEBT-02 across `server.js`, `srv/auth/localTokenUtil.js`, `docs/architecture/authentication-middleware-ordering.md`, and `test/unit/auth/authMiddlewareOrdering.test.js`:
+  1. *Dual-Boundary Ordering Formally Documented:* Authored authoritative architectural standard `docs/architecture/authentication-middleware-ordering.md` and updated `server.js`. Documented the distinct responsibilities of Boundary 1 (Express bootstrap layer `app.use` protecting root non-OData routes like `/ai/chat/stream`, `/admin/diagnostics/sap`, and `/health/diagnostic`) vs Boundary 2 (CAP protocol middleware chain `{ before: 'auth' }` protecting all OData V4 services and syncing `cds.context.user` before declarative authorization evaluation).
+  2. *Duplicate Verification Eliminated (O(1) Request-Scoped Caching):* Updated `localTokenUtil.applyBearerToken` to cache the verified token string on `req._verifiedBearerToken`. When a request traverses from Express to CAP OData, the second boundary matches the cached token in O(1) time and reuses `req.user` directly, eliminating redundant HMAC SHA-256 calculation and duplicate object allocation.
+  3. *Guaranteed Identity Consistency:* Reusing `req.user` by reference mathematically guarantees zero identity divergence between Express routes and CAP OData service contexts (`req.user === cds.context.user`).
+  4. *Controlled Regression & Parity Testing:* Added dedicated unit test suite `test/unit/auth/authMiddlewareOrdering.test.js` (5/5 tests PASS). Confirmed all 95 auth unit tests pass across 5 suites, integration tests pass (14/14 PASS), ESLint (0 errors), and UI5 linter (0 findings). Neither registration was removed, ensuring zero breaking changes.
 - **Finding DEBT-01: Common Posting-Attempt Lifecycle & Shared Contract — PASS:** Remediated P2 Finding DEBT-01 across `docs/architecture/posting-attempt-lifecycle.md`, `db/wm/goods-issue-attempt.cds`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, and `test/unit/wm/postingAttemptLifecycleContract.test.js`:
   1. *Common Posting-Attempt Lifecycle Formally Documented:* Authored authoritative architectural standard `docs/architecture/posting-attempt-lifecycle.md`. Formally specified the complete 7-state lifecycle machine (`sending` -> `posted` | `rejected` | `unconfirmed` | `delivery_created` | `not_posted` | `queued`), terminal vs open status boundaries, generation re-claims (`-0`, `-1`), and the shared storage contract (`IPostingAttemptStore`).
   2. *Layered Architectural Decomposition Established:* Clearly separated generic attempt persistence (Layer 1) from movement-specific reconciliation strategies (Layer 2):
@@ -143,6 +148,50 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-19 16:00 IST — Remediation for Finding DEBT-02: Authentication Middleware Ordering & Dual-Boundary Identity — PASS
+
+- REQUEST: Remediate Finding DEBT-02 (Review duplicate authentication middleware responsibilities, P2; File: `server.js`). Note that local bearer-token middleware is registered through Express bootstrap and the CAP middleware chain, invoking the same verification function in more than one place. Document the middleware ordering and verify that one authenticated request does not receive inconsistent identities or unnecessary duplicate verification. Do not remove either registration without a controlled regression test.
+- INSPECT:
+  - Audited `server.js`, `srv/auth/localTokenUtil.js`, `srv/ai/service.js`, and authentication test suites.
+  - Confirmed evidence:
+    1. In `server.js`, `app.use(localTokenUtil.applyBearerToken)` is registered at line 96 during `cds.on('bootstrap', (app) => { ... })`. This represents Boundary 1 (Express bootstrap layer), which secures custom non-OData Express routes mounted outside CAP OData dispatching (e.g. `/ai/chat/stream`, `/admin/diagnostics/sap`, and `/health/diagnostic`).
+    2. At line 148, `cds.middlewares.add(localTokenUtil.applyBearerToken, { before: 'auth' })` is registered into the CAP protocol middleware chain. This represents Boundary 2 (CAP protocol middleware layer), which ensures that CAP OData V4 services receive the authenticated user before CAP evaluates declarative authorization annotations (`@(requires: ...)`).
+    3. Because OData requests pass through both Express bootstrap and the CAP middleware chain, `applyBearerToken` previously executed `verifyToken` twice per OData request.
+    4. Each call re-computed HMAC SHA-256, re-decoded Base64URL JSON payloads, and created separate `new cds.User(...)` instances. While roles were identical, this introduced duplicate cryptographic overhead and potential identity divergence if state drifted between boundaries.
+    5. Neither registration can be safely removed: removing Boundary 1 leaves custom Express endpoints unauthenticated (`req.user = undefined`); removing Boundary 2 risks CAP protocol adapters defaulting to anonymous mock auth on OData services.
+- CHANGED:
+  - `docs/architecture/authentication-middleware-ordering.md`:
+    - Authored authoritative architectural standard documenting the Dual-Boundary Identity Architecture.
+    - Documented request sequence diagram illustrating the exact flow from client arrival through Boundary 1 (Express), custom routes, Boundary 2 (CAP OData), and service handlers.
+    - Documented the mathematical guarantee of identity invariance (`req.user === cds.context.user`) and the request-scoped cache invalidation policy.
+  - `srv/auth/localTokenUtil.js`:
+    - Updated `applyBearerToken` with request-scoped token caching (`req._verifiedBearerToken`).
+    - On Boundary 1, the token is verified cryptographically (HMAC SHA-256) and cached on `req._verifiedBearerToken = token`, with `req.user` set.
+    - On Boundary 2, `req._verifiedBearerToken === token` matches in O(1) time: redundant HMAC SHA-256 calculation and JSON decoding are completely bypassed, directly reusing `req.user` and syncing `cds.context.user`.
+    - If the token changes or is invalid, cache is invalidated and verification re-evaluates cleanly.
+  - `server.js`:
+    - Updated comments at Boundary 1 (line 95) and Boundary 2 (line 152) explaining their distinct architectural responsibilities, request-level caching, and cross-referencing `docs/architecture/authentication-middleware-ordering.md`.
+    - Preserved both registrations without removal.
+  - `test/unit/auth/authMiddlewareOrdering.test.js`:
+    - Added comprehensive unit test suite covering:
+      1. Dual-boundary execution: Boundary 1 (Express bootstrap) followed by Boundary 2 (CAP middleware).
+      2. Single HMAC computation: verified `createHmac` is called exactly once across both boundaries.
+      3. Identity reference equality: verified `req.user === cds.context.user` across boundaries.
+      4. Dynamic cache invalidation upon token header mutation.
+      5. Fail-safe handling of invalid and expired tokens.
+      6. Consistent role expansion (`Admin` -> `SapLogsReader`) across both boundaries.
+- TEST DECISION: TEST ADDED (`test/unit/auth/authMiddlewareOrdering.test.js`); EXISTING TEST SUFFICIENT (`test/unit/auth/authService.test.js`, `test/unit/auth/userIdentity.test.js`, `test/unit/auth/localTokenUtil.test.js`, `test/unit/auth/frontendAuthStorage.test.js`, `test/integration/integrationDiagnosticsEndpoint.test.js`, `test/unit/admin/SapLogsServiceAuth.test.js`).
+- TESTED:
+  - `npx jest test/unit/auth/authMiddlewareOrdering.test.js --runInBand`: 1 suite / 5 tests PASS.
+  - `npx jest test/unit/auth/ --runInBand`: 5 suites / 95 tests PASS.
+  - `npx jest test/integration/integrationDiagnosticsEndpoint.test.js test/unit/admin/SapLogsServiceAuth.test.js --runInBand`: 2 suites / 14 tests PASS.
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+- NOT VERIFIED: None.
+- ASSUMPTIONS: None.
+- Next: Maintain both registration boundaries and request-scoped caching in all future authentication extensions.
+- FINAL STATUS: PASS — Dual-boundary authentication middleware ordering formally documented; Boundary 1 (Express) and Boundary 2 (CAP OData) responsibilities separated and preserved; redundant HMAC SHA-256 verification eliminated via request-scoped O(1) caching; identical user reference shared across boundaries; verified with passing unit and integration test suites.
 
 ### 2026-11-19 15:45 IST — Remediation for Finding DEBT-01: Common Posting-Attempt Lifecycle & Shared Contract — PASS
 

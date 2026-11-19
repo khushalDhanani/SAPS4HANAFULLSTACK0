@@ -92,7 +92,12 @@ cds.on('bootstrap', (app) => {
         next();
     });
 
-    // In local development, verify Bearer tokens (JWT with standard XSUAA claims) when dev issuer is explicitly enabled
+    // Finding DEBT-02 (Boundary 1 - Express Bootstrap Layer):
+    // Verifies Bearer tokens for all root Express endpoints mounted outside the CAP OData dispatcher
+    // (such as /ai/chat/stream, /admin/diagnostics/sap, and /health/diagnostic).
+    // applyBearerToken caches the verified token on req._verifiedBearerToken to eliminate duplicate
+    // HMAC computations when requests later proceed into the CAP OData middleware chain.
+    // Full specification: docs/architecture/authentication-middleware-ordering.md
     app.use(localTokenUtil.applyBearerToken);
 
     // AI assistant streaming endpoint (SSE). Runs behind the CAP auth middlewares so cds.context.user is set.
@@ -144,7 +149,11 @@ cds.on('serving', (srv) => {
     }
 });
 
-// Register local development Bearer token verification into CAP OData middleware chain when dev issuer is enabled
+// Finding DEBT-02 (Boundary 2 - CAP Protocol Middleware Chain):
+// Ensures that all CAP OData V4 services receive the verified user before CAP's built-in auth middleware
+// ({ before: 'auth' }) evaluates declarative authorization annotations (@(requires: ...)).
+// Reuses req._verifiedBearerToken from Boundary 1 in O(1) time without redundant HMAC SHA-256 calculation.
+// Full specification: docs/architecture/authentication-middleware-ordering.md
 cds.middlewares.add(localTokenUtil.applyBearerToken, { before: 'auth' });
 
 // Delegate to default CAP server bootstrap

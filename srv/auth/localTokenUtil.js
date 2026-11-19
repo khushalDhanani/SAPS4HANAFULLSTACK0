@@ -183,18 +183,38 @@ function verifyToken(token) {
 }
 
 /**
- * Express middleware: signs in the request's user from a valid local dev Bearer token.
+ * Express / CAP middleware: signs in the request's user from a valid local dev Bearer token.
  * Does nothing when the dev token issuer is disabled, which it always is in production.
+ *
+ * Finding DEBT-02: Registered at both Express bootstrap (for custom non-OData routes like /ai/chat/stream)
+ * and CAP OData middleware chain ({ before: 'auth' }). To eliminate redundant cryptographic verification
+ * (HMAC SHA-256 calculation) and prevent inconsistent identities across middleware boundaries, the verified
+ * user is cached on the request (`req._verifiedBearerToken`).
+ *
+ * Full specification: docs/architecture/authentication-middleware-ordering.md
  */
 function applyBearerToken(req, res, next) {
     const [, token] = /^bearer\s+(.+)$/i.exec(req.headers.authorization || '') || [];
-    const user = token && verifyToken(token);
-    if (user) {
-        req.user = user;
-        if (cds.context) {
-            cds.context.user = user;
+    if (!token) {
+        return next();
+    }
+
+    let user;
+    if (req._verifiedBearerToken === token && req.user && !req.user._is_anonymous) {
+        // Cache hit from earlier middleware boundary (e.g. Express bootstrap -> CAP OData)
+        user = req.user;
+    } else {
+        user = verifyToken(token);
+        if (user) {
+            req._verifiedBearerToken = token;
+            req.user = user;
         }
     }
+
+    if (user && cds.context) {
+        cds.context.user = user;
+    }
+
     next();
 }
 
