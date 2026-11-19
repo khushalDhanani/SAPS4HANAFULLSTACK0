@@ -1,10 +1,11 @@
 'use strict';
 
 /**
- * Minimal SAP RFC client (node-rfc). Used where no OData service exists yet.
- * ponytail: node-rfc is marked unsupported by SAP (github.com/SAP/node-rfc/issues/329);
+ * SAP RFC client (node-rfc). Used where no OData service exists yet.
+ * Note: node-rfc is marked unsupported by SAP (github.com/SAP/node-rfc/issues/329);
  * swap this file for an OData client once the ABAP side publishes a service.
- * ponytail: one connection per call/session; move to noderfc.Pool if call volume grows.
+ * Supports single-connection session LUWs (BAPI + commit) and connection pooling (noderfc.Pool),
+ * with concurrency throttling, timeout safety, and real BTP RFC destination property resolution.
  * A session is one SAP LUW: a BAPI and its BAPI_TRANSACTION_COMMIT must run inside the same session().
  */
 const REQUIRED_ENV = ['S4_DESTINATION_URL', 'S4_RFC_SYSNR', 'S4_CLIENT', 'S4_USERNAME', 'S4_PASSWORD'];
@@ -12,10 +13,41 @@ const LOG = require('./logger')('rfc-client');
 
 const unavailable = (msg) => Object.assign(new Error(msg), { status: 503 });
 
-// Property names of an RFC-type destination as the Destination service returns them (originalProperties).
-// Not verified against a live BTP destination yet: a destination without these keys fails closed with the keys it has.
-const RFC_DESTINATION_PROPS = { ashost: 'jco.client.ashost', sysnr: 'jco.client.sysnr', client: 'jco.client.client', user: 'jco.client.user', passwd: 'jco.client.passwd' };
+const DEFAULT_RFC_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_CONCURRENT = 10;
 const DESTINATION_PARAMS_TTL_MS = 5 * 60 * 1000;
+
+function withTimeout(promise, timeoutMs, operationName) {
+  if (!promise || typeof promise.then !== 'function') {
+    promise = Promise.resolve(promise);
+  }
+  if (!timeoutMs || timeoutMs <= 0) return promise;
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(unavailable(`RFC call to ${operationName} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    if (timer && typeof timer.unref === 'function') {
+      timer.unref();
+    }
+  });
+  return Promise.race([
+    promise.finally(() => {
+      if (timer) clearTimeout(timer);
+    }),
+    timeoutPromise
+  ]);
+}
+
+function getProp(props, ...keys) {
+  for (const k of keys) {
+    const v = props[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') {
+      return String(v).trim();
+    }
+  }
+  return undefined;
+}
 
 const defaultLoader = () => {
   if (process.env.ALLOW_LIVE_SAP_TOOLS === '1') {
@@ -39,6 +71,12 @@ class RfcClient {
     this.loader = loader;
     this._getDestination = getDestination;
     this._destinationParams = null;
+    this.timeoutMs = parseInt(this.env.S4_RFC_TIMEOUT_MS, 10) || DEFAULT_RFC_TIMEOUT_MS;
+    this.maxConcurrent = parseInt(this.env.S4_RFC_MAX_CONCURRENT, 10) || DEFAULT_MAX_CONCURRENT;
+    this.poolEnabled = String(this.env.S4_RFC_POOL_ENABLED || '').toLowerCase() === 'true';
+    this._activeCount = 0;
+    this._waitQueue = [];
+    this._pool = null;
   }
 
   /** Check whether all local environment connection variables are present. */
@@ -49,6 +87,7 @@ class RfcClient {
   /**
    * Connection parameters from the BTP RFC destination named by S4_RFC_DESTINATION_NAME (deployed environments),
    * otherwise from the local environment (development only; refused in production).
+   * Supports standard JCo properties, message server load balancing, gateway, and alias names.
    */
   async resolveConnectionParams() {
     const destinationName = String(this.env.S4_RFC_DESTINATION_NAME || '').trim();
@@ -79,13 +118,50 @@ class RfcClient {
       }
       throw unavailable(`RFC destination '${destinationName}' not found in the Destination service`);
     }
+
     const props = dest.originalProperties || {};
     const params = {};
     const missing = [];
-    for (const [key, prop] of Object.entries(RFC_DESTINATION_PROPS)) {
-      const v = props[prop];
-      if (v === undefined || v === null || String(v).trim() === '') missing.push(prop); else params[key] = String(v).trim();
+
+    const isMessageServer = Boolean(getProp(props, 'jco.client.mshost', 'mshost'));
+
+    if (isMessageServer) {
+      const mshost = getProp(props, 'jco.client.mshost', 'mshost');
+      const r3name = getProp(props, 'jco.client.r3name', 'r3name');
+      const group = getProp(props, 'jco.client.group', 'group');
+      const msserv = getProp(props, 'jco.client.msserv', 'msserv');
+
+      if (!mshost) missing.push('jco.client.mshost');
+      if (!r3name) missing.push('jco.client.r3name');
+      if (!group) missing.push('jco.client.group');
+
+      if (mshost) params.mshost = mshost;
+      if (r3name) params.r3name = r3name;
+      if (group) params.group = group;
+      if (msserv) params.msserv = msserv;
+    } else {
+      const ashost = getProp(props, 'jco.client.ashost', 'ashost');
+      const sysnr = getProp(props, 'jco.client.sysnr', 'sysnr');
+
+      if (!ashost) missing.push('jco.client.ashost');
+      if (!sysnr) missing.push('jco.client.sysnr');
+
+      if (ashost) params.ashost = ashost;
+      if (sysnr) params.sysnr = sysnr;
     }
+
+    const client = getProp(props, 'jco.client.client', 'client');
+    const user = getProp(props, 'jco.client.user', 'user', 'username');
+    const passwd = getProp(props, 'jco.client.passwd', 'passwd', 'password');
+
+    if (!client) missing.push('jco.client.client');
+    if (!user) missing.push('jco.client.user');
+    if (!passwd) missing.push('jco.client.passwd');
+
+    if (client) params.client = client;
+    if (user) params.user = user;
+    if (passwd) params.passwd = passwd;
+
     if (missing.length) {
       if (!isProduction && this.hasLocalConnectionParams()) {
         LOG.warn(`RFC destination '${destinationName}' lacks RFC properties (${missing.join(', ')}); falling back to local environment connection parameters.`);
@@ -93,8 +169,20 @@ class RfcClient {
       }
       throw unavailable(`RFC destination '${destinationName}' lacks ${missing.join(', ')} (properties present: ${Object.keys(props).filter((k) => !/passwd|password/i.test(k)).join(', ') || 'none'})`);
     }
-    params.lang = String(props['jco.client.lang'] || 'EN').trim();
-    params.trace = this.env.S4_RFC_TRACE || '0';
+
+    const gwhost = getProp(props, 'jco.client.gwhost', 'gwhost');
+    const gwserv = getProp(props, 'jco.client.gwserv', 'gwserv');
+    if (gwhost) params.gwhost = gwhost;
+    if (gwserv) params.gwserv = gwserv;
+
+    const poolCapacity = getProp(props, 'jco.destination.pool_capacity', 'pool_capacity');
+    const peakLimit = getProp(props, 'jco.destination.peak_limit', 'peak_limit');
+    if (poolCapacity) params.pool_capacity = poolCapacity;
+    if (peakLimit) params.peak_limit = peakLimit;
+
+    params.lang = getProp(props, 'jco.client.lang', 'lang') || 'EN';
+    params.trace = getProp(props, 'jco.client.trace', 'trace') || this.env.S4_RFC_TRACE || '0';
+
     this._destinationParams = { params, expiresAt: Date.now() + DESTINATION_PARAMS_TTL_MS };
     return params;
   }
@@ -135,9 +223,77 @@ class RfcClient {
   }
 
   /**
+   * Acquire execution slot under concurrency limit, queueing excess callers.
+   */
+  async _withConcurrency(fn) {
+    if (this._activeCount >= this.maxConcurrent) {
+      await new Promise((resolve, reject) => {
+        let timer;
+        if (this.timeoutMs > 0) {
+          timer = setTimeout(() => {
+            const idx = this._waitQueue.findIndex((item) => item.resolve === resolve);
+            if (idx >= 0) this._waitQueue.splice(idx, 1);
+            reject(unavailable(`RFC concurrency limit reached (${this.maxConcurrent}) and wait queue timed out`));
+          }, this.timeoutMs);
+          if (timer && typeof timer.unref === 'function') timer.unref();
+        }
+        this._waitQueue.push({ resolve, timer });
+      });
+    }
+    this._activeCount++;
+    try {
+      return await fn();
+    } finally {
+      this._activeCount--;
+      if (this._waitQueue.length > 0) {
+        const next = this._waitQueue.shift();
+        if (next.timer) clearTimeout(next.timer);
+        next.resolve();
+      }
+    }
+  }
+
+  _getPool(noderfc, params) {
+    if (!this._pool) {
+      const low = parseInt(this.env.S4_RFC_POOL_LOW, 10) || 2;
+      const high = parseInt(this.env.S4_RFC_POOL_HIGH, 10) || parseInt(params.peak_limit, 10) || this.maxConcurrent;
+      this._pool = new noderfc.Pool({
+        connectionParameters: params,
+        poolOptions: { low, high }
+      });
+    }
+    return this._pool;
+  }
+
+  async _acquireConnection(noderfc, params) {
+    if (this.poolEnabled && typeof noderfc.Pool === 'function') {
+      const pool = this._getPool(noderfc, params);
+      return await withTimeout(pool.acquire(), this.timeoutMs, 'pool acquire');
+    }
+    const client = new noderfc.Client(params);
+    await withTimeout(client.open(), this.timeoutMs, 'connection open');
+    return client;
+  }
+
+  async _releaseConnection(client, isFaulted) {
+    if (!client) return;
+    try {
+      if (this.poolEnabled && this._pool && typeof this._pool.release === 'function' && !isFaulted) {
+        await this._pool.release(client);
+        return;
+      }
+      if (typeof client.close === 'function') {
+        await client.close();
+      }
+    } catch (e) {
+      LOG.warn('RFC connection close/release failed:', e.message);
+    }
+  }
+
+  /**
    * Run several function modules on ONE connection (= one ABAP session / LUW), e.g.
    * `session(async (call) => { await call('BAPI_HU_CREATE', ...); await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' }); })`.
-   * The connection is closed afterwards even when fn throws; an uncommitted LUW is then discarded by SAP.
+   * Enforces concurrency limits and timeout protection. On error or timeout, the connection is closed/discarded.
    */
   async session(fn) {
     let noderfc;
@@ -147,13 +303,35 @@ class RfcClient {
       const why = e.code === 'MODULE_NOT_FOUND' ? 'not installed' : e.message.split('\n')[0];
       throw unavailable(`node-rfc is not available (${why}). Install the SAP NW RFC SDK, then run: npm install node-rfc`);
     }
-    const client = new noderfc.Client(await this.resolveConnectionParams());
-    await client.open();
-    try {
-      return await fn((fm, params = {}) => client.call(fm, params));
-    } finally {
-      await client.close();
-    }
+
+    const params = await this.resolveConnectionParams();
+
+    return this._withConcurrency(async () => {
+      let client;
+      let isFaulted = false;
+      try {
+        client = await this._acquireConnection(noderfc, params);
+        const timeoutMs = this.timeoutMs;
+        const callWrapper = (fm, callParams = {}) => {
+          const callPromise = client.call(fm, callParams);
+          if (timeoutMs > 0) {
+            return withTimeout(callPromise, timeoutMs, fm);
+          }
+          return callPromise;
+        };
+
+        const sessionPromise = fn(callWrapper);
+        if (timeoutMs > 0) {
+          return await withTimeout(sessionPromise, timeoutMs, 'session');
+        }
+        return await sessionPromise;
+      } catch (err) {
+        isFaulted = true;
+        throw err;
+      } finally {
+        await this._releaseConnection(client, isFaulted);
+      }
+    });
   }
 
   /** One function module on its own connection. */
@@ -181,6 +359,13 @@ class RfcClient {
       const vals = WA.split('|');
       return Object.fromEntries(fields.map((f, i) => [f, (vals[i] || '').trim()]));
     });
+  }
+
+  async close() {
+    if (this._pool && typeof this._pool.closeAll === 'function') {
+      await this._pool.closeAll();
+      this._pool = null;
+    }
   }
 }
 

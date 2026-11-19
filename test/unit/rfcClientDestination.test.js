@@ -62,6 +62,200 @@ describe('RfcClient.resolveConnectionParams — BTP RFC destination first, local
     await expect(new RfcClient({ ...env, NODE_ENV: 'production' }, noLoader).resolveConnectionParams())
       .rejects.toMatchObject({ status: 503, message: expect.stringContaining('S4_RFC_DESTINATION_NAME') });
   });
+
+  test('resolves message server / logon group destination properties', async () => {
+    const msProps = {
+      'jco.client.mshost': 'ms.corp.sap',
+      'jco.client.r3name': 'PRD',
+      'jco.client.group': 'PUBLIC',
+      'jco.client.client': '100',
+      'jco.client.user': 'RFC_USER',
+      'jco.client.passwd': 'secret',
+      'jco.client.msserv': '3600'
+    };
+    const rfc = new RfcClient({ S4_RFC_DESTINATION_NAME: 'S4_MS_RFC' }, noLoader, dest(msProps));
+    await expect(rfc.resolveConnectionParams()).resolves.toEqual({
+      mshost: 'ms.corp.sap',
+      r3name: 'PRD',
+      group: 'PUBLIC',
+      client: '100',
+      user: 'RFC_USER',
+      passwd: 'secret',
+      msserv: '3600',
+      lang: 'EN',
+      trace: '0'
+    });
+  });
+
+  test('resolves destination properties configured with direct alias names without jco.client prefix', async () => {
+    const aliasProps = {
+      ashost: 's4app.corp.internal',
+      sysnr: '02',
+      client: '200',
+      username: 'APP_USER',
+      password: 'vaultPassword',
+      pool_capacity: '10',
+      peak_limit: '20'
+    };
+    const rfc = new RfcClient({ S4_RFC_DESTINATION_NAME: 'S4_ALIAS' }, noLoader, dest(aliasProps));
+    await expect(rfc.resolveConnectionParams()).resolves.toMatchObject({
+      ashost: 's4app.corp.internal',
+      sysnr: '02',
+      client: '200',
+      user: 'APP_USER',
+      passwd: 'vaultPassword',
+      pool_capacity: '10',
+      peak_limit: '20'
+    });
+  });
+
+  test('resolves optional gateway parameters when configured in BTP destination', async () => {
+    const gwProps = {
+      ...fullProps,
+      'jco.client.gwhost': 'gw.corp.internal',
+      'jco.client.gwserv': 'sapgw00'
+    };
+    const rfc = new RfcClient({ S4_RFC_DESTINATION_NAME: 'S4_GW' }, noLoader, dest(gwProps));
+    await expect(rfc.resolveConnectionParams()).resolves.toMatchObject({
+      ashost: 'sap.internal',
+      gwhost: 'gw.corp.internal',
+      gwserv: 'sapgw00'
+    });
+  });
+});
+
+describe('RfcClient concurrency limits and queueing', () => {
+  test('throttles concurrent sessions to maxConcurrent and processes queued calls as capacity frees', async () => {
+    let active = 0;
+    let maxObservedActive = 0;
+    const makeMockClient = () => ({
+      open: jest.fn(async () => {
+        active++;
+        maxObservedActive = Math.max(maxObservedActive, active);
+      }),
+      call: jest.fn(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+        return { ok: true };
+      }),
+      close: jest.fn(async () => {
+        active--;
+      })
+    });
+
+    const loader = () => ({ Client: jest.fn(() => makeMockClient()) });
+    const rfc = new RfcClient({
+      S4_DESTINATION_URL: 'https://sap.local:44300',
+      S4_RFC_SYSNR: '00',
+      S4_CLIENT: '100',
+      S4_USERNAME: 'U',
+      S4_PASSWORD: 'P',
+      S4_RFC_MAX_CONCURRENT: '2',
+      S4_RFC_TIMEOUT_MS: '2000'
+    }, loader);
+
+    const results = await Promise.all([
+      rfc.call('FM1'),
+      rfc.call('FM2'),
+      rfc.call('FM3'),
+      rfc.call('FM4')
+    ]);
+
+    expect(results).toEqual([{ ok: true }, { ok: true }, { ok: true }, { ok: true }]);
+    expect(maxObservedActive).toBeLessThanOrEqual(2);
+    expect(active).toBe(0);
+  });
+
+  test('queue wait times out with 503 if concurrency slots do not free up in time', async () => {
+    const makeHangingClient = () => ({
+      open: jest.fn(async () => {}),
+      call: jest.fn(() => new Promise(() => {})), // never resolves
+      close: jest.fn(async () => {})
+    });
+
+    const loader = () => ({ Client: jest.fn(() => makeHangingClient()) });
+    const rfc = new RfcClient({
+      S4_DESTINATION_URL: 'https://sap.local:44300',
+      S4_RFC_SYSNR: '00',
+      S4_CLIENT: '100',
+      S4_USERNAME: 'U',
+      S4_PASSWORD: 'P',
+      S4_RFC_MAX_CONCURRENT: '1',
+      S4_RFC_TIMEOUT_MS: '50'
+    }, loader);
+
+    // First call consumes the only slot
+    const p1 = rfc.call('HANG1');
+    // Second call is queued and times out waiting in queue
+    const p2 = rfc.call('HANG2');
+
+    await Promise.all([
+      expect(p1).rejects.toMatchObject({ status: 503, message: expect.stringMatching(/timed out/) }),
+      expect(p2).rejects.toMatchObject({ status: 503, message: expect.stringMatching(/concurrency limit reached|timed out/) })
+    ]);
+  });
+});
+
+describe('RfcClient timeout protection and lifecycle', () => {
+  test('aborts hanging call with 503 timeout and forcefully closes client connection', async () => {
+    const mockClient = {
+      open: jest.fn(async () => {}),
+      call: jest.fn(() => new Promise((resolve) => setTimeout(resolve, 200))),
+      close: jest.fn(async () => {})
+    };
+    const loader = () => ({ Client: jest.fn(() => mockClient) });
+    const rfc = new RfcClient({
+      S4_DESTINATION_URL: 'https://sap.local:44300',
+      S4_RFC_SYSNR: '00',
+      S4_CLIENT: '100',
+      S4_USERNAME: 'U',
+      S4_PASSWORD: 'P',
+      S4_RFC_TIMEOUT_MS: '30'
+    }, loader);
+
+    await expect(rfc.call('HANGING_FM')).rejects.toMatchObject({
+      status: 503,
+      message: expect.stringMatching(/RFC call to HANGING_FM timed out after 30ms/)
+    });
+    expect(mockClient.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('connection pooling: acquires from Pool, releases on success, and disposes on error', async () => {
+    const fakeClient = {
+      call: jest.fn().mockResolvedValue({ SUCCESS: true }),
+      close: jest.fn().mockResolvedValue()
+    };
+    const mockPool = {
+      acquire: jest.fn().mockResolvedValue(fakeClient),
+      release: jest.fn().mockResolvedValue(),
+      closeAll: jest.fn().mockResolvedValue()
+    };
+    const loader = () => ({
+      Client: jest.fn(),
+      Pool: jest.fn(() => mockPool)
+    });
+
+    const rfc = new RfcClient({
+      S4_DESTINATION_URL: 'https://sap.local:44300',
+      S4_RFC_SYSNR: '00',
+      S4_CLIENT: '100',
+      S4_USERNAME: 'U',
+      S4_PASSWORD: 'P',
+      S4_RFC_POOL_ENABLED: 'true'
+    }, loader);
+
+    const res = await rfc.call('TEST_FM');
+    expect(res).toEqual({ SUCCESS: true });
+    expect(mockPool.acquire).toHaveBeenCalledTimes(1);
+    expect(mockPool.release).toHaveBeenCalledWith(fakeClient);
+
+    // On error, faulted client is closed rather than released back to pool
+    fakeClient.call.mockRejectedValueOnce(new Error('SAP ABAP Dump'));
+    await expect(rfc.call('TEST_FAIL')).rejects.toThrow('SAP ABAP Dump');
+    expect(fakeClient.close).toHaveBeenCalledTimes(1);
+
+    await rfc.close();
+    expect(mockPool.closeAll).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('RfcClient.readTable sorted paging', () => {

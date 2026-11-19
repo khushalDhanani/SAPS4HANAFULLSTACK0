@@ -7,11 +7,24 @@ function blockedRfcError() {
 }
 
 class Client {
-  constructor() {
+  constructor(params = {}) {
+    this.params = params;
     this.open = async () => { throw blockedRfcError(); };
     this.call = async () => { throw blockedRfcError(); };
     this.close = async () => {};
   }
 }
 
-module.exports = { Client };
+class Pool {
+  constructor(options = {}) {
+    this.options = options;
+    this.status = { ready: 0, used: 0 };
+  }
+  async acquire() {
+    throw blockedRfcError();
+  }
+  async release() {}
+  async closeAll() {}
+}
+
+module.exports = { Client, Pool };

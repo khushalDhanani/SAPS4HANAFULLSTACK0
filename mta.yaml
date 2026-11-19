@@ -15,6 +15,10 @@ build-parameters:
 
 modules:
   # ------------------ BACKEND SERVICE (CAP) ------------------
+  # Note on RFC Production Readiness (Finding SAP-01):
+  # Standard nodejs_buildpack does not bundle proprietary SAP NW RFC SDK (libsapnwrfc.so).
+  # If RFC-dependent flows are used in CF, supply the SDK via multi-buildpack (binary-buildpack + nodejs_buildpack)
+  # or deploy as a Docker container using docker/cap/Dockerfile (see docs/deployment/rfc-production-readiness.md).
   - name: saps4hana-srv
     type: nodejs
     path: gen/srv
