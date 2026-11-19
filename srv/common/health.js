@@ -7,7 +7,18 @@ const cds = require('@sap/cds');
  *   /health/live          the process answers; never depends on anything else
  *   /health/ready         the app can serve requests: its own database answers (503 otherwise)
  *   /health/dependencies  the state of each dependency; informational, always 200
- * SAP being down must not fail liveness or readiness: the app still serves its UI and reports the SAP error.
+ *
+ * Safety & Architecture Principle (Finding MON-01):
+ * - Platform health probes execute without credentials at high frequency (e.g. every 10–30s).
+ * - Unauthenticated probes must NEVER repeatedly log on to SAP with service account credentials:
+ *   doing so risks technical user account lockouts, connection pool exhaustion, and denial of service.
+ * - Therefore, /health/dependencies reports local configuration and SDK readiness only:
+ *   - s4Destination: CONFIGURED (destination parameters resolve locally or via BTP)
+ *   - rfcSdk:        UP (native NW RFC SDK dynamic libraries can be loaded)
+ *   - sapOData:      NOT_CHECKED (intentionally unprobed on unauthenticated requests)
+ * - Full end-to-end SAP reachability and persistence verification is provided via the separately
+ *   controlled, authenticated diagnostic endpoint: /admin/diagnostics/sap (requires Admin role).
+ *
  * Responses carry status words only, never hosts, users or error text.
  */
 
@@ -41,9 +52,44 @@ function checkRfcSdk() {
   }
 }
 
+function extractUser(req) {
+  if (req.user && !req.user._is_anonymous) return req.user;
+  const authHeader = req.headers && req.headers.authorization;
+  if (authHeader) {
+    const [, token] = /^bearer\s+(.+)$/i.exec(authHeader) || [];
+    if (token) {
+      try {
+        const { verifyToken } = require('../auth/localTokenUtil');
+        const u = verifyToken(token);
+        if (u) return u;
+      } catch (_) {}
+    }
+  }
+  if (cds.context && cds.context.user && !cds.context.user._is_anonymous) {
+    return cds.context.user;
+  }
+  return null;
+}
+
+function hasAdminRole(user) {
+  if (!user) return false;
+  if (typeof user.is === 'function') {
+    return user.is('Admin') || user.is('TechnicalUser');
+  }
+  if (Array.isArray(user.roles)) {
+    return user.roles.includes('Admin') || user.roles.includes('TechnicalUser');
+  }
+  return false;
+}
+
 const defaultChecks = { database: checkDatabase, s4Destination: checkS4Destination, rfcSdk: checkRfcSdk };
 
-function registerHealth(app, { checks = defaultChecks, cacheMs = CACHE_MS, now = Date.now } = {}) {
+function registerHealth(app, {
+  checks = defaultChecks,
+  cacheMs = CACHE_MS,
+  now = Date.now,
+  diagnosticsRunner = null
+} = {}) {
   let cached = null;
 
   async function dependencies() {
@@ -51,8 +97,8 @@ function registerHealth(app, { checks = defaultChecks, cacheMs = CACHE_MS, now =
     const names = Object.keys(checks);
     const results = await Promise.all(names.map((name) => checks[name]()));
     const value = Object.fromEntries(names.map((name, i) => [name, results[i]]));
-    // shortcut: SAP OData reachability is not probed, because an unauthenticated probe would log on to SAP
-    // with the service user (failed-logon lock risk); upgrade when a safe probe is decided.
+    // Finding MON-01: SAP OData reachability is NOT probed in unauthenticated health probes
+    // to protect technical service accounts from repeated logons and lockouts.
     value.sapOData = 'NOT_CHECKED';
     cached = { at: now(), value };
     return value;
@@ -70,8 +116,54 @@ function registerHealth(app, { checks = defaultChecks, cacheMs = CACHE_MS, now =
   app.get('/health/dependencies', async (_req, res) => {
     const deps = await dependencies();
     const degraded = deps.database !== 'UP' || deps.s4Destination !== 'CONFIGURED' || deps.rfcSdk !== 'UP';
-    send(res, 200, { status: degraded ? 'DEGRADED' : 'UP', dependencies: deps, checkedAt: new Date(cached.at).toISOString() });
+    send(res, 200, {
+      status: degraded ? 'DEGRADED' : 'UP',
+      dependencies: deps,
+      checkedAt: new Date(cached.at).toISOString(),
+      diagnosticsEndpoint: '/admin/diagnostics/sap',
+      note: 'Unauthenticated dependency health reports local configuration and SDK state only (sapOData is NOT_CHECKED to prevent service account lockouts). For full 6-stage live SAP connectivity and persistence verification, use the authenticated integration diagnostic endpoint with an approved technical identity.'
+    });
   });
+
+  // Separately controlled, authenticated integration diagnostic endpoint (Finding MON-01)
+  const handleDiagnostics = async (req, res) => {
+    const user = extractUser(req);
+    if (!user) {
+      return send(res, 401, {
+        error: 'AUTHENTICATION_REQUIRED',
+        message: 'SAP integration diagnostics require authentication with an approved technical identity (Admin role). Unauthenticated health probes are prohibited from repeatedly logging on to SAP to prevent service account lockouts and repeated load.',
+        requiredRole: 'Admin'
+      });
+    }
+
+    if (!hasAdminRole(user)) {
+      return send(res, 403, {
+        error: 'FORBIDDEN',
+        message: 'SAP integration diagnostics require an approved technical identity with the Admin role.',
+        requiredRole: 'Admin'
+      });
+    }
+
+    const runner = diagnosticsRunner || require('./integrationDiagnostics').runIntegrationDiagnostics;
+    try {
+      const channel = req.query.channel || 'all';
+      const report = await runner({ channel, user: user.id || 'admin' });
+      const statusCode = report.overallStatus === 'FAILED' ? 502 : 200;
+      return send(res, statusCode, report);
+    } catch (err) {
+      return send(res, 500, {
+        error: 'DIAGNOSTIC_EXECUTION_ERROR',
+        message: String(err && err.message ? err.message : err).split('\n')[0]
+      });
+    }
+  };
+
+  app.get('/admin/diagnostics/sap', handleDiagnostics);
+  app.get('/health/diagnostic', handleDiagnostics);
 }
 
-module.exports = { registerHealth };
+module.exports = {
+  registerHealth,
+  extractUser,
+  hasAdminRole
+};

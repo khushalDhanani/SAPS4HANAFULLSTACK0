@@ -196,4 +196,35 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         failedNotificationCount     : Integer;
         errorMessage                : String;
     };
+
+    type DiagnosticStageResult {
+        stage    : String;
+        status   : String;
+        details  : String;
+        latencyMs: Integer;
+    };
+
+    type IntegrationDiagnosticReport {
+        timestamp     : String;
+        channel       : String;
+        overallStatus : String;
+        targetClient  : String;
+        systemLabel   : String;
+        operator      : String;
+        readOnlyNotice: String;
+        summary       : {
+            totalStages: Integer;
+            passed     : Integer;
+            failed     : Integer;
+            skipped    : Integer;
+        };
+        stages        : array of DiagnosticStageResult;
+    };
+
+    /**
+     * Separately controlled, read-only integration diagnostic (Finding MON-01).
+     * Reports distinct states: Configured, Reachable, Authenticated, Authorized, Metadata verified, Functionally verified.
+     * Requires the Admin role.
+     */
+    function runIntegrationDiagnostics(channel: String) returns IntegrationDiagnosticReport;
 }

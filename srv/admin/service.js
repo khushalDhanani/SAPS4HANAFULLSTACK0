@@ -40,6 +40,7 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     this.on('getPasswordExpirySummary', this._handleGetPasswordExpirySummary.bind(this));
     this.on('getPasswordExpiryList', this._handleGetPasswordExpiryList.bind(this));
     this.on('getPasswordExpiryMonitor', this._handleGetPasswordExpiryMonitor.bind(this));
+    this.on('runIntegrationDiagnostics', this._handleRunIntegrationDiagnostics.bind(this));
 
     lockNotifier.startJob(() => this._getAdapter());
     passwordExpiryNotifier.startJob(() => this._getAdapter());
@@ -410,6 +411,38 @@ module.exports = class UserManagementService extends cds.ApplicationService {
     } catch (e) {
       LOG.error('getPasswordExpiryMonitor error:', e.message);
       return req.reject(e.status || 502, e.message || 'Failed to retrieve password expiry monitor status');
+    }
+  }
+
+  /**
+   * runIntegrationDiagnostics(channel?) — execute 6-stage read-only integration diagnostic.
+   */
+  async _handleRunIntegrationDiagnostics(req) {
+    try {
+      const channel = (req.data && req.data.channel) || 'all';
+      const { runIntegrationDiagnostics } = require('../common/integrationDiagnostics');
+      const user = req.user?.id || 'admin';
+      const report = await runIntegrationDiagnostics({ channel, user });
+
+      const flatStages = [
+        ...(report.channels.odata?.stages || []),
+        ...(report.channels.rfc?.stages || [])
+      ];
+
+      return {
+        timestamp: report.timestamp,
+        channel: report.channel,
+        overallStatus: report.overallStatus,
+        targetClient: report.targetClient,
+        systemLabel: report.systemLabel,
+        operator: report.operator,
+        readOnlyNotice: report.readOnlyNotice,
+        summary: report.summary,
+        stages: flatStages
+      };
+    } catch (e) {
+      LOG.error('runIntegrationDiagnostics error:', e.message);
+      return req.reject(e.status || 502, e.message || 'Failed to execute integration diagnostics');
     }
   }
 };

@@ -83,6 +83,7 @@ Full production release certification requires documented evidence across all **
 | **3. Service Connectivity Check** | `npm run check:connectivity` | Resolves BTP destinations, certificates, system labels, and AI service provider configuration without mutations. | Reports `Overall Service Connectivity Status: HEALTHY`. |
 | **4. Live OData Metadata Verification** | `npm run validate:sap:sandbox` | Reads `$metadata` for all required S/4HANA OData services (`C_PURCHASEORDER_FS_SRV`, `MM_PUR_PO_MAINT_V2_SRV`, `SD_F2370_INQY_WL_SRV`, `SD_F1873_SO_WL_SRV`). | HTTP 200 OK for all metadata endpoints. |
 | **5. Read-Only System Log Audit** | `ALLOW_LIVE_SAP_TOOLS=1 node tools/check-sap-logs.js` (or unit live suite) | Tests read-only RFC function modules `RSLG_READ_SLG` (SM21) and `RSAU_API_GET_LOG_DATA` (SM20). | Returns recent log records within configured UTC window. |
+| **6. 6-Stage Integration Diagnostic (MON-01)** | `npm run check:sap-diagnostic` (or `GET /admin/diagnostics/sap`) | Separately controlled diagnostic reporting 6 distinct states: Configured, Reachable, Authenticated, Authorized, Metadata verified, Functionally verified across OData and RFC using approved technical identity. | All stages `PASSED` (Overall Status: `HEALTHY`); zero writes. Unauthenticated health probes prohibited from logging on to SAP. |
 
 ---
 

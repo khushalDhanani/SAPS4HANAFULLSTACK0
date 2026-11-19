@@ -347,4 +347,14 @@ describe('UserManagementService._handleGetPasswordExpiryMonitor', () => {
       lastRunDurationMs: 650
     });
   });
+
+  describe('UserManagementService._handleRunIntegrationDiagnostics', () => {
+    test('delegates to integrationDiagnostics module and formats report', async () => {
+      const res = await svc._handleRunIntegrationDiagnostics(makeReq({ channel: 'odata' }));
+      expect(res).toBeDefined();
+      expect(res.overallStatus).toBeDefined();
+      expect(res.readOnlyNotice).toBe('CONFIRMED READ-ONLY: Zero data mutations executed.');
+      expect(Array.isArray(res.stages)).toBe(true);
+    });
+  });
 });

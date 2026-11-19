@@ -17,6 +17,18 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`, `HEAD` `1305d03c` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44482086195 on branch HEAD `1305d03c`: **SUCCESS** (Build, Test & Validate in 3m49s: PASS; Browser E2E, SAP-free suites PR gate in 5m47s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Finding MON-01: Dependency Health vs Live SAP Connectivity & 6-Stage Integration Diagnostics — PASS:** Remediated P1 Finding MON-01 across `srv/common/health.js`, `srv/common/integrationDiagnostics.js`, `srv/admin/service.cds`, `srv/admin/service.js`, `tools/check-sap-integration-diagnostic.js`, `package.json`, `docs/release-evidence-checklist.md`, `test/unit/monitoring/integrationDiagnostics.test.js`, and `test/integration/integrationDiagnosticsEndpoint.test.js`:
+  1. *Safe Unauthenticated Probes Protected:* Preserved `/health/live`, `/health/ready`, and `/health/dependencies` without credentials. Unauthenticated probes never log on to SAP, preventing service account lockouts, connection pool exhaustion, and denial of service. `sapOData = 'NOT_CHECKED'` and `rfcSdk = 'UP'` are explicitly documented as local readiness indicators rather than live connectivity proofs.
+  2. *Separately Controlled Integration Diagnostic:* Introduced `/admin/diagnostics/sap` (and alias `/health/diagnostic`) requiring an approved technical identity (`Admin` or `TechnicalUser` role). Unauthenticated callers are rejected with HTTP 401 (`AUTHENTICATION_REQUIRED`), and unauthorized callers are rejected with HTTP 403 (`FORBIDDEN`).
+  3. *6 Distinct Lifecycle States Reported:* Both OData and RFC channels evaluate and report:
+     - **Configured**: Destination, connection parameters, and SDK libraries present and resolved.
+     - **Reachable**: Low-level network transport and SAP Gateway host/port reachable without connection timeouts or refused sockets.
+     - **Authenticated**: Technical credentials accepted by SAP Gateway / dispatcher (no 401 or RFC_LOGON_FAILURE).
+     - **Authorized**: Technical identity holds required authorizations (`S_SERVICE` / `S_RFC` / `S_TABU_DIS`; no 403 or RFC_NO_AUTHORITY).
+     - **Metadata verified**: OData `$metadata` EDMX schema or RFC DDIC interface definition retrieved and structurally verified.
+     - **Functionally verified**: Safe, strictly READ-ONLY business query (`C_PurchaseOrderFs?$top=1` or `T000` read) returns valid data from backend.
+  4. *CAP OData Function & CLI Tooling:* Exposed `runIntegrationDiagnostics(channel)` in `UserManagementService` (`@(requires: 'Admin')`) and implemented CLI tool `tools/check-sap-integration-diagnostic.js` (`npm run check:sap-diagnostic`).
+  5. *Validation Results:* Executed 11 new unit tests in `test/unit/monitoring/integrationDiagnostics.test.js` (PASS), 6 integration tests in `test/integration/integrationDiagnosticsEndpoint.test.js` (PASS), 8 tests in `test/integration/health.test.js` (PASS), 25 tests in `test/unit/admin/UserManagementService.test.js` (PASS), and verified zero ESLint errors/warnings and zero UI5 linter findings.
 - **Finding CI-03: SAP-Dependent Validation Separation & Release Evidence Checklist — PASS:** Established the formal 5-Tier Release Evidence Architecture and operational sign-off protocol in `docs/release-evidence-checklist.md`, resolving P1 Finding CI-03:
   1. *Architectural Separation of Concerns:* Reinforced the critical enterprise safety rule that **live SAP write tests must NEVER run automatically on every push**. Automated CI runs strictly against an isolated test server with mocked writes and blocked SAP egress (`assertSapUnreachable`).
   2. *Tier 1 (Automated SAP-Free Verification):* Continuous PR release gate verifying static analysis (ESLint, UI5 lint), security scans (secrets, dependencies), Jest unit/integration tests with coverage, performance benchmarks, Fiori a11y, monitoring tests, local smoke checks, MTA packaging, and all 6 Playwright SAP-free browser suites.
@@ -115,6 +127,48 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-19 14:45 IST — Remediation for Finding MON-01: Dependency Health vs Live SAP Connectivity & 6-Stage Integration Diagnostics — PASS
+
+- REQUEST: Remediate Finding MON-01 (Dependency health is not the same as live SAP connectivity, P1; File: `srv/common/health.js`). Acknowledge that `value.sapOData = 'NOT_CHECKED'`, RFC SDK check proves only library loading, and destination check verifies configuration resolution without proving SAP reachability. Keep the current safe health endpoints, but introduce a separately controlled, read-only integration diagnostic using an approved technical identity. Report distinct states: 1. Configured, 2. Reachable, 3. Authenticated, 4. Authorized, 5. Metadata verified, 6. Functionally verified. Do not make an unauthenticated health probe repeatedly log on to SAP with a service account.
+- INSPECT:
+  - Audited `srv/common/health.js`, `server.js`, `srv/admin/service.cds`, `srv/admin/service.js`, `srv/integration/s4hana/S4HttpClient.js`, `srv/integration/s4hana/RfcClient.js`, and `test/integration/health.test.js`.
+  - Confirmed evidence:
+    1. Unauthenticated health probes (`/health/live`, `/health/ready`, `/health/dependencies`) are invoked by platforms (e.g. Cloud Foundry, load balancers) without credentials every 10–30 seconds.
+    2. Repeated unauthenticated logons against SAP with service account credentials risk locking the technical user, causing connection storm overhead, and coupling process readiness to external SAP availability.
+    3. `sapOData = 'NOT_CHECKED'` and `rfcSdk = 'UP'` in `/health/dependencies` represent local process readiness only; they do not prove that SAP host is network-reachable, credentials are valid, or backend services are executable.
+    4. Production readiness requires a separate, authenticated, read-only diagnostic reporting the 6 distinct lifecycle states across both OData and RFC channels.
+- CHANGED:
+  - `srv/common/health.js`:
+    - Preserved unauthenticated endpoints (`/health/live`, `/health/ready`, `/health/dependencies`).
+    - Added architectural safety documentation and response metadata pointing to `/admin/diagnostics/sap`.
+    - Registered separately controlled endpoint `/admin/diagnostics/sap` (and alias `/health/diagnostic`). Enforced authentication check via `extractUser` and `hasAdminRole`: rejects unauthenticated requests with HTTP 401 (`AUTHENTICATION_REQUIRED`) and non-Admin callers with HTTP 403 (`FORBIDDEN`).
+  - `srv/common/integrationDiagnostics.js`: Created core 6-stage diagnostic runner executing strictly READ-ONLY checks with zero data mutations:
+    - **Configured**: Destination, parameters, and SDK libraries present and resolved.
+    - **Reachable**: Low-level network transport and SAP Gateway host/port reachable without connection timeouts or refused sockets (`NEVER_SENT_CODES`).
+    - **Authenticated**: Technical credentials accepted by SAP Gateway / dispatcher (no 401 or RFC_LOGON_FAILURE).
+    - **Authorized**: Technical identity holds required authorizations (`S_SERVICE` / `S_RFC` / `S_TABU_DIS`; no 403 or RFC_NO_AUTHORITY).
+    - **Metadata verified**: OData `$metadata` EDMX schema or RFC DDIC interface definition retrieved and structurally verified.
+    - **Functionally verified**: Safe, strictly READ-ONLY business query (`C_PurchaseOrderFs?$top=1` or `T000` read) returns valid data from backend.
+    - Supports channel scoping (`all`, `odata`, `rfc`), redacts secrets in logs/outputs, and reports overall health (`HEALTHY`, `DEGRADED`, `FAILED`).
+  - `srv/admin/service.cds`: Added `DiagnosticStageResult` and `IntegrationDiagnosticReport` types and exposed `runIntegrationDiagnostics(channel: String)` in `UserManagementService` (`@(requires: 'Admin')`).
+  - `srv/admin/service.js`: Implemented `_handleRunIntegrationDiagnostics` handler delegating to `integrationDiagnostics`.
+  - `tools/check-sap-integration-diagnostic.js`: Created CLI diagnostic tool with formatted ASCII tables, channel filtering, and live safety gating.
+  - `package.json`: Added `"check:sap-diagnostic": "node tools/check-sap-integration-diagnostic.js"`.
+  - `docs/release-evidence-checklist.md`: Added Step 6 to Tier 2 (Read-Only SAP Integration Verification).
+- TEST DECISION: TEST ADDED (`test/unit/monitoring/integrationDiagnostics.test.js`, `test/integration/integrationDiagnosticsEndpoint.test.js`).
+- TESTED:
+  - `npx jest test/unit/monitoring/integrationDiagnostics.test.js --runInBand`: 1 suite / 11 tests PASS.
+  - `npx jest test/integration/integrationDiagnosticsEndpoint.test.js --runInBand`: 1 suite / 6 tests PASS.
+  - `npx jest test/integration/health.test.js --runInBand`: 1 suite / 8 tests PASS.
+  - `npx jest test/unit/admin/UserManagementService.test.js --runInBand`: 1 suite / 25 tests PASS.
+  - `node tools/check-sap-integration-diagnostic.js`: PASS (DEGRADED in isolated test environment with accurate stage classification).
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+- NOT VERIFIED: Live SAP network egress in production (intentionally gated by live tool gate; requires explicit `--allow-live-sap`).
+- ASSUMPTIONS: None.
+- Next: Use `/admin/diagnostics/sap` or `npm run check:sap-diagnostic` for controlled pre-flight staging verification across all 6 integration stages.
+- FINAL STATUS: PASS — Safe health endpoints preserved without repeated SAP logons; separately controlled, authenticated 6-stage read-only integration diagnostic implemented, verified, and integrated into CAP administration and CLI tooling.
 
 ### 2026-11-19 14:15 IST — Remediation for Finding CI-03: SAP-Dependent Validation Separation & Release Evidence Checklist — PASS
 
