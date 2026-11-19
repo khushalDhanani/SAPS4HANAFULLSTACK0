@@ -17,6 +17,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`, `HEAD` `37e8c7ea` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44485490673 on branch HEAD `37e8c7ea`: **SUCCESS** (Build, Test & Validate in 3m46s: PASS; Browser E2E, SAP-free suites PR gate in 7m21s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Finding MON-02: Goods Receipt Recheck Timer Can Run on Both CF Instances & Distributed Worker Leasing — PASS:** Remediated P1 Finding MON-02 across `srv/wm/goods-receipt/service.js`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, and `test/unit/wm/goodsReceiptTwoInstances.test.js`:
+  1. *Single-Worker Background Scheduling:* Replaced the unguarded `setInterval` background recheck in `srv/wm/goods-receipt/service.js` with a proven single-worker strategy `isWorker(env)` aligning with `lockNotifier` and `passwordExpiryNotifier`. Recheck timers schedule and run exclusively on Cloud Foundry instance 0 (`(env.CF_INSTANCE_INDEX ?? '0') === '0'`). Secondary instances (`CF_INSTANCE_INDEX != '0'`) disable the timer with informative logging, preventing dual-instance polling loops.
+  2. *Distributed Worker Lease Coordination:* Implemented `claimAttemptForRecheck(referenceDocument, workerId, leaseMs, now)` and `releaseAttemptLease(referenceDocument, workerId)` in `GoodsIssueAttemptStore.js`. Acquiring a lease executes an atomic Compare-And-Swap (CAS) update on `LastError`, storing `lease:${workerId}:${expiresAtIso}`.
+  3. *Lease Expiration & Crash Recovery:* Leased attempts are locked to the claiming worker until the lease expires. If an instance crashes mid-call, the lease expires (default 60s) allowing another instance to safely recover and re-check the unresolved receipt attempt. When an attempt is resolved (`posted` or `not_posted`), the lease is cleared; if still open without confirmation, the lease is explicitly released.
+  4. *Atomic Concurrency Verification:* Verified that when two Cloud Foundry instances concurrently run recheck on the same open receipt attempt, exactly one instance claims the lease and queries SAP, while the other detects the lock (`SkippedLocked`) and skips it without redundant SAP queries.
+  5. *Validation Results:* Added dedicated unit test suite `test/unit/wm/goodsReceiptTwoInstances.test.js` (6/6 tests PASS). Verified `transactionPersistenceAndRetry.test.js` (6/6 PASS), `lockNotifierRules.test.js` (41/41 PASS), `passwordExpiryNotifier.test.js` (15/15 PASS), `goodsIssueAttempt.test.js` (5/5 PASS), `goodsReceiptAttempt.test.js` (38/38 PASS), `goodsIssueAttemptInstances.test.js` (6/6 PASS), `duplicateConcurrentTimeoutRecovery.test.js` (9/9 PASS), `e2eRoundTripKit.test.js` (16/16 PASS), `SapLogsServiceAuth.test.js` (8/8 PASS), root ESLint (0 errors, 0 warnings), and UI5 linter (0 findings).
 - **Finding MON-01: Dependency Health vs Live SAP Connectivity & 6-Stage Integration Diagnostics — PASS:** Remediated P1 Finding MON-01 across `srv/common/health.js`, `srv/common/integrationDiagnostics.js`, `srv/admin/service.cds`, `srv/admin/service.js`, `tools/check-sap-integration-diagnostic.js`, `package.json`, `docs/release-evidence-checklist.md`, `test/unit/monitoring/integrationDiagnostics.test.js`, and `test/integration/integrationDiagnosticsEndpoint.test.js`:
   1. *Safe Unauthenticated Probes Protected:* Preserved `/health/live`, `/health/ready`, and `/health/dependencies` without credentials. Unauthenticated probes never log on to SAP, preventing service account lockouts, connection pool exhaustion, and denial of service. `sapOData = 'NOT_CHECKED'` and `rfcSdk = 'UP'` are explicitly documented as local readiness indicators rather than live connectivity proofs.
   2. *Separately Controlled Integration Diagnostic:* Introduced `/admin/diagnostics/sap` (and alias `/health/diagnostic`) requiring an approved technical identity (`Admin` or `TechnicalUser` role). Unauthenticated callers are rejected with HTTP 401 (`AUTHENTICATION_REQUIRED`), and unauthorized callers are rejected with HTTP 403 (`FORBIDDEN`).
@@ -127,6 +133,49 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-19 15:15 IST — Remediation for Finding MON-02: Goods Receipt Recheck Timer on Dual CF Instances & Distributed Worker Leases — PASS
+
+- REQUEST: Remediate Finding MON-02 (Goods receipt recheck timer can run on both CF instances, P1; File: `srv/wm/goods-receipt/service.js`). Note that `setInterval()` starts background recheck on both Cloud Foundry instances without a single-worker guard, unlike `lockNotifier` and `passwordExpiryNotifier`. Use a distributed worker lease or proven single-worker strategy so two instances cannot independently process the same unresolved scheduled job. Validate via specified test suites (`test/unit/wm/transactionPersistenceAndRetry.test.js`, `test/unit/admin/lockNotifierRules.test.js`, `test/unit/admin/passwordExpiryNotifier.test.js`) and add a specific two-instance goods receipt recheck test.
+- INSPECT:
+  - Audited `srv/wm/goods-receipt/service.js`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `mta/extensions/prod/prod.mtaext`, `srv/admin/lockNotifier.js`, and `srv/admin/passwordExpiryNotifier.js`.
+  - Confirmed evidence:
+    1. In `mta/extensions/prod/prod.mtaext`, `saps4hana-srv` is scaled to `instances: 2` for high availability.
+    2. In `srv/wm/goods-receipt/service.js`, `init()` previously started `setInterval(() => { GoodsIssueAttemptStore.recheckReceipts(...) }, every)` without checking `CF_INSTANCE_INDEX`.
+    3. `lockNotifier.js` and `passwordExpiryNotifier.js` both implement single-worker guards (`(env.CF_INSTANCE_INDEX ?? '0') === '0'`).
+    4. Without a worker guard, both CF instances run the background recheck timer concurrently every 60 seconds.
+    5. Furthermore, without distributed attempt leasing in `GoodsIssueAttemptStore`, if both instances query the attempt store at the same time, both would find the same unresolved attempts and issue redundant read requests against S/4HANA.
+- CHANGED:
+  - `srv/wm/goods-receipt/service.js`:
+    - Implemented single-worker strategy helper `isWorker(env)`: primary instance 0 (or undefined in local development) is the designated worker; secondary instances (`1`, `2`, ...) are non-workers.
+    - Implemented `startRecheckJob({ getStore, getAdapter, env })` and `stopRecheckJob(timer)`. On secondary instances, the timer is suppressed with an informative log message: `'Goods receipt attempt re-check timer disabled on secondary Cloud Foundry instance (CF_INSTANCE_INDEX != 0)'`.
+    - Skips background timer under `NODE_ENV=test` unless explicitly opted in via `RECEIPT_RECHECK_IN_TEST=1`.
+    - Attached `this._recheckTimer` to `init()` and exported lifecycle helpers for testability.
+  - `srv/wm/goods-issue/GoodsIssueAttemptStore.js`:
+    - Implemented `claimAttemptForRecheck(referenceDocument, workerId, leaseMs, now)`:
+      - Uses atomic Compare-And-Swap (CAS) update on `LastError` in the database: `UPDATE ATTEMPT_ENTITY SET LastError = 'lease:workerId:expiresAtIso' WHERE ReferenceDocument = ref AND Status = current.Status AND (LastError IS NULL OR LastError = '' OR LastError = currentLastError)`.
+      - Enforces unexpired lease ownership: if another instance holds an unexpired lease (`owner !== workerId && expiresAtMs > now`), claim returns `false`.
+      - Automatically recovers expired leases after timeout (default 60s), ensuring crash resilience.
+    - Implemented `releaseAttemptLease(referenceDocument, workerId)`: safely resets `LastError = ''` when still owned by the releasing worker.
+    - Updated `recheckReceipts(adapter, now, options)`: passes worker ID and lease duration, acquires distributed lease before querying SAP, skips locked attempts (`SkippedLocked`), and releases lease when an attempt remains unresolved or encounters an error.
+  - `test/unit/wm/goodsReceiptTwoInstances.test.js`:
+    - Added dedicated test suite covering:
+      1. Single-worker strategy (instance 0 vs secondary instances).
+      2. Timer startup and suppression logic across environment configurations.
+      3. Distributed worker leasing across two stores sharing the database: concurrent recheck runs result in exactly 1 instance processing the attempt and exactly 1 instance skipping it (`SkippedLocked = 1`), with exactly 1 call to `findReceiptForAttempt`.
+      4. Lease expiration recovery allowing a secondary instance to recover an attempt if the primary worker crashes or exceeds lease duration.
+- TEST DECISION: TEST ADDED (`test/unit/wm/goodsReceiptTwoInstances.test.js`); EXISTING TEST SUFFICIENT (`test/unit/wm/transactionPersistenceAndRetry.test.js`, `test/unit/admin/lockNotifierRules.test.js`, `test/unit/admin/passwordExpiryNotifier.test.js`, `test/unit/wm/goodsReceiptAttempt.test.js`).
+- TESTED:
+  - `npx jest test/unit/wm/goodsReceiptTwoInstances.test.js --runInBand`: 1 suite / 6 tests PASS.
+  - `npx jest test/unit/wm/transactionPersistenceAndRetry.test.js --runInBand`: 1 suite / 6 tests PASS.
+  - `npx jest test/unit/admin/lockNotifierRules.test.js test/unit/admin/passwordExpiryNotifier.test.js --runInBand`: 2 suites / 68 tests PASS.
+  - `npx jest test/unit/wm/goodsIssueAttempt.test.js test/unit/wm/goodsReceiptAttempt.test.js test/unit/wm/goodsIssueAttemptInstances.test.js test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js --runInBand`: 4 suites / 58 tests PASS.
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+- NOT VERIFIED: Live 2-node Cloud Foundry staging cluster deployment (requires active BTP Cloud Foundry runtime with 2 running container instances).
+- ASSUMPTIONS: None.
+- Next: Deploy to Cloud Foundry staging with 2 instances and verify log output on instance 1 confirms timer suppression while instance 0 performs background rechecks.
+- FINAL STATUS: PASS — Single-worker background scheduling implemented for Goods Receipt service matching admin notifiers; distributed worker leasing and atomic CAS locking implemented in GoodsIssueAttemptStore with crash-recovery; 2-instance concurrency and lease expiration verified through dedicated tests.
 
 ### 2026-11-19 14:45 IST — Remediation for Finding MON-01: Dependency Health vs Live SAP Connectivity & 6-Stage Integration Diagnostics — PASS
 

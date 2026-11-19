@@ -468,14 +468,109 @@ class GoodsIssueAttemptStore {
   }
 
   /**
+   * Distributed worker lease for an attempt during background re-check.
+   * Ensures that two Cloud Foundry instances cannot independently process the same unresolved attempt.
+   *
+   * @param {string} referenceDocument
+   * @param {string} [workerId] - Worker / instance identifier (e.g. CF_INSTANCE_INDEX)
+   * @param {number} [leaseMs=60000] - Lease duration in milliseconds
+   * @param {number} [now=Date.now()]
+   * @returns {Promise<boolean>} true if the worker acquired the lease; false if locked or already resolved
+   */
+  async claimAttemptForRecheck(referenceDocument, workerId = (process.env.CF_INSTANCE_INDEX || '0'), leaseMs = 60000, now = Date.now()) {
+    const ref = String(referenceDocument).trim();
+    const expiresAtIso = new Date(now + leaseMs).toISOString();
+    const leaseTag = `lease:${workerId}:${expiresAtIso}`;
+
+    if (this.db) {
+      const current = await this.getByReference(ref);
+      if (!current || !OPEN_STATUSES.includes(current.Status)) {
+        return false;
+      }
+      if (current.LastError && current.LastError.startsWith('lease:')) {
+        const match = current.LastError.match(/^lease:([^:]+):(.+)$/);
+        if (match) {
+          const [, owner, expiresIso] = match;
+          const expiresAtMs = new Date(expiresIso).getTime();
+          // If leased to another instance and lease has not expired, cannot claim
+          if (owner !== String(workerId) && Number.isFinite(expiresAtMs) && expiresAtMs > now) {
+            return false;
+          }
+        }
+      }
+
+      const currentLastError = current.LastError ?? '';
+      let query;
+      if (currentLastError === '') {
+        query = UPDATE(ATTEMPT_ENTITY)
+          .set({ LastError: leaseTag })
+          .where({ ReferenceDocument: ref, Status: current.Status })
+          .and(`(LastError is null or LastError = '')`);
+      } else {
+        query = UPDATE(ATTEMPT_ENTITY)
+          .set({ LastError: leaseTag })
+          .where({ ReferenceDocument: ref, Status: current.Status, LastError: currentLastError });
+      }
+
+      const updated = await this._run(query);
+      return Boolean(updated && (typeof updated === 'number' ? updated > 0 : true));
+    }
+
+    if (this._useMemoryStore && process.env.NODE_ENV !== 'production') {
+      const mem = this._memoryStore.get(ref);
+      if (!mem || !OPEN_STATUSES.includes(mem.Status)) return false;
+      if (mem.LastError && mem.LastError.startsWith('lease:')) {
+        const match = mem.LastError.match(/^lease:([^:]+):(.+)$/);
+        if (match) {
+          const [, owner, expiresIso] = match;
+          const expiresAtMs = new Date(expiresIso).getTime();
+          if (owner !== String(workerId) && Number.isFinite(expiresAtMs) && expiresAtMs > now) {
+            return false;
+          }
+        }
+      }
+      mem.LastError = leaseTag;
+      return true;
+    }
+
+    return false;
+  }
+
+  async releaseAttemptLease(referenceDocument, workerId) {
+    const ref = String(referenceDocument).trim();
+    const expectedOwner = String(workerId ?? process.env.CF_INSTANCE_INDEX ?? '0');
+    if (this.db) {
+      const current = await this.getByReference(ref);
+      if (current && current.LastError && current.LastError.startsWith(`lease:${expectedOwner}:`)) {
+        await this._run(
+          UPDATE(ATTEMPT_ENTITY)
+            .set({ LastError: '' })
+            .where({ ReferenceDocument: ref, LastError: current.LastError })
+        );
+      }
+      return;
+    }
+    if (this._useMemoryStore) {
+      const mem = this._memoryStore.get(ref);
+      if (mem && mem.LastError && mem.LastError.startsWith(`lease:${expectedOwner}:`)) {
+        mem.LastError = '';
+      }
+    }
+  }
+
+  /**
    * Background re-check of goods receipt attempts: looks for a 101 document of the delivery item in SAP.
+   * Protected by distributed worker leases so multiple instances cannot redundantly query SAP.
    *
    * @param {Object} adapter - GoodsReceiptAdapter (findReceiptForAttempt)
    * @param {number} [now] - current time in ms (tests)
-   * @returns {Promise<{ Checked: number, Posted: number, NotPosted: number, StillOpen: number, Errors: number }>}
+   * @param {Object} [options] - workerId and leaseMs options
+   * @returns {Promise<{ Checked: number, Posted: number, NotPosted: number, StillOpen: number, Errors: number, SkippedLocked: number }>}
    */
-  async recheckReceipts(adapter, now = Date.now()) {
-    const summary = { Checked: 0, Posted: 0, NotPosted: 0, StillOpen: 0, Errors: 0 };
+  async recheckReceipts(adapter, now = Date.now(), options = {}) {
+    const summary = { Checked: 0, Posted: 0, NotPosted: 0, StillOpen: 0, Errors: 0, SkippedLocked: 0 };
+    const workerId = String(options.workerId ?? process.env.CF_INSTANCE_INDEX ?? '0');
+    const leaseMs = options.leaseMs || 60000;
     const open = this.db
       ? await this._run(SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES }, MovementType: RECEIPT_MOVEMENT }))
       : Array.from(this._memoryStore.values()).filter((a) => OPEN_STATUSES.includes(a.Status) && a.MovementType === RECEIPT_MOVEMENT);
@@ -484,11 +579,20 @@ class GoodsIssueAttemptStore {
     for (const attempt of (open || []).filter((a) => ageOf(a) >= GoodsIssueAttemptStore.recheckAgeMs())) {
       summary.Checked++;
       const ref = attempt.ReferenceDocument;
+
+      const claimed = await this.claimAttemptForRecheck(ref, workerId, leaseMs, now);
+      if (!claimed) {
+        summary.SkippedLocked = (summary.SkippedLocked || 0) + 1;
+        summary.StillOpen++;
+        continue;
+      }
+
       let doc;
       try {
         doc = await adapter.findReceiptForAttempt(attempt);
       } catch (err) {
         LOG.warn(`Re-check of receipt attempt ${ref} failed, status ${attempt.Status} kept: ${err.message}`);
+        await this.releaseAttemptLease(ref, workerId);
         summary.Errors++;
         continue;
       }
@@ -500,6 +604,7 @@ class GoodsIssueAttemptStore {
         await this.setStatus(ref, 'not_posted', { LastError: finding });
         summary.NotPosted++;
       } else {
+        await this.releaseAttemptLease(ref, workerId);
         summary.StillOpen++;
       }
     }
