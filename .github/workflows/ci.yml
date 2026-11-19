@@ -187,7 +187,7 @@ jobs:
           npm ci
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Run SAP-free browser E2E (isolated test-profile server, SAP unreachable, writes mocked)
         run: npm run test:e2e:sap-free
@@ -244,7 +244,7 @@ jobs:
           npm ci
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: RFC preflight (READ-ONLY T000 read; fails fast with the broken layer)
         env:
