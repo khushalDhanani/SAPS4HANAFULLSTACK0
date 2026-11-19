@@ -15,10 +15,14 @@ build-parameters:
 
 modules:
   # ------------------ BACKEND SERVICE (CAP) ------------------
-  # Note on RFC Production Readiness (Finding SAP-01):
+  # Note on RFC Production Readiness (Finding SAP-01 & MTA-01):
   # Standard nodejs_buildpack does not bundle proprietary SAP NW RFC SDK (libsapnwrfc.so).
-  # If RFC-dependent flows are used in CF, supply the SDK via multi-buildpack (binary-buildpack + nodejs_buildpack)
-  # or deploy as a Docker container using docker/cap/Dockerfile (see docs/deployment/rfc-production-readiness.md).
+  # For Cloud Foundry production deployment with native RFC SDK:
+  # Option A: Cloud Foundry multi-buildpack pattern (droplet deployment):
+  #   buildpacks:
+  #     - ((sap-nwrfc-supply-buildpack-url))  # unpacks nwrfc750P_XX-linuxx86_64.zip into $DEPS_DIR/0/nwrfcsdk
+  #     - nodejs_buildpack
+  # Option B: Docker container deployment using docker/cap/Dockerfile (see docs/deployment/cf-native-rfc-runtime-proof.md).
   - name: saps4hana-srv
     type: nodejs
     path: gen/srv
@@ -26,6 +30,9 @@ modules:
       buildpack: nodejs_buildpack
       readiness-health-check-type: http
       readiness-health-check-http-endpoint: /health/ready
+    properties:
+      SAPNWRFC_HOME: /home/vcap/deps/0/nwrfcsdk
+      LD_LIBRARY_PATH: /home/vcap/deps/0/nwrfcsdk/lib:/usr/sap/nwrfcsdk/lib:/home/vcap/app/lib:$LD_LIBRARY_PATH
     build-parameters:
       builder: npm-ci
     provides:

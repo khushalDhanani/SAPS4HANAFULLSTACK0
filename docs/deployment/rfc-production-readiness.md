@@ -183,16 +183,24 @@ Run in any development or CI environment (zero SAP connection required):
 ```sh
 npx jest test/unit/rfcClientDestination.test.js --runInBand
 npx jest test/unit/s4HttpClient.test.js --runInBand
+npx jest test/unit/tools/verifyCfRfcRuntime.test.js --runInBand
 npx jest test/unit/networkSafety.test.js --runInBand
 ```
 
-### Step 2: Post-Deployment Service Connectivity Check
+### Step 2: Cloud Foundry RFC Runtime Dependency & Deployment Certification Check
+Verify whether the running environment satisfies all native dynamic library, platform, and destination prerequisites:
+```sh
+npm run check:rfc-runtime
+```
+(See `docs/deployment/cf-native-rfc-runtime-proof.md` for the full deployment proof and multi-buildpack provisioning specification).
+
+### Step 3: Post-Deployment Service Connectivity Check
 Run post-deployment to verify security guardrails and destination configuration:
 ```sh
 npm run check:connectivity
 ```
 
-### Step 3: Read-Only Live RFC Preflight Probe
+### Step 4: Read-Only Live RFC Preflight Probe
 In an SAP-connected environment (with NW RFC SDK installed and authorized read-only target):
 ```sh
 ALLOW_LIVE_SAP_TOOLS=1 node tools/rfc-preflight.js --allow-live-sap
