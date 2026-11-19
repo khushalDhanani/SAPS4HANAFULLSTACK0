@@ -45,7 +45,6 @@ sap.ui.define([
             if (this._oMessagePopover) {
                 this._oMessagePopover.close();
             }
-            this._refreshPurchGrpBinding();
             if (bLoadConfig) {
                 this._loadConfigurationAndDefaults();
             }
@@ -689,16 +688,45 @@ sap.ui.define([
         },
 
         /**
-         * Re-applies active contextual filters
-         * to the inCompanyCode suggestion items binding.
+         * Serializes an array of UI5 Filter objects into a stable canonical string
+         * for idempotent filter equality checking.
          * @private
          */
-        _refreshCompanyCodeBinding: function () {
+        _serializeFilterArray: function (aFilters) {
+            if (!Array.isArray(aFilters) || aFilters.length === 0) return "";
+            return JSON.stringify(aFilters.map(function (f) {
+                if (!f) return "";
+                if (f.aFilters && Array.isArray(f.aFilters)) {
+                    return (f.bAnd ? "AND:" : "OR:") + f.aFilters.map(function (sf) {
+                        var sP = sf.sPath || (sf.getPath && sf.getPath()) || "";
+                        var sV = sf.sValue !== undefined ? sf.sValue : (sf.oValue1 !== undefined ? sf.oValue1 : (sf.getValue1 && sf.getValue1()) || "");
+                        return sP + "=" + sV;
+                    }).join(",");
+                }
+                var sPath = f.sPath || (f.getPath && f.getPath()) || "";
+                var sVal = f.sValue !== undefined ? f.sValue : (f.oValue1 !== undefined ? f.oValue1 : (f.getValue1 && f.getValue1()) || "");
+                return sPath + "=" + sVal;
+            }));
+        },
+
+        /**
+         * Re-applies active contextual filters
+         * to the inCompanyCode suggestion items binding.
+         * @param {boolean} [bForce=false]
+         * @private
+         */
+        _refreshCompanyCodeBinding: function (bForce) {
             var oCompanyInput = typeof this.byId === "function" ? this.byId("inCompanyCode") : null;
             if (oCompanyInput && typeof oCompanyInput.getBinding === "function") {
                 var oBinding = oCompanyInput.getBinding("suggestionItems");
                 if (oBinding && typeof oBinding.filter === "function") {
                     var aFilters = this._buildContextFilters(oCompanyInput);
+                    var sNewSig = this._serializeFilterArray(aFilters);
+                    var sCurrentSig = oBinding._sContextFilterSig || this._serializeFilterArray(oBinding.aApplicationFilters || oBinding.aFilters);
+                    if (!bForce && sCurrentSig && sCurrentSig === sNewSig) {
+                        return;
+                    }
+                    oBinding._sContextFilterSig = sNewSig;
                     oBinding.filter(aFilters);
                 }
             }
@@ -721,14 +749,21 @@ sap.ui.define([
 
         /**
          * Re-applies active contextual filters (100 Series) to Purchasing Group suggestion items.
+         * @param {boolean} [bForce=false]
          * @private
          */
-        _refreshPurchGrpBinding: function () {
+        _refreshPurchGrpBinding: function (bForce) {
             var oPurchGrpInput = typeof this.byId === "function" ? this.byId("inPurchGrp") : null;
             if (oPurchGrpInput && typeof oPurchGrpInput.getBinding === "function") {
                 var oBinding = oPurchGrpInput.getBinding("suggestionItems");
                 if (oBinding && typeof oBinding.filter === "function") {
                     var aFilters = this._buildContextFilters(oPurchGrpInput);
+                    var sNewSig = this._serializeFilterArray(aFilters);
+                    var sCurrentSig = oBinding._sContextFilterSig || this._serializeFilterArray(oBinding.aApplicationFilters || oBinding.aFilters);
+                    if (!bForce && sCurrentSig && sCurrentSig === sNewSig) {
+                        return;
+                    }
+                    oBinding._sContextFilterSig = sNewSig;
                     oBinding.filter(aFilters);
                 }
             }

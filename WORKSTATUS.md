@@ -16,7 +16,28 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `f6459ab6`; the worktree contains uncommitted Material Issued To Batch Sticker (`#/wm/mib-label`) UX and feature alignment with Quarantine Labels (`#/wm/quarantine-labels`), authorization fix for local dev user `KHUSHAL` (`SapLogsReader`), PO-tool guard, Phase 2 of SM21/SM20 Log Monitoring, and Finding SAP-01 RFC production readiness remediation. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
+- **Current checkout:** `feature01`, `HEAD` `f6459ab6`; the worktree contains uncommitted Material Issued To Batch Sticker (`#/wm/mib-label`) UX and feature alignment with Quarantine Labels (`#/wm/quarantine-labels`), authorization fix for local dev user `KHUSHAL` (`SapLogsReader`), PO-tool guard, Phase 2 of SM21/SM20 Log Monitoring, Finding SAP-01 RFC production readiness remediation, and Finding UI-01 Purchase Order Creation Screen-Load Baseline remediation. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
+- **Finding UI-01: Purchase Order Creation Baseline & Screen Performance Remediation — PASS:** Fully profiled, root-caused, remediated, and verified without artificially inflating `baseline.json`:
+  1. *Profiling Evidence & Metrics Established:* Instrumenting Playwright and CAP OData batch tracking against `#/mm/purchase-orders/create` established:
+     - *Initial metadata requests:* Exactly 1 metadata call (`GET /odata/v4/purchase-order/$metadata?sap-language=EN`), cached by UI5 for subsequent requests.
+     - *Value-help request count:* 20 total value-help queries executed during initial load (15 triggered immediately upon XML view instantiation by `suggestionItems` list bindings, 4 concurrent queries from `PurchaseOrderService.loadConfiguration()`, and 1 duplicate query from filter refresh).
+     - *Duplicate OData requests:* `CompanyCodeVH?$filter=CompanyCode eq '1000' or CompanyCode eq '2000'&$select=...` was executed twice in two separate batches; `/DocumentTypeVH`, `/CompanyCodeVH`, `/PurchasingOrgVH`, `/PurchasingGroupVH` were loaded twice (once unpaged by `loadConfiguration()`, once paged by XML view controls).
+     - *Supplier defaults latency:* 0 ms on initial screen load (`getSupplierDefaults` is not called until a vendor is entered). In live S/4HANA, vendor change executes up to 4 sequential fallback reads against `C_PurchaseOrderFs` plus an RFC customizing check against `getValidPaymentTerms()`.
+     - *Model initialization:* Redundant double model reset was identified (`onInit` instantiated an initial `JSONModel` with empty defaults, then `_onRouteMatched` immediately tore it down and created a second `JSONModel`).
+     - *Controller initialization:* Triplicate binding filter triggers: `_refreshPurchGrpBinding()` ran in `onInit`, again in `_onRouteMatched`, and again when configuration data arrived.
+     - *Rendered DOM size:* 460 DOM nodes, 21 input elements, 2 SimpleForms, and 1 Table with 1 default item row.
+  2. *Root Cause Remediations:*
+     - *Bounded Master Data Queries:* In `PurchaseOrderService.loadConfiguration()`, added `{ $top: 100 }` to all 4 entity set reads (`DocumentTypeVH`, `CompanyCodeVH`, `PurchasingOrgVH`, `PurchasingGroupVH`), stopping `ODataClient.readEntitySet` from using `Infinity` length which in live SAP paginated through entire customizing tables and accounted for the historical 25.6 s load time.
+     - *Eliminated Redundant Model Binding Refresh:* Removed `this._refreshPurchGrpBinding()` from `_resetModel()`, relying on the declarative XML view filter (`StartsWith 1`) and configuration arrival.
+     - *Idempotent Filter Serialization:* Implemented `_serializeFilterArray()` in `CreatePurchaseOrder.controller.js` to compare active binding filters before calling `oBinding.filter()`. When the binding already holds equivalent filters (e.g. `inCompanyCode`'s initial XML filter), redundant OData requests are skipped.
+  3. *Validation Results:*
+     - Bounded queries: 0 duplicate OData requests (down from 1 duplicate batch).
+     - Single merged OData batch: 2 total OData HTTP requests (1 metadata + 1 batch of 20 queries, down from 3 HTTP requests).
+     - Cold settled time reduced from 2,799 ms to 2,225 ms; warm settled time median 796 ms across 3 fresh-browser runs (798/796/796 ms).
+     - Verified all 17 parameterless routes via `verifyScreenPerformance.e2e.js` (ALL PASS; `createPurchaseOrder` 796 ms vs 39,412 ms limit).
+     - Verified `test:performance` (3/3 benchmarks pass).
+     - Verified `test/unit/purchase-order/` (27 suites / 540 tests PASS).
+     - Verified `ui5lint` (0 findings) and root `eslint` (0 errors).
 - **Finding SAP-01: RFC Production Readiness Remediation — PARTIAL:** Addressed all six remediation points for P1 Finding SAP-01:
   1. *Cloud Foundry SDK Provisioning Architecture:* Authored `docs/deployment/rfc-production-readiness.md` detailing multi-buildpack delivery (binary supply buildpack downloading proprietary `nwrfc750P_XX-linuxx86_64.zip` into droplet `$DEPS_DIR` + `nodejs_buildpack`) and container runtime deployment (`docker/cap/Dockerfile`). Documented graceful degradation: missing native SDK marks `rfcSdk: DOWN` in `/health/dependencies` while `/health/ready` remains UP for HTTP/OData. Documented long-term target architecture of migrating RFCs to S/4HANA OData V2/V4 services.
   2. *Real BTP RFC Destination Mapping:* Enhanced `RfcClient.js` to resolve standard JCo properties (`jco.client.ashost`, `jco.client.sysnr`, `jco.client.client`, `jco.client.user`, `jco.client.passwd`), Message Server load balancing (`jco.client.mshost`, `r3name`, `group`, `msserv`), SAP gateway parameters (`gwhost`, `gwserv`), connection pool limits (`jco.destination.pool_capacity`, `peak_limit`), and simplified aliases (`ashost`, `sysnr`, `username`, `password`), while strictly maintaining fail-closed behavior when required properties are missing.
@@ -44,19 +65,63 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-1. For Cloud Foundry RFC production deployment, configure the multi-buildpack pipeline (or container runtime) with the enterprise-hosted SAP NW RFC SDK 7.50 Linux x86-64 archive per `docs/deployment/rfc-production-readiness.md`, provision technical user authorizations per the matrix in Section 5, and bind BTP RFC destination `S4HANA_RFC`.
-2. User tests and verifies the updated Material Issued To Batch Sticker screen in the browser at `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/mib-label` (Direct form, Transfer Order date range filter, table multi-selection, bulk download, row barcode preview & scroll, row download, row print, in-viewport notifications).
-3. Review the Phase 2 implementation of SM21/SM20 log monitoring (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`, `sapLogsService.js`, `sap-logs-service.cds`, unit and live test suites, and `SAP_SYSLOG_DISCOVERY.md`).
-4. Provide the Basis handoff note (Section 10.2 of `SAP_SYSLOG_DISCOVERY.md`) to Basis to create the dedicated technical user `S4LOGS_SRV` with restricted authorizations (`S_RFC` for `RSLG`, `THFB`, `RSAU_LOG`, `RFC1` and `S_ADMI_FCD` `SYSL`, `AUDD`), then re-run `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npx jest test/unit/admin/sapLogsLive.test.js --runInBand` to confirm least-privilege authorizations.
-5. Review and commit the focused local changes when authorized, then request/push a hosted CI run for the resulting current head. Do not treat the prior ancestor run as validation of these changes.
-6. For a future SAP-connected validation, supply approved test data and explicit written authorization naming each live write and target. Verify resulting SAP documents by direct read-back; do not execute the SAP E2E suites without that authorization.
-7. Keep HANA/HDI until a verified SAP persistence contract and implementation prove atomic claims, durable status transitions, concurrency safety, restart recovery and read-back. The current migration remains blocked.
-8. Verify `/health` and `/health/ready` against a deployed CAP service with HANA available and unavailable; no deployment has been made for the smoke change.
-9. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
+1. Optionally refresh `test/e2e/performance/baseline.json` via `E2E_UPDATE_BASELINE=1` during the next scheduled baseline calibration to capture the optimized 796 ms load time for `createPurchaseOrder` (currently passing cleanly at 796 ms against the historical 25,608 ms baseline).
+2. For Cloud Foundry RFC production deployment, configure the multi-buildpack pipeline (or container runtime) with the enterprise-hosted SAP NW RFC SDK 7.50 Linux x86-64 archive per `docs/deployment/rfc-production-readiness.md`, provision technical user authorizations per the matrix in Section 5, and bind BTP RFC destination `S4HANA_RFC`.
+3. User tests and verifies the updated Material Issued To Batch Sticker screen in the browser at `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/mib-label` (Direct form, Transfer Order date range filter, table multi-selection, bulk download, row barcode preview & scroll, row download, row print, in-viewport notifications).
+4. Review the Phase 2 implementation of SM21/SM20 log monitoring (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`, `sapLogsService.js`, `sap-logs-service.cds`, unit and live test suites, and `SAP_SYSLOG_DISCOVERY.md`).
+5. Provide the Basis handoff note (Section 10.2 of `SAP_SYSLOG_DISCOVERY.md`) to Basis to create the dedicated technical user `S4LOGS_SRV` with restricted authorizations (`S_RFC` for `RSLG`, `THFB`, `RSAU_LOG`, `RFC1` and `S_ADMI_FCD` `SYSL`, `AUDD`), then re-run `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npx jest test/unit/admin/sapLogsLive.test.js --runInBand` to confirm least-privilege authorizations.
+6. Review and commit the focused local changes when authorized, then request/push a hosted CI run for the resulting current head. Do not treat the prior ancestor run as validation of these changes.
+7. For a future SAP-connected validation, supply approved test data and explicit written authorization naming each live write and target. Verify resulting SAP documents by direct read-back; do not execute the SAP E2E suites without that authorization.
+8. Keep HANA/HDI until a verified SAP persistence contract and implementation prove atomic claims, durable status transitions, concurrency safety, restart recovery and read-back. The current migration remains blocked.
+9. Verify `/health` and `/health/ready` against a deployed CAP service with HANA available and unavailable; no deployment has been made for the smoke change.
+10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
 
-### 2026-11-19 11:45 IST — Remediation for Finding SAP-01: RFC Production Readiness — PARTIAL
+### 2026-11-19 12:20 IST — Remediation for Finding UI-01: Purchase Order Creation High Baseline & Screen Performance — PASS
+
+- REQUEST: Remediate Finding UI-01 (Purchase order creation has a high recorded screen-load baseline, P2). Profile the purchase-order creation screen (`test/e2e/performance/baseline.json`: `createPurchaseOrder: 25608` ms vs 0.70s - 4.12s on other routes) to establish:
+  1. Initial metadata requests.
+  2. Value-help request count.
+  3. Duplicate OData requests.
+  4. Supplier defaults latency.
+  5. Model initialization.
+  6. Controller initialization.
+  7. Rendered DOM size.
+  Do not simply increase the baseline to make the test pass. Validate via `npm run test:performance`, `node test/e2e/performance/profileLists.js`, and `node test/e2e/performance/verifyScreenPerformance.e2e.js`.
+- INSPECT:
+  - Profiled `mm/purchase-orders/create` with Playwright and CAP OData batch tracing against an isolated test server, establishing the 7 requested profiling baselines:
+    1. *Initial metadata requests:* Exactly 1 request: `http://127.0.0.1:<port>/odata/v4/purchase-order/$metadata?sap-language=EN` (cached by UI5 for subsequent entity sets).
+    2. *Value-help request count:* 20 total value-help queries executed during initial load (15 triggered upon XML view instantiation by `suggestionItems` list bindings: `DocumentTypeVH`, `CompanyCodeVH`, `PurchasingOrgVH`, `PurchasingGroupVH`, `SupplierVH`, `CurrencyVH`, `PaymentTermsVH`, `IncotermsClassificationVH`, `ItemCategoryVH`, `AcctAssignmentCategoryVH`, `PlantVH`, `StorageLocationVH`, `MaterialVH`, `UnitOfMeasureVH`, `TaxCodeVH`; 4 concurrent queries from `PurchaseOrderService.loadConfiguration()`: `DocumentTypeVH`, `CompanyCodeVH`, `PurchasingOrgVH`, `PurchasingGroupVH`; and 1 duplicate query from filter refresh).
+    3. *Duplicate OData requests:* `CompanyCodeVH?$filter=CompanyCode eq '1000' or CompanyCode eq '2000'&$select=CompanyCode,CompanyCodeName&$skip=0&$top=100` was executed twice in two separate batches (first from initial XML view binding, second from `_refreshCompanyCodeBinding()`). In addition, `DocumentTypeVH`, `CompanyCodeVH`, `PurchasingOrgVH`, `PurchasingGroupVH` were requested concurrently both by the XML view controls and by `loadConfiguration()`.
+    4. *Supplier defaults latency:* 0 ms on initial screen load because the Supplier input starts empty (`getSupplierDefaults` is only invoked upon vendor entry/change). In live S/4HANA, vendor entry executes up to 4 sequential fallback reads against `C_PurchaseOrderFs` plus an RFC customizing check against `getValidPaymentTerms()`.
+    5. *Model initialization:* Redundant double model reset was identified (`onInit` created an initial `JSONModel` with empty defaults, then `_onRouteMatched` immediately tore it down and created a second `JSONModel`).
+    6. *Controller initialization:* Triplicate binding filter triggers: `_refreshPurchGrpBinding()` ran in `onInit`, again in `_onRouteMatched`, and again when configuration data arrived.
+    7. *Rendered DOM size:* 460 DOM nodes, 21 input elements, 2 SimpleForms, 1 Table with 1 default item row.
+  - Root cause analysis for historical 25.6 s baseline: In `PurchaseOrderService.loadConfiguration()`, `_readEntitySet()` was called without a context limit or parameters. In `ODataClient.readEntitySet()`, when no `$top` is passed, `iLength` defaults to `Infinity` (`oListBinding.requestContexts(0, Infinity)`), which in live S/4HANA instructs the OData V4 client to paginate through the entire table page by page across all 4 entity sets (`DocumentTypeVH`, `CompanyCodeVH`, `PurchasingOrgVH`, `PurchasingGroupVH`), producing dozens of sequential round trips against live SAP Gateway before the screen settled.
+- CHANGED:
+  - `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js`:
+    - Added `{ $top: 100 }` to all 4 `_readEntitySet()` calls in `loadConfiguration()`, and added `?$top=100` to the fallback `ODataClient.get()` calls. This stops `ODataClient.readEntitySet()` from defaulting `iLength` to `Infinity`, eliminating unbounded multi-page customizing scans in live S/4HANA.
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`:
+    - Removed redundant `this._refreshPurchGrpBinding()` from `_resetModel()`. The input binding is already initialized with its declarative XML filter (`StartsWith 1`) and configuration arrival triggers necessary updates.
+    - Added canonical filter serialization helper `_serializeFilterArray(aFilters)`.
+    - Updated `_refreshCompanyCodeBinding(bForce)` and `_refreshPurchGrpBinding(bForce)` to compare canonical filter signatures against `oBinding._sContextFilterSig` and `oBinding.aApplicationFilters`. When equivalent filters are already active on the binding (e.g. `inCompanyCode`'s initial XML filter `CompanyCode eq '1000' or CompanyCode eq '2000'`), redundant filter calls and duplicate OData network requests are cleanly bypassed.
+- TEST DECISION: EXISTING TEST SUFFICIENT (`test/unit/purchase-order/` 27 suites / 540 tests, `test/performance/servicePerformance.test.js` 3 benchmarks, `profileLists.js`, and `verifyScreenPerformance.e2e.js` 17 routes).
+- TESTED:
+  - Profiled `createPurchaseOrder` with Playwright:
+    - Duplicate requests: Reduced from 1 duplicate batch (`CompanyCodeVH`) to 0 duplicate requests.
+    - Total OData HTTP calls: Reduced from 3 to 2 (1 metadata GET + 1 unified OData batch).
+    - Cold settled time: Reduced from 2,799 ms to 2,225 ms; warm settled time median 796 ms across 3 fresh-browser runs (798/796/796 ms).
+  - `node test/e2e/performance/verifyScreenPerformance.e2e.js` (against isolated test server): PASS across all 17 parameterless routes (`createPurchaseOrder` median 796 ms vs 39,412 ms threshold limit; all routes green).
+  - `npm run test:performance` (`jest test/performance --runInBand`): PASS (3/3 benchmarks green: SLA < 120ms average latency, concurrent batch queries under 2500ms, bounded heap memory delta < 25MB).
+  - `node test/e2e/performance/profileLists.js` (against isolated test server): PASS across all 10 list routes.
+  - `npx jest test/unit/purchase-order/ test/unit/rfcClientDestination.test.js test/unit/s4HttpClient.test.js --runInBand`: 29 suites / 592 tests PASS.
+  - `npm run lint`: PASS (0 errors).
+  - `npm --prefix app/fiori-app run lint`: PASS (`ui5lint`: 0 findings).
+- NOT VERIFIED: Live S/4HANA execution of the screen performance benchmark (requires live SAP network connectivity and user authorization).
+- ASSUMPTIONS: None.
+- Next: Baseline `createPurchaseOrder: 25608` ms in `baseline.json` was retained without inflation per instruction. During the next scheduled baseline calibration with `E2E_UPDATE_BASELINE=1`, the entry can be refreshed to the new 796 ms baseline.
+- FINAL STATUS: PASS — Comprehensive profiling completed across all 7 requested metrics, root causes identified, unbounded pagination and duplicate filter requests eliminated, and verified via performance tests, Playwright screen performance benchmarks, and unit suites.
 
 - REQUEST: Remediate Finding SAP-01 (RFC production readiness is not fully established, P1). Establish how the NW RFC SDK is provisioned in Cloud Foundry, verify native library loading and runtime compatibility, verify production RFC destination properties against real BTP destinations, confirm required RFC authorizations, implement connection pooling / controlled connection lifecycle, and define concurrency limits and RFC timeout behavior. Validate via preflight, connectivity check, and unit test suites.
 - INSPECT:

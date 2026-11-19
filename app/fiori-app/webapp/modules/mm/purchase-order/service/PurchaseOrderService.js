@@ -181,10 +181,10 @@ sap.ui.define([
             var m = _isModel(oModel) ? oModel : _oModel;
             if (m) {
                 return Promise.all([
-                    _readEntitySet(m, "/DocumentTypeVH"),
-                    _readEntitySet(m, "/CompanyCodeVH"),
-                    _readEntitySet(m, "/PurchasingOrgVH"),
-                    _readEntitySet(m, "/PurchasingGroupVH")
+                    _readEntitySet(m, "/DocumentTypeVH", undefined, { $top: 100 }),
+                    _readEntitySet(m, "/CompanyCodeVH", undefined, { $top: 100 }),
+                    _readEntitySet(m, "/PurchasingOrgVH", undefined, { $top: 100 }),
+                    _readEntitySet(m, "/PurchasingGroupVH", undefined, { $top: 100 })
                 ]).then(function (aResults) {
                     return {
                         documentTypes: aResults[0] || [],
@@ -204,10 +204,10 @@ sap.ui.define([
             }
 
             return Promise.all([
-                ODataClient.get(SERVICE_BASE + "/DocumentTypeVH").then(function (res) { return (res && res.value) || []; }),
-                ODataClient.get(SERVICE_BASE + "/CompanyCodeVH").then(function (res) { return (res && res.value) || []; }),
-                ODataClient.get(SERVICE_BASE + "/PurchasingOrgVH").then(function (res) { return (res && res.value) || []; }),
-                ODataClient.get(SERVICE_BASE + "/PurchasingGroupVH").then(function (res) { return (res && res.value) || []; })
+                ODataClient.get(SERVICE_BASE + "/DocumentTypeVH?$top=100").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/CompanyCodeVH?$top=100").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/PurchasingOrgVH?$top=100").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/PurchasingGroupVH?$top=100").then(function (res) { return (res && res.value) || []; })
             ]).then(function (aResults) {
                 return {
                     documentTypes: aResults[0] || [],
