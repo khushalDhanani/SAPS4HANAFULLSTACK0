@@ -21,16 +21,26 @@ function envMs(name, fallback) {
 }
 
 /**
- * GoodsIssueAttemptStore
- * Log of Goods Issue posting attempts. A row is written with status `sending` BEFORE S/4HANA is
- * called, carrying the same ReferenceDocument that goes into the material document header, and is
- * moved to posted / rejected / unconfirmed afterwards. If the process dies mid-call the row
- * stays `sending`, and recheck() resolves it later by looking the reference up in SAP.
+ * Common Posting-Attempt Store & Distributed Lifecycle Engine.
  *
- * Every write runs in its own committed transaction, never in the transaction of the calling
- * request: a request that ends in req.error is rolled back, and the attempt must survive that.
+ * Persisted in SAP HANA Cloud HDI container (`saps4hana.wm.GoodsIssuePostingAttempt`).
+ * Written BEFORE S/4HANA is called, carrying the unique ReferenceDocument.
+ * If the process dies mid-call, the attempt survives and background re-checks resolve it against SAP.
+ *
+ * Finding DEBT-01 Architectural Organization:
+ * Handles both Goods Issue (Movement 261/201) and Goods Receipt (Movement 101) attempts.
+ * Structured into two distinct architectural layers:
+ * 1. Layer 1: Core Generic Attempt Persistence & Distributed CAS Leasing (ADR-0001, at-most-once semantics).
+ * 2. Layer 2: Movement-Specific Reconciliation Strategies (Goods Issue MATDOC header/L9-514 correlation
+ *             and Goods Receipt delivery item correlation).
+ *
+ * Full architectural specification: docs/architecture/posting-attempt-lifecycle.md
  */
 class GoodsIssueAttemptStore {
+  // =========================================================================
+  // Section 1: Core Generic Attempt Persistence & Distributed CAS Leasing
+  // =========================================================================
+
   /**
    * @param {Object} [options]
    * @param {Object|null} [options.db] - Database service to use (tests); default: cds.db at call time
@@ -311,6 +321,10 @@ class GoodsIssueAttemptStore {
    * @param {number} [now] - current time in ms (tests)
    * @returns {Promise<{ Checked: number, Posted: number, DeliveryCreated: number, NotPosted: number, StillOpen: number, Errors: number }>}
    */
+  // =========================================================================
+  // Section 2: Movement-Specific Reconciliation Strategy — Goods Issue (261/201)
+  // =========================================================================
+
   /**
    * Re-confirm job: retries read-back for unconfirmed documents and clears the flag.
    * Promotes attempt status from 'unconfirmed' to 'posted' when SAP confirms the document,
@@ -467,6 +481,10 @@ class GoodsIssueAttemptStore {
     return summary;
   }
 
+  // =========================================================================
+  // Section 3: Distributed Multi-Instance Worker Leasing (Compare-And-Swap)
+  // =========================================================================
+
   /**
    * Distributed worker lease for an attempt during background re-check.
    * Ensures that two Cloud Foundry instances cannot independently process the same unresolved attempt.
@@ -558,6 +576,10 @@ class GoodsIssueAttemptStore {
     }
   }
 
+  // =========================================================================
+  // Section 4: Movement-Specific Reconciliation Strategy — Goods Receipt (101)
+  // =========================================================================
+
   /**
    * Background re-check of goods receipt attempts: looks for a 101 document of the delivery item in SAP.
    * Protected by distributed worker leases so multiple instances cannot redundantly query SAP.
@@ -612,6 +634,14 @@ class GoodsIssueAttemptStore {
   }
 }
 
-module.exports = new GoodsIssueAttemptStore();
+const defaultInstance = new GoodsIssueAttemptStore();
+
+module.exports = defaultInstance;
 module.exports.GoodsIssueAttemptStore = GoodsIssueAttemptStore;
+// Finding DEBT-01: Shared generic alias for common posting-attempt lifecycle consumers
+module.exports.PostingAttemptStore = GoodsIssueAttemptStore;
+module.exports.default = defaultInstance;
 module.exports.ATTEMPT_ENTITY = ATTEMPT_ENTITY;
+module.exports.OPEN_STATUSES = OPEN_STATUSES;
+module.exports.FINAL_STATUSES = FINAL_STATUSES;
+module.exports.RECEIPT_MOVEMENT = RECEIPT_MOVEMENT;

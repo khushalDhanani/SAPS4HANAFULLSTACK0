@@ -16,7 +16,17 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `37e8c7ea` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44485490673 on branch HEAD `37e8c7ea`: **SUCCESS** (Build, Test & Validate in 3m46s: PASS; Browser E2E, SAP-free suites PR gate in 7m21s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Current checkout:** `feature01`, `HEAD` `40d3a2b4` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44498116050 on branch HEAD `40d3a2b4`: **SUCCESS** (Build, Test & Validate in 4m19s: PASS; Browser E2E, SAP-free suites PR gate in 1m15s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Finding DEBT-01: Common Posting-Attempt Lifecycle & Shared Contract — PASS:** Remediated P2 Finding DEBT-01 across `docs/architecture/posting-attempt-lifecycle.md`, `db/wm/goods-issue-attempt.cds`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, and `test/unit/wm/postingAttemptLifecycleContract.test.js`:
+  1. *Common Posting-Attempt Lifecycle Formally Documented:* Authored authoritative architectural standard `docs/architecture/posting-attempt-lifecycle.md`. Formally specified the complete 7-state lifecycle machine (`sending` -> `posted` | `rejected` | `unconfirmed` | `delivery_created` | `not_posted` | `queued`), terminal vs open status boundaries, generation re-claims (`-0`, `-1`), and the shared storage contract (`IPostingAttemptStore`).
+  2. *Layered Architectural Decomposition Established:* Clearly separated generic attempt persistence (Layer 1) from movement-specific reconciliation strategies (Layer 2):
+     - Layer 1: Core Generic Persistence & Distributed CAS Leasing (`create`, `createOrGet`, `getByReference`, `setStatus`, `claimAttemptForRecheck`, `releaseAttemptLease`, fail-closed HANA rules).
+     - Layer 2A: Goods Issue Reconciliation Strategy (Movement 261/201, MATDOC header reference correlation, MKPF fallback, L9/514 outbound delivery resolution, `reconfirmUnconfirmed`).
+     - Layer 2B: Goods Receipt Reconciliation Strategy (Movement 101, inbound delivery item correlation, single-worker schedule, distributed worker lease).
+  3. *In-Code Delineation & JSDoc Typing:* Structured `srv/wm/goods-issue/GoodsIssueAttemptStore.js` into distinct numbered architectural sections with complete JSDoc annotations and cross-references.
+  4. *Generic Backward-Compatible Alias Export:* Exported `PostingAttemptStore` as an alias to `GoodsIssueAttemptStore` alongside `ATTEMPT_ENTITY`, `OPEN_STATUSES`, `FINAL_STATUSES`, and `RECEIPT_MOVEMENT`. Guaranteed 100% backward compatibility with all existing imports in `srv/wm/goods-receipt/`, `srv/wm/goods-issue/`, and unit test suites.
+  5. *Future Modularization Blueprint:* Established the phased roadmap for future movements (e.g. Physical Inventory 701/702 or Stock Transfer 311) to extract `srv/wm/common/PostingAttemptStore.js` and dedicated strategy files without database migrations or breaking changes.
+  6. *Validation Results:* Added dedicated unit test suite `test/unit/wm/postingAttemptLifecycleContract.test.js` (9/9 tests PASS). Verified all 6 existing attempt test suites (70/70 tests PASS), ESLint (0 errors), and UI5 linter (0 findings).
 - **Finding MON-02: Goods Receipt Recheck Timer Can Run on Both CF Instances & Distributed Worker Leasing — PASS:** Remediated P1 Finding MON-02 across `srv/wm/goods-receipt/service.js`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, and `test/unit/wm/goodsReceiptTwoInstances.test.js`:
   1. *Single-Worker Background Scheduling:* Replaced the unguarded `setInterval` background recheck in `srv/wm/goods-receipt/service.js` with a proven single-worker strategy `isWorker(env)` aligning with `lockNotifier` and `passwordExpiryNotifier`. Recheck timers schedule and run exclusively on Cloud Foundry instance 0 (`(env.CF_INSTANCE_INDEX ?? '0') === '0'`). Secondary instances (`CF_INSTANCE_INDEX != '0'`) disable the timer with informative logging, preventing dual-instance polling loops.
   2. *Distributed Worker Lease Coordination:* Implemented `claimAttemptForRecheck(referenceDocument, workerId, leaseMs, now)` and `releaseAttemptLease(referenceDocument, workerId)` in `GoodsIssueAttemptStore.js`. Acquiring a lease executes an atomic Compare-And-Swap (CAS) update on `LastError`, storing `lease:${workerId}:${expiresAtIso}`.
@@ -133,6 +143,53 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-19 15:45 IST — Remediation for Finding DEBT-01: Common Posting-Attempt Lifecycle & Shared Contract — PASS
+
+- REQUEST: Remediate Finding DEBT-01 (Posting-attempt store has accumulated multiple responsibilities, P2; Files: `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `db/wm/goods-issue-attempt.cds`). Note that the store handles both goods issue and goods receipt posting attempts with misleading naming and 8 accumulated responsibilities (attempt creation, idempotency, reclaim generations, goods issue reconciliation, goods receipt reconciliation, unconfirmed document handling, delivery-created reconciliation, background retry logic). Do not immediately split it into several new services; first document the common posting-attempt lifecycle and identify the shared contract, and separate generic attempt persistence from movement-specific reconciliation.
+- INSPECT:
+  - Audited `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `db/wm/goods-issue-attempt.cds`, `srv/wm/goods-receipt/service.js`, `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`, and all callers across `srv/` and `test/`.
+  - Confirmed evidence:
+    1. `saps4hana.wm.GoodsIssuePostingAttempt` in `db/wm/goods-issue-attempt.cds` holds attempts for both Movement 261/201 (Goods Issues) and Movement 101 (Goods Receipts).
+    2. `GoodsIssueAttemptStore.js` encompasses both generic attempt persistence (creation, unique key idempotency, CAS leasing, terminal status updates) and movement-specific reconciliation protocols (MATDOC header reference matching vs delivery item POSNR matching, L9/514 outbound delivery resolution).
+    3. Splitting into multiple new services immediately would cause high churn, risk breaking existing imports across 12+ consumer files, and complicate HDI container table management.
+    4. The recommended remediation is establishing the formal lifecycle specification, defining the shared contract interface, structuring the existing implementation into clean architectural layers, and exporting generic aliases while preserving 100% backward compatibility.
+- CHANGED:
+  - `docs/architecture/posting-attempt-lifecycle.md`:
+    - Authored authoritative architectural standard defining the Common Posting-Attempt Lifecycle State Machine (`sending` -> `posted` | `rejected` | `unconfirmed` | `delivery_created` | `not_posted` | `queued`), terminal vs open status sets, and generation re-claim audit trail rules.
+    - Defined the shared storage contract (`IPostingAttemptStore`) and data model tiers (Generic Lifecycle, S/4HANA Confirmed Document, and Contextual Business Attributes).
+    - Detailed movement-specific reconciliation protocols for Movement 261/201 (header reference correlation and L9/514 delivery detection) vs Movement 101 (inbound delivery item correlation and distributed leasing).
+    - Established Phase 2 future modularization blueprint for extracting `srv/wm/common/PostingAttemptStore.js` and dedicated strategy files when additional movements are introduced.
+  - `db/wm/goods-issue-attempt.cds`:
+    - Updated entity documentation to clarify its role as the shared persistent store for all inventory movement attempts.
+    - Added structured comments categorizing columns into Tier 1 (Generic Lifecycle), Tier 2 (S/4 Confirmed Document), and Tier 3 (Contextual Business Attributes).
+    - Added cross-reference to `docs/architecture/posting-attempt-lifecycle.md`.
+  - `srv/wm/goods-issue/GoodsIssueAttemptStore.js`:
+    - Updated class-level JSDoc documenting the 2-layer decomposition (Generic Attempt Persistence vs Movement-Specific Reconciliation Strategies).
+    - Structured codebase into 4 clear architectural sections:
+      - *Section 1*: Core Generic Attempt Persistence & Distributed CAS Leasing (`create`, `createOrGet`, `getByReference`, `setStatus`, `isAvailable`).
+      - *Section 2*: Movement-Specific Reconciliation Strategy — Goods Issue 261/201 (`reconfirmUnconfirmed`, `_findDeliveryForAttempt`, `recheck`).
+      - *Section 3*: Distributed Multi-Instance Worker Leasing (`claimAttemptForRecheck`, `releaseAttemptLease`).
+      - *Section 4*: Movement-Specific Reconciliation Strategy — Goods Receipt 101 (`recheckReceipts`).
+    - Added generic alias exports: `module.exports.PostingAttemptStore = GoodsIssueAttemptStore`, `OPEN_STATUSES`, `FINAL_STATUSES`, and `RECEIPT_MOVEMENT`.
+  - `test/unit/wm/postingAttemptLifecycleContract.test.js`:
+    - Added dedicated unit test suite validating:
+      1. Shared contract exports and generic aliases (`PostingAttemptStore === GoodsIssueAttemptStore`).
+      2. Presence and signatures of all `IPostingAttemptStore` contract methods.
+      3. Lifecycle state constants and transitions (`sending` -> `posted`, `sending` -> `unconfirmed`).
+      4. Generation re-claim (`-1`) audit trail preservation under identical `RequestHash`.
+      5. Distributed worker lease acquisition (atomic CAS) and release.
+      6. Fail-closed production protection when durable database is unavailable.
+- TEST DECISION: TEST ADDED (`test/unit/wm/postingAttemptLifecycleContract.test.js`); EXISTING TEST SUFFICIENT (`test/unit/wm/goodsIssueAttempt.test.js`, `test/unit/wm/goodsReceiptAttempt.test.js`, `test/unit/wm/goodsReceiptTwoInstances.test.js`, `test/unit/wm/transactionPersistenceAndRetry.test.js`).
+- TESTED:
+  - `npx jest test/unit/wm/postingAttemptLifecycleContract.test.js --runInBand`: 1 suite / 9 tests PASS.
+  - `npx jest test/unit/wm/goodsIssueAttempt.test.js test/unit/wm/goodsReceiptAttempt.test.js test/unit/wm/goodsReceiptTwoInstances.test.js test/unit/wm/transactionPersistenceAndRetry.test.js test/unit/wm/goodsIssueAttemptInstances.test.js test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js --runInBand`: 6 suites / 70 tests PASS.
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+- NOT VERIFIED: None.
+- ASSUMPTIONS: None.
+- Next: When introducing a new movement type (e.g. Physical Inventory 701 or Stock Transfer 311), execute Phase 2 of the modularization blueprint per `docs/architecture/posting-attempt-lifecycle.md` to extract dedicated strategy classes.
+- FINAL STATUS: PASS — Common posting-attempt lifecycle and shared storage contract formally documented in `docs/architecture/posting-attempt-lifecycle.md`; CDS schema documented with tiered attribute classification; store structured into clean architectural sections with generic `PostingAttemptStore` alias exported; 100% backward compatibility maintained with passing unit test suites.
 
 ### 2026-11-19 15:15 IST — Remediation for Finding MON-02: Goods Receipt Recheck Timer on Dual CF Instances & Distributed Worker Leases — PASS
 
