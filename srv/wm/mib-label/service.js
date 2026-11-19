@@ -2,11 +2,17 @@
 
 const cds = require('@sap/cds');
 const { MibLabelAdapter } = require('../../integration/s4hana/wm/MibLabelAdapter');
-const plantScope = require('../handling-unit/plantScope');
+const { warehouseScope, assertWarehouseAllowed } = require('./warehouseScope');
 
 /**
  * CAP Service Implementation for MibLabelService.
  * Orchestrates authorization, input handling and delegates to MibLabelAdapter.
+ *
+ * Hardened warehouse authorization discipline (Finding SEC-01):
+ *   - Enforces warehouse roles at CAP boundary (@requires: ['WarehouseClerk', 'WarehouseManager', 'Admin']).
+ *   - Derives allowed warehouses server-side via warehouseScope(req.user).
+ *   - Validates each requested WarehouseNumber against authoritative server-side scope before delegation.
+ *   - Passes allowedWarehouses to adapter for defense-in-depth enforcement.
  */
 module.exports = class MibLabelService extends cds.ApplicationService {
   async init() {
@@ -15,7 +21,9 @@ module.exports = class MibLabelService extends cds.ApplicationService {
     this.on('generateMibSticker', async (req) => {
       try {
         const payload = req.data || {};
-        return await adapter.generateMibSticker(payload);
+        const allowedWarehouses = warehouseScope(req.user);
+        assertWarehouseAllowed(payload.WarehouseNumber, allowedWarehouses);
+        return await adapter.generateMibSticker(payload, { allowedWarehouses });
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to generate Material Issued Batch Sticker');
       }
@@ -24,7 +32,9 @@ module.exports = class MibLabelService extends cds.ApplicationService {
     this.on('readMibStickerData', async (req) => {
       try {
         const payload = req.data || {};
-        return await adapter.readMibStickerData(payload);
+        const allowedWarehouses = warehouseScope(req.user);
+        assertWarehouseAllowed(payload.WarehouseNumber, allowedWarehouses);
+        return await adapter.readMibStickerData(payload, { allowedWarehouses });
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to read Material Issued Batch Sticker data');
       }
@@ -33,19 +43,20 @@ module.exports = class MibLabelService extends cds.ApplicationService {
     this.on('listTransferOrders', async (req) => {
       try {
         const payload = req.data || {};
-        return await adapter.listTransferOrders(payload);
+        const allowedWarehouses = warehouseScope(req.user);
+        assertWarehouseAllowed(payload.WarehouseNumber, allowedWarehouses);
+        return await adapter.listTransferOrders(payload, { allowedWarehouses });
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Transfer orders could not be read');
       }
     });
 
     this.on('getWarehouseContext', (req) => {
-      const scope = plantScope(req.user);
-      const isUnrestricted = scope === null;
-      // Default standard warehouse W01
-      const defaultWarehouses = ['W01'];
+      const allowedWarehouses = warehouseScope(req.user);
+      const isUnrestricted = allowedWarehouses === null;
+      const warehouses = isUnrestricted ? ['W01'] : allowedWarehouses;
       return {
-        warehouses: defaultWarehouses,
+        warehouses,
         unrestricted: isUnrestricted
       };
     });

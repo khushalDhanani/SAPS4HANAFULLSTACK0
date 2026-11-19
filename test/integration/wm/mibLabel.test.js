@@ -19,6 +19,29 @@ describe('Integration: MibLabelService', () => {
     })).rejects.toMatchObject({ response: { status: 401 } });
   });
 
+  it('authenticated callers without warehouse roles are refused with 403', async () => {
+    await expect(POST(`${BASE}/generateMibSticker`, {
+      WarehouseNumber: 'W01',
+      TransferOrderNumber: '1037246'
+    }, as('test-viewer-1120'))).rejects.toMatchObject({ response: { status: 403 } });
+  });
+
+  it('warehouse clerks are refused with 403 for warehouse outside their scope', async () => {
+    await expect(POST(`${BASE}/generateMibSticker`, {
+      WarehouseNumber: 'W02',
+      TransferOrderNumber: '1037246'
+    }, as('test-clerk-w01'))).rejects.toMatchObject({
+      response: {
+        status: 403,
+        data: {
+          error: {
+            message: expect.stringContaining("outside the user's authorized warehouse scope")
+          }
+        }
+      }
+    });
+  });
+
   it('generates MIB sticker via POST /generateMibSticker', async () => {
     const mockPdfResult = {
       WarehouseNumber: 'W01',

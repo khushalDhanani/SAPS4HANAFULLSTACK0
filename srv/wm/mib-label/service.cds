@@ -1,7 +1,7 @@
 namespace saps4hana.wm;
 
 // Material Issued To Batch Sticker (transaction ZMIB, report ZMM_R_067, Adobe form ZMM_AF_021)
-@(requires: 'authenticated-user')
+@(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
 service MibLabelService @(path: '/odata/v4/mib-label') {
 
     type MibStickerPdf {
@@ -48,6 +48,7 @@ service MibLabelService @(path: '/odata/v4/mib-label') {
         TransferOrders  : many TransferOrderRow;
     }
 
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action generateMibSticker(
         WarehouseNumber     : String(3),
         TransferOrderNumber : String(10),
@@ -55,6 +56,7 @@ service MibLabelService @(path: '/odata/v4/mib-label') {
         CheckedBy           : String(12)
     ) returns MibStickerPdf;
 
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action readMibStickerData(
         WarehouseNumber     : String(3),
         TransferOrderNumber : String(10),
@@ -62,6 +64,7 @@ service MibLabelService @(path: '/odata/v4/mib-label') {
         CheckedBy           : String(12)
     ) returns array of MibStickerRow;
 
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action listTransferOrders(
         WarehouseNumber     : String(3),
         DateFrom            : String(10),
@@ -69,6 +72,7 @@ service MibLabelService @(path: '/odata/v4/mib-label') {
         TransferOrderNumber : String(10)
     ) returns TransferOrderList;
 
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getWarehouseContext() returns {
         warehouses: array of String;
         unrestricted: Boolean;

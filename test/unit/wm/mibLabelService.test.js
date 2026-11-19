@@ -6,18 +6,23 @@ describe('MibLabelService', () => {
   let srv;
   let mockAdapter;
 
+  const adminUser = { is: jest.fn((r) => r === 'Admin'), attr: {} };
+  const clerkW01 = { is: jest.fn((r) => r === 'WarehouseClerk'), attr: { WarehouseNumber: ['W01'] } };
+  const clerkNoWarehouse = { is: jest.fn((r) => r === 'WarehouseClerk'), attr: {} };
+
   beforeEach(async () => {
     srv = new MibLabelService('MibLabelService');
     mockAdapter = {
       generateMibSticker: jest.fn(),
-      readMibStickerData: jest.fn()
+      readMibStickerData: jest.fn(),
+      listTransferOrders: jest.fn()
     };
     srv.adapter = mockAdapter;
     await srv.init();
   });
 
   describe('generateMibSticker action', () => {
-    it('returns generated sticker payload on adapter success', async () => {
+    it('returns generated sticker payload on adapter success for authorized warehouse', async () => {
       const mockResult = {
         WarehouseNumber: 'W01',
         TransferOrderNumber: '0001037246',
@@ -28,6 +33,7 @@ describe('MibLabelService', () => {
       mockAdapter.generateMibSticker.mockResolvedValueOnce(mockResult);
 
       const req = {
+        user: clerkW01,
         data: {
           WarehouseNumber: 'W01',
           TransferOrderNumber: '1037246',
@@ -42,8 +48,25 @@ describe('MibLabelService', () => {
 
       const result = await handler.handler.call(srv, req);
       expect(result).toEqual(mockResult);
-      expect(mockAdapter.generateMibSticker).toHaveBeenCalledWith(req.data);
+      expect(mockAdapter.generateMibSticker).toHaveBeenCalledWith(req.data, { allowedWarehouses: ['W01'] });
       expect(req.error).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 403 if requested warehouse is outside user scope', async () => {
+      const req = {
+        user: clerkW01,
+        data: {
+          WarehouseNumber: 'W02',
+          TransferOrderNumber: '1037246'
+        },
+        error: jest.fn((status, msg) => ({ status, msg }))
+      };
+
+      const handler = srv._handlers.on.find((h) => h.on === 'generateMibSticker');
+      await handler.handler.call(srv, req);
+
+      expect(req.error).toHaveBeenCalledWith(403, expect.stringContaining("outside the user's authorized warehouse scope"));
+      expect(mockAdapter.generateMibSticker).not.toHaveBeenCalled();
     });
 
     it('surfaces adapter error status and message via req.error', async () => {
@@ -52,6 +75,7 @@ describe('MibLabelService', () => {
       mockAdapter.generateMibSticker.mockRejectedValueOnce(err);
 
       const req = {
+        user: adminUser,
         data: { WarehouseNumber: 'W01', TransferOrderNumber: '1037246' },
         error: jest.fn((status, msg) => ({ status, msg }))
       };
@@ -64,7 +88,7 @@ describe('MibLabelService', () => {
   });
 
   describe('readMibStickerData action', () => {
-    it('returns sticker rows from adapter', async () => {
+    it('returns sticker rows from adapter for authorized warehouse', async () => {
       const mockRows = [{
         Material: 'MAT-001',
         MaterialDescription: 'Test Material',
@@ -81,6 +105,7 @@ describe('MibLabelService', () => {
       mockAdapter.readMibStickerData.mockResolvedValueOnce(mockRows);
 
       const req = {
+        user: clerkW01,
         data: { WarehouseNumber: 'W01', TransferOrderNumber: '1037246' },
         error: jest.fn()
       };
@@ -89,7 +114,21 @@ describe('MibLabelService', () => {
       const result = await handler.handler.call(srv, req);
 
       expect(result).toEqual(mockRows);
-      expect(mockAdapter.readMibStickerData).toHaveBeenCalledWith(req.data);
+      expect(mockAdapter.readMibStickerData).toHaveBeenCalledWith(req.data, { allowedWarehouses: ['W01'] });
+    });
+
+    it('rejects with 403 if requested warehouse is outside user scope', async () => {
+      const req = {
+        user: clerkW01,
+        data: { WarehouseNumber: 'W99', TransferOrderNumber: '1037246' },
+        error: jest.fn((status, msg) => ({ status, msg }))
+      };
+
+      const handler = srv._handlers.on.find((h) => h.on === 'readMibStickerData');
+      await handler.handler.call(srv, req);
+
+      expect(req.error).toHaveBeenCalledWith(403, expect.stringContaining("outside the user's authorized warehouse scope"));
+      expect(mockAdapter.readMibStickerData).not.toHaveBeenCalled();
     });
 
     it('returns req.error if read fails', async () => {
@@ -98,6 +137,7 @@ describe('MibLabelService', () => {
       mockAdapter.readMibStickerData.mockRejectedValueOnce(err);
 
       const req = {
+        user: adminUser,
         data: { WarehouseNumber: 'W01', TransferOrderNumber: '1037246' },
         error: jest.fn((status, msg) => ({ status, msg }))
       };
@@ -110,7 +150,7 @@ describe('MibLabelService', () => {
   });
 
   describe('listTransferOrders action', () => {
-    it('returns transfer orders from adapter', async () => {
+    it('returns transfer orders from adapter for authorized warehouse', async () => {
       const mockList = {
         WarehouseNumber: 'W01',
         DateFrom: '2026-10-20',
@@ -118,9 +158,10 @@ describe('MibLabelService', () => {
         More: false,
         TransferOrders: [{ TransferOrderNumber: '0001037246', Material: 'MAT-001' }]
       };
-      mockAdapter.listTransferOrders = jest.fn().mockResolvedValueOnce(mockList);
+      mockAdapter.listTransferOrders.mockResolvedValueOnce(mockList);
 
       const req = {
+        user: clerkW01,
         data: { WarehouseNumber: 'W01', DateFrom: '2026-10-20', DateTo: '2026-10-25' },
         error: jest.fn()
       };
@@ -129,15 +170,30 @@ describe('MibLabelService', () => {
       const result = await handler.handler.call(srv, req);
 
       expect(result).toEqual(mockList);
-      expect(mockAdapter.listTransferOrders).toHaveBeenCalledWith(req.data);
+      expect(mockAdapter.listTransferOrders).toHaveBeenCalledWith(req.data, { allowedWarehouses: ['W01'] });
+    });
+
+    it('rejects with 403 if requested warehouse is outside user scope', async () => {
+      const req = {
+        user: clerkW01,
+        data: { WarehouseNumber: 'W02', DateFrom: '2026-10-20', DateTo: '2026-10-25' },
+        error: jest.fn((status, msg) => ({ status, msg }))
+      };
+
+      const handler = srv._handlers.on.find((h) => h.on === 'listTransferOrders');
+      await handler.handler.call(srv, req);
+
+      expect(req.error).toHaveBeenCalledWith(403, expect.stringContaining("outside the user's authorized warehouse scope"));
+      expect(mockAdapter.listTransferOrders).not.toHaveBeenCalled();
     });
 
     it('returns req.error if list fails', async () => {
       const err = new Error('List read failed');
       err.status = 500;
-      mockAdapter.listTransferOrders = jest.fn().mockRejectedValueOnce(err);
+      mockAdapter.listTransferOrders.mockRejectedValueOnce(err);
 
       const req = {
+        user: adminUser,
         data: { WarehouseNumber: 'W01', DateFrom: '2026-10-20', DateTo: '2026-10-25' },
         error: jest.fn((status, msg) => ({ status, msg }))
       };
@@ -150,9 +206,9 @@ describe('MibLabelService', () => {
   });
 
   describe('getWarehouseContext function', () => {
-    it('returns unrestricted true for Admin user', async () => {
+    it('returns unrestricted true and default warehouses for Admin user', async () => {
       const req = {
-        user: { is: jest.fn((role) => role === 'Admin'), attr: {} }
+        user: adminUser
       };
 
       const handler = srv._handlers.on.find((h) => h.on === 'getWarehouseContext');
@@ -164,7 +220,21 @@ describe('MibLabelService', () => {
       });
     });
 
-    it('returns unrestricted false for user with Plant attribute', async () => {
+    it('returns scoped warehouses for clerk with explicit warehouse attribute', async () => {
+      const req = {
+        user: { is: jest.fn(() => false), attr: { WarehouseNumber: ['W02'] } }
+      };
+
+      const handler = srv._handlers.on.find((h) => h.on === 'getWarehouseContext');
+      const result = await handler.handler.call(srv, req);
+
+      expect(result).toEqual({
+        warehouses: ['W02'],
+        unrestricted: false
+      });
+    });
+
+    it('returns mapped warehouse for clerk with Plant attribute via authoritative mapping', async () => {
       const req = {
         user: { is: jest.fn(() => false), attr: { Plant: ['1120'] } }
       };
@@ -174,6 +244,20 @@ describe('MibLabelService', () => {
 
       expect(result).toEqual({
         warehouses: ['W01'],
+        unrestricted: false
+      });
+    });
+
+    it('returns empty warehouse list for clerk without warehouse or plant assignment', async () => {
+      const req = {
+        user: clerkNoWarehouse
+      };
+
+      const handler = srv._handlers.on.find((h) => h.on === 'getWarehouseContext');
+      const result = await handler.handler.call(srv, req);
+
+      expect(result).toEqual({
+        warehouses: [],
         unrestricted: false
       });
     });

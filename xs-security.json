@@ -42,6 +42,12 @@
       "description": "Plants (WERKS) the user may access; empty for a non-Admin means no handling-unit data",
       "valueType": "string",
       "valueRequired": false
+    },
+    {
+      "name": "WarehouseNumber",
+      "description": "Warehouse numbers (LGNUM) the user may access; empty for a non-Admin resolves via plant mapping",
+      "valueType": "string",
+      "valueRequired": false
     }
   ],
   "role-templates": [
@@ -102,7 +108,8 @@
         "$XSAPPNAME.WarehouseClerk"
       ],
       "attribute-references": [
-        "Plant"
+        "Plant",
+        "WarehouseNumber"
       ]
     },
     {
@@ -114,7 +121,8 @@
         "$XSAPPNAME.WarehouseManager"
       ],
       "attribute-references": [
-        "Plant"
+        "Plant",
+        "WarehouseNumber"
       ]
     },
     {

@@ -162,6 +162,20 @@ describe('MibLabelAdapter', () => {
         message: expect.stringContaining('empty PDF')
       });
     });
+
+    it('throws 403 if warehouse is outside allowedWarehouses', async () => {
+      const rfc = createRfcFake();
+      const adapter = new MibLabelAdapter(rfc);
+
+      await expect(adapter.generateMibSticker({
+        WarehouseNumber: 'W02',
+        TransferOrderNumber: '1037246'
+      }, { allowedWarehouses: ['W01'] })).rejects.toMatchObject({
+        status: 403,
+        message: expect.stringContaining('outside your authorized warehouses')
+      });
+      expect(rfc.call).not.toHaveBeenCalled();
+    });
   });
 
   describe('readMibStickerData', () => {
@@ -204,6 +218,20 @@ describe('MibLabelAdapter', () => {
       });
 
       expect(rows).toEqual([]);
+    });
+
+    it('throws 403 if warehouse is outside allowedWarehouses', async () => {
+      const rfc = createRfcFake();
+      const adapter = new MibLabelAdapter(rfc);
+
+      await expect(adapter.readMibStickerData({
+        WarehouseNumber: 'W02',
+        TransferOrderNumber: '1037246'
+      }, { allowedWarehouses: ['W01'] })).rejects.toMatchObject({
+        status: 403,
+        message: expect.stringContaining('outside your authorized warehouses')
+      });
+      expect(rfc.readTable).not.toHaveBeenCalled();
     });
   });
 
@@ -330,6 +358,21 @@ describe('MibLabelAdapter', () => {
 
       expect(res.More).toBe(true);
       expect(res.TransferOrders.length).toBe(LIST_MAX_ITEMS);
+    });
+
+    it('throws 403 if warehouse is outside allowedWarehouses', async () => {
+      const rfc = createRfcFake();
+      const adapter = new MibLabelAdapter(rfc);
+
+      await expect(adapter.listTransferOrders({
+        WarehouseNumber: 'W02',
+        DateFrom: '2026-10-20',
+        DateTo: '2026-10-25'
+      }, { allowedWarehouses: ['W01'] })).rejects.toMatchObject({
+        status: 403,
+        message: expect.stringContaining('outside your authorized warehouses')
+      });
+      expect(rfc.readTable).not.toHaveBeenCalled();
     });
   });
 });

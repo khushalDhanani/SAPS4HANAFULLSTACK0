@@ -17,6 +17,18 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`, `HEAD` `df9600e1` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44500825160 on branch HEAD `df9600e1`: **SUCCESS** (Build, Test & Validate in 4m46s: PASS; Browser E2E, SAP-free suites PR gate in 6m51s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Finding SEC-01: MIB Label Authorization & Authoritative Warehouse Scope — PASS:** Remediated P1 Finding SEC-01 across `srv/wm/mib-label/service.cds`, `srv/wm/mib-label/service.js`, `srv/wm/mib-label/warehouseScope.js`, `srv/integration/s4hana/wm/MibLabelAdapter.js`, `xs-security.json`, `test/testUsers.js`, `test/unit/wm/mibLabelAuthorization.test.js`, `test/unit/wm/mibLabelService.test.js`, `test/unit/wm/mibLabelAdapter.test.js`, and `test/integration/wm/mibLabel.test.js`:
+  1. *Role Enforcement at the CAP Boundary:* Upgraded `MibLabelService` service-level authorization from generic `authenticated-user` to `@(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])` in `srv/wm/mib-label/service.cds`. Added explicit `@(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])` annotations to all operations: `generateMibSticker`, `readMibStickerData`, `listTransferOrders`, and `getWarehouseContext`. Authenticated callers lacking warehouse privileges (e.g. `Viewer` or `SalesRepresentative`) are rejected with HTTP 403 Forbidden at the CAP boundary before any handler or adapter logic executes.
+  2. *Authoritative Server-Side Warehouse Scope Mapping (`warehouseScope`):* Authored `srv/wm/mib-label/warehouseScope.js`. Implemented authoritative server-side user-to-warehouse derivation:
+     - Admin users (`user.is('Admin')`) receive `null` (unrestricted access to all warehouses).
+     - Non-Admin users: evaluates explicit user warehouse attributes (`WarehouseNumber`, `Warehouse`, `LGNUM`), extracting and normalizing valid 1-3 character alphanumeric codes (`/^[A-Z0-9]{1,3}$/`).
+     - "Do not assume that a Plant attribute is itself a warehouse mapping": If explicit warehouse attributes are absent, resolves warehouses via an authoritative server-side configuration mapping (table `T320`), where plant `1120` and `1000` map to warehouse `['W01']`. A 4-character plant code (`WERKS`) is NEVER treated directly as a warehouse code.
+     - Fail-Closed: Users with no warehouse attributes and unmapped plant attributes receive `[]` (authorized for zero warehouses).
+  3. *CAP Handler Server-Side Warehouse Validation:* In `srv/wm/mib-label/service.js`, replaced the misplaced `plantScope` with `warehouseScope(req.user)`. In all three operational handlers (`generateMibSticker`, `readMibStickerData`, `listTransferOrders`), enforced `assertWarehouseAllowed(payload.WarehouseNumber, allowedWarehouses)`, throwing HTTP 403 (`Warehouse <lgnum> is outside the user's authorized warehouse scope`) when a client attempts to supply a warehouse outside their authorized scope.
+  4. *Dynamic Warehouse Context:* In `getWarehouseContext`, returned the user's actual scoped warehouses (`unrestricted: false`, `warehouses: allowedWarehouses`) for non-Admin users, or default configured warehouses (`unrestricted: true`, `warehouses: ['W01']`) for Admin users, eliminating the previous hardcoded `W01` return for unauthorized users.
+  5. *Defense-in-Depth in RFC Adapter:* Updated `MibLabelAdapter.js` in `generateMibSticker`, `readMibStickerData`, and `listTransferOrders` to accept `allowedWarehouses` and assert that normalized `lgnum` is within `allowedWarehouses` if restricted, throwing HTTP 403.
+  6. *XSUAA Security Profile Alignment:* Updated `xs-security.json` to define the `WarehouseNumber` attribute and added `WarehouseNumber` to attribute-references of both `WarehouseClerk` and `WarehouseManager` role-templates.
+  7. *Validation Results:* Added dedicated unit test suite `test/unit/wm/mibLabelAuthorization.test.js` (17/17 tests PASS). Updated `test/unit/wm/mibLabelService.test.js` (13/13 tests PASS), `test/unit/wm/mibLabelAdapter.test.js` (24/24 tests PASS), `test/unit/wm/mibLabelController.test.js` (17/17 tests PASS), `test/unit/wm/mibLabelPdf.test.js` (17/17 tests PASS), and `test/integration/wm/mibLabel.test.js` (8/8 tests PASS including 401 unauthenticated, 403 unauthorized role, and 403 out-of-scope warehouse). Ran Playwright E2E suite `verifyMibLabels.e2e.js` (ALL 7 cases PASS). Ran backend ESLint (0 errors, 0 warnings) and UI5 linter (0 findings). CDS compile passed cleanly.
 - **Finding DEBT-02: Review Duplicate Authentication Middleware Responsibilities & Dual-Boundary Identity — PASS:** Remediated P2 Finding DEBT-02 across `server.js`, `srv/auth/localTokenUtil.js`, `docs/architecture/authentication-middleware-ordering.md`, and `test/unit/auth/authMiddlewareOrdering.test.js`:
   1. *Dual-Boundary Ordering Formally Documented:* Authored authoritative architectural standard `docs/architecture/authentication-middleware-ordering.md` and updated `server.js`. Documented the distinct responsibilities of Boundary 1 (Express bootstrap layer `app.use` protecting root non-OData routes like `/ai/chat/stream`, `/admin/diagnostics/sap`, and `/health/diagnostic`) vs Boundary 2 (CAP protocol middleware chain `{ before: 'auth' }` protecting all OData V4 services and syncing `cds.context.user` before declarative authorization evaluation).
   2. *Duplicate Verification Eliminated (O(1) Request-Scoped Caching):* Updated `localTokenUtil.applyBearerToken` to cache the verified token string on `req._verifiedBearerToken`. When a request traverses from Express to CAP OData, the second boundary matches the cached token in O(1) time and reuses `req.user` directly, eliminating redundant HMAC SHA-256 calculation and duplicate object allocation.
@@ -148,6 +160,65 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-19 17:35 IST — Remediation for Finding SEC-01: MIB Label Authorization & Authoritative Warehouse Scope — PASS
+
+- REQUEST: Remediate Finding SEC-01 (MIB Label authorization, P1 · Open; Files: `srv/wm/mib-label/service.cds`, `srv/wm/mib-label/service.js`, `srv/integration/s4hana/wm/MibLabelAdapter.js`). Evidence: service-level authorization requires only `authenticated-user`; `generateMibSticker`, `readMibStickerData`, and `listTransferOrders` have no stricter role requirements; handler passes client-supplied warehouse numbers directly to adapter; `plantScope()` is called only by `getWarehouseContext()`, not by operational handlers; warehouse context returns hardcoded `W01`. Risk: A user with authentication but without warehouse privileges may invoke warehouse operations or query another warehouse. Required remediation: Enforce warehouse roles at the CAP boundary and validate each requested warehouse against an authoritative server-side user-to-warehouse authorization mapping. Do not assume that a Plant attribute is itself a warehouse mapping.
+- INSPECT:
+  - Audited `srv/wm/mib-label/service.cds`, `srv/wm/mib-label/service.js`, `srv/integration/s4hana/wm/MibLabelAdapter.js`, `xs-security.json`, and reference implementations in `srv/wm/quarantine-label/` and `srv/wm/handling-unit/`.
+  - Confirmed evidence:
+    1. In `srv/wm/mib-label/service.cds`, service level was `@(requires: 'authenticated-user')`, and actions `generateMibSticker`, `readMibStickerData`, and `listTransferOrders` lacked `@(requires: ...)` annotations. Any authenticated user (even with non-warehouse roles like `Viewer` or `SalesRepresentative`) could execute them.
+    2. In `srv/wm/mib-label/service.js`, operational handlers extracted `req.data` and passed client-supplied `WarehouseNumber` directly to `MibLabelAdapter` without verifying warehouse permissions.
+    3. `plantScope()` was invoked only by `getWarehouseContext()`. However, plants in SAP are 4-character codes (WERKS, e.g. `1120`), whereas warehouses are 3-character codes (LGNUM, e.g. `W01`). Treating a Plant attribute as a warehouse number is semantically invalid.
+    4. `getWarehouseContext()` hardcoded `['W01']`, exposing warehouse `W01` to users regardless of their actual permissions.
+    5. `MibLabelAdapter.js` did not check `allowedWarehouses` on incoming calls.
+- CHANGED:
+  - `srv/wm/mib-label/warehouseScope.js` (NEW):
+    - Implemented `warehouseScope(user, plantToWarehouseMap)`:
+      - Admin users (`user.is('Admin')`) receive `null` (unrestricted access to all warehouses).
+      - Evaluates explicit user warehouse attributes (`user.attr.WarehouseNumber`, `user.attr.Warehouse`, `user.attr.LGNUM`), normalizing to uppercase 1-3 alphanumeric strings (`/^[A-Z0-9]{1,3}$/`).
+      - Authoritative server-side mapping from user's `Plant` attribute (`DEFAULT_PLANT_TO_WAREHOUSE` reflecting SAP table `T320` configuration: `1120` -> `['W01']`, `1000` -> `['W01']`), ensuring plant codes are never treated directly as warehouse numbers.
+      - Returns `[]` (fail-closed) for users without warehouse attributes or mapped plants.
+    - Implemented `isWarehouseAllowed(warehouse, allowedWarehouses)` and `assertWarehouseAllowed(warehouse, allowedWarehouses)` throwing HTTP 403 Forbidden with descriptive message if outside scope.
+  - `srv/wm/mib-label/service.cds`:
+    - Updated service-level authorization annotation to `@(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])`.
+    - Added `@(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])` to actions `generateMibSticker`, `readMibStickerData`, `listTransferOrders`, and function `getWarehouseContext`.
+  - `srv/wm/mib-label/service.js`:
+    - Replaced `plantScope` with `warehouseScope` and `assertWarehouseAllowed`.
+    - In `generateMibSticker`, `readMibStickerData`, and `listTransferOrders`: derived `allowedWarehouses = warehouseScope(req.user)` and asserted `assertWarehouseAllowed(payload.WarehouseNumber, allowedWarehouses)` before delegating to adapter.
+    - In `getWarehouseContext`: returned `{ warehouses: isUnrestricted ? ['W01'] : allowedWarehouses, unrestricted: isUnrestricted }`.
+  - `srv/integration/s4hana/wm/MibLabelAdapter.js`:
+    - In `generateMibSticker`, `readMibStickerData`, and `listTransferOrders`: accepted `allowedWarehouses` and validated that `lgnum` is included if restricted, throwing HTTP 403 (`Warehouse <lgnum> is outside your authorized warehouses.`).
+  - `xs-security.json`:
+    - Added `WarehouseNumber` attribute definition.
+    - Added `WarehouseNumber` to attribute-references of `WarehouseClerk` and `WarehouseManager` role-templates.
+  - `test/testUsers.js`:
+    - Added `test-clerk-w01` (`['W01']`) and `test-clerk-w02` (`['W02']`) test identities for scoped permission verification.
+  - `test/unit/wm/mibLabelAuthorization.test.js` (NEW):
+    - Added 17 unit tests verifying `warehouseScope()`, `isWarehouseAllowed()`, `assertWarehouseAllowed()`, case-insensitivity, whitespace trimming, fail-closed handling, and authoritative plant-to-warehouse mapping.
+  - `test/unit/wm/mibLabelService.test.js`:
+    - Updated tests to verify warehouse scope enforcement across `generateMibSticker`, `readMibStickerData`, `listTransferOrders`, and `getWarehouseContext`. Verified 403 rejection when accessing out-of-scope warehouses.
+  - `test/unit/wm/mibLabelAdapter.test.js`:
+    - Added tests verifying `allowedWarehouses` enforcement across `generateMibSticker`, `readMibStickerData`, and `listTransferOrders`.
+  - `test/integration/wm/mibLabel.test.js`:
+    - Added integration tests verifying 401 unauthenticated, 403 unauthorized role (`test-viewer-1120`), and 403 out-of-scope warehouse (`test-clerk-w01` accessing `W02`).
+- TEST DECISION: TEST ADDED (`test/unit/wm/mibLabelAuthorization.test.js`); TEST UPDATED (`test/unit/wm/mibLabelService.test.js`, `test/unit/wm/mibLabelAdapter.test.js`, `test/integration/wm/mibLabel.test.js`); EXISTING TEST SUFFICIENT (`test/unit/wm/mibLabelController.test.js`, `test/unit/wm/mibLabelPdf.test.js`, `test/e2e/wm/verifyMibLabels.e2e.js`).
+- TESTED:
+  - `npx jest test/unit/wm/mibLabelAuthorization.test.js`: 1 suite / 17 tests PASS.
+  - `npx jest test/unit/wm/mibLabelService.test.js`: 1 suite / 13 tests PASS.
+  - `npx jest test/unit/wm/mibLabelAdapter.test.js`: 1 suite / 24 tests PASS.
+  - `npx jest test/unit/wm/mibLabelController.test.js`: 1 suite / 17 tests PASS.
+  - `npx jest test/unit/wm/mibLabelPdf.test.js`: 1 suite / 17 tests PASS.
+  - `npx jest test/integration/wm/mibLabel.test.js`: 1 suite / 8 tests PASS.
+  - `npx jest test/unit/wm/`: 38 suites / 731 tests PASS.
+  - `node test/e2e/runAllE2E.js --sap-free --only=Mib`: 1 suite / 7 cases PASS (15.8s).
+  - `npx cds compile srv/wm/mib-label/service.cds`: PASS (clean CSN output).
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+- NOT VERIFIED: None.
+- ASSUMPTIONS: None.
+- Next: Commit and push the changes to `origin/feature01` and monitor hosted GitHub Actions CI run to completion.
+- FINAL STATUS: PASS — MIB Label authorization remediated at CAP service boundary and operational handlers; authoritative server-side user-to-warehouse mapping established; Plant attribute mapped via T320 configuration rather than conflated with warehouse codes; out-of-scope warehouse queries rejected with HTTP 403; verified with passing unit, integration, and E2E suites.
 
 ### 2026-11-19 16:00 IST — Remediation for Finding DEBT-02: Authentication Middleware Ordering & Dual-Boundary Identity — PASS
 

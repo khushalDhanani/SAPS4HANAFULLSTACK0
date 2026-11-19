@@ -129,8 +129,12 @@ class MibLabelAdapter {
   /**
    * Generate Sticker PDF via RFC wrapper Z_MM_MIB_LABEL_PDF.
    */
-  async generateMibSticker(input) {
+  async generateMibSticker(input, options = {}) {
     const { lgnum, tanum, bname, bname1 } = normalizeInput(input);
+    const allowedWarehouses = options?.allowedWarehouses ?? input?.allowedWarehouses ?? null;
+    if (Array.isArray(allowedWarehouses) && !allowedWarehouses.includes(lgnum)) {
+      throw httpError(403, `Warehouse ${lgnum} is outside your authorized warehouses.`);
+    }
     await this.assertAvailable(FUNCTION_NAME);
 
     let res;
@@ -173,8 +177,12 @@ class MibLabelAdapter {
   /**
    * Read-only data assembly from SAP tables (LTAK, LTAP, MAKT, AFPO) matching report ZMM_R_067_F01.
    */
-  async readMibStickerData(input) {
+  async readMibStickerData(input, options = {}) {
     const { lgnum, tanum, bname, bname1 } = normalizeInput(input);
+    const allowedWarehouses = options?.allowedWarehouses ?? input?.allowedWarehouses ?? null;
+    if (Array.isArray(allowedWarehouses) && !allowedWarehouses.includes(lgnum)) {
+      throw httpError(403, `Warehouse ${lgnum} is outside your authorized warehouses.`);
+    }
 
     // Read TO Header (LTAK) and Items (LTAP)
     const ltakRows = await this.rfc.readTable(
@@ -269,8 +277,12 @@ class MibLabelAdapter {
   /**
    * List Transfer Orders for a warehouse by date range or TO number (read-only).
    */
-  async listTransferOrders(input) {
+  async listTransferOrders(input, options = {}) {
     const q = normalizeListInput(input);
+    const allowedWarehouses = options?.allowedWarehouses ?? input?.allowedWarehouses ?? null;
+    if (Array.isArray(allowedWarehouses) && !allowedWarehouses.includes(q.lgnum)) {
+      throw httpError(403, `Warehouse ${q.lgnum} is outside your authorized warehouses.`);
+    }
     const sap = (d) => d.replace(/-/g, '');
     const where = [`LGNUM = ${quote(q.lgnum)}`].concat(q.tanum
       ? [`AND TANUM = ${quote(q.tanum)}`]

@@ -12,6 +12,8 @@ const USERS = {
   'test-viewer-noplant': { roles: ['Viewer'] },
   'test-clerk-1120': { roles: ['Viewer', 'WarehouseClerk'], attr: { Plant: ['1120'] } },
   'test-clerk-noplant': { roles: ['Viewer', 'WarehouseClerk'] },
+  'test-clerk-w01': { roles: ['Viewer', 'WarehouseClerk'], attr: { WarehouseNumber: ['W01'] } },
+  'test-clerk-w02': { roles: ['Viewer', 'WarehouseClerk'], attr: { WarehouseNumber: ['W02'] } },
   'test-sales-1120': { roles: ['Viewer', 'SalesRepresentative'], attr: { Plant: ['1120'] } },
   'test-logs-reader': { roles: ['SapLogsReader'] },
   'test-logs-viewer': { roles: ['Viewer'] },
