@@ -16,7 +16,14 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `efe0f586` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44480177488 on current branch HEAD `efe0f586`: **SUCCESS** (Build, Test & Validate in 3m47s: PASS; Browser E2E, SAP-free suites PR gate in 2m4s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Current checkout:** `feature01`, `HEAD` `21ee69ad` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44480177488 on branch HEAD: **SUCCESS** (Build, Test & Validate: PASS; Browser E2E, SAP-free suites PR gate: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Finding CI-03: SAP-Dependent Validation Separation & Release Evidence Checklist — PASS:** Established the formal 5-Tier Release Evidence Architecture and operational sign-off protocol in `docs/release-evidence-checklist.md`, resolving P1 Finding CI-03:
+  1. *Architectural Separation of Concerns:* Reinforced the critical enterprise safety rule that **live SAP write tests must NEVER run automatically on every push**. Automated CI runs strictly against an isolated test server with mocked writes and blocked SAP egress (`assertSapUnreachable`).
+  2. *Tier 1 (Automated SAP-Free Verification):* Continuous PR release gate verifying static analysis (ESLint, UI5 lint), security scans (secrets, dependencies), Jest unit/integration tests with coverage, performance benchmarks, Fiori a11y, monitoring tests, local smoke checks, MTA packaging, and all 6 Playwright SAP-free browser suites.
+  3. *Tier 2 (Read-Only SAP Integration Verification):* Controlled non-production staging probes verifying RFC dynamic library loading (`check:rfc-runtime`), T000 read-only RFC preflight (`tools/rfc-preflight.js`), service connectivity (`check:connectivity`), and live OData metadata validation (`validate:sap:sandbox`) with zero SAP writes.
+  4. *Tier 3 (Explicitly Authorized SAP Write Verification):* Guarded live transactional executions requiring written user "go", `ALLOW_LIVE_SAP_TOOLS=1`, `--allow-live-sap`, `E2E_SAP_WRITE_FLOWS`, verified non-placeholder test data (`test/e2e/live/testData.json`), and `singleWriteHandler` (preventing duplicate writes).
+  5. *Tier 4 (Direct SAP Document Read-Back):* Mandatory persistence verification directly reading created business documents back from underlying SAP database tables (`EKKO`/`EKPO` for PO, `VBAK`/`VBAP` for SO, `MATDOC`/`EKBE` for GR, `VBAK`/`VBFA` for Returns, `LTAK`/`LTAP` for TO, `VEKP`/`VEPO` for HU, `PACKKP` for PI).
+  6. *Tier 5 (Deployment Smoke Verification):* Post-deployment health probes against deployed Cloud Foundry routes verifying `/health` (liveness), `/health/ready` (HANA database readiness), `/health/dependencies` (graceful degradation state), and approuter/XSUAA routing.
 - **Finding CI-01: Latest SAP-Free Browser E2E Failed — PASS:** Root-caused and resolved the failing release gate job `Browser E2E, SAP-free suites (PR gate)` from CI run 44457044796 on GitHub Actions:
   1. *Failing Test Identified:* Retrieved complete failed job logs (`gh run view 44457044796 --job 135335942402 --log`). The failing test was in `test/e2e/wm/verifyMibLabels.e2e.js`: `503 error shows informative warning and falls back to sticker data inspection: row count was 0, expected 1`.
   2. *Root Cause Analyzed:* During the recent MIB label UX alignment with Quarantine Labels (commit `6a4038f7`), the old data inspection table `mibDataTable` was removed from `MibLabel.view.xml` and replaced by the Transfer Orders search table `mibToTable` (`items="{mibList>/transferOrders}"`). In `verifyMibLabels.e2e.js`, the test state helper was updated to check `toTable` (`byId('mibToTable')`). However, in Case 4, only the single TO form preview is triggered (`onPreview`), which falls back to client-side 4x6 label generation (`on4x6Labels`), setting `mibView>/labelCount` to 1. `mibToTable` in `mibListPanel` is not populated during single TO preview (it is populated only on list search in Case 6). Asserting `st.rowCount === 1` against `mibToTable` failed because `toTable.getItems().length` was 0.
@@ -108,6 +115,34 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-19 14:15 IST — Remediation for Finding CI-03: SAP-Dependent Validation Separation & Release Evidence Checklist — PASS
+
+- REQUEST: Remediate Finding CI-03 (SAP-dependent validation remains separate, P1; File: `.github/workflows/ci.yml`). Acknowledge that the CI workflow correctly separates SAP-free testing from manually controlled SAP validation. Establish a release evidence checklist formally separating: 1. Automated SAP-free verification, 2. Read-only SAP integration verification, 3. Explicitly authorized SAP write verification, 4. Direct SAP document read-back, 5. Deployment smoke verification. Never make live SAP write tests automatic on every push.
+- INSPECT:
+  - Audited `.github/workflows/ci.yml`, `docs/e2e-coverage-matrix.md`, `test/e2e/support/writeGuard.js`, `test/e2e/support/liveWriteGate.js`, `tools/smoke-test-deployment.js`, and `tools/rfc-preflight.js`.
+  - Confirmed evidence:
+    1. The CI pipeline correctly gates live SAP tests: push and pull requests execute only `ci` and `browser-e2e-sap-free` against an isolated test-profile server (`NODE_ENV=test`, SQLite in-memory, zero SAP credentials, SAP egress blocked).
+    2. Live SAP validation jobs (`sap-nonprod-validation` and `browser-e2e`) are separately controlled via `workflow_dispatch` only.
+    3. Production-readiness evidence is incomplete if release sign-off relies solely on automated CI without documented evidence across read-only SAP checks, authorized write round trips, direct table read-backs, and deployment smoke probes.
+    4. Automatic live writes on push are strictly prohibited to prevent uncontrolled side effects, inventory blocks, and data corruption on shared SAP landscapes.
+- CHANGED:
+  - `docs/release-evidence-checklist.md`: Created official 5-Tier Release Evidence Architecture and Sign-Off Protocol:
+    - **Tier 1 (Automated SAP-Free Verification)**: Continuous PR release gate (ESLint, UI5 lint, secret scan, dependency audit, Jest coverage, screen performance, a11y, monitoring, local smoke, MTA build, 6 Playwright SAP-free browser suites).
+    - **Tier 2 (Read-Only SAP Integration Verification)**: Controlled non-production staging probe (`npm run check:rfc-runtime`, `tools/rfc-preflight.js` T000 check, `npm run check:connectivity`, live OData `$metadata` check, SM21/SM20 read-only log audit; 0 live writes).
+    - **Tier 3 (Explicitly Authorized SAP Write Verification)**: Guarded transactional round-trip suites (`npm run test:e2e:sap`) strictly requiring written user authorization, `ALLOW_LIVE_SAP_TOOLS=1`, `--allow-live-sap`, `E2E_SAP_WRITE_FLOWS`, non-placeholder test data in `test/e2e/live/testData.json`, and `singleWriteHandler`.
+    - **Tier 4 (Direct SAP Document Read-Back)**: Mandatory persistence proof directly querying underlying SAP database tables (`EKKO`/`EKPO` for PO, `VBAK`/`VBAP`/`VBKD` for SO, `MATDOC`/`EKBE`/`MARD` for GR, `VBAK`/`VBFA` for Returns, `LTAK`/`LTAP` for TO, `VEKP`/`VEPO` for HU, `PACKKP` for PI) to confirm backend persistence independent of HTTP responses or local state.
+    - **Tier 5 (Deployment Smoke Verification)**: Post-deployment infrastructure and application health probes against deployed Cloud Foundry routes (`tools/smoke-test-deployment.js` verifying `/health` liveness, `/health/ready` HANA database readiness, `/health/dependencies` graceful degradation, and approuter/XSUAA routing).
+    - Included pre-release sign-off matrix and active architectural blockers review (RFC SDK in CF, SAP-only persistence migration status, live write authorization requirements).
+- TEST DECISION: EXISTING TEST SUFFICIENT (`test/unit/tools/e2eCoverageMatrix.test.js`, `test/e2e/support/liveWriteGate.js`, `tools/smoke-test-deployment.js`).
+- TESTED:
+  - `npx jest test/unit/tools/e2eCoverageMatrix.test.js --runInBand`: 1 suite / 8 tests PASS.
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+- NOT VERIFIED: Live SAP transactional write execution (intentionally gated; requires explicit written per-call user authorization with non-placeholder test data).
+- ASSUMPTIONS: None.
+- Next: Use `docs/release-evidence-checklist.md` as the authoritative release gate matrix for pre-production sign-off and milestone reviews.
+- FINAL STATUS: PASS — 5-tier release evidence checklist and validation protocol established, documented, and aligned with project governance; strict separation of automated SAP-free testing from guarded live SAP validation maintained.
 
 ### 2026-11-19 13:50 IST — Remediation for Finding CI-01: Latest SAP-Free Browser E2E Failed — PASS
 
