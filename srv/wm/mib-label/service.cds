@@ -26,6 +26,28 @@ service MibLabelService @(path: '/odata/v4/mib-label') {
         CheckedBy           : String(80);
     }
 
+    type TransferOrderRow {
+        WarehouseNumber     : String(3);
+        TransferOrderNumber : String(10);
+        TransferDate        : String(10);
+        TransferRequirement : String(10);
+        RequirementNumber   : String(10);
+        MovementType        : String(3);
+        Material            : String(40);
+        MaterialDescription : String(40);
+        Batch               : String(20);
+        QuantityWithUom     : String(50);
+        StorageUnit         : String(20);
+    }
+
+    type TransferOrderList {
+        WarehouseNumber : String(3);
+        DateFrom        : String(10);
+        DateTo          : String(10);
+        More            : Boolean;
+        TransferOrders  : many TransferOrderRow;
+    }
+
     action generateMibSticker(
         WarehouseNumber     : String(3),
         TransferOrderNumber : String(10),
@@ -39,6 +61,13 @@ service MibLabelService @(path: '/odata/v4/mib-label') {
         WeightedBy          : String(12),
         CheckedBy           : String(12)
     ) returns array of MibStickerRow;
+
+    action listTransferOrders(
+        WarehouseNumber     : String(3),
+        DateFrom            : String(10),
+        DateTo              : String(10),
+        TransferOrderNumber : String(10)
+    ) returns TransferOrderList;
 
     function getWarehouseContext() returns {
         warehouses: array of String;

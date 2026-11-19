@@ -1,6 +1,6 @@
 'use strict';
 
-const { MibLabelAdapter, normalizeInput, FUNCTION_NAME } = require('../../../srv/integration/s4hana/wm/MibLabelAdapter');
+const { MibLabelAdapter, normalizeInput, normalizeListInput, LIST_MAX_DAYS, LIST_MAX_ITEMS, FUNCTION_NAME } = require('../../../srv/integration/s4hana/wm/MibLabelAdapter');
 
 const FAKE_PDF = Buffer.from('%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF');
 
@@ -204,6 +204,132 @@ describe('MibLabelAdapter', () => {
       });
 
       expect(rows).toEqual([]);
+    });
+  });
+
+  describe('normalizeListInput', () => {
+    it('normalizes valid warehouse and date range', () => {
+      const res = normalizeListInput({
+        WarehouseNumber: ' w01 ',
+        DateFrom: '2026-10-01',
+        DateTo: '2026-10-20'
+      });
+      expect(res).toEqual({
+        lgnum: 'W01',
+        from: '2026-10-01',
+        to: '2026-10-20'
+      });
+    });
+
+    it('normalizes direct TransferOrderNumber lookup', () => {
+      const res = normalizeListInput({
+        WarehouseNumber: 'W01',
+        TransferOrderNumber: '1037246'
+      });
+      expect(res).toEqual({
+        lgnum: 'W01',
+        tanum: '0001037246'
+      });
+    });
+
+    it('rejects invalid warehouse', () => {
+      expect(() => normalizeListInput({ WarehouseNumber: '' }))
+        .toThrow(/Warehouse number must be 1 to 3 letters or digits/);
+      expect(() => normalizeListInput({ WarehouseNumber: 'W1234' }))
+        .toThrow(/Warehouse number must be 1 to 3 letters or digits/);
+    });
+
+    it('rejects missing or invalid dates when TO is omitted', () => {
+      expect(() => normalizeListInput({ WarehouseNumber: 'W01', DateFrom: 'invalid' }))
+        .toThrow(/Transfer order dates must be valid dates/);
+      expect(() => normalizeListInput({ WarehouseNumber: 'W01', DateFrom: '2026-10-01' }))
+        .toThrow(/Transfer order dates must be valid dates/);
+    });
+
+    it('rejects date range where from is after to', () => {
+      expect(() => normalizeListInput({ WarehouseNumber: 'W01', DateFrom: '2026-10-20', DateTo: '2026-10-01' }))
+        .toThrow(/The transfer order date "from" must not be after "to"/);
+    });
+
+    it(`rejects date range exceeding ${LIST_MAX_DAYS} days`, () => {
+      expect(() => normalizeListInput({ WarehouseNumber: 'W01', DateFrom: '2026-09-01', DateTo: '2026-10-15' }))
+        .toThrow(/The transfer order date range must be at most 31 days/);
+    });
+  });
+
+  describe('listTransferOrders', () => {
+    it('returns transfer orders with items, MAKT descriptions and AFPO batches', async () => {
+      const rfc = createRfcFake();
+      const adapter = new MibLabelAdapter(rfc);
+
+      const res = await adapter.listTransferOrders({
+        WarehouseNumber: 'W01',
+        DateFrom: '2026-10-20',
+        DateTo: '2026-10-25'
+      });
+
+      expect(res).toEqual({
+        WarehouseNumber: 'W01',
+        DateFrom: '2026-10-20',
+        DateTo: '2026-10-25',
+        More: false,
+        TransferOrders: [
+          {
+            WarehouseNumber: 'W01',
+            TransferOrderNumber: '0001037246',
+            TransferDate: '2026-10-23',
+            TransferRequirement: '0001001222',
+            RequirementNumber: '1002318',
+            MovementType: '',
+            Material: 'MAT-001',
+            MaterialDescription: 'Chemical Raw Material A',
+            Batch: 'PROD-BATCH-99',
+            QuantityWithUom: '10.5 KG',
+            StorageUnit: 'SU-100'
+          }
+        ]
+      });
+    });
+
+    it('returns empty list if LTAK returns no rows', async () => {
+      const rfc = createRfcFake({ ltakRows: [] });
+      const adapter = new MibLabelAdapter(rfc);
+
+      const res = await adapter.listTransferOrders({
+        WarehouseNumber: 'W01',
+        DateFrom: '2026-10-20',
+        DateTo: '2026-10-25'
+      });
+
+      expect(res).toEqual({
+        WarehouseNumber: 'W01',
+        DateFrom: '2026-10-20',
+        DateTo: '2026-10-25',
+        More: false,
+        TransferOrders: []
+      });
+    });
+
+    it('flags More when LTAK returns more than LIST_MAX_ITEMS', async () => {
+      const manyRows = Array.from({ length: LIST_MAX_ITEMS + 1 }, (_, i) => ({
+        LGNUM: 'W01',
+        TANUM: String(i + 1).padStart(10, '0'),
+        BDATU: '20261023',
+        TBNUM: '100',
+        BENUM: '',
+        BWLVS: '261'
+      }));
+      const rfc = createRfcFake({ ltakRows: manyRows, ltapRows: [] });
+      const adapter = new MibLabelAdapter(rfc);
+
+      const res = await adapter.listTransferOrders({
+        WarehouseNumber: 'W01',
+        DateFrom: '2026-10-20',
+        DateTo: '2026-10-25'
+      });
+
+      expect(res.More).toBe(true);
+      expect(res.TransferOrders.length).toBe(LIST_MAX_ITEMS);
     });
   });
 });

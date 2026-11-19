@@ -13,7 +13,7 @@
 
 const { openSession, openHash, inspectScreen } = require('../support/screenCheck');
 
-const ACTION_RE = /\/odata\/v4\/mib-label\/(generateMibSticker|readMibStickerData)$/;
+const ACTION_RE = /\/odata\/v4\/mib-label\/(generateMibSticker|readMibStickerData|listTransferOrders)$/;
 const PDF_B64 = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF').toString('base64');
 const json = (status, body) => ({
   status,
@@ -30,16 +30,16 @@ function state(page) {
     const byId = (id) => E.registry.filter((c) => c.getId().endsWith('--' + id))[0];
     const strip = byId('mibMessageStrip');
     const viewer = byId('mibPdfViewer');
-    const printBtn = byId('mibPrintBtn');
-    const downloadBtn = byId('mibDownloadBtn');
-    const dataTable = byId('mibDataTable');
+    const printBtn = byId('mibPrint') || byId('mibPrintBtn');
+    const downloadBtn = byId('mibDownload') || byId('mibDownloadBtn');
+    const toTable = byId('mibToTable');
     return {
       message: strip && strip.getVisible() ? strip.getText() : '',
       messageType: strip ? strip.getType() : '',
       pdfShown: !!viewer && viewer.getVisible() && /^blob:/.test(viewer.getSource()),
       printEnabled: printBtn ? printBtn.getEnabled() : false,
       downloadEnabled: downloadBtn ? downloadBtn.getEnabled() : false,
-      rowCount: dataTable ? dataTable.getItems().length : 0,
+      rowCount: toTable ? toTable.getItems().length : 0,
       warehouseState: byId('mibWarehouseInput').getValueState(),
       toState: byId('mibTransferOrderInput').getValueState(),
       variant: byId('mibVariantSelect') ? byId('mibVariantSelect').getSelectedKey() : ''
@@ -235,12 +235,96 @@ const CASES = [
       await s.settle();
       const stInitial = await state(s.page);
       const errs = [];
-      if (stInitial.variant !== 'standard') errs.push(`initial variant ${stInitial.variant}, expected standard`);
+      if (stInitial.variant !== 'vertical') errs.push(`initial variant ${stInitial.variant}, expected vertical`);
       await s.page.click('[id$="--mibVariantSelect"] .sapMSegBBtn:nth-child(2)');
       await s.settle();
-      const stVertical = await state(s.page);
-      if (stVertical.variant !== 'vertical') errs.push(`switched variant ${stVertical.variant}, expected vertical`);
-      if (!stVertical.pdfShown) errs.push('PDF preview not shown after switching to vertical');
+      const stStandard = await state(s.page);
+      if (stStandard.variant !== 'standard') errs.push(`switched variant ${stStandard.variant}, expected standard`);
+      if (!stStandard.pdfShown) errs.push('PDF preview not shown after switching to standard');
+      return errs;
+    }
+  },
+  {
+    name: 'Transfer Orders list (mocked): Go lists orders, ticked rows download as one 4x6 PDF',
+    respond: (route) => {
+      const url = route.request().url();
+      if (/listTransferOrders$/.test(url)) {
+        return route.fulfill(json(200, {
+          WarehouseNumber: 'W01',
+          DateFrom: '2026-10-21',
+          DateTo: '2026-10-27',
+          More: false,
+          TransferOrders: [1, 2].map((n) => ({
+            WarehouseNumber: 'W01',
+            TransferOrderNumber: `000103724${n}`,
+            TransferDate: '2026-10-2' + n,
+            TransferRequirement: `100${n}`,
+            RequirementNumber: `200${n}`,
+            MovementType: '261',
+            Material: `MAT-00${n}`,
+            MaterialDescription: `Material ${n}`,
+            Batch: `BATCH-0${n}`,
+            QuantityWithUom: `${n * 5} KG`,
+            StorageUnit: `SU-00${n}`
+          }))
+        }));
+      }
+      if (/readMibStickerData$/.test(url)) {
+        const toNum = route.request().postDataJSON().TransferOrderNumber;
+        return route.fulfill(json(200, {
+          value: [{
+            Material: 'MAT-001',
+            MaterialDescription: 'Material 1',
+            Batch: 'BATCH-01',
+            TransferOrder: toNum,
+            TransferRequirement: '1001',
+            RequirementNumber: '2001',
+            TransferDate: '2026-10-27',
+            QuantityWithUom: '10 KG',
+            StorageUnit: `000000000099000000${toNum.slice(-1)}1`,
+            WeightedBy: 'USER1',
+            CheckedBy: 'USER2'
+          }]
+        }));
+      }
+      return route.fulfill(json(200, {}));
+    },
+    run: async (s, calls) => {
+      const errs = [];
+      await s.page.evaluate(() => {
+        window.__mibSaved = [];
+        const click = window.HTMLAnchorElement.prototype.click;
+        window.HTMLAnchorElement.prototype.click = function () {
+          if (this.download) { window.__mibSaved.push({ name: this.download, href: this.href }); return undefined; }
+          return click.call(this);
+        };
+      });
+
+      await s.page.fill('[id$="--mibListWarehouse-inner"]', 'W01');
+      await s.page.click('[id$="--mibListGo"]');
+      await s.page.waitForFunction(() => {
+        const E = window.sap.ui.require('sap/ui/core/Element');
+        const t = E.registry.filter((c) => c.getId().endsWith('--mibToTable'))[0];
+        return t && t.getItems().length === 2;
+      }, null, { timeout: 15000 });
+
+      const listCall = calls.find((c) => c && c.WarehouseNumber && !c.TransferOrderNumber);
+      if (!listCall || listCall.WarehouseNumber !== 'W01' || !/^\d{4}-\d{2}-\d{2}$/.test(listCall.DateFrom || '') || !listCall.DateTo) {
+        errs.push(`list request invalid: ${JSON.stringify(listCall)}`);
+      }
+
+      await s.page.evaluate(() => {
+        const E = window.sap.ui.require('sap/ui/core/Element');
+        E.registry.filter((c) => c.getId().endsWith('--mibToTable'))[0].selectAll(true);
+      });
+      await s.page.click('[id$="--mibDownloadSelected"]');
+      await s.page.waitForFunction(() => window.__mibSaved && window.__mibSaved.length > 0, null, { timeout: 15000 }).catch(() => {});
+
+      const savedCount = await s.page.evaluate(() => window.__mibSaved.length);
+      if (savedCount !== 1) {
+        errs.push(`${savedCount} downloads, expected 1`);
+      }
+
       return errs;
     }
   }

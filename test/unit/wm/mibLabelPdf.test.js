@@ -62,6 +62,30 @@ describe('MibLabelPdf', () => {
         });
     });
 
+    describe('withoutLeadingZeros', () => {
+        it('strips leading zeros from numeric strings matching Quarantine Labels behavior', () => {
+            expect(MibLabelPdf.withoutLeadingZeros('00000000001000057539')).toBe('1000057539');
+            expect(MibLabelPdf.withoutLeadingZeros('0000000000990000001')).toBe('990000001');
+            expect(MibLabelPdf.withoutLeadingZeros('000123')).toBe('123');
+        });
+
+        it('preserves single zero "0"', () => {
+            expect(MibLabelPdf.withoutLeadingZeros('0')).toBe('0');
+            expect(MibLabelPdf.withoutLeadingZeros('00000')).toBe('0');
+        });
+
+        it('preserves alphanumeric strings unchanged', () => {
+            expect(MibLabelPdf.withoutLeadingZeros('SU-100')).toBe('SU-100');
+            expect(MibLabelPdf.withoutLeadingZeros('A000123')).toBe('A000123');
+        });
+
+        it('handles empty or null values gracefully', () => {
+            expect(MibLabelPdf.withoutLeadingZeros('')).toBe('');
+            expect(MibLabelPdf.withoutLeadingZeros(null)).toBe('');
+            expect(MibLabelPdf.withoutLeadingZeros(undefined)).toBe('');
+        });
+    });
+
     describe('generateDoc', () => {
         const mockItem = {
             Material: '1000000940',
@@ -231,6 +255,49 @@ describe('MibLabelPdf', () => {
             expect(logoItem.paths).toHaveLength(30);
             expect(logoItem.x).toBeGreaterThan(206);
             expect(logoItem.w).toBeLessThan(65);
+        });
+
+        it('prevents barcode from overlapping the Aether corporate logo for 20-digit storage units', () => {
+            const itemWith20DigitSu = {
+                ...mockItem,
+                StorageUnit: '00000000001000057539'
+            };
+            const vertMeta = { ...mockMeta, variant: 'vertical' };
+            const items = MibLabelPdf.getVerticalItems(itemWith20DigitSu, vertMeta);
+
+            const hrNumber = items.find(i => i.kind === 'text' && i.text === '1000057539');
+            expect(hrNumber).toBeDefined();
+
+            const bars = items.filter(i => i.kind === 'bar');
+            expect(bars.length).toBeGreaterThan(0);
+            const maxBarX = Math.max(...bars.map(b => b.x + b.w));
+
+            const logoItem = items.find(i => i.kind === 'logo');
+            expect(logoItem).toBeDefined();
+
+            // The rightmost edge of the barcode bars must terminate well before the logo starts
+            expect(maxBarX).toBeLessThan(logoItem.x);
+            expect(logoItem.x - maxBarX).toBeGreaterThanOrEqual(10); // Clean buffer
+        });
+
+        it('strictly constrains barcode width within available width for long unstripped strings', () => {
+            const itemLong = {
+                ...mockItem,
+                StorageUnit: 'LONG-STORAGE-UNIT-CODE-128-EXTREME-STRING'
+            };
+            const vertMeta = { ...mockMeta, variant: 'vertical' };
+            const items = MibLabelPdf.getVerticalItems(itemLong, vertMeta);
+
+            const bars = items.filter(i => i.kind === 'bar');
+            expect(bars.length).toBeGreaterThan(0);
+            const maxBarX = Math.max(...bars.map(b => b.x + b.w));
+
+            const logoItem = items.find(i => i.kind === 'logo');
+            expect(logoItem).toBeDefined();
+
+            // Guaranteed to never cross into the logo area
+            expect(maxBarX).toBeLessThanOrEqual(206.5);
+            expect(maxBarX).toBeLessThan(logoItem.x);
         });
 
         it('draws ZQURAN vertical architecture onto jsPDF instance', () => {

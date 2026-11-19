@@ -30,6 +30,15 @@ module.exports = class MibLabelService extends cds.ApplicationService {
       }
     });
 
+    this.on('listTransferOrders', async (req) => {
+      try {
+        const payload = req.data || {};
+        return await adapter.listTransferOrders(payload);
+      } catch (err) {
+        return req.error(err.status || 500, err.message || 'Transfer orders could not be read');
+      }
+    });
+
     this.on('getWarehouseContext', (req) => {
       const scope = plantScope(req.user);
       const isUnrestricted = scope === null;

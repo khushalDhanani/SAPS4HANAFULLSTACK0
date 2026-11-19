@@ -16,7 +16,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `f6459ab6`; the worktree contains uncommitted authorization fix for local dev user `KHUSHAL` (`SapLogsReader`), PO-tool guard, and Phase 2 of SM21/SM20 Log Monitoring. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
+- **Current checkout:** `feature01`, `HEAD` `f6459ab6`; the worktree contains uncommitted Material Issued To Batch Sticker (`#/wm/mib-label`) UX and feature alignment with Quarantine Labels (`#/wm/quarantine-labels`), authorization fix for local dev user `KHUSHAL` (`SapLogsReader`), PO-tool guard, and Phase 2 of SM21/SM20 Log Monitoring. The latest recorded hosted CI run is 43806107926 on ancestor `880048fb`: Build/Test/Validate and SAP-free browser E2E passed; full browser E2E and non-production SAP validation were skipped. The current worktree has no hosted CI result.
+- **Material Issued To Batch Sticker (`#/wm/mib-label`) Alignment with Quarantine Labels — PARTIAL:** Full workflow, UX, and architectural alignment with `#/wm/quarantine-labels` (transaction `ZMIB`, report `ZMM_R_067`):
+  1. *Transfer Order Search & Multi-Select Table:* Implemented `listTransferOrders` action across CAP service (`srv/wm/mib-label/service.cds`, `service.js`), RFC adapter (`MibLabelAdapter.js` querying `LTAK`/`LTAP`/`MAKT`/`AFPO` with safe 50-item RFC chunking and max 31-day bounds), frontend service (`MibLabelService.js`), and view (`MibLabel.view.xml`) with `DateRangeSelection` (default last 7 days) and responsive table (`mode="MultiSelect"`).
+  2. *Header & Row Actions:* Added count title `Transfer Orders ({0})`, multi-select bulk download button `Download selected ({0})` (safely capped at 20 documents), and 3 row action buttons (Barcode preview & scroll, direct Download, direct Print).
+  3. *In-Viewport Feedback & PDF Toolbar:* Added `_notifyResult` routing notifications to `MessageBox.error()`, `MessageBox.warning()`, and `MessageToast.show()`. Added dedicated action toolbar (`mibActions`) with result title, Print, Download, and 70vh `PDFViewer`.
+  4. *Validation & Tests:* Added 18 unit tests in `test/unit/wm/mibLabelController.test.js`, updated `test/unit/wm/mibLabelAdapter.test.js` (20 passed), `test/unit/wm/mibLabelService.test.js` (8 passed), `test/integration/wm/mibLabel.test.js` (6 passed), `test/e2e/wm/verifyMibLabels.e2e.js` (Case 6 TO list & bulk download), `uiConsistency.test.js` (8 passed), and `e2eCoverageMatrix.test.js` (8 passed). `ui5lint` passed with 0 findings; root ESLint passed with 0 errors. Full repo test suite (`npm test`): 201 suites passed (3442 passed, 13 skipped, 3455 total, 83.711 s). Strictly 0 staged files.
 - **SM21 & SM20 Log Monitoring (UI Implementation & Auth Fix) — PARTIAL:** SAPUI5 user interface implemented following official Fiori Design Guidelines.
   1. *Fiori Views & Navigation:* Added `sideNavSapLogs` under `sideNavAdministration` in `App.view.xml` (visible to `Admin` and `SapLogsReader`). Added `sectionSapLogs` in `Dashboard.view.xml` rendering `SapLogs.fragment.xml` with two tabs via `IconTabBar`: Tab 1 System Log (SM21, icon `sap-icon://log`), Tab 2 Security Audit Log (SM20, icon `sap-icon://shield`). Added `SapLogsDetailDialog.fragment.xml` for full technical record inspection.
   2. *Logic & Service Integration:* Created `saps4hana/fiori/modules/admin/sap-logs/util/SapLogsLogic.js`. Manages `sapLogsView` JSON model, computes UTC query windows (15m, 1h, 4h, 24h for SM21; 15m, 1h, 4h, 6h for SM20) with a 5s past buffer guarding against future-window rejection, queries CAP `/odata/v4/sap-logs/getSystemLog` and `/odata/v4/sap-logs/getSecurityAuditLog` via `ODataClient.get()`, filters loaded logs client-side via `SearchField`, and maps severity states/icons. Mounted `SapLogsService` in `srv/service.cds`.
@@ -32,15 +37,82 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-1. Review the Phase 2 implementation of SM21/SM20 log monitoring (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`, `sapLogsService.js`, `sap-logs-service.cds`, unit and live test suites, and `SAP_SYSLOG_DISCOVERY.md`).
-2. Provide the Basis handoff note (Section 10.2 of `SAP_SYSLOG_DISCOVERY.md`) to Basis to create the dedicated technical user `S4LOGS_SRV` with restricted authorizations (`S_RFC` for `RSLG`, `THFB`, `RSAU_LOG`, `RFC1` and `S_ADMI_FCD` `SYSL`, `AUDD`), then re-run `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npx jest test/unit/admin/sapLogsLive.test.js --runInBand` to confirm least-privilege authorizations.
-3. Review and commit the focused local changes, then request/push a hosted CI run for the resulting current head when authorized. Do not treat the prior ancestor run as validation of these changes.
-2. For a future SAP-connected validation, supply approved test data and explicit written authorization naming each live write and target. Verify resulting SAP documents by direct read-back; do not execute the SAP E2E suites without that authorization.
-3. Keep HANA/HDI until a verified SAP persistence contract and implementation prove atomic claims, durable status transitions, concurrency safety, restart recovery and read-back. The current migration remains blocked.
-4. Verify `/health` and `/health/ready` against a deployed CAP service with HANA available and unavailable; no deployment has been made for the smoke change.
-5. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
+1. User tests and verifies the updated Material Issued To Batch Sticker screen in the browser at `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/mib-label` (Direct form, Transfer Order date range filter, table multi-selection, bulk download, row barcode preview & scroll, row download, row print, in-viewport notifications).
+2. Review the Phase 2 implementation of SM21/SM20 log monitoring (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`, `sapLogsService.js`, `sap-logs-service.cds`, unit and live test suites, and `SAP_SYSLOG_DISCOVERY.md`).
+3. Provide the Basis handoff note (Section 10.2 of `SAP_SYSLOG_DISCOVERY.md`) to Basis to create the dedicated technical user `S4LOGS_SRV` with restricted authorizations (`S_RFC` for `RSLG`, `THFB`, `RSAU_LOG`, `RFC1` and `S_ADMI_FCD` `SYSL`, `AUDD`), then re-run `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npx jest test/unit/admin/sapLogsLive.test.js --runInBand` to confirm least-privilege authorizations.
+4. Review and commit the focused local changes when authorized, then request/push a hosted CI run for the resulting current head. Do not treat the prior ancestor run as validation of these changes.
+5. For a future SAP-connected validation, supply approved test data and explicit written authorization naming each live write and target. Verify resulting SAP documents by direct read-back; do not execute the SAP E2E suites without that authorization.
+6. Keep HANA/HDI until a verified SAP persistence contract and implementation prove atomic claims, durable status transitions, concurrency safety, restart recovery and read-back. The current migration remains blocked.
+7. Verify `/health` and `/health/ready` against a deployed CAP service with HANA available and unavailable; no deployment has been made for the smoke change.
+8. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-18 17:10 IST — Fix MIB Label Barcode Overlapping Aether Logo — PARTIAL
+
+- REQUEST: Resolve barcode and corporate logo overlapping issue on the Material Issued To Batch Sticker 4" x 6" label (`#/wm/mib-label`).
+- INSPECT:
+  - Inspected uploaded screenshot: SAP storage unit `00000000001000057539` was printed with 10 leading zeros across 20 digits.
+  - Root cause 1: In `MibLabelPdf.js`, `Barcode.bars(String(sBarcodeText), "B")` forced Code 128 subset B and did not strip leading zeros. In subset B, 20 digits generates 275 modules, which at minimum module width (3 dots @ 203 DPI = 1.064 pt) creates a 292.6 pt wide barcode, exceeding the entire 288 pt page width and blowing past the 166.42 pt barcode boundary into the Aether logo box located at `x = 209.261 pt`.
+  - Root cause 2: In Quarantine Labels (`ZquarLabelRows.js:34`), leading zeros on numeric storage units are explicitly stripped (`withoutLeadingZeros`), converting `00000000001000057539` to `1000057539` (10 digits). In Code 128 B, 10 digits requires only 145 modules (154.3 pt width), leaving a clean 14.5 pt gap before the logo.
+  - Root cause 3: `MibLabelPdf.js` lacked an anti-overlap safety clamp. When `barsWTest > availW`, it previously rendered with `minModuleDots = 3` regardless of available width.
+- CHANGED:
+  - `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js`:
+    - Added `withoutLeadingZeros(v)` helper, mirroring `ZquarLabelRows.js` to strip leading zeros from numeric storage units while preserving alphanumeric codes.
+    - Updated both `drawStandardSticker` and `getVerticalItems` to sanitize `sBarcodeText` using `withoutLeadingZeros`.
+    - Added proportional scaling clamp in `getVerticalItems`: if barcode width exceeds `availW`, `modulePt = availW / (oBars.total - 10)`, guaranteeing the barcode can never cross into the logo area at `x = 209.261 pt`.
+    - Exported `withoutLeadingZeros`.
+  - `test/unit/wm/mibLabelPdf.test.js`:
+    - Added unit test suite for `withoutLeadingZeros` (4 tests).
+    - Added anti-overlap regression test with 20-digit storage unit `00000000001000057539`, asserting `maxBarX < logoItem.x` with a $\ge 10$ pt gap.
+    - Added safety clamp test for extreme strings, asserting `maxBarX <= 206.5 pt`.
+- TEST DECISION: TEST ADDED (`test/unit/wm/mibLabelPdf.test.js`).
+- TESTED:
+  - `npx jest test/unit/wm/mibLabelPdf.test.js`: 1 suite / 17 tests PASS.
+  - `npx jest test/unit/wm/mibLabelController.test.js test/unit/wm/mibLabelAdapter.test.js test/unit/wm/mibLabelService.test.js test/unit/wm/mibLabelPdf.test.js`: 4 suites / 63 tests PASS.
+  - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `npm run lint`: 0 errors.
+- NOT VERIFIED: Live user print / physical scanner check.
+- ASSUMPTIONS: None.
+- Next: User reloads label preview in browser to confirm zero overlap.
+- FINAL STATUS: PARTIAL — Fix applied and verified; strictly 0 staged files.
+
+### 2026-11-18 16:45 IST — Align MIB Label Screen with Quarantine Labels — PARTIAL
+
+- REQUEST: Align `/wm/mib-label` (Material Issued To Batch Sticker, transaction `ZMIB`, report `ZMM_R_067`) with the workflow, UX, and full architectural feature set of `/wm/quarantine-labels` (`ZQUAR`): direct document form (Warehouse, TO Number, Weighted By, Checked By, vertical/standard variant toggle, Preview, 4" x 6" Labels), Transfer Order search panel with date range selection, multi-select table with counter and bulk download (up to 20 TOs), per-row action buttons (barcode preview & scroll, download, print), in-viewport notifications (`MessageBox`/`MessageToast`), and dedicated PDF action toolbar with 70vh `PDFViewer`.
+- INSPECT:
+  - Reviewed `AGENTS.md` and `WORKSTATUS.md`.
+  - Queried UI5 MCP server (`ui5-mcp`) for development guidelines: async loading, XML views, `sap.ui.define`, responsive table with `mode="MultiSelect"`, all text in `i18n.properties` / `i18n_en.properties`.
+  - Inspected reference implementation `QuarantineLabels.view.xml`, `QuarantineLabels.controller.js`, `QuarantineLabelsService.js`, `QuarantineLabelAdapter.js`, and `QuarantineLabelPdf.js`.
+  - Traced complete round trip: UI View (`MibLabel.view.xml`) → Controller (`MibLabel.controller.js`) → Client Service (`MibLabelService.js`) → CAP OData V4 (`/odata/v4/mib-label/listTransferOrders`) → Handler (`srv/wm/mib-label/service.js`) → Adapter (`MibLabelAdapter.js`) → S/4HANA (`RFC_READ_TABLE` for `LTAK`, `LTAP`, `MAKT`, `AFPO`).
+- CHANGED:
+  - `srv/wm/mib-label/service.cds`: Added `TransferOrderRow` and `TransferOrderList` types and action `listTransferOrders(WarehouseNumber: String(3), DateFrom: Date, DateTo: Date, TransferOrderNumber: String(10)) returns TransferOrderList`.
+  - `srv/wm/mib-label/service.js`: Added handler for `listTransferOrders` delegating to `adapter.listTransferOrders`.
+  - `srv/integration/s4hana/wm/MibLabelAdapter.js`: Implemented `normalizeListInput` (enforcing max 31 days date range), `listTransferOrders` querying `LTAK` with date/TO filters, chunking `LTAP` item lookups in batches of 50 to honor RFC 72-char WHERE limits, querying material descriptions from `MAKT` (`SPRAS = 'E'`), querying batch from `AFPO`, and sorting results newest first.
+  - `app/fiori-app/webapp/modules/wm/mib-label/service/MibLabelService.js`: Added `listTransferOrders(oInput)` method calling CAP OData V4 action via `ODataClient.post`.
+  - `app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js`: Added `print(aItems, oMeta)` method managing hidden printing iframe with print dialog triggers.
+  - `app/fiori-app/webapp/modules/wm/mib-label/view/MibLabel.view.xml`: Complete redesign mirroring `QuarantineLabels.view.xml` with top direct form (Warehouse, TO Number, Weighted By, Checked By, vertical/standard variant toggle, 4x6 labels button), inline `MessageStrip`, collapsible Search & Filter panel with `DateRangeSelection` (default 7 days, max 31 days), responsive table (`mode="MultiSelect"`), header toolbar with counter and `Download selected ({0})` button, row action buttons (Barcode preview & scroll, Download single TO, Print single TO), and dedicated bottom action toolbar with result title, Print, Download, and 70vh `PDFViewer`.
+  - `app/fiori-app/webapp/modules/wm/mib-label/controller/MibLabel.controller.js`: Complete rewrite mirroring `QuarantineLabels.controller.js` with dual JSON models (`mibView` and `mibList`), `onListGo`, `on4x6Labels`, `onRowLabels`, `onRowDownload`, `onRowPrint`, `onDownloadSelected`, `_listLabels`, `_saveBlob`, `_notifyResult` (routing notifications to `MessageBox.error()`, `MessageBox.warning()`, and `MessageToast.show()`), and `_scrollTo`.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`: Added 30 i18n keys for all user-facing labels, table columns, tooltips, dialogs, and messages.
+  - `docs/e2e-coverage-matrix.md`: Updated declared actions for `/odata/v4/mib-label` and row note for `wmMibLabel`.
+  - `test/unit/wm/mibLabelController.test.js`: Created 18 unit tests covering model initialization, search list validation, single TO generation, row action handling, multi-select bulk downloads (with 20-order cap validation), in-viewport notification routing, and error handling.
+  - `test/unit/wm/mibLabelAdapter.test.js`: Added 9 unit tests for `listTransferOrders` input normalization, date range bounds, LTAK/LTAP querying, chunking, and error paths (20 passed total).
+  - `test/unit/wm/mibLabelService.test.js`: Added 2 unit tests for `listTransferOrders` handling success and errors (8 passed total).
+  - `test/integration/wm/mibLabel.test.js`: Added integration test for `listTransferOrders` action endpoint (6 passed total).
+  - `test/e2e/wm/verifyMibLabels.e2e.js`: Added Case 6 validating Transfer Order listing, multi-selection, and bulk download.
+- TEST DECISION: TEST ADDED (`test/unit/wm/mibLabelController.test.js`, `test/unit/wm/mibLabelAdapter.test.js` list tests, `test/unit/wm/mibLabelService.test.js` list tests, `test/integration/wm/mibLabel.test.js` action test, `test/e2e/wm/verifyMibLabels.e2e.js` Case 6).
+- TESTED:
+  - `npx jest test/unit/wm/mibLabelAdapter.test.js test/unit/wm/mibLabelService.test.js test/unit/wm/mibLabelPdf.test.js test/unit/wm/mibLabelController.test.js`: 4 suites / 57 tests PASS.
+  - `npx jest test/integration/wm/mibLabel.test.js`: 1 suite / 6 tests PASS.
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 1 suite / 8 tests PASS.
+  - `npx jest test/unit/tools/e2eCoverageMatrix.test.js`: 1 suite / 8 tests PASS.
+  - `npm --prefix app/fiori-app run lint` (ui5lint): Success! 0 findings.
+  - `npm run lint` (root ESLint): 0 errors, 1 pre-existing warning in SapLogsLogic.test.js.
+  - Full repo test suite (`npm test`): 201 suites passed, 0 failed (3442 passed, 13 skipped, 3455 total, 83.711 s).
+- NOT VERIFIED: Live browser refresh by user at `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/mib-label`. Live SAP write is NOT APPLICABLE (all queries are read-only: LTAK, LTAP, MAKT, AFPO).
+- ASSUMPTIONS: None.
+- Next: User tests the updated MIB label screen in the browser, confirms UX alignment with Quarantine Labels, and authorizes git commit when satisfied.
+- FINAL STATUS: PARTIAL — Feature implementation, UI redesign, and test suites verified locally; strictly 0 staged files.
 
 ### 2026-11-17 17:10 IST — Fix 403 Forbidden Authorization for User 'KHUSHAL' in Local Dev — PARTIAL
 

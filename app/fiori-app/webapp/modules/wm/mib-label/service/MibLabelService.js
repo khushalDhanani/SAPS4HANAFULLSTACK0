@@ -37,6 +37,21 @@ sap.ui.define([
         },
 
         /**
+         * Lists Transfer Orders for a warehouse by date range or TO number.
+         *
+         * @param {{warehouseNumber: string, dateFrom?: string, dateTo?: string, transferOrderNumber?: string}} oInput
+         * @returns {Promise<{WarehouseNumber: string, DateFrom: ?string, DateTo: ?string, More: boolean, TransferOrders: object[]}>}
+         */
+        listTransferOrders: function (oInput) {
+            return ODataClient.post(SERVICE_BASE + "/listTransferOrders", {
+                WarehouseNumber: oInput.warehouseNumber,
+                DateFrom: oInput.dateFrom || null,
+                DateTo: oInput.dateTo || null,
+                TransferOrderNumber: oInput.transferOrderNumber || null
+            }, null, { maxRetries: 0 });
+        },
+
+        /**
          * Retrieves warehouse context for the current user.
          *
          * @returns {Promise<{warehouses: string[], unrestricted: boolean}>}

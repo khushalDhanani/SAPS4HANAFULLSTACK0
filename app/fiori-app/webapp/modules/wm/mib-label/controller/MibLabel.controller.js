@@ -9,6 +9,9 @@ sap.ui.define([
 ], function (BaseController, JSONModel, MibLabelService, MibLabelPdf, AuthService, MessageBox, MessageToast) {
     "use strict";
 
+    var LIST_MAX_DAYS = 31;
+    var BULK_MAX_ORDERS = 20;
+
     function validateInput(oData) {
         var mErrors = {};
         var sLgnum = String(oData.warehouseNumber || "").trim();
@@ -30,6 +33,29 @@ sap.ui.define([
         }
 
         return mErrors;
+    }
+
+    /** Date -> "yyyy-MM-dd" in local time ("" for no date). */
+    function isoDay(d) {
+        if (!(d instanceof Date) || isNaN(d.getTime())) {
+            return "";
+        }
+        return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+    }
+
+    function validateList(oList) {
+        if (!/^[A-Za-z0-9]{1,3}$/.test(String(oList.warehouseNumber || "").trim())) {
+            return "mibListWarehouseInvalid";
+        }
+        if (String(oList.transferOrderNumber || "").trim()) {
+            return /^\d{1,10}$/.test(String(oList.transferOrderNumber).trim()) ? "" : "mibToInvalid";
+        }
+        if (!isoDay(oList.dateFrom) || !isoDay(oList.dateTo)) {
+            return "mibListDatesMissing";
+        }
+        var iDays = Math.round((Date.UTC(oList.dateTo.getFullYear(), oList.dateTo.getMonth(), oList.dateTo.getDate())
+            - Date.UTC(oList.dateFrom.getFullYear(), oList.dateFrom.getMonth(), oList.dateFrom.getDate())) / 86400000) + 1;
+        return iDays > LIST_MAX_DAYS ? "mibListRangeTooLong" : "";
     }
 
     function base64ToBlobUrl(sBase64) {
@@ -54,11 +80,11 @@ sap.ui.define([
                 transferOrderNumber: "",
                 weightedBy: "",
                 checkedBy: "",
-                variant: "standard",
-                hasPdf: false,
+                variant: "vertical",
                 pdfSource: "",
                 pdfTitle: "",
-                fileName: "MIB-Sticker.pdf",
+                fileName: "",
+                labelCount: 0,
                 message: "",
                 messageType: "Information",
                 warehouseState: "None",
@@ -72,26 +98,45 @@ sap.ui.define([
             });
             this.setModel(oViewModel, "mibView");
 
-            var oDataModel = new JSONModel({
-                items: []
+            var dTo = new Date();
+            var dFrom = new Date(dTo.getFullYear(), dTo.getMonth(), dTo.getDate() - 6);
+            var oListModel = new JSONModel({
+                warehouseNumber: "W01",
+                dateFrom: dFrom,
+                dateTo: dTo,
+                transferOrderNumber: "",
+                transferOrders: [],
+                listed: false,
+                more: false,
+                selectedCount: 0
             });
-            this.setModel(oDataModel, "mibData");
+            this.setModel(oListModel, "mibList");
 
-            this.getRouter().getRoute("wmMibLabel").attachPatternMatched(this._onRouteMatched, this);
+            this._iRequest = 0;
+            var oRouter = this.getRouter && this.getRouter();
+            if (oRouter && oRouter.getRoute("wmMibLabel")) {
+                oRouter.getRoute("wmMibLabel").attachPatternMatched(this._onRouteMatched, this);
+            }
         },
 
         _onRouteMatched: function () {
-            var oModel = this.getModel("mibView");
+            this._clearPreview();
+            var oVm = this.getModel("mibView");
+            var oList = this.getModel("mibList");
             var oUser = AuthService.getCurrentUser();
-            if (oUser && oUser.username && !oModel.getProperty("/weightedBy")) {
-                oModel.setProperty("/weightedBy", oUser.username.toUpperCase());
+            if (oUser && oUser.username && !oVm.getProperty("/weightedBy")) {
+                oVm.setProperty("/weightedBy", oUser.username.toUpperCase());
             }
 
             MibLabelService.getWarehouseContext().then(function (oContext) {
                 if (oContext && oContext.warehouses && oContext.warehouses.length > 0) {
-                    var sCurrent = oModel.getProperty("/warehouseNumber");
+                    var sCurrent = oVm.getProperty("/warehouseNumber");
                     if (!sCurrent) {
-                        oModel.setProperty("/warehouseNumber", oContext.warehouses[0]);
+                        oVm.setProperty("/warehouseNumber", oContext.warehouses[0]);
+                    }
+                    var sListWh = oList.getProperty("/warehouseNumber");
+                    if (!sListWh) {
+                        oList.setProperty("/warehouseNumber", oContext.warehouses[0]);
                     }
                 }
             }).catch(function () {
@@ -99,8 +144,21 @@ sap.ui.define([
             });
         },
 
-        onInputChange: function () {
+        _clearPreview: function () {
+            this._revokePdfUrl();
             var oModel = this.getModel("mibView");
+            oModel.setProperty("/pdfSource", "");
+            oModel.setProperty("/pdfTitle", "");
+            oModel.setProperty("/fileName", "");
+            oModel.setProperty("/labelCount", 0);
+            oModel.setProperty("/message", "");
+        },
+
+        onInputChange: function () {
+            this._iRequest++;
+            this._clearPreview();
+            var oModel = this.getModel("mibView");
+            oModel.setProperty("/busy", false);
             oModel.setProperty("/warehouseState", "None");
             oModel.setProperty("/warehouseStateText", "");
             oModel.setProperty("/toState", "None");
@@ -109,34 +167,45 @@ sap.ui.define([
             oModel.setProperty("/weightedByStateText", "");
             oModel.setProperty("/checkedByState", "None");
             oModel.setProperty("/checkedByStateText", "");
-            oModel.setProperty("/message", "");
-            this._revokePdfUrl();
-            oModel.setProperty("/hasPdf", false);
-            oModel.setProperty("/pdfSource", "");
+        },
+
+        onVariantChange: function () {
+            if (this._oCurrentRows && this._oCurrentRows.length > 0) {
+                this.on4x6Labels();
+            }
         },
 
         onPreview: function () {
             var oModel = this.getModel("mibView");
+            if (oModel.getProperty("/busy")) {
+                return;
+            }
             var oData = {
                 warehouseNumber: oModel.getProperty("/warehouseNumber"),
                 transferOrderNumber: oModel.getProperty("/transferOrderNumber"),
                 weightedBy: oModel.getProperty("/weightedBy"),
                 checkedBy: oModel.getProperty("/checkedBy"),
-                variant: oModel.getProperty("/variant") || "standard"
+                variant: oModel.getProperty("/variant") || "vertical"
             };
 
             var mErrors = validateInput(oData);
             if (Object.keys(mErrors).length > 0) {
                 this._applyValidationErrors(mErrors);
+                oModel.setProperty("/message", this.getText("mibFixInput", null, "Please correct the highlighted fields."));
+                oModel.setProperty("/messageType", "Error");
                 return;
             }
 
+            this._clearPreview();
+            var iRequest = ++this._iRequest;
+            var that = this;
             oModel.setProperty("/busy", true);
             oModel.setProperty("/message", "");
-            this._revokePdfUrl();
 
-            var that = this;
-            MibLabelService.generateMibSticker(oData).then(function (oResult) {
+            return MibLabelService.generateMibSticker(oData).then(function (oResult) {
+                if (iRequest !== that._iRequest) {
+                    return;
+                }
                 oModel.setProperty("/busy", false);
                 if (oResult && oResult.PdfBase64) {
                     var oBlobInfo = base64ToBlobUrl(oResult.PdfBase64);
@@ -146,21 +215,26 @@ sap.ui.define([
                     oModel.setProperty("/pdfSource", oBlobInfo.url);
                     oModel.setProperty("/pdfTitle", oResult.FileName || "MIB-Sticker.pdf");
                     oModel.setProperty("/fileName", oResult.FileName || "MIB-Sticker.pdf");
-                    oModel.setProperty("/hasPdf", true);
-
-                    MessageToast.show(that.getText("mibStickerGeneratedSuccess"));
+                    oModel.setProperty("/labelCount", oResult.LabelCount || 1);
+                    var sReady = that.getText("mibReady", [oResult.LabelCount || 1], "{0} label(s) ready.");
+                    oModel.setProperty("/message", sReady);
+                    oModel.setProperty("/messageType", "Success");
+                    MessageToast.show(sReady);
                 }
-                // Also load data rows for the inspection table
-                that._loadStickerData(oData);
             }).catch(function (oErr) {
+                if (iRequest !== that._iRequest) {
+                    return;
+                }
                 var sMessage = oErr && oErr.message ? oErr.message : "Error generating sticker";
                 var iStatus = oErr && oErr.status ? oErr.status : 500;
 
                 if (iStatus === 503) {
-                    oModel.setProperty("/messageType", "Warning");
-                    oModel.setProperty("/message", sMessage + " " + that.getText("mibFallbackInspectionNote"));
-                    // Fallback to table data inspect and client-side PDF preview; keep busy true
-                    that._loadStickerData(oData, false, true);
+                    oModel.setProperty("/busy", false);
+                    // Fallback to table data inspect and client-side PDF preview
+                    return that.on4x6Labels().then(function () {
+                        oModel.setProperty("/messageType", "Warning");
+                        oModel.setProperty("/message", sMessage + " " + that.getText("mibClientFallbackNote"));
+                    });
                 } else {
                     oModel.setProperty("/busy", false);
                     oModel.setProperty("/messageType", "Error");
@@ -170,104 +244,272 @@ sap.ui.define([
             });
         },
 
-        onVariantChange: function () {
-            var oViewModel = this.getModel("mibView");
-            var oDataModel = this.getModel("mibData");
-            var aRows = oDataModel.getProperty("/items");
+        /**
+         * App-drawn 4 x 6 sticker labels from SAP table data (LTAK, LTAP, MAKT, AFPO).
+         */
+        on4x6Labels: function () {
+            var oModel = this.getModel("mibView");
+            if (oModel.getProperty("/busy")) {
+                return Promise.resolve();
+            }
+            var oData = {
+                warehouseNumber: oModel.getProperty("/warehouseNumber"),
+                transferOrderNumber: oModel.getProperty("/transferOrderNumber"),
+                weightedBy: oModel.getProperty("/weightedBy"),
+                checkedBy: oModel.getProperty("/checkedBy"),
+                variant: oModel.getProperty("/variant") || "vertical"
+            };
 
-            if (oViewModel.getProperty("/hasPdf") && aRows && aRows.length > 0) {
-                var oData = {
-                    warehouseNumber: oViewModel.getProperty("/warehouseNumber"),
-                    transferOrderNumber: oViewModel.getProperty("/transferOrderNumber"),
-                    weightedBy: oViewModel.getProperty("/weightedBy"),
-                    checkedBy: oViewModel.getProperty("/checkedBy"),
-                    variant: oViewModel.getProperty("/variant") || "standard"
-                };
-                var that = this;
-                oViewModel.setProperty("/busy", true);
-                MibLabelPdf.generateBlob(aRows, oData).then(function (oBlob) {
+            var mErrors = validateInput(oData);
+            if (Object.keys(mErrors).length > 0) {
+                this._applyValidationErrors(mErrors);
+                oModel.setProperty("/message", this.getText("mibFixInput", null, "Please correct the highlighted fields."));
+                oModel.setProperty("/messageType", "Error");
+                return Promise.resolve();
+            }
+
+            this._clearPreview();
+            var iRequest = ++this._iRequest;
+            var that = this;
+            oModel.setProperty("/busy", true);
+            oModel.setProperty("/message", "");
+
+            return MibLabelService.readMibStickerData(oData).then(function (oResponse) {
+                if (iRequest !== that._iRequest) {
+                    return null;
+                }
+                var aRows = Array.isArray(oResponse) ? oResponse : ((oResponse && oResponse.value) || []);
+                if (!aRows.length) {
+                    throw new Error(that.getText("mibNoRowsFound"));
+                }
+                that._oCurrentRows = aRows;
+                return MibLabelPdf.generateBlob(aRows, oData).then(function (oBlob) {
+                    if (iRequest !== that._iRequest) {
+                        return;
+                    }
                     that._revokePdfUrl();
                     that._pdfBlobUrl = URL.createObjectURL(oBlob);
                     that._pdfBlob = oBlob;
 
                     var sVariantSuffix = oData.variant === "vertical" ? "-Vertical" : "";
                     var sFileName = "MIB-Sticker-" + oData.warehouseNumber + "-" + oData.transferOrderNumber + sVariantSuffix + ".pdf";
-                    oViewModel.setProperty("/pdfSource", that._pdfBlobUrl);
-                    oViewModel.setProperty("/pdfTitle", sFileName);
-                    oViewModel.setProperty("/fileName", sFileName);
-                    oViewModel.setProperty("/busy", false);
-                }).catch(function () {
-                    oViewModel.setProperty("/busy", false);
+                    oModel.setProperty("/pdfSource", that._pdfBlobUrl);
+                    oModel.setProperty("/pdfTitle", sFileName);
+                    oModel.setProperty("/fileName", sFileName);
+                    oModel.setProperty("/labelCount", aRows.length);
+                    var sReady = that.getText("mib4x6Ready", [aRows.length], "{0} label(s) ready as 4 x 6 in labels.");
+                    oModel.setProperty("/message", sReady);
+                    oModel.setProperty("/messageType", "Success");
+                    that._scrollTo("mibActions");
                 });
-            }
+            }).catch(function (oError) {
+                if (iRequest !== that._iRequest) {
+                    return;
+                }
+                oModel.setProperty("/message", (oError && oError.message) || that.getText("mibFailed", null, "Batch issue stickers could not be generated."));
+                oModel.setProperty("/messageType", "Error");
+            }).finally(function () {
+                if (iRequest === that._iRequest) {
+                    oModel.setProperty("/busy", false);
+                }
+            });
         },
 
-        onInspectData: function () {
-            var oModel = this.getModel("mibView");
-            var oData = {
-                warehouseNumber: oModel.getProperty("/warehouseNumber"),
-                transferOrderNumber: oModel.getProperty("/transferOrderNumber"),
-                weightedBy: oModel.getProperty("/weightedBy"),
-                checkedBy: oModel.getProperty("/checkedBy"),
-                variant: oModel.getProperty("/variant") || "standard"
-            };
+        onListGo: function () {
+            var oVm = this.getModel("mibView");
+            if (oVm.getProperty("/busy")) {
+                return;
+            }
+            var oList = this.getModel("mibList");
+            var sError = validateList(oList.getData());
+            if (sError) {
+                oVm.setProperty("/message", this.getText(sError));
+                oVm.setProperty("/messageType", "Error");
+                return;
+            }
+            var oData = oList.getData();
+            var bTo = !!String(oData.transferOrderNumber || "").trim();
+            var that = this;
+            oVm.setProperty("/busy", true);
+            oVm.setProperty("/message", "");
 
-            var mErrors = validateInput(oData);
-            if (Object.keys(mErrors).length > 0) {
-                this._applyValidationErrors(mErrors);
+            return MibLabelService.listTransferOrders({
+                warehouseNumber: String(oData.warehouseNumber).trim().toUpperCase(),
+                dateFrom: bTo ? "" : isoDay(oData.dateFrom),
+                dateTo: bTo ? "" : isoDay(oData.dateTo),
+                transferOrderNumber: bTo ? String(oData.transferOrderNumber).trim() : ""
+            }).then(function (oResult) {
+                var aOrders = (oResult && oResult.TransferOrders) || [];
+                oList.setProperty("/transferOrders", aOrders);
+                oList.setProperty("/more", !!(oResult && oResult.More));
+                oList.setProperty("/listed", true);
+                oList.setProperty("/selectedCount", 0);
+                var oTable = that.byId && that.byId("mibToTable");
+                if (oTable) {
+                    oTable.removeSelections(true);
+                }
+                if (oResult && oResult.More) {
+                    oVm.setProperty("/message", that.getText("mibListMore", [aOrders.length]));
+                    oVm.setProperty("/messageType", "Warning");
+                }
+            }).catch(function (oError) {
+                oList.setProperty("/transferOrders", []);
+                oList.setProperty("/listed", false);
+                oVm.setProperty("/message", (oError && oError.message) || that.getText("mibListFailed"));
+                oVm.setProperty("/messageType", "Error");
+            }).finally(function () {
+                oVm.setProperty("/busy", false);
+            });
+        },
+
+        formatCount: function (sPattern, aOrders) {
+            return String(sPattern || "").replace("{0}", (aOrders || []).length);
+        },
+
+        formatSelected: function (sPattern, iCount) {
+            return String(sPattern || "").replace("{0}", iCount || 0);
+        },
+
+        onListSelectionChange: function (oEvent) {
+            this.getModel("mibList").setProperty("/selectedCount", oEvent.getSource().getSelectedItems().length);
+        },
+
+        /** Row "4x6 Labels": populate Transfer Order into the form, run preview, and scroll down to the PDF. */
+        onRowLabels: function (oEvent) {
+            var oOrder = oEvent.getSource().getBindingContext("mibList").getObject();
+            var oVm = this.getModel("mibView");
+            oVm.setProperty("/warehouseNumber", oOrder.WarehouseNumber);
+            oVm.setProperty("/transferOrderNumber", oOrder.TransferOrderNumber);
+            var that = this;
+            return Promise.resolve(this.on4x6Labels()).then(function () {
+                if (oVm.getProperty("/pdfSource")) {
+                    that._scrollTo("mibActions");
+                } else {
+                    that._notifyResult();
+                }
+            });
+        },
+
+        onRowDownload: function (oEvent) {
+            return this._listLabels([oEvent.getSource().getBindingContext("mibList").getObject()], "download");
+        },
+
+        onRowPrint: function (oEvent) {
+            return this._listLabels([oEvent.getSource().getBindingContext("mibList").getObject()], "print");
+        },
+
+        /** Ticked transfer orders -> one combined PDF with all their 4 x 6 sticker labels. */
+        onDownloadSelected: function () {
+            var aOrders = this.byId("mibToTable").getSelectedItems().map(function (oItem) {
+                return oItem.getBindingContext("mibList").getObject();
+            });
+            return this._listLabels(aOrders, "download");
+        },
+
+        _listLabels: function (aOrders, sMode) {
+            var oVm = this.getModel("mibView");
+            if (oVm.getProperty("/busy") || !aOrders.length) {
+                return;
+            }
+            if (aOrders.length > BULK_MAX_ORDERS) {
+                oVm.setProperty("/message", this.getText("mibBulkTooMany", [BULK_MAX_ORDERS]));
+                oVm.setProperty("/messageType", "Error");
+                this._notifyResult();
                 return;
             }
 
-            oModel.setProperty("/busy", true);
-            this._loadStickerData(oData, true);
-        },
-
-        _loadStickerData: function (oData, bShowSuccessToast, bGenerateFallbackPdf) {
-            var oViewModel = this.getModel("mibView");
-            var oDataModel = this.getModel("mibData");
             var that = this;
+            oVm.setProperty("/busy", true);
+            oVm.setProperty("/message", "");
 
-            MibLabelService.readMibStickerData(oData).then(function (oResponse) {
-                var aRows = Array.isArray(oResponse) ? oResponse : ((oResponse && oResponse.value) || []);
-                oDataModel.setProperty("/items", aRows);
-
-                if (bGenerateFallbackPdf && aRows && aRows.length > 0) {
-                    return MibLabelPdf.generateBlob(aRows, oData).then(function (oBlob) {
-                        that._revokePdfUrl();
-                        that._pdfBlobUrl = URL.createObjectURL(oBlob);
-                        that._pdfBlob = oBlob;
-
-                        var sVariantSuffix = oData.variant === "vertical" ? "-Vertical" : "";
-                        var sFileName = "MIB-Sticker-" + oData.warehouseNumber + "-" + oData.transferOrderNumber + sVariantSuffix + ".pdf";
-                        oViewModel.setProperty("/pdfSource", that._pdfBlobUrl);
-                        oViewModel.setProperty("/pdfTitle", sFileName);
-                        oViewModel.setProperty("/fileName", sFileName);
-                        oViewModel.setProperty("/hasPdf", true);
-                        oViewModel.setProperty("/messageType", "Warning");
-                        oViewModel.setProperty("/message", that.getText("mibClientFallbackNote"));
-                        oViewModel.setProperty("/busy", false);
-                        MessageToast.show(that.getText("mibStickerGeneratedSuccess"));
-                    }).catch(function () {
-                        oViewModel.setProperty("/busy", false);
-                        // PDF generation error: message remains table inspection note
+            return this._buildLabels(aOrders).then(function (aAllRows) {
+                var oMeta = {
+                    variant: oVm.getProperty("/variant") || "vertical",
+                    warehouseNumber: aOrders[0].WarehouseNumber
+                };
+                if (sMode === "print") {
+                    return MibLabelPdf.print(aAllRows, oMeta).then(function () {
+                        return { rows: aAllRows };
                     });
                 }
-
-                oViewModel.setProperty("/busy", false);
-                if (bShowSuccessToast) {
-                    if (aRows && aRows.length > 0) {
-                        MessageToast.show(that.getText("mibDataLoadedSuccess", [aRows.length]));
-                    } else {
-                        oViewModel.setProperty("/messageType", "Warning");
-                        oViewModel.setProperty("/message", that.getText("mibNoRowsFound"));
-                    }
-                }
-            }).catch(function (oErr) {
-                oViewModel.setProperty("/busy", false);
-                var sMessage = oErr && oErr.message ? oErr.message : "Failed to load sticker data";
-                oViewModel.setProperty("/messageType", "Error");
-                oViewModel.setProperty("/message", sMessage);
+                return MibLabelPdf.generateBlob(aAllRows, oMeta).then(function (oBlob) {
+                    var d = aOrders[0];
+                    that._saveBlob(oBlob, aOrders.length === 1
+                        ? "MIB-Sticker-" + d.WarehouseNumber + "-" + d.TransferOrderNumber + ".pdf"
+                        : "MIB-Stickers-" + d.WarehouseNumber + "-" + aOrders.length + "docs.pdf");
+                    return { rows: aAllRows };
+                });
+            }).then(function (oDone) {
+                var sReady = that.getText("mibReady", [oDone.rows.length], "{0} label(s) ready.");
+                oVm.setProperty("/message", sReady);
+                oVm.setProperty("/messageType", "Success");
+            }).catch(function (oError) {
+                oVm.setProperty("/message", (oError && oError.message) || that.getText("mibFailed", null, "Batch issue stickers could not be generated."));
+                oVm.setProperty("/messageType", "Error");
+            }).finally(function () {
+                oVm.setProperty("/busy", false);
+                that._notifyResult();
             });
+        },
+
+        _buildLabels: function (aOrders) {
+            var that = this;
+            var aAllRows = [];
+            return aOrders.reduce(function (p, order) {
+                return p.then(function () {
+                    return MibLabelService.readMibStickerData({
+                        warehouseNumber: order.WarehouseNumber,
+                        transferOrderNumber: order.TransferOrderNumber
+                    }).then(function (oResponse) {
+                        var aRows = Array.isArray(oResponse) ? oResponse : ((oResponse && oResponse.value) || []);
+                        aAllRows = aAllRows.concat(aRows);
+                    }, function (oError) {
+                        throw new Error(that.getText("mibDocFailed", [order.TransferOrderNumber, (oError && oError.message) || ""]));
+                    });
+                });
+            }, Promise.resolve()).then(function () {
+                if (!aAllRows.length) {
+                    throw new Error(that.getText("mibNoRowsFound"));
+                }
+                return aAllRows;
+            });
+        },
+
+        _saveBlob: function (oBlob, sName) {
+            var sUrl = URL.createObjectURL(oBlob);
+            var oLink = document.createElement("a");
+            oLink.href = sUrl;
+            oLink.download = sName;
+            document.body.appendChild(oLink);
+            oLink.click();
+            document.body.removeChild(oLink);
+            setTimeout(function () {
+                URL.revokeObjectURL(sUrl);
+            }, 1000);
+        },
+
+        _notifyResult: function () {
+            var oVm = this.getModel("mibView");
+            var sText = oVm.getProperty("/message");
+            if (!sText) {
+                return;
+            }
+            var sType = oVm.getProperty("/messageType");
+            if (sType === "Error") {
+                MessageBox.error(sText);
+            } else if (sType === "Warning") {
+                MessageBox.warning(sText);
+            } else {
+                MessageToast.show(sText);
+            }
+        },
+
+        _scrollTo: function (sId) {
+            var oCtrl = this.byId && this.byId(sId);
+            var oDom = oCtrl && oCtrl.getDomRef && oCtrl.getDomRef();
+            if (oDom && oDom.scrollIntoView) {
+                oDom.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
         },
 
         onPrint: function () {

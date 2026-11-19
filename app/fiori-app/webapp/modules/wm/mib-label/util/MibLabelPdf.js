@@ -133,6 +133,19 @@ sap.ui.define([
     }
 
     /**
+     * Numeric storage unit or barcode text "00000000001000057539" -> "1000057539".
+     * Alphanumeric values unchanged.
+     * Matches Quarantine Labels convention (user: "Yes, use them").
+     *
+     * @param {string} v
+     * @returns {string}
+     */
+    function withoutLeadingZeros(v) {
+        var s = String(v == null ? "" : v).trim();
+        return /^\d+$/.test(s) ? s.replace(/^0+(?=\d)/, "") : s;
+    }
+
+    /**
      * Draws one 100 x 100 mm standard sticker matching the physical label from Adobe Form ZMM_AF_021 / TCode ZMIB.
      *
      * @param {any} doc - jsPDF instance (unit: mm)
@@ -259,9 +272,10 @@ sap.ui.define([
         doc.text(sWeighted, 30, 74.5);
 
         // Row 8: Bottom Left Barcode & SOP Footer
-        var sBarcodeText = (oItem.StorageUnit && oItem.StorageUnit !== "N/A" && oItem.StorageUnit !== "-")
+        var sRawBarcode = (oItem.StorageUnit && oItem.StorageUnit !== "N/A" && oItem.StorageUnit !== "-")
             ? oItem.StorageUnit
             : (oItem.TransferOrder || oMeta.transferOrderNumber || "1000058465");
+        var sBarcodeText = withoutLeadingZeros(sRawBarcode);
 
         if (Barcode && typeof Barcode.bars === "function") {
             try {
@@ -500,9 +514,10 @@ sap.ui.define([
         });
 
         // 5. Code 128 B Vector Barcode & Centered Human-Readable Number
-        var sBarcodeText = (oItem.StorageUnit && oItem.StorageUnit !== "N/A" && oItem.StorageUnit !== "-")
+        var sRawBarcode = (oItem.StorageUnit && oItem.StorageUnit !== "N/A" && oItem.StorageUnit !== "-")
             ? oItem.StorageUnit
             : (oItem.TransferOrder || oMeta.transferOrderNumber || "1000058465");
+        var sBarcodeText = withoutLeadingZeros(sRawBarcode);
 
         if (Barcode && typeof Barcode.bars === "function") {
             try {
@@ -514,16 +529,24 @@ sap.ui.define([
                 var availW = barRight - pX;
 
                 var chosenDots = minModuleDots;
+                var bFits = false;
                 for (var d = targetModuleDots; d >= minModuleDots; d--) {
                     var mTest = d * dotPt;
                     var barsWTest = (oBars.total - 10) * mTest;
                     if (barsWTest <= availW + 1e-9) {
                         chosenDots = d;
+                        bFits = true;
                         break;
                     }
                 }
 
                 var modulePt = chosenDots * dotPt;
+                // If even minModuleDots exceeds availW, scale modulePt to strictly fit inside availW
+                // to guarantee the barcode never extends into the corporate logo on the right side.
+                if (!bFits && (oBars.total - 10) * modulePt > availW) {
+                    modulePt = availW / (oBars.total - 10);
+                }
+
                 var x0 = Math.round((pX - 10 * modulePt) / dotPt) * dotPt;
                 var totalW = oBars.total * modulePt;
 
@@ -733,6 +756,40 @@ sap.ui.define([
         });
     }
 
+    /**
+     * Triggers in-browser printing for the generated sticker PDF.
+     *
+     * @param {object[]} aItems
+     * @param {object} [oMeta]
+     * @returns {Promise<void>}
+     */
+    function print(aItems, oMeta) {
+        return generateBlob(aItems, oMeta).then(function (oBlob) {
+            var sUrl = URL.createObjectURL(oBlob);
+            var oIframe = document.getElementById("mibPrintIframe");
+            if (!oIframe) {
+                oIframe = document.createElement("iframe");
+                oIframe.id = "mibPrintIframe";
+                oIframe.style.position = "fixed";
+                oIframe.style.right = "0";
+                oIframe.style.bottom = "0";
+                oIframe.style.width = "0";
+                oIframe.style.height = "0";
+                oIframe.style.border = "0";
+                document.body.appendChild(oIframe);
+            }
+            oIframe.src = sUrl;
+            oIframe.onload = function () {
+                try {
+                    oIframe.contentWindow.focus();
+                    oIframe.contentWindow.print();
+                } catch {
+                    window.open(sUrl, "_blank");
+                }
+            };
+        });
+    }
+
     return {
         VARIANTS: VARIANTS,
         SEP: SEP,
@@ -740,6 +797,7 @@ sap.ui.define([
         loadJsPdf: loadJsPdf,
         measureTextPt: measureTextPt,
         formatDate: formatDate,
+        withoutLeadingZeros: withoutLeadingZeros,
         getVerticalItems: getVerticalItems,
         drawItems: drawItems,
         drawStandardSticker: drawStandardSticker,
@@ -747,6 +805,7 @@ sap.ui.define([
         drawSticker: drawSticker,
         generateDoc: generateDoc,
         generateBlob: generateBlob,
-        download: download
+        download: download,
+        print: print
     };
 });

@@ -109,6 +109,46 @@ describe('MibLabelService', () => {
     });
   });
 
+  describe('listTransferOrders action', () => {
+    it('returns transfer orders from adapter', async () => {
+      const mockList = {
+        WarehouseNumber: 'W01',
+        DateFrom: '2026-10-20',
+        DateTo: '2026-10-25',
+        More: false,
+        TransferOrders: [{ TransferOrderNumber: '0001037246', Material: 'MAT-001' }]
+      };
+      mockAdapter.listTransferOrders = jest.fn().mockResolvedValueOnce(mockList);
+
+      const req = {
+        data: { WarehouseNumber: 'W01', DateFrom: '2026-10-20', DateTo: '2026-10-25' },
+        error: jest.fn()
+      };
+
+      const handler = srv._handlers.on.find((h) => h.on === 'listTransferOrders');
+      const result = await handler.handler.call(srv, req);
+
+      expect(result).toEqual(mockList);
+      expect(mockAdapter.listTransferOrders).toHaveBeenCalledWith(req.data);
+    });
+
+    it('returns req.error if list fails', async () => {
+      const err = new Error('List read failed');
+      err.status = 500;
+      mockAdapter.listTransferOrders = jest.fn().mockRejectedValueOnce(err);
+
+      const req = {
+        data: { WarehouseNumber: 'W01', DateFrom: '2026-10-20', DateTo: '2026-10-25' },
+        error: jest.fn((status, msg) => ({ status, msg }))
+      };
+
+      const handler = srv._handlers.on.find((h) => h.on === 'listTransferOrders');
+      await handler.handler.call(srv, req);
+
+      expect(req.error).toHaveBeenCalledWith(500, 'List read failed');
+    });
+  });
+
   describe('getWarehouseContext function', () => {
     it('returns unrestricted true for Admin user', async () => {
       const req = {

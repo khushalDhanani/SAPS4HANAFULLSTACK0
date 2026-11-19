@@ -73,6 +73,37 @@ describe('Integration: MibLabelService', () => {
     });
   });
 
+  it('lists transfer orders via POST /listTransferOrders', async () => {
+    const mockList = {
+      WarehouseNumber: 'W01',
+      DateFrom: '2026-10-20',
+      DateTo: '2026-10-27',
+      More: false,
+      TransferOrders: [{
+        WarehouseNumber: 'W01',
+        TransferOrderNumber: '0001037246',
+        TransferDate: '2026-10-23',
+        TransferRequirement: '1001222',
+        RequirementNumber: '1002318',
+        MovementType: '261',
+        Material: 'MAT-001',
+        MaterialDescription: 'Chemical A',
+        Batch: 'BATCH-01',
+        QuantityWithUom: '10 KG',
+        StorageUnit: 'SU-100'
+      }]
+    };
+    jest.spyOn(MibLabelAdapter.prototype, 'listTransferOrders').mockResolvedValue(mockList);
+
+    const { data } = await POST(`${BASE}/listTransferOrders`, {
+      WarehouseNumber: 'W01',
+      DateFrom: '2026-10-20',
+      DateTo: '2026-10-27'
+    }, as('khushal'));
+
+    expect(data).toMatchObject(mockList);
+  });
+
   it('propagates 503 error if SAP RFC wrapper is missing', async () => {
     const err = new Error('Z_MM_MIB_LABEL_PDF is not installed on this system.');
     err.status = 503;
