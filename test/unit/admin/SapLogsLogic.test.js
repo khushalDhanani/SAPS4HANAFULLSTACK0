@@ -78,6 +78,7 @@ describe('SapLogsLogic Unit Tests', () => {
             const fromMs = Date.parse(win.fromUtc);
             const toMs = Date.parse(win.toUtc);
 
+            expect(toMs).toBeGreaterThanOrEqual(before - 6000);
             expect(toMs).toBeLessThanOrEqual(after - 4000); // 5s past buffer
             expect(toMs - fromMs).toBe(60 * 60 * 1000);
         });

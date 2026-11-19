@@ -33,6 +33,8 @@ function state(page) {
     const printBtn = byId('mibPrint') || byId('mibPrintBtn');
     const downloadBtn = byId('mibDownload') || byId('mibDownloadBtn');
     const toTable = byId('mibToTable');
+    const pageEl = byId('mibPage');
+    const mibView = pageEl && pageEl.getModel('mibView');
     return {
       message: strip && strip.getVisible() ? strip.getText() : '',
       messageType: strip ? strip.getType() : '',
@@ -40,6 +42,7 @@ function state(page) {
       printEnabled: printBtn ? printBtn.getEnabled() : false,
       downloadEnabled: downloadBtn ? downloadBtn.getEnabled() : false,
       rowCount: toTable ? toTable.getItems().length : 0,
+      labelCount: mibView ? mibView.getProperty('/labelCount') : 0,
       warehouseState: byId('mibWarehouseInput').getValueState(),
       toState: byId('mibTransferOrderInput').getValueState(),
       variant: byId('mibVariantSelect') ? byId('mibVariantSelect').getSelectedKey() : ''
@@ -169,7 +172,7 @@ const CASES = [
       const errs = [];
       if (!st.message.includes('Z_MM_MIB_LABEL_PDF')) errs.push(`message unexpected: ${st.message}`);
       if (st.messageType !== 'Warning') errs.push(`message type was ${st.messageType}, expected Warning`);
-      if (st.rowCount !== 1) errs.push(`row count was ${st.rowCount}, expected 1`);
+      if (st.labelCount !== 1) errs.push(`label count was ${st.labelCount}, expected 1`);
       if (!st.pdfShown) errs.push('fallback PDF not shown');
       if (!st.printEnabled) errs.push('print button not enabled on fallback');
       if (!st.downloadEnabled) errs.push('download button not enabled on fallback');
