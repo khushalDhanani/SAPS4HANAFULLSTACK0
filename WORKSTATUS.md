@@ -16,7 +16,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `df9600e1` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44500825160 on branch HEAD `df9600e1`: **SUCCESS** (Build, Test & Validate in 4m46s: PASS; Browser E2E, SAP-free suites PR gate in 6m51s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Current checkout:** `feature01`, `HEAD` `a1a903e0` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44525189417 on branch HEAD `a1a903e0`: **SUCCESS** (Build, Test & Validate in 3m51s: PASS; Browser E2E, SAP-free suites PR gate in 1m32s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
 - **Finding SEC-01: MIB Label Authorization & Authoritative Warehouse Scope — PASS:** Remediated P1 Finding SEC-01 across `srv/wm/mib-label/service.cds`, `srv/wm/mib-label/service.js`, `srv/wm/mib-label/warehouseScope.js`, `srv/integration/s4hana/wm/MibLabelAdapter.js`, `xs-security.json`, `test/testUsers.js`, `test/unit/wm/mibLabelAuthorization.test.js`, `test/unit/wm/mibLabelService.test.js`, `test/unit/wm/mibLabelAdapter.test.js`, and `test/integration/wm/mibLabel.test.js`:
   1. *Role Enforcement at the CAP Boundary:* Upgraded `MibLabelService` service-level authorization from generic `authenticated-user` to `@(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])` in `srv/wm/mib-label/service.cds`. Added explicit `@(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])` annotations to all operations: `generateMibSticker`, `readMibStickerData`, `listTransferOrders`, and `getWarehouseContext`. Authenticated callers lacking warehouse privileges (e.g. `Viewer` or `SalesRepresentative`) are rejected with HTTP 403 Forbidden at the CAP boundary before any handler or adapter logic executes.
   2. *Authoritative Server-Side Warehouse Scope Mapping (`warehouseScope`):* Authored `srv/wm/mib-label/warehouseScope.js`. Implemented authoritative server-side user-to-warehouse derivation:
@@ -161,6 +161,28 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-20 09:25 IST — CI Workflow: Bypass Ubuntu APT Mirror Timeout & Hosted CI Run 44525189417 — PASS
+
+- REQUEST: Resolve GitHub Actions hosted CI failure during Playwright browser installation (`npx playwright install --with-deps chromium` timed out on `azure.archive.ubuntu.com` / `security.ubuntu.com` APT font packages).
+- INSPECT:
+  - On GitHub Actions runner `ubuntu-24.04`, all system shared libraries required by Chromium (`libasound2t64`, `libatk-bridge2.0-0t64`, `libcairo2`, `libglib2.0-0t64`, `libnss3`, `xvfb`, etc.) are pre-installed.
+  - `--with-deps` invokes `apt-get` to download optional Asian and legacy X11 fonts from external Ubuntu APT mirrors (`azure.archive.ubuntu.com`). When the mirror experiences network outages or 503 service unavailable, the CI step fails with exit code 100 before any tests execute.
+  - Running `npx playwright install chromium` directly downloads the pinned Chromium binary from Microsoft CDN in <15 seconds without touching APT mirrors.
+- CHANGED:
+  - `.github/workflows/ci.yml`:
+    - Updated lines 190 and 247: changed `npx playwright install --with-deps chromium` to `npx playwright install chromium` in both `browser-e2e-sap-free` and `test-e2e-sap` jobs.
+- TEST DECISION: EXISTING TEST SUFFICIENT (`npm run test:e2e:sap-free`).
+- TESTED:
+  - Committed as `a1a903e0` and pushed to `origin/feature01`.
+  - Hosted GitHub Actions CI run `44525189417`:
+    - `Build, Test & Validate` (ID 135563758643) in 3m51s: PASS
+    - `Browser E2E, SAP-free suites (PR gate)` (ID 135565873109) in 1m32s: PASS
+    - Zero failed jobs, zero warnings, zero annotations.
+- NOT VERIFIED: Live SAP writes (remain separately controlled behind written authorization).
+- ASSUMPTIONS: None.
+- Next: Select and proceed with next finding from the audit queue.
+- FINAL STATUS: PASS — Playwright Chromium installation hardened against Ubuntu APT mirror timeouts; hosted CI run 44525189417 completed with 100% PASS across all PR release gate jobs.
+
 ### 2026-11-19 17:35 IST — Remediation for Finding SEC-01: MIB Label Authorization & Authoritative Warehouse Scope — PASS
 
 - REQUEST: Remediate Finding SEC-01 (MIB Label authorization, P1 · Open; Files: `srv/wm/mib-label/service.cds`, `srv/wm/mib-label/service.js`, `srv/integration/s4hana/wm/MibLabelAdapter.js`). Evidence: service-level authorization requires only `authenticated-user`; `generateMibSticker`, `readMibStickerData`, and `listTransferOrders` have no stricter role requirements; handler passes client-supplied warehouse numbers directly to adapter; `plantScope()` is called only by `getWarehouseContext()`, not by operational handlers; warehouse context returns hardcoded `W01`. Risk: A user with authentication but without warehouse privileges may invoke warehouse operations or query another warehouse. Required remediation: Enforce warehouse roles at the CAP boundary and validate each requested warehouse against an authoritative server-side user-to-warehouse authorization mapping. Do not assume that a Plant attribute is itself a warehouse mapping.
@@ -217,7 +239,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
   - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
 - NOT VERIFIED: None.
 - ASSUMPTIONS: None.
-- Next: Commit and push the changes to `origin/feature01` and monitor hosted GitHub Actions CI run to completion.
+- Next: Committed as 8837a059. Pushed to origin/feature01 and verified on hosted GitHub Actions CI run 44525189417.
 - FINAL STATUS: PASS — MIB Label authorization remediated at CAP service boundary and operational handlers; authoritative server-side user-to-warehouse mapping established; Plant attribute mapped via T320 configuration rather than conflated with warehouse codes; out-of-scope warehouse queries rejected with HTTP 403; verified with passing unit, integration, and E2E suites.
 
 ### 2026-11-19 16:00 IST — Remediation for Finding DEBT-02: Authentication Middleware Ordering & Dual-Boundary Identity — PASS
