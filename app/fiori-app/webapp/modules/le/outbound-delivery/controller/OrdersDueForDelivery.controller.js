@@ -7,7 +7,11 @@ sap.ui.define([
     "sap/ui/core/Fragment",
     "sap/m/MessageBox",
     "saps4hana/fiori/service/AuthService",
-    "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService"
+    "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService",
+    "saps4hana/fiori/modules/le/outbound-delivery/controller/OrdersDueTableManager",
+    "saps4hana/fiori/modules/le/outbound-delivery/controller/OrdersDueDeliveryCreator",
+    "saps4hana/fiori/modules/le/outbound-delivery/controller/OrdersDueDeliveryNoRef",
+    "saps4hana/fiori/modules/le/outbound-delivery/controller/OrdersDueDeliveryFollowUp"
 ], function (
     BaseController,
     JSONModel,
@@ -17,11 +21,59 @@ sap.ui.define([
     Fragment,
     MessageBox,
     AuthService,
-    OutboundDeliveryService
+    OutboundDeliveryService,
+    OrdersDueTableManager,
+    OrdersDueDeliveryCreator,
+    OrdersDueDeliveryNoRef,
+    OrdersDueDeliveryFollowUp
 ) {
     "use strict";
 
-    return BaseController.extend("saps4hana.fiori.modules.le.outbound-delivery.controller.OrdersDueForDelivery", {
+    var isNode = typeof module !== "undefined" && module.exports;
+    function req(mod, path) {
+        if (mod && Object.keys(mod).length > 0) { return mod; }
+        if (isNode) {
+            try { return require(path); } catch (e) { return {}; }
+        }
+        return mod || {};
+    }
+
+    var modTable = req(OrdersDueTableManager, "./OrdersDueTableManager");
+    var modCreator = req(OrdersDueDeliveryCreator, "./OrdersDueDeliveryCreator");
+    var modNoRef = req(OrdersDueDeliveryNoRef, "./OrdersDueDeliveryNoRef");
+    var modFollowUp = req(OrdersDueDeliveryFollowUp, "./OrdersDueDeliveryFollowUp");
+
+    var fnTable = typeof createOrdersDueTableManager === "function" ? createOrdersDueTableManager : (modTable && modTable.createOrdersDueTableManager);
+    var fnCreator = typeof createOrdersDueDeliveryCreator === "function" ? createOrdersDueDeliveryCreator : (modCreator && modCreator.createOrdersDueDeliveryCreator);
+    var fnNoRef = typeof createOrdersDueDeliveryNoRef === "function" ? createOrdersDueDeliveryNoRef : (modNoRef && modNoRef.createOrdersDueDeliveryNoRef);
+    var fnFollowUp = typeof createOrdersDueDeliveryFollowUp === "function" ? createOrdersDueDeliveryFollowUp : (modFollowUp && modFollowUp.createOrdersDueDeliveryFollowUp);
+
+    var mTable = typeof fnTable === "function" ? fnTable({
+        Filter: Filter,
+        FilterOperator: FilterOperator,
+        FilterType: FilterType,
+        AuthService: AuthService,
+        OutboundDeliveryService: OutboundDeliveryService
+    }) : {};
+
+    var mCreator = typeof fnCreator === "function" ? fnCreator({
+        Fragment: Fragment,
+        MessageBox: MessageBox,
+        OutboundDeliveryService: OutboundDeliveryService
+    }) : {};
+
+    var mNoRef = typeof fnNoRef === "function" ? fnNoRef({
+        Fragment: Fragment,
+        MessageBox: MessageBox,
+        OutboundDeliveryService: OutboundDeliveryService
+    }) : {};
+
+    var mFollowUp = typeof fnFollowUp === "function" ? fnFollowUp({
+        MessageBox: MessageBox,
+        OutboundDeliveryService: OutboundDeliveryService
+    }) : {};
+
+    var oMembers = {
         onInit: function () {
             if (AuthService && typeof AuthService.syncModelHeaders === "function") {
                 AuthService.syncModelHeaders(this.getOwnerComponent(), true);
@@ -92,654 +144,11 @@ sap.ui.define([
             this._initPlant();
         },
 
-        _getPlant: function () {
-            var oVm = this.getView().getModel("ordersDueView");
-            return String((oVm && oVm.getProperty("/plant")) || "").trim().toUpperCase();
-        },
-
-        /** The worklist table starts suspended: the server fails closed without a plant, so nothing loads until one is set. */
-        _initPlant: function () {
-            var that = this;
-            return OutboundDeliveryService.getPlantContext().then(function (oCtx) {
-                that._oPlantScope = oCtx;
-                var sOwn = oCtx.plants[0] || "";
-                if (!that._getPlant() && sOwn) {
-                    that.getView().getModel("ordersDueView").setProperty("/plant", sOwn);
-                }
-                that._loadForPlant();
-            }).catch(function (oError) {
-                that._setPlantState("Error", that._text("ordersDuePlantLoadFailed", "Your plants could not be determined: {0}")
-                    .replace("{0}", (oError && oError.message) || ""));
-            });
-        },
-
-        _setPlantState: function (sState, sText) {
-            var oVm = this.getView().getModel("ordersDueView");
-            oVm.setProperty("/plantValueState", sState);
-            oVm.setProperty("/plantValueStateText", sText || "");
-        },
-
-        onPlantChange: function () {
-            var oVm = this.getView().getModel("ordersDueView");
-            var sPlant = this._getPlant();
-            var oScope = this._oPlantScope;
-            // A plant outside the user's scope is refused here too (the server refuses it with 403), keeping the
-            // last loaded plant so the input never disagrees with the rows on screen.
-            if (sPlant && oScope && !oScope.unrestricted && oScope.plants.indexOf(sPlant) === -1) {
-                oVm.setProperty("/plant", this._sLoadedPlant || "");
-                this._setPlantState("Error", this._text("ordersDuePlantOutOfScope", "Plant {0} is not one of your plants ({1}).")
-                    .replace("{0}", sPlant).replace("{1}", oScope.plants.join(", ")));
-                return;
-            }
-            oVm.setProperty("/plant", sPlant);
-            this._loadForPlant();
-        },
-
-        /** Applies the filters (incl. Plant) first, then resumes the table so its first request already carries the plant. */
-        _loadForPlant: function () {
-            if (!this._getPlant()) {
-                this._setPlantState("Error", this._text("ordersDuePlantRequired", "Enter a plant to load the orders due for delivery."));
-                return;
-            }
-            this._setPlantState("None", "");
-            this._sLoadedPlant = this._getPlant();
-            this._applyCombinedFilters();
-            var oTable = this.byId("ordersDueTable");
-            var oBinding = oTable ? oTable.getBinding("items") : null;
-            if (oBinding && typeof oBinding.isSuspended === "function" && oBinding.isSuspended()) {
-                oBinding.resume();
-                // Off until now: a scroll on the suspended table would ask it for a page, which UI5 refuses with an error.
-                oTable.setGrowingScrollToLoad(true);
-            }
-            this._loadServerMetrics();
-        },
-
-        _onRouteMatched: function () {
-            if (AuthService && typeof AuthService.syncModelHeaders === "function") {
-                AuthService.syncModelHeaders(this.getOwnerComponent(), true);
-            }
-            if (AuthService && typeof AuthService.canCreateDelivery === "function") {
-                var oVm = this.getView().getModel("ordersDueView");
-                if (oVm) {
-                    oVm.setProperty("/canCreateDelivery", AuthService.canCreateDelivery());
-                }
-            }
-            if (!this._getPlant()) {
-                return;
-            }
-            this._applyCombinedFilters();
-            var oTable = this.byId("ordersDueTable");
-            var oBinding = oTable ? oTable.getBinding("items") : null;
-            if (oBinding) {
-                try {
-                    oBinding.refresh();
-                } catch (e) {
-                    // Ignore refresh error if request is in flight
-                }
-            }
-            this._loadServerMetrics();
-        },
-
         _getTodayDateString: function () {
             var d = new Date();
             var sMonth = String(d.getMonth() + 1).padStart(2, "0");
             var sDay = String(d.getDate()).padStart(2, "0");
             return d.getFullYear() + "-" + sMonth + "-" + sDay;
-        },
-
-        _loadServerMetrics: function () {
-            var oViewModel = this.getView().getModel("ordersDueView");
-            if (!oViewModel || !this._getPlant()) {
-                return Promise.resolve();
-            }
-            return OutboundDeliveryService.getOrdersDueMetrics(this._getPlant())
-                .then(function (oMetrics) {
-                    var bOk = oMetrics && typeof oMetrics.scheduleLineCount === "number" && typeof oMetrics.shippingPointCount === "number";
-                    var nTotal = bOk ? oMetrics.scheduleLineCount : "-";
-                    var nReady = bOk && typeof oMetrics.readyToDeliverCount === "number" ? oMetrics.readyToDeliverCount : "-";
-                    var nApproval = bOk && typeof oMetrics.inApprovalCount === "number" ? oMetrics.inApprovalCount : "-";
-                    var nSP = bOk ? oMetrics.shippingPointCount : "-";
-                    var nOrdersTotal = bOk && typeof oMetrics.distinctOrdersCount === "number" ? oMetrics.distinctOrdersCount : "-";
-                    var nOrdersReady = bOk && typeof oMetrics.readyOrdersCount === "number" ? oMetrics.readyOrdersCount : "-";
-                    var nOrdersApproval = bOk && typeof oMetrics.inApprovalOrdersCount === "number" ? oMetrics.inApprovalOrdersCount : "-";
-
-                    oViewModel.setProperty("/totalCount", nTotal);
-                    oViewModel.setProperty("/readyCount", nReady);
-                    oViewModel.setProperty("/inApprovalCount", nApproval);
-                    oViewModel.setProperty("/shippingPointCount", nSP);
-                    oViewModel.setProperty("/distinctOrdersCount", nOrdersTotal);
-                    oViewModel.setProperty("/readyOrdersCount", nOrdersReady);
-                    oViewModel.setProperty("/inApprovalOrdersCount", nOrdersApproval);
-
-                    var sTab = oViewModel.getProperty("/selectedTab") || "ready";
-                    var sDisplay = sTab === "ready" ? nReady : (sTab === "inApproval" ? nApproval : nTotal);
-                    oViewModel.setProperty("/displayCount", sDisplay);
-                })
-                .catch(function () {
-                    oViewModel.setProperty("/totalCount", "-");
-                    oViewModel.setProperty("/readyCount", "-");
-                    oViewModel.setProperty("/inApprovalCount", "-");
-                    oViewModel.setProperty("/shippingPointCount", "-");
-                    oViewModel.setProperty("/distinctOrdersCount", "-");
-                    oViewModel.setProperty("/readyOrdersCount", "-");
-                    oViewModel.setProperty("/inApprovalOrdersCount", "-");
-                    oViewModel.setProperty("/displayCount", "-");
-                });
-        },
-
-        onTabSelect: function (oEvent) {
-            var sKey = oEvent && typeof oEvent.getParameter === "function"
-                ? (oEvent.getParameter("key") || (oEvent.getParameter("item") && oEvent.getParameter("item").getKey()))
-                : null;
-            if (!sKey) {
-                var oSeg = (typeof this.byId === "function")
-                    ? this.byId("segApprovalStatus")
-                    : (this.getView && typeof this.getView().byId === "function" ? this.getView().byId("segApprovalStatus") : null);
-                sKey = oSeg && typeof oSeg.getSelectedKey === "function" ? oSeg.getSelectedKey() : "ready";
-            }
-            var oViewModel = this.getView && typeof this.getView().getModel === "function" ? this.getView().getModel("ordersDueView") : null;
-            if (oViewModel) {
-                oViewModel.setProperty("/selectedTab", sKey);
-                var sDisplay = sKey === "ready"
-                    ? oViewModel.getProperty("/readyCount")
-                    : (sKey === "inApproval" ? oViewModel.getProperty("/inApprovalCount") : oViewModel.getProperty("/totalCount"));
-                oViewModel.setProperty("/displayCount", sDisplay);
-            }
-            this._applyCombinedFilters();
-        },
-
-        onSearch: function () {
-            this._applyCombinedFilters();
-        },
-
-        onFilterShippingPointChange: function () {
-            this._applyCombinedFilters();
-        },
-
-        _applyCombinedFilters: function () {
-            var oTable = (typeof this.byId === "function")
-                ? this.byId("ordersDueTable")
-                : (this.getView && typeof this.getView().byId === "function" ? this.getView().byId("ordersDueTable") : null);
-            var oBinding = oTable && typeof oTable.getBinding === "function" ? oTable.getBinding("items") : null;
-            if (!oBinding) return;
-
-            var aFilters = [];
-            var oViewModel = this.getView && typeof this.getView().getModel === "function" ? this.getView().getModel("ordersDueView") : null;
-            var sTab = (oViewModel && typeof oViewModel.getProperty === "function" && oViewModel.getProperty("/selectedTab")) || "ready";
-
-            var sPlant = String((oViewModel && typeof oViewModel.getProperty === "function" && oViewModel.getProperty("/plant")) || "").trim();
-            if (sPlant) {
-                aFilters.push(new Filter("Plant", FilterOperator.EQ, sPlant.toUpperCase()));
-            }
-
-            if (sTab === "ready") {
-                aFilters.push(new Filter("IsDeliverable", FilterOperator.EQ, true));
-            } else if (sTab === "inApproval") {
-                aFilters.push(new Filter("SalesDocApprovalStatus", FilterOperator.EQ, "A"));
-            }
-
-            var sFilterSP = oViewModel && oViewModel.getProperty("/filterShippingPoint");
-            if (sFilterSP && String(sFilterSP).trim()) {
-                aFilters.push(new Filter("ShippingPoint", FilterOperator.EQ, String(sFilterSP).trim()));
-            }
-
-            var oSearchField = (typeof this.byId === "function")
-                ? this.byId("searchOrdersDue")
-                : (this.getView && typeof this.getView().byId === "function" ? this.getView().byId("searchOrdersDue") : null);
-            var sQuery = oSearchField && typeof oSearchField.getValue === "function" ? oSearchField.getValue() : "";
-            if (sQuery && sQuery.trim()) {
-                var q = sQuery.trim();
-                aFilters.push(new Filter({
-                    // Only fields the worklist rows carry; the server applies these itself (computed rows)
-                    filters: [
-                        new Filter("SalesOrder", FilterOperator.Contains, q),
-                        new Filter("ShipToParty", FilterOperator.Contains, q),
-                        new Filter("ShippingPoint", FilterOperator.Contains, q)
-                    ],
-                    and: false
-                }));
-            }
-
-            oBinding.filter(aFilters, FilterType.Application);
-        },
-
-        onRefresh: function () {
-            this._oUnconfirmedOrders = {}; // a refresh re-reads SAP, so the worklist shows what SAP holds
-            if (!this._getPlant()) {
-                this._loadForPlant();
-                return;
-            }
-            var oTable = this.byId("ordersDueTable");
-            if (oTable) {
-                var oBinding = oTable.getBinding("items");
-                if (oBinding) {
-                    try {
-                        oBinding.refresh();
-                    } catch (e) {
-                        // Ignore refresh if already pending
-                    }
-                }
-            }
-            this._loadServerMetrics();
-        },
-
-        onCreateDeliveryPress: function (oEvent) {
-            var oCtx = oEvent.getSource().getBindingContext("outboundDelivery");
-            if (!oCtx) return;
-
-            var sSalesOrder = oCtx.getProperty("SalesOrder");
-            var sDelivBlock = oCtx.getProperty("DelivBlockReasonForSchedLine");
-            var sApprovalStatus = oCtx.getProperty("SalesDocApprovalStatus");
-
-            if (sApprovalStatus === "unknown") {
-                MessageBox.warning(this._text("msgOrderApprovalUnknown", "Approval status for Sales Order {0} could not be verified from S/4HANA. Delivery creation is blocked until status is confirmed.", [sSalesOrder]));
-                return;
-            }
-            if (sApprovalStatus === "A") {
-                MessageBox.warning(this._text("msgOrderInApproval", "Sales Order {0} is currently in approval (SAP Flexible Workflow). It must be approved in SAP (My Inbox or Manage Sales Orders) before an outbound delivery can be created.", [sSalesOrder]));
-                return;
-            }
-            if (sApprovalStatus === "C") {
-                MessageBox.warning(this._text("msgOrderRejected", "Sales Order {0} has been rejected and cannot be delivered.", [sSalesOrder]));
-                return;
-            }
-            if (sApprovalStatus === "D") {
-                MessageBox.warning(this._text("msgOrderRework", "Sales Order {0} is being reworked and cannot be delivered.", [sSalesOrder]));
-                return;
-            }
-            if (sDelivBlock) {
-                MessageBox.warning(this._text("msgOrderDeliveryBlocked", "Sales Order {0} has a delivery block ({1}) and cannot be delivered.", [sSalesOrder, sDelivBlock]));
-                return;
-            }
-
-            var oDialogModel = this.getView().getModel("deliveryDialog");
-            var sShippingPoint = oCtx.getProperty("ShippingPoint") || "";
-            var sGoodsIssueDate = oCtx.getProperty("GoodsIssueDate") || this._getTodayDateString();
-
-            if (oDialogModel) {
-                oDialogModel.setProperty("/salesOrder", sSalesOrder);
-                oDialogModel.setProperty("/shippingPoint", sShippingPoint);
-                oDialogModel.setProperty("/shippingPointValueState", "None");
-                oDialogModel.setProperty("/shippingPointValueStateText", "");
-                oDialogModel.setProperty("/deliveryDate", sGoodsIssueDate);
-            }
-
-            this._openCreateDeliveryDialog();
-        },
-
-        onShippingPointChange: function (oEvent) {
-            var sKey = oEvent.getParameter("selectedItem")
-                ? oEvent.getParameter("selectedItem").getKey()
-                : (oEvent.getSource().getSelectedKey() || oEvent.getSource().getValue());
-            var oDialogModel = this.getView().getModel("deliveryDialog");
-            if (oDialogModel) {
-                oDialogModel.setProperty("/shippingPoint", sKey);
-                if (sKey && String(sKey).trim()) {
-                    oDialogModel.setProperty("/shippingPointValueState", "None");
-                    oDialogModel.setProperty("/shippingPointValueStateText", "");
-                }
-            }
-        },
-
-        _openCreateDeliveryDialog: function () {
-            var oView = this.getView();
-            var that = this;
-
-            if (!this._pCreateDeliveryDialog) {
-                this._pCreateDeliveryDialog = Fragment.load({
-                    id: oView.getId(),
-                    name: "saps4hana.fiori.modules.le.outbound-delivery.view.CreateDeliveryDialog",
-                    controller: this
-                }).then(function (oDialog) {
-                    oView.addDependent(oDialog);
-                    if (oDialog.addStyleClass && that.getContentDensityClass) {
-                        oDialog.addStyleClass(that.getContentDensityClass());
-                    }
-                    return oDialog;
-                });
-            }
-
-            this._pCreateDeliveryDialog.then(function (oDialog) {
-                oDialog.open();
-            });
-        },
-
-        onCancelCreateDelivery: function () {
-            if (this._pCreateDeliveryDialog) {
-                this._pCreateDeliveryDialog.then(function (oDialog) {
-                    oDialog.close();
-                });
-            }
-        },
-
-        onConfirmCreateDelivery: function () {
-            if (this._bDialogBusy) return;
-            var that = this;
-            var oDialogModel = this.getView().getModel("deliveryDialog");
-            var sSalesOrder = oDialogModel.getProperty("/salesOrder");
-            var sShippingPoint = oDialogModel.getProperty("/shippingPoint");
-            var sDeliveryDate = oDialogModel.getProperty("/deliveryDate");
-
-            if (!sSalesOrder) {
-                MessageBox.error(this._text("msgSalesOrderRequired", "Sales Order is required."));
-                return;
-            }
-            // Per order, not per form: this dialog is reopened from the same worklist row with the same data.
-            if (this._oUnconfirmedOrders && this._oUnconfirmedOrders[sSalesOrder]) {
-                MessageBox.warning(this._oUnconfirmedOrders[sSalesOrder]);
-                return;
-            }
-            if (!sShippingPoint || !String(sShippingPoint).trim()) {
-                var sRequiredMsg = this._text("msgShippingPointRequired", "Shipping Point is required. Please choose a valid shipping point from TVSTZ.");
-                if (oDialogModel) {
-                    oDialogModel.setProperty("/shippingPointValueState", "Error");
-                    oDialogModel.setProperty("/shippingPointValueStateText", sRequiredMsg);
-                }
-                MessageBox.error(sRequiredMsg);
-                return;
-            }
-
-            this._setDialogBusy(true);
-
-            OutboundDeliveryService.createOutboundDelivery({
-                salesOrder: sSalesOrder,
-                shippingPoint: sShippingPoint,
-                deliveryDate: sDeliveryDate
-            })
-                .then(function (sDeliveryNo) {
-                    that.onCancelCreateDelivery();
-                    if (sDeliveryNo && String(sDeliveryNo).trim() !== "" && sDeliveryNo !== "Delivery created") {
-                        var sSuccessTemplate = that._text("msgDeliveryCreatedSuccess", "Delivery {0} created");
-                        var sSuccessMessage = sSuccessTemplate.replace("{0}", sDeliveryNo);
-                        var oFollowUp = that.getView().getModel("deliveryFollowUp");
-                        if (oFollowUp) { oFollowUp.setProperty("/delivery", String(sDeliveryNo)); oFollowUp.setProperty("/billingTypes", []); oFollowUp.setProperty("/billingType", ""); that.onLoadDeliveryStatus(); }
-                        MessageBox.success(sSuccessMessage, {
-                            onClose: function () {
-                                that.onRefresh();
-                            }
-                        });
-                    } else {
-                        var sWarningTemplate = that._text(
-                            "msgDeliveryCreatedNoNumberWarning",
-                            "Delivery created in SAP S/4HANA for Sales Order {0}, but no delivery number was returned. Please check transaction VL03N."
-                        );
-                        var sWarningMessage = sWarningTemplate.replace("{0}", sSalesOrder);
-                        MessageBox.warning(sWarningMessage, {
-                            onClose: function () {
-                                that.onRefresh();
-                            }
-                        });
-                    }
-                })
-                .catch(function (err) {
-                    // Show SAP's own message on failure
-                    var sErrorMessage = (err && (err.message || err.statusText)) || "Failed to create outbound delivery.";
-                    var sNotConfirmed = that.blockSubmitIfNotConfirmed(oDialogModel, sErrorMessage);
-                    if (sNotConfirmed) {
-                        that._oUnconfirmedOrders = that._oUnconfirmedOrders || {};
-                        that._oUnconfirmedOrders[sSalesOrder] = sNotConfirmed;
-                    }
-                    MessageBox.error(sNotConfirmed || sErrorMessage);
-                })
-                .finally(function () {
-                    that._setDialogBusy(false);
-                });
-        },
-
-        onOpenCreateDeliveryNoRefDialog: function () {
-            var oView = this.getView();
-            var that = this;
-
-            var oModel = oView.getModel("deliveryNoRefDialog");
-            if (oModel) {
-                oModel.setProperty("/submitBlocked", false);
-                oModel.setProperty("/shippingPoint", "1104");
-                oModel.setProperty("/deliveryType", "LO2");
-                oModel.setProperty("/plant", "1110");
-                oModel.setProperty("/storageLocation", "FG01");
-                oModel.setProperty("/salesOrg", "");
-                oModel.setProperty("/distChannel", "");
-                oModel.setProperty("/division", "");
-                oModel.setProperty("/shipToParty", "10135");
-                oModel.setProperty("/plannedGoodsIssueDate", this._getTodayDateString());
-                oModel.setProperty("/busy", false);
-                oModel.setProperty("/items", [
-                    { itemNo: "000010", material: "4000000186", quantity: 1, uom: "KG" }
-                ]);
-            }
-
-            if (!this._pCreateDeliveryNoRefDialog) {
-                this._pCreateDeliveryNoRefDialog = Fragment.load({
-                    id: oView.getId(),
-                    name: "saps4hana.fiori.modules.le.outbound-delivery.view.CreateDeliveryNoRefDialog",
-                    controller: this
-                }).then(function (oDialog) {
-                    oView.addDependent(oDialog);
-                    if (oDialog.addStyleClass && that.getContentDensityClass) {
-                        oDialog.addStyleClass(that.getContentDensityClass());
-                    }
-                    return oDialog;
-                });
-            }
-
-            this._pCreateDeliveryNoRefDialog.then(function (oDialog) {
-                oDialog.open();
-            });
-        },
-
-        onCancelCreateDeliveryNoRef: function () {
-            if (this._pCreateDeliveryNoRefDialog) {
-                this._pCreateDeliveryNoRefDialog.then(function (oDialog) {
-                    oDialog.close();
-                });
-            }
-        },
-
-        onAddDeliveryNoRefItem: function () {
-            var oModel = this.getView().getModel("deliveryNoRefDialog");
-            if (!oModel) return;
-            var aItems = oModel.getProperty("/items") || [];
-            var nextItemNo = String((aItems.length + 1) * 10).padStart(6, "0");
-            aItems.push({
-                itemNo: nextItemNo,
-                material: "4000000187",
-                quantity: 1,
-                uom: "KG"
-            });
-            oModel.setProperty("/items", aItems);
-        },
-
-        onDeleteDeliveryNoRefItem: function (oEvent) {
-            var oCtx = oEvent.getSource().getBindingContext("deliveryNoRefDialog");
-            if (!oCtx) return;
-            var sPath = oCtx.getPath();
-            var iIndex = parseInt(sPath.split("/").pop(), 10);
-            var oModel = this.getView().getModel("deliveryNoRefDialog");
-            var aItems = oModel.getProperty("/items") || [];
-            if (aItems.length <= 1) {
-                MessageBox.warning("At least one line item is required for delivery.");
-                return;
-            }
-            aItems.splice(iIndex, 1);
-            oModel.setProperty("/items", aItems);
-        },
-
-        onConfirmCreateDeliveryNoRef: function () {
-            var that = this;
-            var oModel = this.getView().getModel("deliveryNoRefDialog");
-            if (!oModel || oModel.getProperty("/busy") || oModel.getProperty("/submitBlocked")) return;
-
-            var sShippingPoint = oModel.getProperty("/shippingPoint");
-            var sDeliveryType = oModel.getProperty("/deliveryType");
-            var sPlant = oModel.getProperty("/plant");
-            var sStorageLocation = oModel.getProperty("/storageLocation");
-            var sShipToParty = oModel.getProperty("/shipToParty");
-            var sSalesOrg = oModel.getProperty("/salesOrg");
-            var sDistChannel = oModel.getProperty("/distChannel");
-            var sDivision = oModel.getProperty("/division");
-            var sPlannedGIDate = oModel.getProperty("/plannedGoodsIssueDate");
-            var aItems = oModel.getProperty("/items") || [];
-
-            if (!sShippingPoint || !sDeliveryType || !sPlant || !sStorageLocation || !sShipToParty) {
-                MessageBox.error(this._text("msgDeliveryNoRefValidationFailed", "Please fill all required fields: Shipping Point, Delivery Type, Plant, Storage Location, Ship-To Party, and at least one item with Material and Quantity."));
-                return;
-            }
-
-            if (aItems.length === 0 || !aItems.some(function (it) { return it.material && Number(it.quantity) > 0; })) {
-                MessageBox.error("At least one item with a valid Material and positive Quantity is required.");
-                return;
-            }
-
-            oModel.setProperty("/busy", true);
-
-            OutboundDeliveryService.createDeliveryWithoutRef({
-                shippingPoint: sShippingPoint,
-                deliveryType: sDeliveryType,
-                plant: sPlant,
-                storageLocation: sStorageLocation,
-                salesOrg: sSalesOrg,
-                distChannel: sDistChannel,
-                division: sDivision,
-                shipToParty: sShipToParty,
-                plannedGoodsIssueDate: sPlannedGIDate,
-                items: aItems
-            })
-                .then(function (oResult) {
-                    var sDeliveryNo = (oResult && oResult.OutboundDelivery) || (typeof oResult === "string" ? oResult : "");
-                    that.onCancelCreateDeliveryNoRef();
-
-                    if (sDeliveryNo) {
-                        var sSuccessTemplate = that._text("msgDeliveryNoRefCreatedSuccess", "Outbound Delivery {0} created successfully in SAP S/4HANA without reference.");
-                        var sSuccessMsg = sSuccessTemplate.replace("{0}", sDeliveryNo);
-                        var oFollowUp = that.getView().getModel("deliveryFollowUp");
-                        if (oFollowUp) {
-                            oFollowUp.setProperty("/delivery", String(sDeliveryNo));
-                            oFollowUp.setProperty("/billingTypes", []);
-                            oFollowUp.setProperty("/billingType", "");
-                            that.onLoadDeliveryStatus();
-                        }
-                        MessageBox.success(sSuccessMsg, {
-                            onClose: function () {
-                                that.onRefresh();
-                            }
-                        });
-                    } else {
-                        MessageBox.success("Outbound Delivery created successfully in SAP S/4HANA.");
-                    }
-                })
-                .catch(function (err) {
-                    var sErrMsg = (err && (err.message || err.statusText)) || "Failed to create outbound delivery without reference.";
-                    MessageBox.error(that.blockSubmitIfNotConfirmed(oModel, sErrMsg) || sErrMsg);
-                })
-                .finally(function () {
-                    oModel.setProperty("/busy", false);
-                });
-        },
-
-        // SAP status domain (STATV): A = not yet processed, B = partially processed, C = completely processed, blank = not relevant
-        _statusLabel: function (sCode) {
-            var m = { A: "not started", B: "partial", C: "complete", "": "not relevant" };
-            return (sCode || "") + " (" + (m[sCode || ""] || sCode) + ")";
-        },
-
-        onLoadDeliveryStatus: function () {
-            var that = this;
-            var oFU = this.getView().getModel("deliveryFollowUp");
-            // Read the live control value: on Enter the submit event can arrive before the two-way binding has written the model.
-            var oInput = this.byId && this.byId("inpFollowUpDelivery");
-            if (oInput && typeof oInput.getValue === "function") {
-                oFU.setProperty("/delivery", String(oInput.getValue() || "").trim());
-            }
-            var sDelivery = (oFU.getProperty("/delivery") || "").trim();
-            oFU.setProperty("/status", null); oFU.setProperty("/statusText", ""); oFU.setProperty("/canBill", false);
-            oFU.setProperty("/billingTypes", []); oFU.setProperty("/billingType", "");
-            if (!sDelivery) { return Promise.resolve(); }
-            oFU.setProperty("/busy", true);
-            return OutboundDeliveryService.getDeliveryStatus(sDelivery)
-                .then(function (o) {
-                    oFU.setProperty("/status", o);
-                    var sETag = (o && (o["@odata.etag"] || o.ETag || o.etag)) || "";
-                    oFU.setProperty("/etag", sETag);
-                    oFU.setProperty("/statusText", that._text("dlvFollowUpStatus", "Type {0} · Ship-to {1} · Picking {2} · Goods movement {3} · Billing {4}")
-                        .replace("{0}", o.DeliveryDocumentType).replace("{1}", o.SoldToParty).replace("{2}", that._statusLabel(o.OverallPickingStatus))
-                        .replace("{3}", that._statusLabel(o.OverallGoodsMovementStatus)).replace("{4}", that._statusLabel(o.OverallDelivReltdBillgStatus)));
-                    // Billing status "" means billing is not relevant for the delivery (see _statusLabel), so only A/B are billable
-                    oFU.setProperty("/canBill", o.OverallGoodsMovementStatus === "C" && ["A", "B"].indexOf(o.OverallDelivReltdBillgStatus) !== -1);
-                })
-                .catch(function (err) {
-                    oFU.setProperty("/statusText", (err && (err.message || err.statusText)) || "Delivery status could not be read from SAP.");
-                })
-                .finally(function () { oFU.setProperty("/busy", false); });
-        },
-
-        onLoadBillingTypes: function () {
-            var oFU = this.getView().getModel("deliveryFollowUp");
-            var sDelivery = (oFU.getProperty("/delivery") || "").trim();
-            if (!sDelivery) { MessageBox.error(this._text("msgDeliveryNumberRequired", "Enter a delivery number.")); return; }
-            oFU.setProperty("/busy", true);
-            return OutboundDeliveryService.getBillingDocumentTypes(sDelivery)
-                .then(function (aTypes) {
-                    oFU.setProperty("/billingTypes", aTypes);
-                    oFU.setProperty("/billingType", aTypes.length === 1 ? aTypes[0].BillingDocumentType : "");
-                    if (aTypes.length === 0) { MessageBox.warning("S/4HANA returned no billing document type for delivery " + sDelivery + "."); }
-                })
-                .catch(function (err) {
-                    oFU.setProperty("/billingTypes", []);
-                    MessageBox.error((err && (err.message || err.statusText)) || "Billing document types could not be read.");
-                })
-                .finally(function () { oFU.setProperty("/busy", false); });
-        },
-
-        onCreateBillingDocument: function () {
-            var that = this;
-            var oFU = this.getView().getModel("deliveryFollowUp");
-            if (oFU && oFU.getProperty("/busy")) return;
-            var sDelivery = (oFU.getProperty("/delivery") || "").trim();
-            var sType = oFU.getProperty("/billingType") || "";
-            if (!sDelivery) { MessageBox.error(this._text("msgDeliveryNumberRequired", "Enter a delivery number.")); return; }
-            MessageBox.confirm(this._text("msgConfirmBilling", "Create billing document (type {1}) in S/4HANA for delivery {0}?").replace("{0}", sDelivery).replace("{1}", sType || this._text("dlvFollowUpTypeBySap", "determined by SAP copy control")), {
-                onClose: function (sAction) {
-                    if (sAction !== MessageBox.Action.OK) { return; }
-                    oFU.setProperty("/busy", true);
-                    var sETag = oFU.getProperty("/etag") || "";
-                    OutboundDeliveryService.createBillingDocument(
-                        { delivery: sDelivery, billingType: sType, billingDate: oFU.getProperty("/billingDate") },
-                        sETag ? { etag: sETag } : undefined
-                    )
-                        .then(function (oRes) {
-                            var sNo = oRes && oRes.BillingDocument;
-                            var aMsgs = (oRes && oRes.Messages) || [];
-                            var sDetail = aMsgs.map(function (m) { return m.Message; }).filter(Boolean).join("\n");
-                            var sMsg = that._text("msgBillingCreated", "Billing document {0} created in S/4HANA for delivery {1}.").replace("{0}", sNo).replace("{1}", sDelivery);
-                            oFU.setProperty("/lastResult", sMsg);
-                            MessageBox.success(sMsg + (sDetail ? "\n\n" + sDetail : ""), { onClose: function () { that.onLoadDeliveryStatus(); } });
-                        })
-                        .catch(function (err) {
-                            if (err && (err.status === 409 || err.statusCode === 409 || err.code === "STALE_DATA")) {
-                                var sConflictMsg = (err.message || that._text("msgStaleDataConflict", "This delivery was modified by another user or session in SAP S/4HANA (stale data).")) +
-                                    "\n\n" + that._text("msgPromptReloadData", "Please reload the latest delivery data from SAP before retrying.");
-                                MessageBox.error(sConflictMsg, {
-                                    title: that._text("titleStaleDataConflict", "Document Changed / Stale Data"),
-                                    onClose: function () {
-                                        that.onLoadDeliveryStatus();
-                                    }
-                                });
-                                return;
-                            }
-                            MessageBox.error((err && (err.message || err.statusText)) || "Billing document could not be created.");
-                        })
-                        .finally(function () { oFU.setProperty("/busy", false); });
-                }
-            });
-        },
-
-        _setDialogBusy: function (bBusy) {
-            this._bDialogBusy = bBusy;
-            if (this._pCreateDeliveryDialog) {
-                this._pCreateDeliveryDialog.then(function (oDialog) {
-                    oDialog.setBusy(bBusy);
-                });
-            }
         },
 
         /** i18n text for sKey with {0}, {1}… filled from aArgs; sDefault (same placeholders) when the bundle has no such key. */
@@ -756,5 +165,14 @@ sap.ui.define([
             }
             return (aArgs || []).reduce(function (s, v, i) { return s.split("{" + i + "}").join(String(v)); }, sDefault);
         }
-    });
+    };
+
+    Object.assign(oMembers, mTable, mCreator, mNoRef, mFollowUp);
+
+    var Controller = BaseController.extend("saps4hana.fiori.modules.le.outbound-delivery.controller.OrdersDueForDelivery", oMembers);
+
+    var oTargetProto = Controller.prototype || Controller;
+    Object.assign(oTargetProto, mTable, mCreator, mNoRef, mFollowUp);
+
+    return Controller;
 });

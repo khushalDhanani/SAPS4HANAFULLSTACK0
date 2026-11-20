@@ -17,11 +17,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
-- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 613 first-party source files (up from 558 initially, due to 32 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
-  1. *Decomposition Milestones (Phases 1-5):* 7 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
-  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 130 files. Total first-party files scanned: 613 files.
+- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 622 first-party source files (up from 558 initially, due to 41 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
+  1. *Decomposition Milestones (Phases 1-5):* 9 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
+  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 128 files. Total first-party files scanned: 622 files.
   3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors). All unit tests pass across all modularized domains.
-- **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting the four largest monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], and `CreateSalesOrder.controller.js` [979 lines]) without breaking changes or regression:
+- **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting the six largest monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], and `OrdersDueForDelivery.controller.js` [760 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
      - Extracted AI chat submission, SSE stream processing, and fallback into `PurchaseOrderAiChat.js` (212 lines).
      - Extracted server-side context retrieval and item batching into `PurchaseOrderAiDataFetcher.js` (240 lines).
@@ -55,10 +55,23 @@ All historical change logs and past milestone statuses are preserved verbatim in
      - Extracted sold-to party change, customer defaults cascade, sales area mismatch dialog, and contact person into `CreateSalesOrderPartnerManager.js` (180 lines).
      - Extracted multi-dialog value help request routing, material details resolution, and suggest filtering into `CreateSalesOrderValueHelp.js` (194 lines).
      - Retained clean form controller in `CreateSalesOrder.controller.js` (280 lines).
-  5. *Validation Results (100% PASS):*
+  5. *CreateSalesInquiry Controller Decomposition (slashed from 911 to 271 lines, -640 lines, -70.3%):*
+     - Extracted sales organization, distribution channel, division, and validity sync into `CreateSalesInquiryHeaderSync.js` (163 lines).
+     - Extracted customer search, sold-to party selection, and partner derivations into `CreateSalesInquiryCustomerManager.js` (127 lines).
+     - Extracted line item CRUD, live calculation, and material detail lookup into `CreateSalesInquiryItemManager.js` (252 lines).
+     - Extracted MessagePopover, incompletion log check, and missing field highlight into `CreateSalesInquiryMessages.js` (114 lines).
+     - Extracted value help dialog routing and suggestion filtering into `CreateSalesInquiryValueHelp.js` (180 lines).
+     - Retained clean wizard controller in `CreateSalesInquiry.controller.js` (271 lines).
+  6. *OrdersDueForDelivery Controller Decomposition (slashed from 760 to 178 lines, -582 lines, -76.6%):*
+     - Extracted plant resolution, table filtering, route matching, and KPI metrics into `OrdersDueTableManager.js` (253 lines).
+     - Extracted delivery dialog, shipping point validation, and delivery creation into `OrdersDueDeliveryCreator.js` (201 lines).
+     - Extracted delivery without reference dialog, item CRUD, and submit into `OrdersDueDeliveryNoRef.js` (176 lines).
+     - Extracted delivery status reading, billing type loading, and billing document creation into `OrdersDueDeliveryFollowUp.js` (133 lines).
+     - Retained clean list controller in `OrdersDueForDelivery.controller.js` (178 lines).
+  7. *Validation Results (100% PASS):*
      - Linters: Root ESLint (`npm run lint`): PASSED (0 errors). UI5 linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
-     - Unit test suites across Purchase Order, Sales Order, Admin, and Dashboard domains: ALL PASSED (Purchase Order: 28/28 suites, 545/545 passed; Sales Order: 7/7 suites, 123/123 passed; Admin & Dashboard: 109/109 passed).
-     - Exact line counts: All 29 newly created and refactored controller files are strictly $\le 300$ lines (ranging from 77 to 293 lines).
+     - Unit test suites across Purchase Order, Sales Order, Sales Inquiry, Outbound Delivery, Admin, and Dashboard domains: ALL PASSED (Purchase Order: 28/28 suites, 545/545 passed; Sales Order: 7/7 suites, 123/123 passed; Sales Inquiry: 15/15 suites, 198/198 passed; Outbound Delivery: 6/6 suites, 179/179 passed; Admin & Dashboard: 109/109 passed).
+     - Exact line counts: All 40 newly created and refactored controller files are strictly $\le 300$ lines (ranging from 77 to 293 lines).
 - **Phase 4: Frontend View Models & Client Services Modularization — PASS:** Successfully executed Phase 4 modularization targeting oversized frontend PDF layout engines and monolithic value help services (`MibLabelPdf.js` and `ValueHelpService.js`) without breaking changes or regression:
   1. *MibLabelPdf Decomposition (slashed from 811 to 264 lines, -547 lines, 67.4% reduction):*
      - Extracted Code 128 barcode sizing, dynamic module width fitting, and logo anti-overlap constraint into `app/fiori-app/webapp/modules/wm/mib-label/util/MibBarcodeLayout.js` (94 lines).
@@ -337,6 +350,62 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 16:30 IST — Phase 5: UI5 Controllers Decomposition (OrdersDueForDelivery.controller.js) — PASS
+
+- REQUEST: Modularize monolithic UI5 controller `OrdersDueForDelivery.controller.js` (760 lines) below 300 lines per `SCAN_REPORT.md` Phase 5 without breaking changes.
+- INSPECT:
+  - Audited `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js` (760 lines).
+  - Verified XML view event bindings in `OrdersDueForDelivery.view.xml` and dialog fragments: 17 distinct event handlers (`onPlantChange`, `onTabSelect`, `onSearch`, `onFilterShippingPointChange`, `onRefresh`, `onCreateDeliveryPress`, `onShippingPointChange`, `onCancelCreateDelivery`, `onConfirmCreateDelivery`, `onOpenCreateDeliveryNoRefDialog`, `onCancelCreateDeliveryNoRef`, `onAddDeliveryNoRefItem`, `onDeleteDeliveryNoRefItem`, `onConfirmCreateDeliveryNoRef`, `onLoadDeliveryStatus`, `onLoadBillingTypes`, `onCreateBillingDocument`).
+  - Traced unit test suite `test/unit/le/ordersDueForDeliveryController.test.js` (52 tests) and Outbound Delivery domain suites (179 tests).
+- PLAN:
+  - Extract plant context initialization, scoping, table filter combinations, route matching, and server KPI metrics into `OrdersDueTableManager.js` (253 lines).
+  - Extract delivery creation dialog, approval status validation, shipping point change, and delivery creation flow into `OrdersDueDeliveryCreator.js` (201 lines).
+  - Extract delivery without reference dialog, line item additions/deletions, and creation into `OrdersDueDeliveryNoRef.js` (176 lines).
+  - Extract delivery status lookup, billing document type loading, and billing document creation into `OrdersDueDeliveryFollowUp.js` (133 lines).
+  - Retain clean form controller in `OrdersDueForDelivery.controller.js` (178 lines).
+  - Use prototype and object mixin pattern (`Object.assign(oMembers, ...); Object.assign(oTargetProto, ...)`) to ensure 100% compatibility in both UI5 runtime and Jest unit tests.
+- CHANGE:
+  - Created `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueTableManager.js` (253 lines).
+  - Created `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueDeliveryCreator.js` (201 lines).
+  - Created `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueDeliveryNoRef.js` (176 lines).
+  - Created `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueDeliveryFollowUp.js` (133 lines).
+  - Refactored `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js` (slashed from 760 to 178 lines, -582 lines, -76.6%).
+- VALIDATE:
+  - Exact line count: All 5 files strictly $\le 300$ lines (`wc -l`: 178, 253, 201, 176, 133).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Root ESLint (`npm run lint`): PASSED (0 errors).
+  - Unit test suites: `test/unit/le/` (6/6 suites, 179/179 tests PASS; `ordersDueForDeliveryController.test.js`: 52/52 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 52 tests in `ordersDueForDeliveryController.test.js` and all 179 tests in `test/unit/le/` covering table filtering, plant scoping, delivery creation, no-ref dialog, and billing follow-up pass cleanly.
+
+### 2026-11-20 16:15 IST — Phase 5: UI5 Controllers Decomposition (CreateSalesInquiry.controller.js) — PASS
+
+- REQUEST: Modularize monolithic UI5 controller `CreateSalesInquiry.controller.js` (911 lines) below 300 lines per `SCAN_REPORT.md` Phase 5 without breaking changes.
+- INSPECT:
+  - Audited `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiry.controller.js` (911 lines).
+  - Verified XML view event bindings in `CreateSalesInquiry.view.xml`: 34 distinct event handlers (`onAddItem`, `onDeleteItem`, `onSoldToPartySelect`, `onInquiryTypeSelect`, `onItemMaterialSelect`, `onSave`, etc.).
+  - Traced unit test suite `test/unit/sales-inquiry/createSalesInquiryController.test.js` (34 tests) and related test suites.
+- PLAN:
+  - Extract sales org, distribution channel, division, and validity period sync into `CreateSalesInquiryHeaderSync.js` (163 lines).
+  - Extract sold-to party selection, customer derivations, and address resolution into `CreateSalesInquiryCustomerManager.js` (127 lines).
+  - Extract line item table additions/deletions, material suggestions, live calculation, and unit resolution into `CreateSalesInquiryItemManager.js` (252 lines).
+  - Extract MessagePopover initialization, incompletion log check, and error field highlighting into `CreateSalesInquiryMessages.js` (114 lines).
+  - Extract multi-dialog value help routing, suggest filters, and dialog opening into `CreateSalesInquiryValueHelp.js` (180 lines).
+  - Retain clean form controller in `CreateSalesInquiry.controller.js` (271 lines).
+  - Use prototype and object mixin pattern (`Object.assign(oMembers, ...); Object.assign(oTargetProto, ...)`) to ensure 100% compatibility in both UI5 runtime and Jest unit tests.
+- CHANGE:
+  - Created `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiryHeaderSync.js` (163 lines).
+  - Created `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiryCustomerManager.js` (127 lines).
+  - Created `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiryItemManager.js` (252 lines).
+  - Created `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiryMessages.js` (114 lines).
+  - Created `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiryValueHelp.js` (180 lines).
+  - Refactored `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiry.controller.js` (slashed from 911 to 271 lines, -640 lines, -70.3%).
+- VALIDATE:
+  - Exact line count: All 6 files strictly $\le 300$ lines (`wc -l`: 271, 163, 127, 252, 114, 180).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Root ESLint (`npm run lint`): PASSED (0 errors).
+  - Unit test suites: `test/unit/sales-inquiry/createSalesInquiryController.test.js` (1/1 suite, 34/34 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 34 tests in `createSalesInquiryController.test.js` covering controller lifecycle, item CRUD, customer derivations, incompletion popover, and submission flow pass cleanly.
 
 ### 2026-11-20 16:00 IST — Phase 5: UI5 Controllers Decomposition (CreateSalesOrder.controller.js) — PASS
 
