@@ -84,7 +84,7 @@ stateDiagram-v2
 | `posted` | Final | S/4HANA successfully processed the transaction; document persistence confirmed with SAP document number and year. | Terminal (`*`) |
 | `rejected` | Final | S/4HANA explicitly rejected the request (e.g. validation error, insufficient stock); no material document exists. Re-claim permitted. | Terminal (`*`) |
 | `not_posted` | Final | Recheck worker verified that no document matching the reference exists in S/4HANA after the grace period (`notPostedAgeMs`, default 15m). | Terminal (`*`) |
-| `delivery_created` | Final | S/4HANA created an outbound delivery instead of a material document (WM-managed storage location, L9/514). Requires Post Goods Issue. | Terminal (`*`) |
+| `delivery_created` | Final | S/4HANA created an outbound delivery instead of a material document (WM-managed storage location, L9/514). Process in SAP GUI via VL02N/VL03N. | Terminal (`*`) |
 
 - **`OPEN_STATUSES`**: `['sending', 'unconfirmed', 'queued']`  
 - **`FINAL_STATUSES`**: `['posted', 'rejected', 'not_posted', 'delivery_created']`

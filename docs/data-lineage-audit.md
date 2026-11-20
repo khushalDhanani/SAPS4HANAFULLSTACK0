@@ -111,15 +111,15 @@ Verdict: **LIVE** = read from SAP at request time and failures are visible; **LI
 
 | Group | Count | Locations | Effect |
 |---|---|---|---|
-| Substitute a value that looks like data | 8 | salesOrder.handler.js:92 (0/0); GoodsIssueBatchesClient.js:39,75,96,143 and GoodsIssueStockUnitClient.js:627,642 (stock becomes 0, units become synthetic); GoodsIssueReservationsClient.js:188 ('NO SLED') | rows 22, 40, 41, 42 |
+| Substitute a value that looks like data | 1 | salesOrder.handler.js:92 (0/0) [Goods Issue clients decommissioned and deleted] | row 22 |
 | Return an empty list | 1 | SalesInquiryAdapter.js:1440 | row 35 [RESOLVED - GoodsReceiptAdapter throws on outage/error and handler rejects with 502] |
 | Fall through to the next lookup tier | 0 | GoodsReceiptAdapter.js [RESOLVED] | row 33 [RESOLVED - _isOutage rethrows immediately across Tiers 1-6 with 502/503/504] |
 | Switch to another read path | 3 | SalesInquiryAdapter.js (getSalesOrders fallback) | row 19 [RESOLVED]; fallback preserves user's filter/pagination/ordering and throws 500 if filter cannot be translated |
 | Leave an enrichment field blank | 6 | SalesInquiryAdapter.js:633,658,706,1004,1008,1072 | honest blank |
-| Report unavailable correctly | 5 | PurchaseOrderAdapter.js:202,255,271 (null + unavailable list); purchaseOrder.handler.js:131 (`derived:false`); goodsIssue.handler.js:239 (`Success:false`) | good pattern |
-| Connection / infrastructure / retry bookkeeping | 21 | S4HttpClient, S4ErrorMapper, AuthAdapter, auth, s4Config, queue manager, SalesInquiryAdapter.js:119,126,133,358,383, GoodsIssueStockUnitClient.js:44,147,364,375,497 | no business value substituted |
+| Report unavailable correctly | 4 | PurchaseOrderAdapter.js:202,255,271 (null + unavailable list); purchaseOrder.handler.js:131 (`derived:false`) [goodsIssue.handler.js decommissioned] | good pattern |
+| Connection / infrastructure / retry bookkeeping | 16 | S4HttpClient, S4ErrorMapper, AuthAdapter, auth, s4Config, queue manager, SalesInquiryAdapter.js:119,126,133,358,383 [GoodsIssueStockUnitClient decommissioned] | no business value substituted |
 
-UI layer: `_refreshQueueCount` -> 0 on error (GoodsIssue.controller.js:1259); `_loadShippingPoints` swallows the error (OrdersDueForDelivery.controller.js:109); customer / order defaults return literals on error (SalesOrderService.js:300-365).
+UI layer: _loadShippingPoints swallows the error (OrdersDueForDelivery.controller.js:109); customer / order defaults return literals on error (SalesOrderService.js:300-365). [GoodsIssue.controller.js decommissioned]
 
 ## Summary
 
@@ -128,8 +128,8 @@ UI layer: `_refreshQueueCount` -> 0 on error (GoodsIssue.controller.js:1259); `_
 - No budget / forecast / plan entity, no mock server, no seed data, no fixture in a runtime path.
 
 Top 3 riskiest:
-1. **Goods Issue stock figures (row 40)** - one storage-location number (or the first row of an unfiltered stock query) is shown as each batch's available stock, and a failed read becomes 0. Clerks pick batches and quantities from it.
-2. **Goods Issue success states (rows 43, 44, with 38)** - queued lines return `Success:true` / `DifferenceCleared:true`, any non-queued response is shown as POSTED_IN_SAP without a material document, and open quantities ignore the queue while SAP posting is blocked.
+1. **[DECOMMISSIONED] Goods Issue stock figures (row 40)** - Goods Issue module decommissioned and deleted.
+2. **[DECOMMISSIONED] Goods Issue success states (rows 43, 44, with 38)** - Goods Issue module decommissioned and deleted.
 3. **Sales Inquiry detail borrowing Sales Office / Sales Group / Ship-to from other records (rows 15, 16)** - a display screen shows values the SAP document does not contain.
 
 Close behind: PO status defaulting to 'Approved' (row 4) and page-only KPIs with a 100% default (rows 6, 7, 21, 28).
@@ -157,16 +157,16 @@ Checks: `cds compile` OK; `jest test/unit` 62 suites / 897 tests passed; `eslint
 | 31 Approval status on due orders | Fixed | Lookup failure marks status as 'unknown', creates warning message strip, and blocks delivery creation across UI and backend. |
 | 32 Shipping points | Fixed | Bound to `ShippingPointVH`. |
 | 39 Movement type default | **Open** | `|| '261'`, `|| 'GI for order'` still in 3 files. |
-| 40 GI batch stock | Mostly fixed | Batch-grain stock from `MMIM_MULTIPLE_MATERIAL_SRV/MaterialMultiStockByDates` (fields verified in saved metadata: Batch, CurrentStock, StorageLocation, BaseUnit); unknown = null. Residuals: (a) `batchStockMap.set` keeps the LAST row per batch, so a batch in two storage locations or special stock is not summed when no storage location is given; (b) [RESOLVED] handling-unit branch `GoodsIssueStockUnitClient.js` now strictly guards unknown stock (`currentStock !== null`), avoiding false "SAP reports no stock" and preventing `Math.min(null, openQty) = 0`; (c) a "secondary fallback for unit test mocks" read sits in the runtime path (GoodsIssueBatchesClient.js:124-146). |
-| 41, 42, 43, 44 | Fixed | 'unknown' status; synthetic barcode removed; POSTED_IN_SAP needs a material document; queued lines `Success:false, Queued:true, DifferenceCleared:false`. |
-| 37 GI reservation list 2,000 cap | Fixed | Pushes Reservation/Order server-side into SAP OData $filter before paging; non-silent truncation with LOG.warn, IsTruncated flag, ItemCountPartial indicator, and UI MessageStrip/toast. |
-| 38 GI open quantity | Fixed | `GoodsIssueReservationsClient.js` and `GoodsIssueStockUnitClient.js` deduct pending quantities in dispatch queue (`openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty)`), expose `QueuedQty`, and prevent double-issuance. |
+| 40 GI batch stock | DECOMMISSIONED | Goods Issue decommissioned and deleted across application. |
+| 41, 42, 43, 44 | DECOMMISSIONED | Goods Issue decommissioned and deleted across application. |
+| 37 GI reservation list 2,000 cap | DECOMMISSIONED | Goods Issue decommissioned and deleted across application. |
+| 38 GI open quantity | DECOMMISSIONED | Goods Issue decommissioned and deleted across application. |
 | 33 GR scan outage propagation | Fixed | `GoodsReceiptAdapter.js` distinguishes S/4HANA backend outages across Tiers 1-6 via `_isOutage` and rethrows immediately; handler rejects with 502/503/504 and UI shows backend outage dialog instead of masking as 404 'barcode not found'. |
 | 34 GR quantity blank on failed read | Fixed | Missing or failed item reads return authentic `null` for `Quantity`, `OpenQuantity`, `OrderedQuantity`, and `QuantityInEntryUnit` instead of default 0. UI controller and view preserve blank/null. |
 | 35 GR pick list errors surfaced & dead source dropped | Fixed | Dead source `MMIM_MATERIAL_DATA_SRV` (0 rows) dropped and replaced with live SAP Value Help `C_MM_StorLocValueHelp` (696 rows); document's authentic `StorageLocation` from `GR4PO_DL_Items` guaranteed in `AvailableStorageLocations`. `getMaterialStorageLocations` and `getMaterialBatches` rethrow on outages and backend errors; CAP handlers reject with 502. |
 | 2 FI tile relabeling | Fixed | Relabeled to "Items to be verified" in `i18n.properties` and `i18n_en.properties` (`dashboardKpiFIDocs`), reflecting authentic `C_GLJrnlEntryItemToBeVerified` line item count. |
 | 9, 30, 45 | **Open** | Unchanged: ZFRT/FERT scope, "Due Orders" counts schedule lines, queue count 0 on error. |
-| Not in table | Open | `'999'` difference storage type (5 places); GI unit `|| "PC"` (GoodsIssueService.js:183); GR movement type `|| '101'`. |
+| Not in table | Open | `'999'` difference storage type in GR; GR movement type `|| '101'` [GI references decommissioned]. |
 
 Scorecard by the same 47 groups: cleanly live 11 -> 31; live with caveat 11 -> 11; assumed 25 -> 5 (rows 21, 23, 24, 26 partly, 39).
 
@@ -175,6 +175,6 @@ Scorecard by the same 47 groups: cleanly live 11 -> 31; live with caveat 11 -> 1
 - No live SAP call was made; every 'live' verdict is a code-path verdict.
 - Which row `C_STOCKQUANTITYVALUEBYTYPE` returns first, and whether it carries batch or stock-type fields: no metadata for it is saved in the repo.
 - The Purchase Order READ handler and `PurchaseOrderDetail.controller.js` were pattern-scanned, not traced line by line.
-- `GoodsIssueStockUnitClient.js` handling-unit branch (lines 100-560, /scwm/ services) was not traced; EWM holds no data per docs/service-map.md.
+- [DECOMMISSIONED] `GoodsIssueStockUnitClient.js` handling-unit branch was decommissioned and deleted.
 - WORKSTATUS.md claims of live results (GR quantities, approval status codes, delivery 13000526) were read, not reproduced.
 - Production behaviour (XSUAA, destinations, HDI) is inferred from `mta.yaml` and `package.json`; nothing is deployed that I could inspect.

@@ -18,12 +18,11 @@ Rule: missing value -> show empty / block Save with a field error. Never substit
 | 1.5 | `'Material ' + id`, `'Plant ' + id` as names (18 places) | `GoodsReceiptAdapter.js` | `DeliveryDocumentItemText`, `PurchaseOrderItemText`, `PlantName` on the same entities; `C_MM_MaterialValueHelp.MaterialName`, `C_MM_PlantValueHelp` (verified). | Return `''` when SAP sends no text. The UI already shows the number. |
 | 1.6 | Storage location falls back to `cds.s4.storageLocation` (CS01) | `GoodsReceiptAdapter.js:543` | `GR4PO_DL_Item.StorageLocation` / `StorageLocationName` / `WarehouseStorageBin` (verified). Note: `MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps` has 0 rows (service-map.md), so today the fallback fires on EVERY scan. | Take storage location from the item read in 1.1; if empty leave empty and make the user pick. Config value only as a visible, editable suggestion flagged `derived: true`. |
 
-## 2. Goods Issue
+## 2. Goods Issue (Decommissioned)
 
-| # | Assumed today | Where | Actual source | Change |
-|---|---|---|---|---|
-| 2.1 | `Unit \|\| "PC"` | `GoodsIssueService.js:183` | `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem.BaseUnit` (14,730 rows; backend already reads it). | Remove fallback; reject when empty. |
-| 2.2 | `DifferenceStorageType \|\| '999'` (5 places: `GoodsIssuePostingClient.js:24`, `goodsIssue.handler.js:225`, `GoodsIssue.controller.js:1128`, `GoodsIssueService.js:187,250`) | — | Not verified. No SAP read in the repo returns this value; 999 is a convention, not data. | Ask the warehouse/SAP WM owner for the real value, put it once in `cds.s4` (explicit config), remove the 5 literals. Send it only when a difference quantity exists. |
+| # | Status | Scope | Resolution |
+|---|---|---|---|
+| 2.1, 2.2 | **DECOMMISSIONED** | `GoodsIssueService.js`, `GoodsIssuePostingClient.js`, `goodsIssue.handler.js`, `GoodsIssue.controller.js` | Goods Issue module completely decommissioned and deleted across the repository. |
 
 ## 3. Sales Order / Sales Inquiry
 

@@ -20,10 +20,10 @@ Nothing below is inferred from code reading or from a `200`. Every claim names i
 | Purchase Order | 23 | **Delivers.** 2,782 POs, 6,136 items, 20 of 21 value helps carry data |
 | Sales Inquiry | 17 | **Delivers.** 629 headers, 628 items, all 12 value helps carry data |
 | Journal Entry | 1 | **Delivers.** 174,155 items |
-| Goods Issue | 6 | **Delivers on read.** Posting blocked — see Part 3 |
+| Goods Issue | - | **DECOMMISSIONED** — removed from application |
 | Goods Receipt | 4 | **Delivers on read.** Posting retargeted, not yet proven |
 
-Goods Issue traced end to end on reservation **168779** (plant 1120, movement 261): 6 items,
+Goods Issue (historical pre-decommissioning trace) on reservation **168779** (plant 1120, movement 261): 6 items,
 material 3000000200 "Diazotization Reaction", 653.847 KG open, storage location CS01, two batches
 with real expiry and status (`IN25000963`, exp 2026-12-11, VALID). Reservation 168778 likewise, with a
 batch flagged EXPIRING SOON. Goods Receipt traced on storage unit **180000001** → delivery 180000001,
