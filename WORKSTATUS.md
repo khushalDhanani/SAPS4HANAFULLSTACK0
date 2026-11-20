@@ -17,9 +17,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
-- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 657 first-party source files (up from 558 initially, due to 59 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
-  1. *Decomposition Milestones (Phases 1-5):* 20 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
-  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 117 files. Total first-party files scanned: 657 files.
+- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 657 first-party source files (up from 558 initially, due to 61 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
+  1. *Decomposition Milestones (Phases 1-5):* 21 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
+  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 116 files. Total first-party files scanned: 657 files.
   3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors). All unit tests pass across all modularized domains.
 - **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting all fifteen monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], `HandlingUnits.controller.js` [643 lines], `CreateCustomerReturn.controller.js` [668 lines], `GoodsReceipt.controller.js` [613 lines], `MibLabel.controller.js` [588 lines], `QuarantineLabels.controller.js` [540 lines], `CustomerInvoices.controller.js` [540 lines], `SalesOrders.controller.js` [407 lines], `CustomerReturns.controller.js` [378 lines], and `App.controller.js` [366 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
@@ -397,6 +397,32 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 19:30 IST — Phase 4: Frontend View Models Modularization (PurchaseOrderModel.js) — PASS
+
+- REQUEST: Modularize monolithic frontend view model `PurchaseOrderModel.js` (634 lines) below 300 lines per `SCAN_REPORT.md` Phase 4 without breaking changes or contract deviations.
+- INSPECT:
+  - Audited `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js` (634 lines).
+  - Traced consumers: `CreatePurchaseOrder.controller.js` and test suites: `test/unit/purchase-order/createPurchaseOrderStatus.test.js`, `poConfigDefaulting.test.js`, `poTypeDynamicRules.test.js`, and all 28 purchase order suites (545 tests).
+  - Identified 3 distinct domains in `PurchaseOrderModel.js`:
+    1. Initial state structure: `HEADER_FIELD_CONFIG`, `ITEM_FIELD_CONFIG`, `createInitialModel` (instantiating JSONModel with full header, items, uiRules, userModified, configDerived, and errors).
+    2. Item operations and status evaluation: `addItem`, `deleteItem`, `calculateItemNetAmount`, `computeStatus`, `updateStatus`.
+    3. Model base coordinator and facades: `getCurrentUserName`, `DEFAULT_DOC_TYPE`, `setTextResolver`, `getText`, `markUserModified`, and delegated facades to `_validator` and `_defaults`.
+- PLAN:
+  - Extract initial state and configuration into `PurchaseOrderInitialState.js` (161 lines).
+  - Extract item operations and status management into `PurchaseOrderOperations.js` (148 lines).
+  - Retain coordinator, text resolution, and facades in `PurchaseOrderModel.js` (233 lines).
+  - Use dual-environment export pattern (`isNode` CommonJS `module.exports` vs browser `sap.ui.define`) to guarantee 100% backward compatibility in both UI5 browser AMD and Node/Jest environments.
+- CHANGE:
+  - Created `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderInitialState.js` (161 lines).
+  - Created `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderOperations.js` (148 lines).
+  - Refactored `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js` (slashed from 634 to 233 lines, -401 lines, -63.2%).
+- VALIDATE:
+  - Exact line count: All 3 files strictly $\le 300$ lines (`wc -l`: 233, 161, 148).
+  - Total files > 300 lines reduced from 117 to **116 files**.
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Unit test suites: `test/unit/purchase-order/` (28/28 suites, 545/545 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 545 tests in `test/unit/purchase-order/` covering PO creation, status computation, defaulting, field validation, and error mapping pass cleanly.
 
 ### 2026-11-20 19:15 IST — Phase 4: Frontend View Models Modularization (SalesInquiryModel.js) — PASS
 
