@@ -16,6 +16,8 @@ beforeAll(() => {
                         modules['saps4hana/fiori/modules/wm/quarantine-label/util/AetherLogo'] = res;
                     } else if (res && res.bars) {
                         modules['saps4hana/fiori/modules/wm/handling-unit/util/Barcode'] = res;
+                    } else if (res && res.buildRowItems) {
+                        modules['saps4hana/fiori/modules/wm/mib-label/util/MibLabelRows'] = res;
                     }
                 } else {
                     const resolved = deps.map(d => modules[d]);
@@ -24,6 +26,14 @@ beforeAll(() => {
                         MibLabelPdf = res;
                     } else if (res && res.measureMm) {
                         modules['saps4hana/fiori/modules/wm/handling-unit/util/HuLabelLayout'] = res;
+                    } else if (res && res.buildBarcodeItems) {
+                        modules['saps4hana/fiori/modules/wm/mib-label/util/MibBarcodeLayout'] = res;
+                    } else if (res && res.buildRowItems) {
+                        modules['saps4hana/fiori/modules/wm/mib-label/util/MibLabelRows'] = res;
+                    } else if (res && res.drawStandardSticker && !res.generateDoc) {
+                        modules['saps4hana/fiori/modules/wm/mib-label/util/MibStandardSticker'] = res;
+                    } else if (res && res.getVerticalItems && !res.generateDoc) {
+                        modules['saps4hana/fiori/modules/wm/mib-label/util/MibLabelLayout'] = res;
                     }
                 }
             },
@@ -36,6 +46,10 @@ beforeAll(() => {
     require('../../../app/fiori-app/webapp/modules/wm/quarantine-label/util/AetherLogo.js');
     require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/Barcode.js');
     require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelLayout.js');
+    require('../../../app/fiori-app/webapp/modules/wm/mib-label/util/MibBarcodeLayout.js');
+    require('../../../app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelRows.js');
+    require('../../../app/fiori-app/webapp/modules/wm/mib-label/util/MibStandardSticker.js');
+    require('../../../app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelLayout.js');
     require('../../../app/fiori-app/webapp/modules/wm/mib-label/util/MibLabelPdf.js');
 });
 
