@@ -116,7 +116,7 @@ function registerOutboundDeliveryHandlers(srv) {
     };
   });
 
-  // 5. PGI / billing on an existing delivery — SAP's result only, never a synthesized number
+  // 5. Follow-up / billing on an existing delivery — SAP's result only, never a synthesized number
   srv.on('getDeliveryStatus', async (req) => {
     try {
       const status = await outboundDeliveryAdapter.getDeliveryStatus(req.data?.DeliveryDocument);

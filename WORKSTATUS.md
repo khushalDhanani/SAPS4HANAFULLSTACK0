@@ -208,6 +208,39 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-20 11:45 IST — Non-Functional Comment & Constant Purge (PGI Service Path to Credit Block Service Path) — PASS
+
+- REQUEST: Clean up remaining non-functional references across Outbound Delivery files: remove PGI wording from comments in `outboundDelivery.handler.js:119`, `OrdersDueForDelivery.controller.js:74`, and `OrdersDueForDelivery.view.xml:97`; rename constant `PGI_SERVICE_PATH` to `CREDIT_BLOCK_SERVICE_PATH` in `OutboundDeliveryAdapter.js` while strictly preserving `releaseCreditDelivery()`. Retain legitimate SAP delivery date fields `GoodsIssueDate` and `PlannedGoodsIssueDate`.
+- INSPECT:
+  - Inspected `outboundDelivery.handler.js:119`: Header comment for `getDeliveryStatus` referenced PGI.
+  - Inspected `OrdersDueForDelivery.controller.js:74`: Model setup comment referenced PGI.
+  - Inspected `OrdersDueForDelivery.view.xml:97`: Follow-up panel XML comment referenced PGI.
+  - Inspected `OutboundDeliveryAdapter.js:24, 653`: Constant `PGI_SERVICE_PATH` was used exclusively by `releaseCreditDelivery()` to call `SD_SOFM_CREDIT_BLOCK_SRV/ReleaseCreditDelivery`. Verified this operation is for releasing credit blocks, not Goods Issue.
+- PLAN:
+  - Update comments in `outboundDelivery.handler.js`, `OrdersDueForDelivery.controller.js`, and `OrdersDueForDelivery.view.xml` to refer to follow-up and billing.
+  - Rename `PGI_SERVICE_PATH` to `CREDIT_BLOCK_SERVICE_PATH` in `OutboundDeliveryAdapter.js` (declaration at line 24 and usage in `releaseCreditDelivery` at line 650).
+  - Retain `PlannedGoodsIssueDate` and `GoodsIssueDate` as standard SAP delivery scheduling fields.
+  - Run linters, UI5 production build, CDS compilation, and LE unit tests.
+- CHANGE:
+  - `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`: Replaced comment `PGI / billing` with `Follow-up / billing`.
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`: Replaced comment `PGI and billing` with `billing`.
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`: Replaced XML comment `PGI, then billing` with `billing`.
+  - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`: Renamed `PGI_SERVICE_PATH` to `CREDIT_BLOCK_SERVICE_PATH`.
+- TEST:
+  - `TEST NOT REQUIRED` for comment updates and internal constant rename.
+  - `EXISTING TEST SUFFICIENT`:
+    - Full LE unit tests (`npx jest test/unit/le/`): 6/6 suites PASSED (179 passed, 0 failed, 1.181s).
+    - UI5 Production Build (`npm --prefix app/fiori-app run build`): PASSED (Build succeeded in 1.05s).
+    - MTA Project Validation (`npm run validate:mta`): PASSED (MTA project validated).
+    - Root ESLint (`npm run lint`): PASSED (0 errors, 0 warnings).
+    - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (Success! No findings detected).
+    - CDS compilation (`npx cds compile srv/service.cds`): PASSED (0 errors).
+- VERIFY:
+  - `releaseCreditDelivery()` preserved and functioning with renamed constant.
+  - Zero PGI wording remains in Outbound Delivery comments or constants.
+- REVIEW:
+  - Conforms to repository architectural standards. Working tree clean.
+
 ### 2026-11-20 11:30 IST — Final Cleanliness Audit, Residual Artifact Purge & Complete Hard Deletion Verification — PASS
 
 - REQUEST: Complete hard deletion of Goods Issue functionality across the SAP S/4HANA full-stack application (both LE-WM Movement 261 workflow and EWM Outbound Delivery PGI). Remove all dedicated files, references in shared files, residual build/investigation artifacts, and database entities without breaking unrelated modules. Verify all preserved modules.

@@ -21,7 +21,7 @@ try {
 
 const SERVICE_PATH = '/sap/opu/odata/sap/LE_SHP_QC_DLVREF_SRV';
 // Verified in docs/sd-metadata (22 Sep 2026): function imports, HttpMethod POST, parameters in the URL.
-const PGI_SERVICE_PATH = '/sap/opu/odata/sap/SD_SOFM_CREDIT_BLOCK_SRV';
+const CREDIT_BLOCK_SERVICE_PATH = '/sap/opu/odata/sap/SD_SOFM_CREDIT_BLOCK_SRV';
 const BILLING_SERVICE_PATH = '/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_CREATE';
 // Delivery header statuses: SD_SOF/I_DeliveryDocument (verified live 22 Sep 2026; single-key read fails with LCX_INVALID_SECTION_TYPE, $filter works)
 const DELIVERY_READ_PATH = '/sap/opu/odata/sap/SD_SOF';
@@ -650,7 +650,7 @@ class OutboundDeliveryAdapter {
       err.status = 400;
       throw err;
     }
-    const url = `${PGI_SERVICE_PATH}/ReleaseCreditDelivery?DeliveryNumber=${odataString(dlv)}`;
+    const url = `${CREDIT_BLOCK_SERVICE_PATH}/ReleaseCreditDelivery?DeliveryNumber=${odataString(dlv)}`;
     LOG.info(`Releasing credit block for delivery: POST ${url}`);
     let res;
     try {

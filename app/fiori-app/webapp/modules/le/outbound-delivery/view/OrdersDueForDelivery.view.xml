@@ -94,7 +94,7 @@
                     </GenericTile>
                 </HBox>
 
-                <!-- Follow-up on an existing delivery: PGI, then billing. Everything shown comes from S/4HANA. -->
+                <!-- Follow-up on an existing delivery: billing. Everything shown comes from S/4HANA. -->
                 <Panel id="deliveryFollowUpPanel" headerText="{i18n>dlvFollowUpTitle}" expandable="true" expanded="{= !!${deliveryFollowUp>/delivery} }" class="sapUiSmallMarginBottom" busy="{deliveryFollowUp>/busy}">
                     <HBox wrap="Wrap" alignItems="End" class="sapUiTinyMargin">
                         <VBox class="sapUiTinyMarginEnd">

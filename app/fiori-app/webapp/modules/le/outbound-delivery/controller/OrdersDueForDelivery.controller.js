@@ -71,7 +71,7 @@ sap.ui.define([
             });
             this.getView().setModel(oNoRefDialogModel, "deliveryNoRefDialog");
 
-            // Follow-up on an existing delivery: PGI and billing. Types come from SAP per delivery.
+            // Follow-up on an existing delivery: billing. Types come from SAP per delivery.
             this.getView().setModel(new JSONModel({
                 delivery: "",
                 billingTypes: [],
