@@ -17,6 +17,22 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
+- **Phase 2: S/4 Integration Adapters Modularization — PASS:** Successfully executed Phase 2 modularization targeting monolithic S/4HANA integration adapters (`SalesInquiryAdapter.js` and `UserManagementAdapter.js`) without breaking changes or regression:
+  1. *SalesInquiryAdapter Modularization (slashed from 1,434 to 676 lines, -758 lines, 53% reduction):*
+     - Extracted `getInquiry` (deep expand, partner cards, price mapping, value help cache lookups) into `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDetailReader.js` (199 lines).
+     - Extracted `getInquiries`, `getSalesMetrics`, and `getInquiryMetrics` into `srv/integration/s4hana/sd/sales-inquiry/salesInquiryWorklistReader.js` (134 lines).
+     - Extracted `getCustomerDefaults` (KNVV RFC table read, `FAR_CUSTOMER_LIST_V2`, sales area validation) into `srv/integration/s4hana/sd/sales-inquiry/salesInquiryCustomerDefaults.js` (250 lines).
+     - Extracted `getSalesOrders`, `getSalesOrder`, `getSalesOrderDefaults`, and `checkATP` into `srv/integration/s4hana/sd/sales-inquiry/salesOrderReader.js` (287 lines).
+     - Retained 100% backward compatibility via delegating forwarders on `SalesInquiryAdapter.prototype`.
+  2. *UserManagementAdapter Modularization (slashed from 797 to 530 lines, -267 lines, 33% reduction):*
+     - Extracted `readUSH02`, `compareHistoryRows`, `compareHistoryCursor`, `readUSH02Where`, `readUSH02Range`, and cursor pagination into `srv/integration/s4hana/admin/UserHistoryReader.js` (134 lines).
+     - Extracted `parseSapDate`, `formatSapDate`, `addDays`, `diffCalendarDays`, `calculatePasswordStatus`, and policy constants into `srv/integration/s4hana/admin/UserPasswordExpiryUtil.js` (177 lines).
+     - Re-exported all utility functions on `UserManagementAdapter` module exports for 100% backward compatibility.
+  3. *Validation Results (100% PASS):*
+     - Linters: Root ESLint (`npm run lint`): PASSED (0 errors, 0 warnings). UI5 linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+     - CDS compilation (`npx cds compile srv/service.cds`): clean with 0 errors.
+     - Unit test suites across Sales Inquiry, Sales Order, and Admin domains: 20/20 suites PASSED (319 passed, 0 failed).
+     - All 6 newly extracted modules are strictly under 300 lines (134 to 287 lines).
 - **Phase 1: Pure Utilities and Leaf Validation Logic Modularization — PASS:** Successfully executed Phase 1 modularization targeting oversized pure utility and validation modules without breaking changes or regression:
   1. *CQN Filter Evaluator Extraction:* Extracted in-memory CQN where-clause compiler and evaluator from `srv/common/filterUtils.js` into dedicated module `srv/common/cqnFilterEvaluator.js` (167 lines). `filterUtils.js` slashed from 349 to 214 lines (-135 lines, dropping well below the 300-line threshold) while retaining 100% backward compatibility via re-exports. Added dedicated unit test suite `test/unit/common/cqnFilterEvaluator.test.js` (8/8 tests PASS).
   2. *Purchase Order Backend Error Mapper Extraction:* Extracted SAP Gateway/CAP backend error parsing and UI model mapping from `PurchaseOrderValidator.js` into dedicated UMD module `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderBackendErrorMapper.js` (258 lines). `PurchaseOrderValidator.js` reduced from 1,140 to 930 lines (-210 lines) while preserving the public `applyBackendErrors` API via delegation. Added dedicated unit test suite `test/unit/purchase-order/purchaseOrderBackendErrorMapper.test.js` (5/5 tests PASS).
@@ -240,7 +256,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-1. Optionally refresh `test/e2e/performance/baseline.json` via `E2E_UPDATE_BASELINE=1` during the next scheduled baseline calibration to capture the optimized 796 ms load time for `createPurchaseOrder` (currently passing cleanly at 796 ms against the historical 25,608 ms baseline).
+1. Execute Phase 3: Backend CAP Handlers & Background Daemons Modularization (specifically decompose snapshot diffing from `srv/admin/lockNotifier.js` into `srv/admin/LockDiffEngine.js`).
 2. For Cloud Foundry RFC production deployment, configure the multi-buildpack pipeline (or container runtime) with the enterprise-hosted SAP NW RFC SDK 7.50 Linux x86-64 archive per `docs/deployment/rfc-production-readiness.md`, provision technical user authorizations per the matrix in Section 5, and bind BTP RFC destination `S4HANA_RFC`.
 3. User tests and verifies the updated Material Issued To Batch Sticker screen in the browser at `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/mib-label` (Direct form, Transfer Order date range filter, table multi-selection, bulk download, row barcode preview & scroll, row download, row print, in-viewport notifications).
 4. Review the Phase 2 implementation of SM21/SM20 log monitoring (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`, `sapLogsService.js`, `sap-logs-service.cds`, unit and live test suites, and `SAP_SYSLOG_DISCOVERY.md`).
@@ -252,6 +268,47 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 14:45 IST — Phase 2: S/4 Integration Adapters Modularization (SalesInquiryAdapter & UserManagementAdapter) — PASS
+
+- REQUEST: Execute Phase 2 modularization targeting S/4HANA integration adapters (`SalesInquiryAdapter.js` and `UserManagementAdapter.js`) per `SCAN_REPORT.md` roadmap.
+- INSPECT:
+  - Audited `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js` (1,434 lines) and `srv/integration/s4hana/admin/UserManagementAdapter.js` (797 lines).
+  - Identified clean architectural separation boundaries:
+    - `SalesInquiryAdapter.js`: Single inquiry detail reader (`getInquiry`), Worklist reader & live metrics (`getInquiries`, `getSalesMetrics`, `getInquiryMetrics`), Customer commercial defaulting (`getCustomerDefaults`), and Sales order reader & ATP check (`getSalesOrders`, `getSalesOrder`, `getSalesOrderDefaults`, `checkATP`).
+    - `UserManagementAdapter.js`: USH02 change history reader & cursor pagination (`readUSH02`, `compareHistoryRows`, `compareHistoryCursor`), and Password expiry utility calculation (`parseSapDate`, `formatSapDate`, `addDays`, `diffCalendarDays`, `calculatePasswordStatus`).
+  - Traced consumers: SD service handlers, Fiori controllers, 12 sales inquiry test suites, 3 sales order test suites, and SU01 admin test suites.
+- PLAN:
+  - Extract `salesInquiryDetailReader.js` (199 lines) for `getInquiry`.
+  - Extract `salesInquiryWorklistReader.js` (134 lines) for `getInquiries` and metrics.
+  - Extract `salesInquiryCustomerDefaults.js` (250 lines) for `getCustomerDefaults`.
+  - Extract `salesOrderReader.js` (287 lines) for `getSalesOrders`, `getSalesOrder`, `getSalesOrderDefaults`, and `checkATP`.
+  - Extract `UserHistoryReader.js` (134 lines) for `readUSH02` and cursor pagination.
+  - Extract `UserPasswordExpiryUtil.js` (177 lines) for password expiry calculation and policy defaults.
+  - Maintain 100% backward compatibility via delegating forwarders on `SalesInquiryAdapter.prototype` and re-exports on `UserManagementAdapter`.
+  - Add dedicated unit test suites for all 6 newly created modules.
+  - Run linting, CDS compilation, and unit test suites across affected domains.
+- CHANGE:
+  - Created `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDetailReader.js` (199 lines).
+  - Created `srv/integration/s4hana/sd/sales-inquiry/salesInquiryWorklistReader.js` (134 lines).
+  - Created `srv/integration/s4hana/sd/sales-inquiry/salesInquiryCustomerDefaults.js` (250 lines).
+  - Created `srv/integration/s4hana/sd/sales-inquiry/salesOrderReader.js` (287 lines).
+  - Refactored `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js` (slashed from 1,434 to 676 lines, -758 lines, 53% reduction).
+  - Created `srv/integration/s4hana/admin/UserHistoryReader.js` (134 lines).
+  - Created `srv/integration/s4hana/admin/UserPasswordExpiryUtil.js` (177 lines).
+  - Refactored `srv/integration/s4hana/admin/UserManagementAdapter.js` (slashed from 797 to 530 lines, -267 lines, 33% reduction).
+  - Created `test/unit/sales-inquiry/salesInquiryDetailReader.test.js` (108 lines).
+  - Created `test/unit/sales-inquiry/salesInquiryWorklistReader.test.js` (65 lines).
+  - Created `test/unit/sales-inquiry/salesInquiryCustomerDefaults.test.js` (68 lines).
+  - Created `test/unit/sales-order/salesOrderReader.test.js` (68 lines).
+  - Created `test/unit/admin/userHistoryReader.test.js` (44 lines).
+  - Created `test/unit/admin/userPasswordExpiryUtil.test.js` (49 lines).
+- VALIDATE:
+  - Root ESLint (`npm run lint`): PASSED (0 errors, 0 warnings).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - CDS compilation (`npx cds compile srv/service.cds`): clean with 0 errors.
+  - Unit test suites across Sales Inquiry, Sales Order, and Admin domains: 20/20 suites PASSED (319 passed, 0 failed).
+- TEST DECISION: `TEST ADDED` — Added 6 dedicated unit test suites (`salesInquiryDetailReader.test.js`, `salesInquiryWorklistReader.test.js`, `salesInquiryCustomerDefaults.test.js`, `salesOrderReader.test.js`, `userHistoryReader.test.js`, `userPasswordExpiryUtil.test.js`). Verified all existing suites continue passing.
 
 ### 2026-11-20 14:10 IST — Phase 1: Pure Utilities and Leaf Validation Logic Modularization — PASS
 
