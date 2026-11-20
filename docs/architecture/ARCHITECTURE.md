@@ -59,7 +59,7 @@ Per [ADR-0001: Pure S/4HANA Integration Façade](../decisions/ADR-0001-s4-centri
 | **Routing** | `app/router/` | Standalone Approuter, central entry point, authentication gateway, route dispatching | Stateless proxy; routes only to registered destinations and HTML5 repo. |
 | **CAP Service** | `srv/` | OData V4 projection, CSRF token handling, S/4 session cookie management, payload normalization, error translation | Communicates with S/4 strictly via `srv/integration/s4hana/`. |
 | **S/4 Integration** | `srv/integration/s4hana/` | S/4HANA technical adapter, HTTP client, CSRF fetch, draft creation, line scheduling, and document activation | Exclusive location for S/4 technical HTTP and OData communication. |
-| **Persistence** | `db/` | Application-owned state only: posting attempts (`saps4hana.wm.GoodsIssuePostingAttempt`) in an HDI container, as the double-post guard | S/4 remains the system of record for every business document |
+| **Persistence** | `db/` | Application-owned state only: posting attempts (`saps4hana.wm.GoodsReceiptPostingAttempt`) in an HDI container, as the double-post guard | S/4 remains the system of record for every business document |
 
 ---
 

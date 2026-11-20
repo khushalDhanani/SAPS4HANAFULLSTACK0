@@ -128,20 +128,6 @@ function registerOutboundDeliveryHandlers(srv) {
     }
   });
 
-  srv.on('postGoodsIssue', async (req) => {
-    try {
-      await assertDeliveryInScope(req);
-      const ifMatch = extractIfMatch(req);
-      return ifMatch
-        ? await outboundDeliveryAdapter.postGoodsIssue(req.data?.DeliveryDocument, { ifMatch })
-        : await outboundDeliveryAdapter.postGoodsIssue(req.data?.DeliveryDocument);
-    } catch (err) {
-      LOG.error(`postGoodsIssue failed: ${err.message}`);
-      throwIfTextMustShow(err);
-      return req.error(err.status || 502, err.message);
-    }
-  });
-
   srv.on('getBillingDocumentTypes', async (req) => {
     try {
       return await outboundDeliveryAdapter.getBillingDocumentTypes(req.data?.DeliveryDocument);

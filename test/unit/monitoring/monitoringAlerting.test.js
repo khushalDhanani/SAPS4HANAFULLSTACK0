@@ -11,17 +11,22 @@
  */
 
 const cds = require('@sap/cds');
+cds.test(__dirname + '/../../../');
+
 const getLogger = require('../../../srv/common/logger');
-const { GoodsIssueAttemptStore } = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
+const { GoodsReceiptAttemptStore, ATTEMPT_ENTITY } = require('../../../srv/wm/goods-receipt/GoodsReceiptAttemptStore');
 const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
 
 describe('Production Assurance: Monitoring & Alerting Verification', () => {
   let warnSpy;
   let errorSpy;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    if (cds.db) {
+      await cds.db.run(cds.ql.DELETE.from(ATTEMPT_ENTITY));
+    }
   });
 
   afterEach(() => {
@@ -54,22 +59,27 @@ describe('Production Assurance: Monitoring & Alerting Verification', () => {
 
   describe('2. Transaction Alerting: needs-attention State for Stale Attempts', () => {
     it('promotes stale unconfirmed attempts (> 30 min) to needs-attention status to trigger supervisor alerts', async () => {
-      const store = new GoodsIssueAttemptStore();
+      const store = new GoodsReceiptAttemptStore();
       const staleTime = new Date(Date.now() - 35 * 60 * 1000).toISOString(); // 35 minutes ago
 
-      // Mock an attempt in the in-memory store
       const ref = 'REF-ALERT-001';
-      store._memoryStore.set(ref, {
+      await store.create({
         ReferenceDocument: ref,
-        MaterialDocument: '4900050304',
-        MaterialDocYear: '2026',
-        Status: 'unconfirmed',
-        MovementType: '201',
-        ReservationNumber: '0000533316',
-        ItemNumber: '0001',
-        createdAt: staleTime,
-        updatedAt: staleTime
+        MovementType: '101',
+        ReservationNo: '0000533316',
+        ReservationItem: '0001'
       });
+      await cds.db.run(
+        cds.ql.UPDATE(ATTEMPT_ENTITY)
+          .set({
+            MaterialDocument: '4900050304',
+            MaterialDocYear: '2026',
+            Status: 'unconfirmed',
+            createdAt: staleTime,
+            updatedAt: staleTime
+          })
+          .where({ ReferenceDocument: ref })
+      );
 
       // Mock adapter finding unconfirmed state
       const mockAdapter = {
@@ -80,26 +90,32 @@ describe('Production Assurance: Monitoring & Alerting Verification', () => {
       expect(summary.Checked).toBe(1);
       expect(summary.MarkedNeedsAttention).toBe(1);
 
-      const updated = store._memoryStore.get(ref);
+      const updated = await store.getByReference(ref);
       expect(updated.Status).toBe('needs-attention');
     });
 
     it('promotes unconfirmed attempts to posted when read-back proves SAP persistence', async () => {
-      const store = new GoodsIssueAttemptStore();
+      const store = new GoodsReceiptAttemptStore();
       const recentTime = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
       const ref = 'REF-CONFIRM-002';
-      store._memoryStore.set(ref, {
+      await store.create({
         ReferenceDocument: ref,
-        MaterialDocument: '4900050305',
-        MaterialDocYear: '2026',
-        Status: 'unconfirmed',
-        MovementType: '241',
-        ReservationNumber: '0000533317',
-        ItemNumber: '0001',
-        createdAt: recentTime,
-        updatedAt: recentTime
+        MovementType: '101',
+        ReservationNo: '0000533317',
+        ReservationItem: '0001'
       });
+      await cds.db.run(
+        cds.ql.UPDATE(ATTEMPT_ENTITY)
+          .set({
+            MaterialDocument: '4900050305',
+            MaterialDocYear: '2026',
+            Status: 'unconfirmed',
+            createdAt: recentTime,
+            updatedAt: recentTime
+          })
+          .where({ ReferenceDocument: ref })
+      );
 
       const mockAdapter = {
         readBackDocument: jest.fn().mockResolvedValue({
@@ -113,7 +129,7 @@ describe('Production Assurance: Monitoring & Alerting Verification', () => {
       expect(summary.Checked).toBe(1);
       expect(summary.Confirmed).toBe(1);
 
-      const updated = store._memoryStore.get(ref);
+      const updated = await store.getByReference(ref);
       expect(updated.Status).toBe('posted');
       expect(updated.MaterialDocument).toBe('4900050305');
     });

@@ -641,38 +641,6 @@ class OutboundDeliveryAdapter {
   }
 
   /**
-   * Posts goods issue for an outbound delivery via SD_SOFM_CREDIT_BLOCK_SRV/PostGoodsIssue.
-   * SAP answers with PostGoodsReturnInfo flags only (no material document number) — that is what is reported.
-   */
-  async postGoodsIssue(deliveryDocument, options = {}) {
-    const dlv = String(deliveryDocument || '').trim();
-    if (!dlv) {
-      const err = new Error('DeliveryDocument is required to post goods issue.');
-      err.status = 400;
-      throw err;
-    }
-    const url = `${PGI_SERVICE_PATH}/PostGoodsIssue?DeliveryNumber=${odataString(dlv)}`;
-    LOG.info(`Posting goods issue: POST ${url}`);
-    let res;
-    try {
-      res = await this.client.post(url, { data: {}, ...options });
-    } catch (err) {
-      throw mapS4Error(err, 'postGoodsIssue');
-    }
-    const d = (res.data && (res.data.d || res.data)) || {};
-    const info = d.PostGoodsIssue || d;
-    const errorFlags = Object.keys(info).filter(k => k.startsWith('Error') && k !== 'ErrorAny' && info[k] === true);
-    const done = info.Done === true && info.ErrorAny !== true;
-    if (!done) {
-      const err = new Error(`S/4HANA did not post goods issue for delivery ${dlv}${errorFlags.length ? ` (${errorFlags.join(', ')})` : ''}.`);
-      err.status = 422;
-      err.details = info;
-      throw err;
-    }
-    return { DeliveryDocument: dlv, Done: true, ErrorFlags: errorFlags };
-  }
-
-  /**
    * Releases credit block for an outbound delivery via SD_SOFM_CREDIT_BLOCK_SRV/ReleaseCreditDelivery.
    */
   async releaseCreditDelivery(deliveryDocument, options = {}) {

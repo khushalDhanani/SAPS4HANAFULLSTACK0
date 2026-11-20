@@ -45,8 +45,8 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
         });
 
         it('derives the OData V4 service root', () => {
-            expect(serviceRootOf('/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem(ReservationNo=\'1\')/ns.postGoodsIssue'))
-                .toBe('/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/');
+            expect(serviceRootOf('/sap/opu/odata4/sap/c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001/SalesOrder(\'1\')/ns.confirm'))
+                .toBe('/sap/opu/odata4/sap/c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001/');
         });
 
         it('joins query strings regardless of leading ? or & and existing queries', () => {
@@ -270,7 +270,7 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
                 .mockResolvedValueOnce({ status: 200, data: {}, headers: {} });
             const { client } = makeClient({ executeHttpRequest });
 
-            await client.post('/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem/ns.postGoodsIssue', {
+            await client.post('/sap/opu/odata4/sap/c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001/SalesOrder/ns.confirm', {
                 data: { IssueQty: 1 },
                 csrfPath: '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1'
             });

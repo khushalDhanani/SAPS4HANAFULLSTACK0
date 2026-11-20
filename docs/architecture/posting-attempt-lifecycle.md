@@ -10,19 +10,17 @@
 
 ## 1. Executive Summary
 
-In the SAP S/4HANA Full-Stack Cloud Application Programming (CAP) platform, warehouse and inventory mutations (e.g. Movement 261/201 Goods Issues, Movement 101 Goods Receipts) interact directly with SAP S/4HANA via transactional BAPIs and OData services. Because network partitions, process crashes, or backend timeouts can sever communication after SAP has processed a transaction but before the client receives the response, the system implements an **At-Most-Once / Idempotent Posting Pattern**.
+In the SAP S/4HANA Full-Stack Cloud Application Programming (CAP) platform, warehouse and inventory mutations (e.g. Movement 101 Goods Receipts) interact directly with SAP S/4HANA via transactional BAPIs and OData services. Because network partitions, process crashes, or backend timeouts can sever communication after SAP has processed a transaction but before the client receives the response, the system implements an **At-Most-Once / Idempotent Posting Pattern**.
 
-To enforce this, every transaction writes a durable **Posting Attempt** to a shared database (SAP HANA HDI container) *before* invoking SAP. If a failure or uncertain outcome occurs, background recheck workers reconcile the attempt against S/4HANA backend tables (`MATDOC`, `MKPF`, `LIKP`) without blind retries or duplicate postings.
+To enforce this, every transaction writes a durable **Posting Attempt** to a shared database (SAP HANA HDI container) *before* invoking SAP. If a failure or uncertain outcome occurs, background recheck workers reconcile the attempt against S/4HANA backend tables (`MATDOC`, `MKPF`) without blind retries or duplicate postings.
 
-Historically, this functionality grew inside `srv/wm/goods-issue/GoodsIssueAttemptStore.js` and `db/wm/goods-issue-attempt.cds`. Over time, it expanded to support both Goods Issues and Goods Receipts, accumulating multiple responsibilities:
+Historically, this functionality grew inside a goods-issue attempt store. Following the full decommissioning of Goods Issue across the repository, the store and entity have been refactored into a dedicated Goods Receipt store: `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js` and `db/wm/goods-receipt-attempt.cds`:
 1. Attempt creation
 2. Idempotency & reference collision prevention
 3. Reclaim generations & audit trail tracking
-4. Goods issue reconciliation
-5. Goods receipt reconciliation
-6. Unconfirmed document read-back
-7. Outbound delivery resolution (L9/514)
-8. Background retry scheduling & distributed worker leasing
+4. Goods receipt reconciliation
+5. Unconfirmed document read-back
+6. Background retry scheduling & distributed worker leasing
 
 This document formally defines the **Common Posting-Attempt Lifecycle State Machine**, establishes the **Shared Storage Contract**, and details the **Future Modularization Blueprint** to decouple generic attempt persistence from movement-specific reconciliation without disrupting production stability or breaking backward compatibility.
 
@@ -48,7 +46,7 @@ If the CAP server simply retries the request upon timeout, S/4HANA risks creatin
 
 ### Architectural Rules
 1. **Durable Persistence Before SAP Call**: The attempt record must be committed to durable persistence (SAP HANA) *before* the S/4HANA network call is dispatched.
-2. **Fail-Closed on Database Loss**: If the durable database is unavailable in production, the application must immediately throw HTTP 503 (`DB_UNAVAILABLE`) and block the SAP write. Non-durable in-memory fallback is strictly restricted to isolated local unit tests.
+2. **Fail-Closed on Database Loss**: If the durable database is unavailable, the application must immediately throw HTTP 503 (`DB_UNAVAILABLE`) and block the SAP write. In-memory fallback is completely removed; the store strictly requires durable database persistence (`db/wm/goods-issue-attempt.cds`) in all environments.
 3. **Reconciliation Over Blind Retry**: An attempt with an uncertain outcome (`sending`, `unconfirmed`) must be reconciled by querying backend SAP tables before any retry is permitted.
 4. **Multi-Instance Distributed Leases**: Cloud Foundry environments run multiple instances (HA topology). Background rechecks and attempt claims must use distributed worker leases and atomic Compare-And-Swap (CAS) operations to prevent concurrent processing.
 

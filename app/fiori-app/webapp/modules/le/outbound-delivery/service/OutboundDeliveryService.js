@@ -178,17 +178,6 @@ sap.ui.define([
             });
         },
 
-        /** Post goods issue for a delivery. Resolves with SAP's PostGoodsReturnInfo-based result; rejects with SAP's message. */
-        postGoodsIssue: function (sDelivery, mOptions) {
-            if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }
-            var oPayload = { DeliveryDocument: String(sDelivery).trim() };
-            var sETag = (mOptions && (mOptions.etag || mOptions.ifMatch)) || "";
-            if (sETag) {
-                return ODataClient.post(SERVICE_BASE + "/postGoodsIssue", oPayload, { "If-Match": sETag });
-            }
-            return ODataClient.post(SERVICE_BASE + "/postGoodsIssue", oPayload);
-        },
-
         /** Billing document types SAP allows for this delivery (never a hardcoded list). */
         getBillingDocumentTypes: function (sDelivery) {
             if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }

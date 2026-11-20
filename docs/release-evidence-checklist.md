@@ -108,7 +108,7 @@ Full production release certification requires documented evidence across all **
 | :--- | :--- | :--- | :--- |
 | **Purchase Order** | `test/e2e/mm/roundTripPurchaseOrder.e2e.js` | `createPurchaseOrder` (OData `MM_PUR_PO_MAINT_V2_SRV` / BAPI fallback) | Purchase Order (e.g. `300002151`) |
 | **Sales Order** | `test/e2e/sd/roundTripSalesOrder.e2e.js` | `createSalesOrder` (Lean Order OData / BAPI) | Standard Sales Order (e.g. `5000534`) |
-| **Goods Receipt** | `test/e2e/wm/roundTripGoodsReceipt.e2e.js` | `postGoodsReceiptWithStorageUnit` (Movement 101/261 via BAPI) | Material Document (e.g. `5000005789`) |
+| **Goods Receipt** | `test/e2e/wm/roundTripGoodsReceipt.e2e.js` | `postGoodsReceiptWithStorageUnit` (Movement 101 via BAPI) | Material Document (e.g. `5000005789`) |
 | **Sales Inquiry** | `test/e2e/sd/roundTripSalesInquiry.e2e.js` | `createSalesInquiry` (OData `SD_F2369_INQY_FS_SRV`) | Sales Inquiry document |
 | **Customer Return** | `test/e2e/sd/roundTripCustomerReturn.e2e.js` | `createCustomerReturn` (Return Order BAPI) | Return Order with pricing |
 | **Handling Unit** | `test/e2e/wm/roundTripHandlingUnit.e2e.js` | `create`, `pack`, `unpack` (`BAPI_HU_CREATE`) | Handling Unit number |
@@ -134,7 +134,7 @@ Full production release certification requires documented evidence across all **
 | :--- | :--- | :--- | :--- |
 | **Purchase Order** | `EKKO` (Header)<br>`EKPO` (Item) | `EBELN`, `BSART`, `LIFNR`, `EKORG`, `EKGRP`, `BUKRS`<br>`EBELP`, `MATNR`, `MENGE`, `MEINS`, `NETPR`, `WERKS` | `EBELN` exists; Supplier, Plant, Material, and Net Price match submitted payload. |
 | **Sales Order** | `VBAK` (Header)<br>`VBAP` (Item)<br>`VBKD` (Commercial) | `VBELN`, `AUART`, `VKORG`, `VTWEG`, `SPART`, `KUNNR`<br>`POSNR`, `MATNR`, `KWMENG`, `VRKME`, `NETPR`<br>`INCO1`, `INCO2`, `ZTERM` | `VBELN` exists; Sold-to party, currency, and line item quantities match submitted order. |
-| **Goods Receipt / MIGO**| `MATDOC` / `MKPF`<br>`EKBE` (History)<br>`MARD` (Stock) | `MBLNR`, `MJAHR`, `BWART`, `MATNR`, `WERKS`, `LGORT`<br>`EBELN`, `EBELP`, `VGABE` (1 = Goods Receipt)<br>`LABST` (Unrestricted Stock) | `MBLNR` exists with movement type `101` or `261`; PO history updated; stock balance adjusted. |
+| **Goods Receipt / MIGO**| `MATDOC` / `MKPF`<br>`EKBE` (History)<br>`MARD` (Stock) | `MBLNR`, `MJAHR`, `BWART`, `MATNR`, `WERKS`, `LGORT`<br>`EBELN`, `EBELP`, `VGABE` (1 = Goods Receipt)<br>`LABST` (Unrestricted Stock) | `MBLNR` exists with movement type `101`; PO history updated; stock balance adjusted. |
 | **Customer Return** | `VBAK` (Return Header)<br>`VBAP` (Return Item)<br>`VBFA` (Doc Flow) | `VBELN`, `AUART`, `KUNNR`, `NETWR`<br>`POSNR`, `MATNR`, `KWMENG`<br>`VBELV` (Preceding Order), `VBELN` (Subsequent Return) | Return document exists; links to preceding reference order in `VBFA`; pricing is non-zero. |
 | **Transfer Order** | `LTAK` (Header)<br>`LTAP` (Items) | `LGNUM`, `TANUM`, `BWLVS`, `BWTAR`, `BDATU`<br>`TAPOS`, `MATNR`, `VSOLA`, `MEINS`, `VLTYP`, `NLTYP` | `TANUM` exists; movement type, source storage type, and destination bin match transfer spec. |
 | **Handling Unit** | `VEKP` (Header)<br>`VEPO` (Items) | `EXIDV`, `VHILM`, `STATUS`, `TARAG`, `GEWIC`<br>`VENUM`, `VELIN`, `VBELN`, `POSNR` | `EXIDV` exists in `VEKP`; packaging material assigned; items packed in `VEPO`. |

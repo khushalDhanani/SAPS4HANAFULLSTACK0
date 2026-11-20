@@ -51,7 +51,7 @@ describe('Integration: plant scope on outbound delivery writes', () => {
       if (config.headers['x-csrf-token'] === 'Fetch') return { status: 200, data: {}, headers: { 'x-csrf-token': 'TOKEN' } };
       if (config.method === 'get') return { status: 200, headers: {}, data: { d: { results: [] } } };
       posts.push(config);
-      return { status: 201, headers: {}, data: { d: { OutboundDelivery: '13000526', PostGoodsIssue: { Done: true, ErrorAny: false } } } };
+      return { status: 201, headers: {}, data: { d: { OutboundDelivery: '13000526' } } };
     });
   };
 
@@ -64,7 +64,6 @@ describe('Integration: plant scope on outbound delivery writes', () => {
   });
 
   describe.each([
-    ['postGoodsIssue', 'test-clerk-1120', 'PostGoodsIssue?DeliveryNumber=\'80000001\'', {}],
     ['createBillingDocument', 'test-sales-1120', 'ReferenceSDDocument=\'80000001\'', { BillingDocumentType: 'F2' }]
   ])('%s', (action, user, sapUrl, extra) => {
     const post = (delivery, as = user) => call(as, action, { DeliveryDocument: delivery, ...extra });
@@ -179,7 +178,7 @@ describe('Integration: plant scope on outbound delivery writes', () => {
   });
 
   it('refuses a user with no plant on a delivery, even when SAP names a plant', async () => {
-    const res = await call('test-clerk-noplant', 'postGoodsIssue', { DeliveryDocument: '80000001' });
+    const res = await call('test-clerk-noplant', 'createBillingDocument', { DeliveryDocument: '80000001', BillingDocumentType: 'F2' });
 
     expect(res.status).toBe(403);
     expect(posts).toEqual([]);

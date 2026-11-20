@@ -3,11 +3,9 @@ const { throwIfTextMustShow } = require('../../../common/visibleError');
 const crypto = require('crypto');
 const LOG = require('../../../common/logger')('goods-receipt');
 const GoodsReceiptAdapter = require('../../../integration/s4hana/wm/GoodsReceiptAdapter');
-const GoodsIssueAttemptStore = require('../../goods-issue/GoodsIssueAttemptStore');
+const GoodsReceiptAttemptStore = require('../GoodsReceiptAttemptStore');
 const { extractFilterParam, extractFilterParams, applyPaging, extractIfMatch } = require('../../../common/filterUtils');
-// Reuse the type-agnostic WM field-format primitives (plant/sloc/material/batch are the same
-// across Goods Issue and Goods Receipt) rather than duplicating the regexes here.
-const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../../goods-issue/validation/common');
+const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../validation/common');
 const { plantScope, isPlantAllowed, assertPlantsInScope } = require('../../readScope');
 
 /** 403 message when the posting plant is outside the authenticated user's plant scope (Admin: unrestricted), else null. */
@@ -46,7 +44,7 @@ async function postWithAttempt(req, post) {
     const requestHash = crypto.createHash('sha1').update(`101|${delivery}|${item}`).digest('hex');
     let claim;
     try {
-        claim = await GoodsIssueAttemptStore.createOrGet({
+        claim = await GoodsReceiptAttemptStore.createOrGet({
             ReferenceDocument: `GR${requestHash.slice(0, 12)}`.toUpperCase(),
             RequestHash: requestHash,
             MovementType: '101',
@@ -69,7 +67,7 @@ async function postWithAttempt(req, post) {
     }
 
     const ref = claim.row.ReferenceDocument;
-    const record = (status, fields) => GoodsIssueAttemptStore.setStatus(ref, status, fields).catch((err) => {
+    const record = (status, fields) => GoodsReceiptAttemptStore.setStatus(ref, status, fields).catch((err) => {
         LOG.error(`Critical reconciliation error: failed to persist attempt status '${status}' for reference ${ref}:`, err.message || err, fields);
     });
     try {

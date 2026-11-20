@@ -81,7 +81,7 @@ const MOCK_READS = [
     }],
     [/getBillingDocumentTypes\(DeliveryDocument='DRYRUNFAIL01'\)$/, { value: [{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }] }]
 ];
-/** Billing needs goods movement complete; PGI needs it open: one status per sub-case. */
+/** Billing needs goods movement complete: one status per sub-case. */
 const statusFor = (name) => (name === 'createBilling' ? { OverallGoodsMovementStatus: 'C' } : {});
 const mockDeliveryReads = (page, name) => page.route((url) => MOCK_READS.some(([re]) => re.test(decodeURIComponent(url.pathname))), (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
@@ -91,7 +91,7 @@ const mockDeliveryReads = (page, name) => page.route((url) => MOCK_READS.some(([
 
 const ordersDueFlows = Object.keys(ordersDue.SUBCASES).map((name) => {
     const a = ordersDue.ACTIONS[name];
-    const followUp = name === 'postGoodsIssue' || name === 'createBilling';
+    const followUp = name === 'createBilling';
     return {
         label: `Orders due: ${name}`,
         service: ordersDue.SERVICE,
@@ -356,7 +356,7 @@ async function verifyActionFailures(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     const errors = [];
     const details = [];
-    const filter = options.only || process.env.E2E_FAILURE_FLOWS; // a shard (see SHARDS) or e.g. 'handling|261' for a subset
+    const filter = options.only || process.env.E2E_FAILURE_FLOWS; // a shard (see SHARDS) or e.g. 'handling|invoice' for a subset
     const only = filter ? new RegExp(filter, 'i') : null;
     for (const flow of FLOWS.filter((f) => !only || only.test(f.label))) {
         if (flow.skipped) {

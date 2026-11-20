@@ -3,16 +3,14 @@
 
 /**
  * Tier C SAP round trip: orders due for delivery (#/le/orders-due, OrdersDueForDelivery.controller.js).
- * Four sub-cases, one write each, separate sessions (actions in srv/le/outbound-delivery/service.cds):
+ * Three sub-cases, one write each, separate sessions (actions in srv/le/outbound-delivery/service.cds):
  * - createDelivery: plant → ready row "Create Delivery" → CreateDeliveryDialog → createOutboundDelivery (:35-40, returns String)
  * - deliveryWithoutRef: "Create Delivery without Reference" → CreateDeliveryNoRefDialog → createDeliveryWithoutRef (:125-146)
- * - postGoodsIssue: follow-up panel, delivery number → status from SAP → Post Goods Issue → OK → postGoodsIssue (:62-67)
  * - createBilling: follow-up panel, delivery number → Load Billing Types → Create Billing Document → OK → createBillingDocument (:75-81)
- * The UI chains create → follow-up only by loading the new delivery's SAP status; PGI/billing stay disabled until SAP
- * reports picking (PGI) or goods movement (billing) complete (controller :533-534), so a stubbed delivery cannot be
- * chained. PGI/billing need a real delivery in that status; no CAP read lists outbound deliveries (service.cds has
- * only getDeliveryStatus by number), so in dry-run they run only when E2E_DRYRUN_PGI_DELIVERY /
- * E2E_DRYRUN_BILLING_DELIVERY (or options.pgiDelivery / options.billingDelivery) name one; otherwise SKIPPED.
+ * The UI chains create → follow-up only by loading the new delivery's SAP status; billing stays disabled until SAP
+ * reports goods movement (billing) complete (controller :533-534), so a stubbed delivery cannot be
+ * chained. Billing needs a real delivery in that status; no CAP read lists outbound deliveries (service.cds has
+ * only getDeliveryStatus by number), so in dry-run it runs only when E2E_DRYRUN_BILLING_DELIVERY (or options.billingDelivery) names one; otherwise SKIPPED.
  * All calls are direct POSTs (ODataClient.post, OutboundDeliveryService.js:178, :197, :212, :284).
  *
  * dry-run (default): rows/values from READ-ONLY reads the screen uses (worklist for plant 1120, ShippingPointVH,
@@ -157,24 +155,6 @@ const SUBCASES = {
         };
     },
 
-    async postGoodsIssue(session, { delivery }) {
-        await openWorklist(session, DRYRUN_PLANT);
-        await enterFollowUpDelivery(session, delivery);
-        const fu = await rt.modelData(session.page, 'deliveryFollowUp');
-        if (!fu.canPgi) throw new Error(`delivery ${delivery} is not ready for goods issue per SAP: ${fu.statusText}`);
-        await session.page.locator('[id$="--btnPostGoodsIssue"]').click();
-        await session.settle();
-        await rt.pressBoxButton(session, 'OK');
-        return {
-            expected: { DeliveryDocument: delivery },
-            docOf: () => delivery,
-            async readBack(get, no) {
-                const s = await get(`outbound-delivery/getDeliveryStatus(DeliveryDocument='${encodeURIComponent(no)}')`);
-                return s.OverallGoodsMovementStatus === 'C' ? [] : [`getDeliveryStatus(${no}).OverallGoodsMovementStatus=${s.OverallGoodsMovementStatus}, expected C`];
-            }
-        };
-    },
-
     async createBilling(session, { live, delivery }) {
         await openWorklist(session, DRYRUN_PLANT);
         await enterFollowUpDelivery(session, delivery);
@@ -212,7 +192,6 @@ const ACTIONS = {
         }),
         expectedHttp: [statusOfStub(STUB_NOREF_DELIVERY)]
     },
-    postGoodsIssue: { action: 'postGoodsIssue', respond: (b) => ({ DeliveryDocument: b.DeliveryDocument, Done: true, ErrorFlags: [] }), expectedHttp: [] },
     createBilling: { action: 'createBillingDocument', respond: () => ({ BillingDocument: STUB_BILLING, BillToParty: '', BillToPartyName: '', Messages: [] }), expectedHttp: [] }
 };
 
@@ -273,7 +252,6 @@ async function roundTripOrdersDue(options = {}) {
     const data = gate.data || {};
     const get = rt.capGet(baseUrl);
     const deliveries = {
-        postGoodsIssue: live ? data.pgiDelivery : (options.pgiDelivery || process.env.E2E_DRYRUN_PGI_DELIVERY),
         createBilling: live ? data.billingDelivery : (options.billingDelivery || process.env.E2E_DRYRUN_BILLING_DELIVERY)
     };
     const cases = [];
@@ -281,7 +259,7 @@ async function roundTripOrdersDue(options = {}) {
         if (name in deliveries && !deliveries[name]) {
             cases.push({
                 name, errors: [], details: {},
-                skipped: `needs a real delivery ready for ${name === 'postGoodsIssue' ? 'goods issue (picking C, goods movement not C)' : 'billing (goods movement C, billing not C)'}; no CAP read lists outbound deliveries — set ${name === 'postGoodsIssue' ? 'E2E_DRYRUN_PGI_DELIVERY' : 'E2E_DRYRUN_BILLING_DELIVERY'}`
+                skipped: `needs a real delivery ready for billing (goods movement C, billing not C); no CAP read lists outbound deliveries — set E2E_DRYRUN_BILLING_DELIVERY`
             });
             continue;
         }

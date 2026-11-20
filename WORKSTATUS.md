@@ -16,7 +16,36 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `a1a903e0` (clean, synchronized with `origin/feature01`). The latest hosted CI run is 44525189417 on branch HEAD `a1a903e0`: **SUCCESS** (Build, Test & Validate in 3m51s: PASS; Browser E2E, SAP-free suites PR gate in 1m32s: PASS; zero failed jobs, zero annotations). All PR release gates are completely green.
+- **Current checkout:** `feature01`, `HEAD` `a1a903e0`. Zero staged files.
+- **Complete Decommissioning of Goods Issue (LE-WM Movement 261 & EWM Outbound Delivery `postGoodsIssue`) — PASS:** Remediated and completely decommissioned Goods Issue functionality across the entire application in accordance with the user request and approved plan `file:///Users/khushaldhanani/.gemini/antigravity/brain/4dbe6a47-31fb-4cd9-8e1c-ec0d8b626859/GI-Decommission-Plan.md`:
+  1. *Decommissioned Dedicated Components:*
+     - Entire directory `srv/wm/goods-issue/` deleted (including previous `GoodsIssueAttemptStore.js`, `validation/common.js`).
+     - Dedicated S/4HANA clients and adapters deleted: `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`, `srv/integration/s4hana/wm/goods-issue/s4common.js`.
+     - Database persistence entity deleted: `db/wm/goods-issue-attempt.cds`.
+     - 12 unit/investigation test files and tools deleted: `test/unit/wm/goodsIssueAttempt.test.js`, `test/unit/wm/goodsIssueAttemptInstances.test.js`, `test/unit/wm/goodsIssueClients.test.js`, `test/unit/wm/goodsIssuePerTypePostingClient.test.js`, `test/unit/wm/transactionPersistenceAndRetry.test.js`, `test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js`, `test/unit/wm/attemptRecheckLifecycle.test.js`, `test/unit/wm/postingAttemptLifecycleContract.test.js`, `test/unit/wm/sapReadBackEvidence.test.js`, `test/unit/wm/executeDeliveryPgi.test.js`, `test/unit/tools/postAttemptAbapSource.test.js`, `tools/archive/sap-investigations/execute-delivery-pgi.js`.
+     - Obsolete investigation/audit documentation deleted: `docs/design/migo_idempotency_design.md`, `docs/audits/AUDIT_261.md`, `docs/evidence/2026-10-26/261-*`, `docs/evidence/2026-10-27/mvt261*`, `docs/abap/flow-decision.md`, `docs/abap/raw/ltbk_*.json`, `snap*.json`, `tr_w10_*.json`, `to_*.json`, `matdoc_*.json`.
+  2. *Surgical Removal of `postGoodsIssue` from Outbound Delivery (Module LE):*
+     - Removed `postGoodsIssue` action from `srv/le/outbound-delivery/service.cds`, `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`, `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`, and `app/fiori-app/webapp/modules/le/outbound-delivery/service/OutboundDeliveryService.js`.
+     - Removed `canPgi` state and `onPostGoodsIssue` event handler from `OrdersDueForDelivery.controller.js`.
+     - Removed `btnPostGoodsIssue` button from `OrdersDueForDelivery.view.xml`.
+     - Cleaned i18n keys `btnPostGoodsIssue`, `msgConfirmPgi`, `msgPgiPosted` in `i18n.properties` and `i18n_en.properties`.
+     - Strictly PRESERVED all remaining outbound delivery functions: `createOutboundDelivery`, `createDeliveryWithoutRef`, `createBillingDocument`, `getDeliveryStatus`, and delivery date display fields `GoodsIssueDate` / `PlannedGoodsIssueDate`.
+  3. *Goods Receipt (Movement 101) Transaction Protection Isolation:*
+     - Authored dedicated `db/wm/goods-receipt-attempt.cds` defining `saps4hana.wm.GoodsReceiptPostingAttempt` entity with unique `ReferenceDocument` index.
+     - Authored dedicated `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js` with fail-closed DB protection, atomic Compare-And-Swap (CAS) distributed leasing, generation re-claims, background rechecks, and unconfirmed read-back promotion.
+     - Migrated type-agnostic field format validators to `srv/wm/goods-receipt/validation/common.js`.
+     - Updated `db/schema.cds`, `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`, and `srv/wm/goods-receipt/service.js` to reference the dedicated Goods Receipt store and validation module.
+  4. *Cleaned Configuration & Architecture Standards:*
+     - Cleaned `package.json` (removed obsolete `"goods-issue-adapter"` logger level).
+     - Updated `docs/e2e-coverage-matrix.md`, `docs/architecture/ARCHITECTURE.md`, `docs/architecture/posting-attempt-lifecycle.md`, `docs/service-map.md`, `docs/release-evidence-checklist.md`, and `docs/data-lineage-audit.md`.
+  5. *Validation Results:*
+     - Full repository test suite (`npm test`): 199/199 test suites PASSED (3443 passed, 13 skipped, 3456 total, 77.561s).
+     - Full SAP-free Playwright browser E2E suites (`node test/e2e/runAllE2E.js --sap-free`): 6/6 suites PASSED (Negative UI paths, Administration menu, PO Ask AI panel, Write authorization, Quarantine labels, MIB labels).
+     - Integration test suites (`npx jest test/integration/`): 23/23 suites PASSED (299/299 tests).
+     - Unit test suites across WM, LE, Monitoring, Tools: ALL PASSED (including `goodsReceiptPlantScope.test.js`, `goodsReceiptAttempt.test.js`, `goodsReceiptTwoInstances.test.js`, `e2eCoverageMatrix.test.js`, `e2eWriteGuard.test.js`, `outboundDeliveryAdapter.test.js`, `outboundDeliveryHandler.test.js`, `outboundDeliveryService.test.js`, `ordersDueForDeliveryController.test.js`).
+     - Linters: Root ESLint (`npm run lint`): 0 errors, 0 warnings. UI5 linter (`npm --prefix app/fiori-app run lint`): 0 findings.
+     - CDS compilation (`npx cds compile srv/service.cds`): clean with 0 errors.
+     - Grep audit: 0 leftover occurrences of Goods Issue actions, routes, controllers, or attempts in `srv/`, `db/`, `app/`, `test/`.
 - **Finding SEC-01: MIB Label Authorization & Authoritative Warehouse Scope — PASS:** Remediated P1 Finding SEC-01 across `srv/wm/mib-label/service.cds`, `srv/wm/mib-label/service.js`, `srv/wm/mib-label/warehouseScope.js`, `srv/integration/s4hana/wm/MibLabelAdapter.js`, `xs-security.json`, `test/testUsers.js`, `test/unit/wm/mibLabelAuthorization.test.js`, `test/unit/wm/mibLabelService.test.js`, `test/unit/wm/mibLabelAdapter.test.js`, and `test/integration/wm/mibLabel.test.js`:
   1. *Role Enforcement at the CAP Boundary:* Upgraded `MibLabelService` service-level authorization from generic `authenticated-user` to `@(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])` in `srv/wm/mib-label/service.cds`. Added explicit `@(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])` annotations to all operations: `generateMibSticker`, `readMibStickerData`, `listTransferOrders`, and `getWarehouseContext`. Authenticated callers lacking warehouse privileges (e.g. `Viewer` or `SalesRepresentative`) are rejected with HTTP 403 Forbidden at the CAP boundary before any handler or adapter logic executes.
   2. *Authoritative Server-Side Warehouse Scope Mapping (`warehouseScope`):* Authored `srv/wm/mib-label/warehouseScope.js`. Implemented authoritative server-side user-to-warehouse derivation:
@@ -163,7 +192,66 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
-### 2026-11-20 09:40 IST — Remediation for Finding UI-02: Frontend Authentication Storage Architecture & Dedicated AuthStorage Module — PASS
+### 2026-11-20 10:45 IST — Complete Decommissioning of Goods Issue Across Application — PASS
+
+- REQUEST: Completely decommission Goods Issue functionality across the SAP S/4HANA application, including both LE-WM Goods Issue Movement 261 workflow and EWM Outbound Delivery Goods Issue posting (`postGoodsIssue`). Remove dedicated frontend, backend, CAP, CDS, database, SAP integration, routing, navigation, translation, persistent queue, testing, and documentation references without deleting or breaking unrelated functionality. Preserve Goods Receipt, Outbound Picking, Warehouse Management, RF Terminal, and all other business modules. Verify entire application after removal.
+- PLAN & APPROVAL: Authored formal decommission plan in artifact `file:///Users/khushaldhanani/.gemini/antigravity/brain/4dbe6a47-31fb-4cd9-8e1c-ec0d8b626859/GI-Decommission-Plan.md`, reviewed and approved by user.
+- INSPECT:
+  - Audited all Goods Issue touchpoints across LE-WM (Movement 261) and EWM Outbound Delivery (`postGoodsIssue`).
+  - Identified shared dependency in `GoodsIssueAttemptStore.js` and `db/wm/goods-issue-attempt.cds`: the store was handling both Goods Issue (261) and Goods Receipt (101) posting attempts.
+  - Planned clean extraction of Goods Receipt (101) attempt persistence to dedicated `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js` and `db/wm/goods-receipt-attempt.cds`, ensuring Movement 101 double-posting protection, distributed worker leases, and rechecks remain 100% intact.
+  - Confirmed preservation of `GoodsIssueDate` / `PlannedGoodsIssueDate` fields on Outbound Delivery for display and create flows.
+- CHANGED:
+  - Deleted dedicated Goods Issue service & integration modules:
+    - `srv/wm/goods-issue/` (entire directory, including `GoodsIssueAttemptStore.js`, `validation/common.js`).
+    - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`.
+    - `srv/integration/s4hana/wm/goods-issue/` (`BaseGoodsIssueClient.js`, `GoodsIssuePostingClient.js`, `s4common.js`).
+    - `db/wm/goods-issue-attempt.cds`.
+  - Deleted 12 unit test, investigation, and investigation tool files:
+    - `test/unit/wm/goodsIssueAttempt.test.js`
+    - `test/unit/wm/goodsIssueAttemptInstances.test.js`
+    - `test/unit/wm/goodsIssueClients.test.js`
+    - `test/unit/wm/goodsIssuePerTypePostingClient.test.js`
+    - `test/unit/wm/transactionPersistenceAndRetry.test.js`
+    - `test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js`
+    - `test/unit/wm/attemptRecheckLifecycle.test.js`
+    - `test/unit/wm/postingAttemptLifecycleContract.test.js`
+    - `test/unit/wm/sapReadBackEvidence.test.js`
+    - `test/unit/wm/executeDeliveryPgi.test.js`
+    - `test/unit/tools/postAttemptAbapSource.test.js`
+    - `tools/archive/sap-investigations/execute-delivery-pgi.js`
+  - Deleted obsolete documentation & investigation evidence:
+    - `docs/design/migo_idempotency_design.md`
+    - `docs/audits/AUDIT_261.md`
+    - `docs/evidence/2026-10-26/261-*` (16 raw JSON and markdown evidence files)
+    - `docs/evidence/2026-10-27/mvt261-startup-bin-discovery.md`
+    - `docs/abap/flow-decision.md`
+    - `docs/abap/raw/` (`ltbk_*.json`, `snap*.json`, `tr_w10_*.json`, `to_*.json`, `matdoc_*.json`)
+  - Created & Migrated for Goods Receipt (Movement 101):
+    - `db/wm/goods-receipt-attempt.cds` (`saps4hana.wm.GoodsReceiptPostingAttempt` entity).
+    - `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js` (dedicated Goods Receipt attempt store backing Movement 101 with fail-closed DB assertions, atomic Compare-And-Swap distributed leasing, generation re-claims, background rechecks, and unconfirmed read-back promotion).
+    - `srv/wm/goods-receipt/validation/common.js` (migrated type-agnostic field format validators: `checkMaterial`, `checkPlant`, `checkStorageLocation`, `checkBatch`).
+    - Updated `db/schema.cds` to point to `./wm/goods-receipt-attempt`.
+    - Updated `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` and `srv/wm/goods-receipt/service.js` to import `GoodsReceiptAttemptStore` and `./validation/common`.
+  - Surgically removed `postGoodsIssue` from Outbound Delivery (Module LE):
+    - `srv/le/outbound-delivery/service.cds`: removed `postGoodsIssue` action.
+    - `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`: removed `srv.on('postGoodsIssue', ...)`.
+    - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`: removed `postGoodsIssue()` method.
+    - `app/fiori-app/webapp/modules/le/outbound-delivery/service/OutboundDeliveryService.js`: removed `postGoodsIssue()` client method.
+    - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`: removed `canPgi` state and `onPostGoodsIssue()`.
+    - `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`: removed `btnPostGoodsIssue` button.
+  - Cleaned UI i18n & Shared Configuration:
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: removed `btnPostGoodsIssue`, `msgConfirmPgi`, `msgPgiPosted`, cleaned 261 references.
+    - `package.json`: removed `"goods-issue-adapter": "info"`.
+    - Documentation updated: `docs/e2e-coverage-matrix.md`, `docs/architecture/ARCHITECTURE.md`, `docs/architecture/posting-attempt-lifecycle.md`, `docs/service-map.md`, `docs/release-evidence-checklist.md`, `docs/data-lineage-audit.md`.
+- TEST DECISION: TEST UPDATED (`test/unit/wm/goodsReceiptAttempt.test.js`, `goodsReceiptTwoInstances.test.js`, `goodsReceiptPlantScope.test.js`, `goodsReceiptFormatChecks.test.js`, `outboundDeliveryHandler.test.js`, `outboundDeliveryService.test.js`, `outboundDeliveryAdapter.test.js`, `ordersDueForDeliveryController.test.js`, `e2eCoverageMatrix.test.js`, `e2eWriteGuard.test.js`); EXISTING TEST SUFFICIENT (all remaining 189 unit, integration, and E2E test suites).
+- TESTED:
+  - `npm test`: 199/199 test suites PASSED (3443 passed, 13 skipped, 3456 total, 77.561s).
+  - `node test/e2e/runAllE2E.js --sap-free`: 6/6 suites PASSED (Negative UI paths, Administration menu, PO Ask AI panel, Write authorization, Quarantine labels, MIB labels).
+  - `npx jest test/integration/`: 23/23 suites PASSED (299/299 tests).
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+  - `npx cds compile srv/service.cds`: clean compile with 0 errors.
 
 - REQUEST: Remediate Finding UI-02 (Review persistent browser token storage, P2; File: `app/fiori-app/webapp/service/AuthService.js`). Address the frontend manifestation of SEC-02 by treating authentication storage as part of the frontend security design, not just a login implementation detail.
 - INSPECT:

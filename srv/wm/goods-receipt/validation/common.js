@@ -1,7 +1,9 @@
 /**
- * validation/common.js
- * Field-format checks the goods receipt posting applies before calling SAP.
+ * srv/wm/goods-receipt/validation/common.js
+ * Field-format checks applied before calling SAP for Goods Receipt.
  */
+
+'use strict';
 
 const PLANT_REGEX = /^[A-Za-z0-9]{4}$/;
 const SLOC_REGEX = /^[A-Za-z0-9]{4}$/;
@@ -56,11 +58,14 @@ function checkStorageLocation(value, required) {
 
 /**
  * @param {*} value
+ * @param {boolean} required
  * @returns {{field:string,message:string}|null}
  */
-function checkBatch(value) {
-  if (value === undefined || value === null || String(value).trim() === '') return null;
-  const s = String(value).trim();
+function checkBatch(value, required) {
+  const s = String(value || '').trim();
+  if (!s) {
+    return required ? { field: 'Batch', message: 'Batch number is required' } : null;
+  }
   if (s.length > 10) {
     return { field: 'Batch', message: `Batch '${s}' exceeds maximum length of 10 characters` };
   }

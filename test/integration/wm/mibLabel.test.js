@@ -108,7 +108,7 @@ describe('Integration: MibLabelService', () => {
         TransferDate: '2026-10-23',
         TransferRequirement: '1001222',
         RequirementNumber: '1002318',
-        MovementType: '261',
+        MovementType: '311',
         Material: 'MAT-001',
         MaterialDescription: 'Chemical A',
         Batch: 'BATCH-01',

@@ -16,10 +16,10 @@ service catalog alone. Where a fact was not measured, the cell says so.
 |`API_WAREHOUSE_ORDER_TASK`|V2|Warehouse Cockpit|200|`CancelWarehouseTask`, `ConfirmWarehouseTaskExact`, `WarehouseOrder`, `WarehouseTask`| **0 rows** (filtered query confirms empty) |
 |`API_WAREHOUSE_RESOURCE`|V2|Warehouse Cockpit|200|`WarehouseResource`| **0 rows** (filtered query confirms empty) |
 |`API_WAREHOUSE_STORAGE_BIN`|V2|Warehouse Cockpit|200|`WarehouseStorageBin`| **0 rows** (filtered query confirms empty) |
-|`API_WHSE_INBOUND_DELIVERY`|V2|Goods Issue / Receipt, Warehouse Cockpit|200|`PostGoodsReceipt`, `WhseInboundDeliveryHead`| **0 rows** (filtered query confirms empty) |
-|`API_WHSE_OUTB_DLV_ORDER`|V2|Warehouse Cockpit|200|`PostGoodsIssue`, `WhseOutboundDeliveryOrderHead`| **0 rows** (filtered query confirms empty) |
+|`API_WHSE_INBOUND_DELIVERY`|V2|Goods Receipt, Warehouse Cockpit|200|`PostGoodsReceipt`, `WhseInboundDeliveryHead`| **0 rows** (filtered query confirms empty) |
+|`API_WHSE_OUTB_DLV_ORDER`|V2|Warehouse Cockpit|200|`WhseOutboundDeliveryOrderHead`| **0 rows** (filtered query confirms empty) |
 |`C_PURCHASEORDER_FS_SRV`|V2|Purchase Order, Warehouse Cockpit|200|`C_MM_StorLocValueHelp`, `C_PurchaseContractValHelp`, `C_PurchaseOrderFs`, `I_CostCenterVH`, `I_GLAccountStdVH`, `I_InternalOrderStdVH`, `I_MasterFixedAssetStdVH`, `I_ProfitCenterStdVH`, `I_WBSElementBasicDataStdVH`| I_GLAccountStdVH: 33784, C_PurchaseOrderFs: 2780, I_CostCenterVH: 952, C_MM_StorLocValueHelp: 696, I_WBSElemen |
-|`C_STOCKQUANTITYVALUEBYTYPE_CDS`|V2|Goods Issue / Receipt|200|`C_STOCKQUANTITYVALUEBYTYPE`| not countable (function import / needs key) |
+|`C_STOCKQUANTITYVALUEBYTYPE_CDS`|V2|Goods Receipt|200|`C_STOCKQUANTITYVALUEBYTYPE`| not countable (function import / needs key) |
 |`FAC_GL_JOURNALENTRY_VER_SRV`|V2|Purchase Order|200|`C_GLJrnlEntryItemToBeVerified`| C_GLJrnlEntryItemToBeVerified: 174153 |
 |`LE_SHP_OD_LIST_SRV`|V2|Warehouse Cockpit|200|`I_WarehouseStdVH`| I_WarehouseStdVH: 25 |
 |`LE_SHP_WHSE_CLERK_OVP_SRV`|V2|Warehouse Cockpit|200|`C_WhseClerkInbDeliv`, `C_WhseClerkOutbDeliv`| C_WhseClerkOutbDeliv: 740, C_WhseClerkInbDeliv: 40 |
@@ -48,9 +48,6 @@ service catalog alone. Where a fact was not measured, the cell says so.
 | Service | Observed | Meaning | Owner |
 |---|---|---|---|
 | `API_MATERIAL_DOCUMENT_SRV` | HTTP 403 carrying `/IWFND/MED/170` | Not registered on the hub. Not an authorisation fault. | Basis — `/IWFND/MAINT_SERVICE` |
-| `ZUI_GI_ORDER_RSV_O4` | HTTP 404 | Not published. | ABAP/Basis — `/IWFND/V4_ADMIN` |
-
-Either one unblocks goods issue posting (e.g. 201, 301, 311). See `ticket-gateway-remediation-ds4.md`.
 
 ## EWM has no data
 

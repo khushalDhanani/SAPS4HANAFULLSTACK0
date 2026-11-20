@@ -36,29 +36,6 @@ describe('Integration: If-Match round trip to the S/4 HTTP boundary', () => {
     afterEach(() => jest.restoreAllMocks());
 
     describe('Outbound delivery', () => {
-        it('postGoodsIssue sends If-Match to S/4 and answers 409 with the SAP text when S/4 returns 412', async () => {
-            const posts = stubSap({ post: () => { throw etagFailure('ETag condition check failed: delivery 80000001 was changed by another user'); } });
-
-            const res = await send('/odata/v4/outbound-delivery/postGoodsIssue', { DeliveryDocument: '80000001' }, 'W/"ETAG123"');
-
-            expect(posts).toHaveLength(1);
-            expect(posts[0].url).toContain("PostGoodsIssue?DeliveryNumber='80000001'");
-            expect(posts[0].headers['If-Match']).toBe('W/"ETAG123"');
-            expect(res.status).toBe(409);
-            expect(res.data.error.message).toBe('ETag condition check failed: delivery 80000001 was changed by another user');
-        });
-
-        it('postGoodsIssue sends If-Match to S/4 and returns Done from the S/4 answer', async () => {
-            const posts = stubSap({ post: () => ({ status: 200, headers: {}, data: { d: { PostGoodsIssue: { Done: true, ErrorAny: false } } } }) });
-
-            const res = await send('/odata/v4/outbound-delivery/postGoodsIssue', { DeliveryDocument: '80000001' }, 'W/"MATCH123"');
-
-            expect(posts[0].headers['If-Match']).toBe('W/"MATCH123"');
-            expect(res.status).toBe(200);
-            expect(res.data.DeliveryDocument).toBe('80000001');
-            expect(res.data.Done).toBe(true);
-        });
-
         it('createBillingDocument sends If-Match to S/4 and answers 409 with the SAP text when S/4 returns 412', async () => {
             const posts = stubSap({ post: () => { throw etagFailure('Precondition Failed: document was modified by another session'); } });
 

@@ -115,25 +115,6 @@ describe('Frontend OutboundDeliveryService Unit Tests', () => {
     await expect(FrontendOutboundDeliveryService.getPlantContext()).resolves.toEqual({ plants: [], unrestricted: false });
   });
 
-  it('postGoodsIssue passes If-Match header when mOptions.etag is supplied', async () => {
-    mockODataClient.post.mockResolvedValueOnce({ value: { DeliveryDocument: '80000001' } });
-    await FrontendOutboundDeliveryService.postGoodsIssue('80000001', { etag: 'W/"12345"' });
-    expect(mockODataClient.post).toHaveBeenCalledWith(
-      '/odata/v4/outbound-delivery/postGoodsIssue',
-      { DeliveryDocument: '80000001' },
-      { 'If-Match': 'W/"12345"' }
-    );
-  });
-
-  it('postGoodsIssue calls post with 2 arguments when no ETag is provided', async () => {
-    mockODataClient.post.mockResolvedValueOnce({ value: { DeliveryDocument: '80000001' } });
-    await FrontendOutboundDeliveryService.postGoodsIssue('80000001');
-    expect(mockODataClient.post).toHaveBeenCalledWith(
-      '/odata/v4/outbound-delivery/postGoodsIssue',
-      { DeliveryDocument: '80000001' }
-    );
-  });
-
   it('createBillingDocument passes If-Match header when mOptions.etag is supplied', async () => {
     mockODataClient.post.mockResolvedValueOnce({ value: { BillingDocument: '90000001' } });
     await FrontendOutboundDeliveryService.createBillingDocument(

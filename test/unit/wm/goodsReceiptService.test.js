@@ -500,7 +500,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             };
             const suItem = { ...suPost, DeliveryDocumentItem: '000010', Batch: 'INHU100004', PackagingMaterial: '2000000130' };
 
-            it('sends the delivery confirmation with goods-issue flag, quantity and handling unit', async () => {
+            it('sends the delivery confirmation with goods-movement flag, quantity and handling unit', async () => {
                 const { adapter, calls } = successDouble();
                 await adapter.postGoodsReceiptWithStorageUnit(suItem);
 

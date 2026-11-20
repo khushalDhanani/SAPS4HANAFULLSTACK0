@@ -96,7 +96,6 @@ const MockOutboundDeliveryService = {
     }),
     createOutboundDelivery: jest.fn().mockResolvedValue("13000526"),
     createDeliveryWithoutRef: jest.fn().mockResolvedValue({ OutboundDelivery: "80000059" }),
-    postGoodsIssue: jest.fn().mockResolvedValue({ DeliveryDocument: "13000526" }),
     createBillingDocument: jest.fn().mockResolvedValue({ BillingDocument: "90000001", Messages: [] }),
     getDeliveryStatus: jest.fn().mockResolvedValue({ DeliveryDocument: "13000526", DeliveryDocumentType: "ZLF", SoldToParty: "10082", OverallPickingStatus: "A", OverallGoodsMovementStatus: "A", OverallDelivReltdBillgStatus: "A" }),
     getPlantContext: jest.fn().mockResolvedValue({ plants: ["1120"], unrestricted: false }),
@@ -950,64 +949,6 @@ describe("OrdersDueForDelivery Controller", () => {
             await flush();
 
             expect(fu.getProperty("/etag")).toBe('W/"20261028120000"');
-        });
-
-        test.each([
-            ["C", "A", true],
-            ["C", "C", false],
-            ["A", "A", false]
-        ])("picking %s and goods movement %s -> canPgi %s", async (picking, movement, expected) => {
-            controller.onInit();
-            await flush();
-            MockOutboundDeliveryService.getDeliveryStatus.mockResolvedValueOnce({
-                DeliveryDocument: "80000085",
-                DeliveryDocumentType: "ZLF",
-                SoldToParty: "10135",
-                OverallPickingStatus: picking,
-                OverallGoodsMovementStatus: movement,
-                OverallDelivReltdBillgStatus: "A"
-            });
-            const fu = mockView.getModel("deliveryFollowUp");
-            fu.setProperty("/delivery", "80000085");
-            await controller.onLoadDeliveryStatus();
-            await flush();
-
-            expect(fu.getProperty("/canPgi")).toBe(expected);
-        });
-
-        test("onPostGoodsIssue passes ETag to service and catches 409 STALE_DATA with reload guidance", async () => {
-            controller.onInit();
-            await flush();
-            const fu = mockView.getModel("deliveryFollowUp");
-            fu.setProperty("/delivery", "80000085");
-            fu.setProperty("/etag", 'W/"20261028120000"');
-
-            const staleErr = new Error("Document changed by another user");
-            staleErr.status = 409;
-            staleErr.code = "STALE_DATA";
-            MockOutboundDeliveryService.postGoodsIssue.mockRejectedValueOnce(staleErr);
-
-            let onCloseAction;
-            MockMessageBox.confirm.mockImplementationOnce((msg, opts) => {
-                opts.onClose(MockMessageBox.Action.OK);
-            });
-            MockMessageBox.error.mockImplementationOnce((msg, opts) => {
-                if (opts && opts.onClose) onCloseAction = opts.onClose;
-            });
-
-            controller.onPostGoodsIssue();
-            await flush();
-
-            expect(MockOutboundDeliveryService.postGoodsIssue).toHaveBeenCalledWith("80000085", { etag: 'W/"20261028120000"' });
-            expect(MockMessageBox.error).toHaveBeenCalledWith(
-                expect.stringContaining("reload the latest delivery data from SAP"),
-                expect.objectContaining({ title: expect.any(String) })
-            );
-
-            // Closing the error dialog reloads delivery status
-            jest.spyOn(controller, "onLoadDeliveryStatus");
-            if (onCloseAction) onCloseAction();
-            expect(controller.onLoadDeliveryStatus).toHaveBeenCalled();
         });
 
         test("onCreateBillingDocument passes ETag to service and catches 409 STALE_DATA with reload guidance", async () => {

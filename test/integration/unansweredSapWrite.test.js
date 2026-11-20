@@ -35,7 +35,6 @@ const WRITES = [
     ShippingPoint: '1104', DeliveryDocumentType: 'LO2', SalesOrganization: '1000', DistributionChannel: '10', Division: '52', ShipToParty: '1',
     Plant: '1120', StorageLocation: 'FG01', PlannedGoodsIssueDate: '2026-10-27', Items: [{ Material: 'E2E', ActualDeliveryQuantity: 1, DeliveryQuantityUnit: 'KG' }]
   }],
-  ['goods issue', '/odata/v4/outbound-delivery/postGoodsIssue', { DeliveryDocument: '80000001' }],
   ['billing', '/odata/v4/outbound-delivery/createBillingDocument', { DeliveryDocument: '80000001', BillingDocumentType: 'F2' }],
   ['packing instruction', '/odata/v4/packing-instruction/create', {
     externalName: 'BOX1', weightUnit: 'KG', components: [{ item: '10', category: 'P', material: '2000000041', targetQty: 1, unit: 'NOS' }]

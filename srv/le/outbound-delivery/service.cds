@@ -59,13 +59,6 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
         ActualGoodsMovementDate      : String;
     };
 
-    @(requires: ['WarehouseClerk', 'WarehouseManager', 'SalesManager', 'Admin'])
-    action postGoodsIssue(DeliveryDocument : String) returns {
-        DeliveryDocument : String;
-        Done             : Boolean;
-        ErrorFlags       : array of String;
-    };
-
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getBillingDocumentTypes(DeliveryDocument : String) returns array of {
         BillingDocumentType     : String;

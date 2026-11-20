@@ -81,7 +81,6 @@ sap.ui.define([
                 lastResult: "",
                 status: null,
                 statusText: "",
-                canPgi: false,
                 canBill: false
             }), "deliveryFollowUp");
 
@@ -652,7 +651,7 @@ sap.ui.define([
                 oFU.setProperty("/delivery", String(oInput.getValue() || "").trim());
             }
             var sDelivery = (oFU.getProperty("/delivery") || "").trim();
-            oFU.setProperty("/status", null); oFU.setProperty("/statusText", ""); oFU.setProperty("/canPgi", false); oFU.setProperty("/canBill", false);
+            oFU.setProperty("/status", null); oFU.setProperty("/statusText", ""); oFU.setProperty("/canBill", false);
             oFU.setProperty("/billingTypes", []); oFU.setProperty("/billingType", "");
             if (!sDelivery) { return Promise.resolve(); }
             oFU.setProperty("/busy", true);
@@ -664,8 +663,6 @@ sap.ui.define([
                     oFU.setProperty("/statusText", that._text("dlvFollowUpStatus", "Type {0} · Ship-to {1} · Picking {2} · Goods movement {3} · Billing {4}")
                         .replace("{0}", o.DeliveryDocumentType).replace("{1}", o.SoldToParty).replace("{2}", that._statusLabel(o.OverallPickingStatus))
                         .replace("{3}", that._statusLabel(o.OverallGoodsMovementStatus)).replace("{4}", that._statusLabel(o.OverallDelivReltdBillgStatus)));
-                    // Gate on SAP's own statuses: PGI needs picking complete and no goods movement yet; billing needs goods movement complete and billing not complete.
-                    oFU.setProperty("/canPgi", o.OverallPickingStatus === "C" && o.OverallGoodsMovementStatus !== "C");
                     // Billing status "" means billing is not relevant for the delivery (see _statusLabel), so only A/B are billable
                     oFU.setProperty("/canBill", o.OverallGoodsMovementStatus === "C" && ["A", "B"].indexOf(o.OverallDelivReltdBillgStatus) !== -1);
                 })
@@ -673,45 +670,6 @@ sap.ui.define([
                     oFU.setProperty("/statusText", (err && (err.message || err.statusText)) || "Delivery status could not be read from SAP.");
                 })
                 .finally(function () { oFU.setProperty("/busy", false); });
-        },
-
-        onPostGoodsIssue: function () {
-            var that = this;
-            var oFU = this.getView().getModel("deliveryFollowUp");
-            if (oFU && oFU.getProperty("/busy")) return;
-            var sDelivery = (oFU.getProperty("/delivery") || "").trim();
-            if (!sDelivery) { MessageBox.error(this._text("msgDeliveryNumberRequired", "Enter a delivery number.")); return; }
-            MessageBox.confirm(this._text("msgConfirmPgi", "Post goods issue in S/4HANA for delivery {0}? This cannot be undone here.").replace("{0}", sDelivery), {
-                onClose: function (sAction) {
-                    if (sAction !== MessageBox.Action.OK) { return; }
-                    oFU.setProperty("/busy", true);
-                    var sETag = oFU.getProperty("/etag") || "";
-                    OutboundDeliveryService.postGoodsIssue(sDelivery, sETag ? { etag: sETag } : undefined)
-                        .then(function (oRes) {
-                            var sMsg = that._text("msgPgiPosted", "Goods issue posted in S/4HANA for delivery {0}.").replace("{0}", sDelivery);
-                            oFU.setProperty("/lastResult", sMsg);
-                            MessageBox.success(sMsg, { onClose: function () { that.onRefresh(); that.onLoadDeliveryStatus(); } });
-                            return oRes;
-                        })
-                        .catch(function (err) {
-                            if (err && (err.status === 409 || err.statusCode === 409 || err.code === "STALE_DATA")) {
-                                var sConflictMsg = (err.message || that._text("msgStaleDataConflict", "This delivery was modified by another user or session in SAP S/4HANA (stale data).")) +
-                                    "\n\n" + that._text("msgPromptReloadData", "Please reload the latest delivery data from SAP before retrying.");
-                                MessageBox.error(sConflictMsg, {
-                                    title: that._text("titleStaleDataConflict", "Document Changed / Stale Data"),
-                                    onClose: function () {
-                                        that.onRefresh();
-                                        that.onLoadDeliveryStatus();
-                                    }
-                                });
-                                return;
-                            }
-                            // SAP's own message, verbatim
-                            MessageBox.error((err && (err.message || err.statusText)) || "Goods issue could not be posted.");
-                        })
-                        .finally(function () { oFU.setProperty("/busy", false); });
-                }
-            });
         },
 
         onLoadBillingTypes: function () {

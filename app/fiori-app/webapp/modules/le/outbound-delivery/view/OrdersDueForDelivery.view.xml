@@ -101,7 +101,6 @@
                             <Label text="{i18n>dlvFollowUpDelivery}" labelFor="inpFollowUpDelivery" />
                             <Input id="inpFollowUpDelivery" value="{deliveryFollowUp>/delivery}" width="11rem" placeholder="{i18n>dlvFollowUpDeliveryPlaceholder}" change=".onLoadDeliveryStatus" submit=".onLoadDeliveryStatus" />
                         </VBox>
-                        <Button id="btnPostGoodsIssue" text="{i18n>btnPostGoodsIssue}" icon="sap-icon://outbox" type="Emphasized" press=".onPostGoodsIssue" class="sapUiTinyMarginEnd" enabled="{deliveryFollowUp>/canPgi}" />
                         <Button id="btnLoadBillingTypes" text="{i18n>btnLoadBillingTypes}" icon="sap-icon://refresh" press=".onLoadBillingTypes" class="sapUiTinyMarginEnd" enabled="{deliveryFollowUp>/canBill}" />
                         <VBox class="sapUiTinyMarginEnd">
                             <Label text="{i18n>dlvFollowUpBillingType}" labelFor="selBillingType" />

@@ -4,14 +4,22 @@
  * Goods receipt (101) double-posting protection: attempt log, unknown outcomes, recheck, document read-back.
  * [mock only, not SAP verification] - every SAP call is a fake; nothing here proves SAP behaviour.
  */
-const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
+const cds = require('@sap/cds');
+cds.test(__dirname + '/../../../');
+
+const GoodsReceiptAttemptStore = require('../../../srv/wm/goods-receipt/GoodsReceiptAttemptStore');
+const { ATTEMPT_ENTITY } = GoodsReceiptAttemptStore;
 const { GoodsReceiptAdapter } = require('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter');
 
 describe('Goods receipt double-posting protection [mock only, not SAP verification]', () => {
-  beforeEach(() => GoodsIssueAttemptStore.clearMemoryStore());
+  beforeEach(async () => {
+    if (cds.db) {
+      await cds.db.run(cds.ql.DELETE.from(ATTEMPT_ENTITY));
+    }
+  });
   afterEach(() => jest.restoreAllMocks());
 
-  const attempts = () => Array.from(GoodsIssueAttemptStore._memoryStore.values());
+  const attempts = async () => (await cds.db.run(cds.ql.SELECT.from(ATTEMPT_ENTITY).orderBy('createdAt asc')));
 
   describe('handler attempt log', () => {
     const singleton = require('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter');
@@ -41,8 +49,8 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
 
         await post(DATA, action);
 
-        expect(attempts()).toHaveLength(1);
-        expect(attempts()[0]).toMatchObject({ MovementType: '101', ReservationNo: '0180000003', ReservationItem: '10', Status: 'posted', MaterialDocument: '5000000001' });
+        expect(await attempts()).toHaveLength(1);
+        expect((await attempts())[0]).toMatchObject({ MovementType: '101', ReservationNo: '0180000003', ReservationItem: '10', Status: 'posted', MaterialDocument: '5000000001' });
       });
 
       it('warns on an unknown outcome and blocks the retry, even with another quantity', async () => {
@@ -51,7 +59,7 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
         await expect(post(DATA, action)).rejects.toMatchObject({ status: 504, $sanitize: false, message: expect.stringContaining('do not post again') });
         const second = await post({ ...DATA, Quantity: 2 }, action);
 
-        expect(attempts()[0].Status).toBe('unconfirmed');
+        expect((await attempts())[0].Status).toBe('unconfirmed');
         expect(second.req.reject).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
         expect(spy).toHaveBeenCalledTimes(1);
       });
@@ -64,7 +72,7 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
         const second = await post(DATA, action);
 
         expect(first.req.reject).toHaveBeenCalledWith(422, 'Quantity deficit');
-        expect(attempts().map((a) => a.Status)).toEqual(['rejected', 'posted']);
+        expect((await attempts()).map((a) => a.Status)).toEqual(['rejected', 'posted']);
         expect(second.req.reject).not.toHaveBeenCalled();
         expect(spy).toHaveBeenCalledTimes(2);
       });
@@ -81,7 +89,7 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
 
       it('does not post when the attempt log cannot be written', async () => {
         const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
-        jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('db down'));
+        jest.spyOn(GoodsReceiptAttemptStore, 'createOrGet').mockRejectedValue(new Error('db down'));
 
         await expect(post(DATA, action)).rejects.toMatchObject({ status: 503, $sanitize: false, message: expect.stringContaining('NOT posted') });
         expect(spy).not.toHaveBeenCalled();
@@ -102,7 +110,7 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
 
       await post({ ...DATA, Simulate: true });
 
-      expect(attempts()).toHaveLength(0);
+      expect(await attempts()).toHaveLength(0);
     });
   });
 
@@ -298,24 +306,14 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
   });
 
   describe('attempt recheck', () => {
-    const { GoodsIssueAttemptStore: Store } = GoodsIssueAttemptStore;
+    const { GoodsReceiptAttemptStore: Store } = GoodsReceiptAttemptStore;
     const OLD = Date.now() + 16 * 60 * 1000; // past the not_posted age
     const SOON = Date.now() + 4 * 60 * 1000; // past the recheck age only
-    const open = () => {
-      const store = new Store({ db: null });
-      return store.create({ ReferenceDocument: 'GRABC0', MovementType: '101', ReservationNo: '0180000003', ReservationItem: '10' })
-        .then(() => store);
+    const open = async () => {
+      const store = new Store();
+      await store.create({ ReferenceDocument: 'GRABC0', MovementType: '101', ReservationNo: '0180000003', ReservationItem: '10' });
+      return store;
     };
-
-    it('never lets the goods-issue recheck mark a receipt not_posted', async () => {
-      const store = await open();
-      const adapter = { findPostedGoodsIssueByReference: jest.fn().mockResolvedValue(null) };
-
-      await store.recheck(adapter, OLD);
-
-      expect(adapter.findPostedGoodsIssueByReference).not.toHaveBeenCalled();
-      expect(store._memoryStore.get('GRABC0').Status).toBe('sending');
-    });
 
     it('marks the attempt posted when SAP shows a receipt', async () => {
       const store = await open();
@@ -323,7 +321,8 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
 
       await store.recheckReceipts(adapter, SOON);
 
-      expect(store._memoryStore.get('GRABC0')).toMatchObject({ Status: 'posted', MaterialDocument: '5000000010' });
+      const doc = await store.getByReference('GRABC0');
+      expect(doc).toMatchObject({ Status: 'posted', MaterialDocument: '5000000010' });
     });
 
     it('keeps the attempt open while the not_posted age has not passed', async () => {
@@ -331,7 +330,8 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
 
       await store.recheckReceipts({ findReceiptForAttempt: jest.fn().mockResolvedValue(null) }, SOON);
 
-      expect(store._memoryStore.get('GRABC0').Status).toBe('sending');
+      const doc = await store.getByReference('GRABC0');
+      expect(doc.Status).toBe('sending');
     });
 
     it('marks the attempt not_posted once old enough with no receipt in SAP', async () => {
@@ -339,7 +339,8 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
 
       await store.recheckReceipts({ findReceiptForAttempt: jest.fn().mockResolvedValue(null) }, OLD);
 
-      expect(store._memoryStore.get('GRABC0').Status).toBe('not_posted');
+      const doc = await store.getByReference('GRABC0');
+      expect(doc.Status).toBe('not_posted');
     });
 
     it('keeps the attempt open when SAP cannot be read', async () => {
@@ -347,17 +348,8 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
 
       await store.recheckReceipts({ findReceiptForAttempt: jest.fn().mockRejectedValue(new Error('RFC down')) }, OLD);
 
-      expect(store._memoryStore.get('GRABC0').Status).toBe('sending');
-    });
-
-    it('ignores goods-issue attempts', async () => {
-      const store = new Store({ db: null });
-      await store.create({ ReferenceDocument: 'GIABC0', MovementType: '261', ReservationNo: '512851', ReservationItem: '3' });
-      const adapter = { findReceiptForAttempt: jest.fn() };
-
-      await store.recheckReceipts(adapter, OLD);
-
-      expect(adapter.findReceiptForAttempt).not.toHaveBeenCalled();
+      const doc = await store.getByReference('GRABC0');
+      expect(doc.Status).toBe('sending');
     });
   });
 });

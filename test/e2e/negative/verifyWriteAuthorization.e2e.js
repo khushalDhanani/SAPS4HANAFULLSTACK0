@@ -100,7 +100,7 @@ async function verifyWriteAuthorization() {
             record(`Clerk of plant 1130 refused: ${c.name}`, r.status === 403 ? [] : [`HTTP ${r.status}: ${r.message} — passed authorization (no SAP reachable here)`]);
         }
         // These take the plant from the SAP document or shipping point. SAP cannot be reached here, so a limited user is refused, not passed on.
-        for (const [action, body] of [['postGoodsIssue', { DeliveryDocument: '80000001' }], ['createBillingDocument', { DeliveryDocument: '80000001', BillingDocumentType: 'F2' }], ['createOutboundDelivery', { SalesOrder: '5000104', ShippingPoint: 'WAVG' }]]) {
+        for (const [action, body] of [['createBillingDocument', { DeliveryDocument: '80000001', BillingDocumentType: 'F2' }], ['createOutboundDelivery', { SalesOrder: '5000104', ShippingPoint: 'WAVG' }]]) {
             const user = action === 'createBillingDocument' ? 'test-sales-1120' : 'test-clerk-1130';
             const r = await post(server, user, `/odata/v4/outbound-delivery/${action}`, body);
             record(`${user} refused while the plant cannot be read: ${action}`, r.status === 503 ? [] : [`HTTP ${r.status}: ${r.message}`]);

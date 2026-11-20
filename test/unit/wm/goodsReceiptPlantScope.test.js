@@ -1,5 +1,8 @@
 'use strict';
 
+const cds = require('@sap/cds');
+cds.test(__dirname + '/../../../');
+
 jest.mock('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter', () => ({
     postGoodsReceipt: jest.fn().mockResolvedValue({ MaterialDocument: '5000000001' }),
     postGoodsReceiptWithStorageUnit: jest.fn().mockResolvedValue({ MaterialDocument: '5000000002' }),
@@ -7,6 +10,8 @@ jest.mock('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter', () => ({
 }));
 
 const GoodsReceiptAdapter = require('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter');
+const GoodsReceiptAttemptStore = require('../../../srv/wm/goods-receipt/GoodsReceiptAttemptStore');
+const { ATTEMPT_ENTITY } = GoodsReceiptAttemptStore;
 const init = require('../../../srv/wm/goods-receipt/handlers/goodsReceipt.handler');
 
 const handlers = {};
@@ -25,7 +30,12 @@ const ACTIONS = [
 ];
 
 describe('Goods receipt posting: server-side plant scope', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(async () => {
+        jest.clearAllMocks();
+        if (cds.db) {
+            await cds.db.run(cds.ql.DELETE.from(ATTEMPT_ENTITY));
+        }
+    });
 
     describe.each(ACTIONS)('%s', (action, adapterFn) => {
         it.each([

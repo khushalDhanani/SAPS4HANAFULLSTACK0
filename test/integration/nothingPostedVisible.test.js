@@ -10,7 +10,7 @@ const cds = require('@sap/cds');
 const { axios } = cds.test(__dirname + '/../../');
 const outbound = require('../../srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const goodsReceipt = require('../../srv/integration/s4hana/wm/GoodsReceiptAdapter');
-const GoodsIssueAttemptStore = require('../../srv/wm/goods-issue/GoodsIssueAttemptStore');
+const GoodsReceiptAttemptStore = require('../../srv/wm/goods-receipt/GoodsReceiptAttemptStore');
 
 const LE = '/odata/v4/outbound-delivery';
 const call = (user, path, body) => axios.post(path, body, { auth: { username: user, password: '' }, validateStatus: () => true });
@@ -36,11 +36,8 @@ describe('Integration: "nothing was posted" stays visible in production', () => 
         jest.restoreAllMocks();
     });
 
-    it.each([
-        ['postGoodsIssue', 'test-clerk-1120', { DeliveryDocument: '80000001' }],
-        ['createBillingDocument', 'test-sales-1120', { DeliveryDocument: '80000001', BillingDocumentType: 'F2' }]
-    ])('%s: shows why when the plant of the delivery cannot be read', async (action, user, body) => {
-        const res = await call(user, `${LE}/${action}`, body);
+    it('createBillingDocument: shows why when the plant of the delivery cannot be read', async () => {
+        const res = await call('test-sales-1120', `${LE}/createBillingDocument`, { DeliveryDocument: '80000001', BillingDocumentType: 'F2' });
 
         expect(res.status).toBe(503);
         expect(res.data.error.message).toBe(plantText('80000001'));
@@ -81,7 +78,7 @@ describe('Integration: "nothing was posted" stays visible in production', () => 
 
         it('shows why when the posting-attempt log is unavailable', async () => {
             jest.spyOn(goodsReceipt, 'readDeliveryPlant').mockResolvedValue('1120');
-            jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('database down'));
+            jest.spyOn(GoodsReceiptAttemptStore, 'createOrGet').mockRejectedValue(new Error('database down'));
 
             const res = await post();
 

@@ -3,7 +3,7 @@
 const cds = require('@sap/cds');
 const GoodsReceiptHandler = require('./handlers/goodsReceipt.handler');
 const GoodsReceiptAdapter = require('../../integration/s4hana/wm/GoodsReceiptAdapter');
-const GoodsIssueAttemptStore = require('../goods-issue/GoodsIssueAttemptStore');
+const GoodsReceiptAttemptStore = require('./GoodsReceiptAttemptStore');
 const LOG = require('../../common/logger')('goods-receipt');
 
 /**
@@ -18,17 +18,17 @@ const isWorker = (env = process.env) => (env.CF_INSTANCE_INDEX ?? '0') === '0';
  * Protected by single-worker scheduling to prevent dual-instance polling in 2-instance Cloud Foundry deployments.
  *
  * @param {Object} [options]
- * @param {Function} [options.getStore] - returns GoodsIssueAttemptStore
+ * @param {Function} [options.getStore] - returns GoodsReceiptAttemptStore
  * @param {Function} [options.getAdapter] - returns GoodsReceiptAdapter
  * @param {Object} [options.env] - environment variables (default: process.env)
  * @returns {NodeJS.Timeout|null}
  */
 function startRecheckJob({
-    getStore = () => GoodsIssueAttemptStore,
+    getStore = () => GoodsReceiptAttemptStore,
     getAdapter = () => GoodsReceiptAdapter,
     env = process.env
 } = {}) {
-    const every = GoodsIssueAttemptStore.GoodsIssueAttemptStore.recheckIntervalMs();
+    const every = GoodsReceiptAttemptStore.GoodsReceiptAttemptStore.recheckIntervalMs();
     const isTest = env.NODE_ENV === 'test' && String(env.RECEIPT_RECHECK_IN_TEST || '').trim() !== '1';
 
     if (isTest || every <= 0) {

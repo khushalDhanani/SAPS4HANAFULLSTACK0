@@ -825,33 +825,6 @@ describe('Unit: OutboundDeliveryAdapter', () => {
     });
   });
 
-  describe('postGoodsIssue (SD_SOFM_CREDIT_BLOCK_SRV/PostGoodsIssue)', () => {
-    test('rejects without a delivery number', async () => {
-      await expect(adapter.postGoodsIssue('')).rejects.toThrow('DeliveryDocument is required');
-    });
-
-    test('posts the function import with the delivery in the URL and reports SAP Done flag', async () => {
-      mockClient.post.mockResolvedValue({ data: { d: { PostGoodsIssue: { Done: true, ErrorAny: false, ErrorInGoodsIssue: false } } } });
-      const res = await adapter.postGoodsIssue('13000526');
-      expect(mockClient.post.mock.calls[0][0]).toBe("/sap/opu/odata/sap/SD_SOFM_CREDIT_BLOCK_SRV/PostGoodsIssue?DeliveryNumber='13000526'");
-      expect(res).toEqual({ DeliveryDocument: '13000526', Done: true, ErrorFlags: [] });
-    });
-
-    test('throws (never reports success) when SAP says Done=false and names the error flags', async () => {
-      mockClient.post.mockResolvedValue({ data: { d: { Done: false, ErrorAny: true, ErrorInGoodsIssue: true, ErrorInFinalCheck: false } } });
-      await expect(adapter.postGoodsIssue('13000526')).rejects.toThrow(/did not post goods issue.*ErrorInGoodsIssue/);
-    });
-
-    // SAP response shape not proven (docs/sd-creatable-services.md:30 names Done and ErrorAny, no live run recorded); the test proves our gate only.
-    test('throws 422 (never reports success) when SAP says Done=true together with ErrorAny=true', async () => {
-      mockClient.post.mockResolvedValue({ data: { d: { PostGoodsIssue: { Done: true, ErrorAny: true } } } });
-      await expect(adapter.postGoodsIssue('13000526')).rejects.toMatchObject({
-        status: 422,
-        message: 'S/4HANA did not post goods issue for delivery 13000526.'
-      });
-    });
-  });
-
   describe('getBillingDocumentTypes / createBillingDocument (SD_CUSTOMER_INVOICES_CREATE)', () => {
     test('returns the types SAP lists for the delivery', async () => {
       mockClient.post.mockResolvedValue({ data: { d: { results: [{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }, { BillingDocumentType: '', BillingDocumentTypeName: 'x' }] } } });

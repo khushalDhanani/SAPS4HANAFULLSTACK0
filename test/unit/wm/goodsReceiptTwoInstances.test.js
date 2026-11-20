@@ -19,7 +19,7 @@
 const cds = require('@sap/cds');
 cds.test(__dirname + '/../../../');
 
-const { GoodsIssueAttemptStore, ATTEMPT_ENTITY } = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
+const { GoodsReceiptAttemptStore, ATTEMPT_ENTITY } = require('../../../srv/wm/goods-receipt/GoodsReceiptAttemptStore');
 const GoodsReceiptService = require('../../../srv/wm/goods-receipt/service');
 
 const RECEIPT_ATTEMPT = {
@@ -94,8 +94,8 @@ describe('Finding MON-02: Goods Receipt Two-Instance Background Scheduling & Dis
       if (cds.db) {
         await cds.db.run(cds.ql.DELETE.from(ATTEMPT_ENTITY));
       }
-      storeA = new GoodsIssueAttemptStore();
-      storeB = new GoodsIssueAttemptStore();
+      storeA = new GoodsReceiptAttemptStore();
+      storeB = new GoodsReceiptAttemptStore();
     });
 
     it('prevents two instances from independently processing the same unresolved receipt attempt', async () => {

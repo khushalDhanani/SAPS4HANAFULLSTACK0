@@ -5,7 +5,7 @@
  * Each returns null when the value is acceptable, or the field and message the caller sees in a 400.
  */
 
-const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../../../srv/wm/goods-issue/validation/common');
+const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../../../srv/wm/goods-receipt/validation/common');
 
 describe('checkMaterial', () => {
   test('requires a value when required, and ignores a blank one when not', () => {
