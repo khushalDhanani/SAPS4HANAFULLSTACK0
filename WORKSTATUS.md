@@ -17,11 +17,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
-- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 626 first-party source files (up from 558 initially, due to 45 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
-  1. *Decomposition Milestones (Phases 1-5):* 10 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
-  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 127 files. Total first-party files scanned: 626 files.
+- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 636 first-party source files (up from 558 initially, due to 55 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
+  1. *Decomposition Milestones (Phases 1-5):* 13 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
+  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 124 files. Total first-party files scanned: 636 files.
   3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors). All unit tests pass across all modularized domains.
-- **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting the seven largest monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], and `HandlingUnits.controller.js` [643 lines]) without breaking changes or regression:
+- **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting the ten largest monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], `HandlingUnits.controller.js` [643 lines], `CreateCustomerReturn.controller.js` [668 lines], `GoodsReceipt.controller.js` [613 lines], and `MibLabel.controller.js` [588 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
      - Extracted AI chat submission, SSE stream processing, and fallback into `PurchaseOrderAiChat.js` (212 lines).
      - Extracted server-side context retrieval and item batching into `PurchaseOrderAiDataFetcher.js` (240 lines).
@@ -74,10 +74,26 @@ All historical change logs and past milestone statuses are preserved verbatim in
      - Extracted chunking, parallel fetching via `labels()`, AbortController, retries, and fallback to `HuBatchReader.read()` into `HandlingUnitLabelReader.js` (116 lines).
      - Extracted create dialog loading, input model reset, submit guard, and CAP OData create submission into `HandlingUnitCreateManager.js` (84 lines).
      - Retained clean list report controller in `HandlingUnits.controller.js` (268 lines).
-  8. *Validation Results (100% PASS):*
+  8. *CreateCustomerReturn Controller Decomposition (slashed from 668 to 219 lines, -449 lines, -67.2%):*
+     - Extracted multi-dialog value help routing, document type / sold-to / return reason value help, and suggestion filtering into `CreateCustomerReturnValueHelp.js` (200 lines).
+     - Extracted reference invoice / order document lookup dialog, reference items retrieval, and defaulting into `CreateCustomerReturnReferenceDoc.js` (162 lines).
+     - Extracted return line items CRUD, quantity / condition calculations, and item table manager into `CreateCustomerReturnItemManager.js` (125 lines).
+     - Extracted return order creation submission, validation guards, and busy dialog into `CreateCustomerReturnSubmitter.js` (121 lines).
+     - Retained clean wizard controller in `CreateCustomerReturn.controller.js` (219 lines).
+  9. *GoodsReceipt Controller Decomposition (slashed from 613 to 275 lines, -338 lines, -55.1%):*
+     - Extracted 101 Goods Receipt posting, ETag header forwarding, confirmation dialog, and 409 stale data handling into `GoodsReceiptPostingCoordinator.js` (135 lines).
+     - Extracted open inbound deliveries pre-fetch, camera/hardware scanning, value help SelectDialog, and document resolution into `GoodsReceiptReferenceSearch.js` (259 lines).
+     - Extracted storage location selection and batch change with SLED expiry hard-stop error into `GoodsReceiptItemManager.js` (73 lines).
+     - Retained clean list & detail page controller in `GoodsReceipt.controller.js` (275 lines).
+  10. *MibLabel Controller Decomposition (slashed from 588 to 171 lines, -417 lines, -70.9%):*
+     - Extracted top form validation, preview PDF generation with client-side fallback on 503, app-drawn 4x6 labels, and variant sync into `MibLabelPreviewManager.js` (265 lines).
+     - Extracted transfer order search form, date range validation (up to 31 days), search submission, and table multi-selection into `MibLabelTableManager.js` (111 lines).
+     - Extracted row-level label preview / download / print, multi-order bulk PDF download / print (up to 20 documents), blob persistence, and iframe print into `MibLabelActionCoordinator.js` (182 lines).
+     - Retained clean list & form controller in `MibLabel.controller.js` (171 lines).
+  11. *Validation Results (100% PASS):*
      - Linters: Root ESLint (`npm run lint`): PASSED (0 errors). UI5 linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
-     - Unit test suites across Purchase Order, Sales Order, Sales Inquiry, Outbound Delivery, Handling Units, Admin, and Dashboard domains: ALL PASSED (Purchase Order: 28/28 suites, 545/545 passed; Sales Order: 7/7 suites, 123/123 passed; Sales Inquiry: 15/15 suites, 198/198 passed; Outbound Delivery: 6/6 suites, 179/179 passed; WM / Handling Units: 30/30 suites, 652/652 passed; Admin & Dashboard: 109/109 passed).
-     - Exact line counts: All 45 newly created and refactored controller files are strictly $\le 300$ lines (ranging from 77 to 293 lines).
+     - Unit test suites across Purchase Order, Sales Order, Sales Inquiry, Outbound Delivery, Handling Units, Customer Return, Goods Receipt, MibLabel, Admin, and Dashboard domains: ALL PASSED (Purchase Order: 28/28 suites, 545/545 passed; Sales Order: 7/7 suites, 123/123 passed; Sales Inquiry: 15/15 suites, 198/198 passed; Outbound Delivery: 6/6 suites, 179/179 passed; WM / Handling Units, Goods Receipt, MIB Labels: 30/30 suites, 652/652 passed; SD / Customer Return: 11/11 suites, 214/214 passed; Admin & Dashboard: 109/109 passed).
+     - Exact line counts: All 55 newly created and refactored controller files are strictly $\le 300$ lines (ranging from 73 to 293 lines).
 - **Phase 4: Frontend View Models & Client Services Modularization — PASS:** Successfully executed Phase 4 modularization targeting oversized frontend PDF layout engines and monolithic value help services (`MibLabelPdf.js` and `ValueHelpService.js`) without breaking changes or regression:
   1. *MibLabelPdf Decomposition (slashed from 811 to 264 lines, -547 lines, 67.4% reduction):*
      - Extracted Code 128 barcode sizing, dynamic module width fitting, and logo anti-overlap constraint into `app/fiori-app/webapp/modules/wm/mib-label/util/MibBarcodeLayout.js` (94 lines).
@@ -356,6 +372,83 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 17:30 IST — Phase 5: UI5 Controllers Decomposition (MibLabel.controller.js) — PASS
+
+- REQUEST: Modularize monolithic UI5 controller `MibLabel.controller.js` (588 lines) below 300 lines per `SCAN_REPORT.md` Phase 5 without breaking changes.
+- INSPECT:
+  - Audited `app/fiori-app/webapp/modules/wm/mib-label/controller/MibLabel.controller.js` (588 lines).
+  - Verified XML view event bindings in `MibLabel.view.xml`: 14 distinct event handlers (`onInputChange`, `onPreview`, `onVariantChange`, `on4x6Labels`, `onListGo`, `onListSelectionChange`, `formatCount`, `formatSelected`, `onDownloadSelected`, `onRowLabels`, `onRowDownload`, `onRowPrint`, `onPrint`, `onDownload`).
+  - Traced unit test suite `test/unit/wm/mibLabelController.test.js` (18 tests) and all WM test suites (30 suites, 652 tests).
+- PLAN:
+  - Extract top form validation, preview generation with client fallback on 503, app-drawn 4x6 labels, and variant sync into `MibLabelPreviewManager.js` (265 lines).
+  - Extract transfer order search form, date range validation (up to 31 days), search submission, and table multi-selection into `MibLabelTableManager.js` (111 lines).
+  - Extract row-level label preview / download / print, multi-order bulk PDF download / print (up to 20 documents), blob persistence, and iframe print into `MibLabelActionCoordinator.js` (182 lines).
+  - Retain clean form and list controller in `MibLabel.controller.js` (171 lines).
+  - Use prototype and object mixin pattern (`Object.assign(oMembers, ...); Object.assign(oTargetProto, ...)`) to ensure 100% compatibility in both UI5 runtime and Jest unit tests.
+- CHANGE:
+  - Created `app/fiori-app/webapp/modules/wm/mib-label/controller/MibLabelPreviewManager.js` (265 lines).
+  - Created `app/fiori-app/webapp/modules/wm/mib-label/controller/MibLabelTableManager.js` (111 lines).
+  - Created `app/fiori-app/webapp/modules/wm/mib-label/controller/MibLabelActionCoordinator.js` (182 lines).
+  - Refactored `app/fiori-app/webapp/modules/wm/mib-label/controller/MibLabel.controller.js` (slashed from 588 to 171 lines, -417 lines, -70.9%).
+- VALIDATE:
+  - Exact line count: All 4 files strictly $\le 300$ lines (`wc -l`: 171, 111, 182, 265).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Root ESLint (`npm run lint`): PASSED (0 errors).
+  - Unit test suites: `test/unit/wm/` (30/30 suites, 652/652 tests PASS; `mibLabelController.test.js`: 18/18 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 18 tests in `mibLabelController.test.js` and all 652 tests in `test/unit/wm/` covering TO search, date range checks, row downloads, bulk PDF compilation, client fallback on 503, and preview rendering pass cleanly.
+
+### 2026-11-20 17:15 IST — Phase 5: UI5 Controllers Decomposition (GoodsReceipt.controller.js) — PASS
+
+- REQUEST: Modularize monolithic UI5 controller `GoodsReceipt.controller.js` (613 lines) below 300 lines per `SCAN_REPORT.md` Phase 5 without breaking changes.
+- INSPECT:
+  - Audited `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js` (613 lines).
+  - Verified XML view event bindings in `GoodsReceipt.view.xml` and dialog fragments: 10 distinct event handlers (`onToggleAudio`, `onResetWorkflow`, `onStorageUnitValueHelp`, `onScanStorageUnit`, `onCameraScanStorageUnit`, `onRefreshDeliveries`, `onSelectInboundDelivery`, `onStorageLocationChange`, `onBatchChange`, `onPostGoodsReceipt`).
+  - Traced unit test suite `test/unit/wm/goodsReceiptController.test.js` (26 tests) and all WM test suites (30 suites, 652 tests).
+- PLAN:
+  - Extract Goods Receipt (101) posting execution, ETag handling, confirmation dialog, 409 stale data error handling, and success notifications into `GoodsReceiptPostingCoordinator.js` (135 lines).
+  - Extract open deliveries pre-fetching, camera & hardware barcode scanning, value help SelectDialog, and document resolution into `GoodsReceiptReferenceSearch.js` (259 lines).
+  - Extract storage location change and batch selection with SLED expiry hard-stop error handling into `GoodsReceiptItemManager.js` (73 lines).
+  - Retain clean list & detail controller in `GoodsReceipt.controller.js` (275 lines).
+  - Use prototype and object mixin pattern (`Object.assign(oMembers, ...); Object.assign(oTargetProto, ...)`) to ensure 100% compatibility in both UI5 runtime and Jest unit tests.
+- CHANGE:
+  - Created `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceiptPostingCoordinator.js` (135 lines).
+  - Created `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceiptReferenceSearch.js` (259 lines).
+  - Created `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceiptItemManager.js` (73 lines).
+  - Refactored `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js` (slashed from 613 to 275 lines, -338 lines, -55.1%).
+- VALIDATE:
+  - Exact line count: All 4 files strictly $\le 300$ lines (`wc -l`: 275, 259, 135, 73).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Root ESLint (`npm run lint`): PASSED (0 errors).
+  - Unit test suites: `test/unit/wm/` (30/30 suites, 652/652 tests PASS; `goodsReceiptController.test.js`: 26/26 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 26 tests in `goodsReceiptController.test.js` and all 652 tests in `test/unit/wm/` covering barcode scanning, open delivery list navigation, value help, batch expiry guards, and 101 Goods Receipt posting pass cleanly.
+
+### 2026-11-20 17:00 IST — Phase 5: UI5 Controllers Decomposition (CreateCustomerReturn.controller.js) — PASS
+
+- REQUEST: Modularize monolithic UI5 controller `CreateCustomerReturn.controller.js` (668 lines) below 300 lines per `SCAN_REPORT.md` Phase 5 without breaking changes.
+- INSPECT:
+  - Audited `app/fiori-app/webapp/modules/sd/customer-return/controller/CreateCustomerReturn.controller.js` (668 lines).
+  - Verified XML view event bindings in `CreateCustomerReturn.view.xml` and dialog fragments: 18 distinct event handlers (`onDocTypeHelp`, `onSoldToPartyHelp`, `onReturnReasonHelp`, `onOpenRefDocDialog`, `onRefDocSearch`, `onRefDocSelect`, `onConfirmRefDoc`, `onCancelRefDoc`, `onAddItem`, `onDeleteItem`, `onItemMaterialSelect`, `onQuantityChange`, `onSaveReturn`, etc.).
+  - Traced unit test suite `test/unit/sd/createCustomerReturnController.test.js` (18 tests) and all SD test suites (11 suites, 214 tests).
+- PLAN:
+  - Extract multi-dialog value help routing, document type / customer / reason value help, and suggestion filtering into `CreateCustomerReturnValueHelp.js` (200 lines).
+  - Extract reference invoice / sales order lookup dialog, reference item loading, and defaulting into `CreateCustomerReturnReferenceDoc.js` (162 lines).
+  - Extract line items CRUD, quantity changes, condition calculation, and item table state into `CreateCustomerReturnItemManager.js` (125 lines).
+  - Extract create customer return submission, validation checks, busy dialog handling, and navigation into `CreateCustomerReturnSubmitter.js` (121 lines).
+  - Retain clean wizard controller in `CreateCustomerReturn.controller.js` (219 lines).
+  - Use prototype and object mixin pattern (`Object.assign(oMembers, ...); Object.assign(oTargetProto, ...)`) to ensure 100% compatibility in both UI5 runtime and Jest unit tests.
+- CHANGE:
+  - Created `app/fiori-app/webapp/modules/sd/customer-return/controller/CreateCustomerReturnValueHelp.js` (200 lines).
+  - Created `app/fiori-app/webapp/modules/sd/customer-return/controller/CreateCustomerReturnReferenceDoc.js` (162 lines).
+  - Created `app/fiori-app/webapp/modules/sd/customer-return/controller/CreateCustomerReturnItemManager.js` (125 lines).
+  - Created `app/fiori-app/webapp/modules/sd/customer-return/controller/CreateCustomerReturnSubmitter.js` (121 lines).
+  - Refactored `app/fiori-app/webapp/modules/sd/customer-return/controller/CreateCustomerReturn.controller.js` (slashed from 668 to 219 lines, -449 lines, -67.2%).
+- VALIDATE:
+  - Exact line count: All 5 files strictly $\le 300$ lines (`wc -l`: 219, 200, 162, 125, 121).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Root ESLint (`npm run lint`): PASSED (0 errors).
+  - Unit test suites: `test/unit/sd/` (11/11 suites, 214/214 tests PASS; `createCustomerReturnController.test.js`: 18/18 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 18 tests in `createCustomerReturnController.test.js` and all 214 tests in `test/unit/sd/` covering value help routing, reference doc lookup, line item calculations, and return submission pass cleanly.
 
 ### 2026-11-20 16:45 IST — Phase 5: UI5 Controllers Decomposition (HandlingUnits.controller.js) — PASS
 
