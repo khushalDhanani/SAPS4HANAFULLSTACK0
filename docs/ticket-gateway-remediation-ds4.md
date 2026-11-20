@@ -255,6 +255,8 @@ Client 220 has 52 sales contracts today, all of type `ZGCQ` (the only unlocked c
 
 Goods issue and stock transfer movements cannot be synchronously posted to SAP S/4HANA from the warehouse application. Currently, all goods issue postings fall back to the Outbox Dispatch Queue (internal queue UUID) because `API_MATERIAL_DOCUMENT_SRV` is uncatalogued.
 
+*(Note: Goods Issue functionality has been completely decommissioned and removed from the application codebase; stock transfer items 5 and 6 remain relevant for MM).*
+
 **Features directly blocked by missing `API_MATERIAL_DOCUMENT_SRV`:**
 1. **Movement 201 Planned:** Goods Issue to Cost Center via Reservation.
 2. **Movement 201 Unplanned:** Direct Goods Issue to Cost Center (no reservation).

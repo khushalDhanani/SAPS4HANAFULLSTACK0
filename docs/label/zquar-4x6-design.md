@@ -78,7 +78,7 @@ Fixed values (storage types, characteristic numbers) are named constants in the 
 - Labels sort by material, batch, TO number, TO item. The report's second `SORT` is not stable.
 - Data the report reads but never prints is not read: LFA1, VEPO, VEKP.
 - When an MSEG match is missing, the report keeps the previous row's supplier. CAP leaves the field empty instead.
-- **INFERRED, not run for this flow:** reading MSEG through RFC_READ_TABLE works. Other adapters already do it (`GoodsIssueDashboardClient.js:225`, `ReservationProcessAdapter.js:1151`).
+- **INFERRED, not run for this flow:** reading MSEG through RFC_READ_TABLE works. Other adapters already do it (`ReservationProcessAdapter.js:1151`).
 - **Not verified:** whether characteristics 818/828 and the "date from" of 820/9999999400 mean what the captions say is also not verified: the report uses AUSP-DATE_FROM, and the label copies it.
 
 ## Long and missing values

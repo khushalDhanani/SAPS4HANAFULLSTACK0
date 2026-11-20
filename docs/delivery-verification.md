@@ -52,9 +52,7 @@ by full catalogue scan). The field was removed from the Goods Issue CDS model, i
 Fiori views/controllers, and the dispatch queue schema. Same root cause as the empty Goods Receipt
 storage-location picker.
 
-**STILL BLOCKED:** Goods Issue posting for movement 261. No reachable endpoint exists on DS4
-(`ZUI_GI_ORDER_RSV_O4` 404; `API_MATERIAL_DOCUMENT_SRV` not registered;
-`MMIM_MATDOC_SRV` `creatable=false`). Needs Basis/ABAP. Module ships as scan-and-queue.
+**DECOMMISSIONED:** Goods Issue posting for movement 261 has been completely decommissioned and removed from the application across all layers.
 
 ---
 
@@ -96,23 +94,9 @@ The one absent is `API_MATERIAL_DOCUMENT_SRV`.
 
 ---
 
-## Part 3 — Goods Issue posting has no reachable endpoint
+## Part 3 — Goods Issue Decommissioned
 
-Movement 261 is the live AIL process. It cannot post. All three routes are closed:
-
-| Route | State | Who can open it |
-|---|---|---|
-| `ZUI_GI_ORDER_RSV_O4` (V4) | 404, not published | ABAP — `/IWFND/V4_ADMIN` |
-| `API_MATERIAL_DOCUMENT_SRV` | not registered, not in catalogue | Basis — `/IWFND/MAINT_SERVICE` |
-| `MMIM_MATDOC_SRV` (MIGO backend) | live, every entity set `creatable="false"` | ABAP |
-
-This is measured, not assumed: all 1,236 services were swept for a creatable goods-movement entity set.
-Seven matched; after discarding payroll false positives the only real candidates are
-`MMIM_GR4PO_DL_SRV` (goods receipt) and `UI_RESERVATION_HDR_MNG_V2` (reservation maintenance).
-**No live endpoint on this system posts a 261 against a reservation.**
-
-Consequence for delivery: the Goods Issue module ships as scan-and-queue. Reads work on real data,
-`GoodsIssueQueue` already captures failed posts, and the queue drains when the block clears.
+Movement 261 Goods Issue workflow has been completely removed from the application (frontend, backend, database attempt entities, and queue).
 
 ---
 

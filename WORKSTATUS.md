@@ -232,12 +232,16 @@ All historical change logs and past milestone statuses are preserved verbatim in
   - `db.sqlite`: Dropped `saps4hana_wm_GoodsIssuePostingAttempt`; redeployed CDS schema.
   - `docs/architecture/posting-attempt-lifecycle.md`: Aligned line 87 status description.
   - `docs/data-lineage-audit.md`: Marked rows 37-45, 114, 119, 120, 122, 131, 132, 160-163, 169, 178 as DECOMMISSIONED.
-  - `docs/delivery-verification.md`: Marked Goods Issue line 23 as DECOMMISSIONED and line 26 as historical pre-decommissioning trace.
+  - `docs/delivery-verification.md`: Marked Goods Issue line 23 as DECOMMISSIONED, line 26 as historical pre-decommissioning trace, and replaced Part 3 with Decommissioned status notice.
+  - `docs/label/zquar-4x6-design.md`: Removed obsolete reference to deleted `GoodsIssueDashboardClient.js`.
+  - `docs/ticket-gateway-remediation-ds4.md`: Added note that Goods Issue functionality has been completely decommissioned.
   - `docs/no-assumed-data-changes.md`: Replaced Section 2 table with decommissioned status notice.
 - TEST:
-  - `TEST NOT REQUIRED` for deleted investigation script.
+  - `TEST NOT REQUIRED` for deleted investigation script and documentation alignment.
   - `EXISTING TEST SUFFICIENT`:
     - Full WM unit test suite (`npx jest test/unit/wm/`): 28/28 suites PASSED (645 passed, 0 failed, 2.442s).
+    - UI5 Production Build (`npm --prefix app/fiori-app run build`): PASSED (Build succeeded in 1.03s, Component-preload.js generated).
+    - MTA Project Validation (`npm run validate:mta`): PASSED (MTA project validated).
     - Root ESLint (`npm run lint`): PASSED (0 errors, 0 warnings).
     - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (Success! No findings detected).
     - CDS compilation (`npx cds compile srv/service.cds`): PASSED (0 errors).
