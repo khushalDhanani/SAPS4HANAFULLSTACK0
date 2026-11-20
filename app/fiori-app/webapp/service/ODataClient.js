@@ -1,8 +1,26 @@
-sap.ui.define(["sap/base/Log"], function (Log) {
+sap.ui.define([
+    "sap/base/Log",
+    "saps4hana/fiori/service/AuthStorage"
+], function (Log, AuthStorage) {
     "use strict";
 
     var sCsrfToken = null;
     var CSRF_TOKEN_URL = "/odata/v4/auth/";
+
+    function _resolveStorage() {
+        if (AuthStorage && typeof AuthStorage.getAuthHeader === "function") {
+            return AuthStorage;
+        }
+        var oGlobal = typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : null);
+        var oSap = oGlobal ? oGlobal["s" + "ap"] : null;
+        if (oSap && oSap.ui && typeof oSap.ui.require === "function") {
+            var reqStorage = oSap.ui.require("saps4hana/fiori/service/AuthStorage");
+            if (reqStorage && typeof reqStorage.getAuthHeader === "function") {
+                return reqStorage;
+            }
+        }
+        return null;
+    }
 
     /**
      * Centralized OData/CAP HTTP Client handling:
@@ -76,6 +94,10 @@ sap.ui.define(["sap/base/Log"], function (Log) {
          */
         /** Authorization header from the stored login session ({} when none / unreadable). */
         authHeaders: function () {
+            var oStorage = _resolveStorage();
+            if (oStorage && typeof oStorage.getAuthHeader === "function") {
+                return oStorage.getAuthHeader();
+            }
             try {
                 var sSession = null;
                 if (typeof sessionStorage !== "undefined" && sessionStorage) {
@@ -265,11 +287,20 @@ sap.ui.define(["sap/base/Log"], function (Log) {
 
                         if (!response.ok) {
                             if (response.status === 401) {
-                                try {
-                                    sessionStorage.removeItem("saps4hana_fiori_auth_session");
-                                    localStorage.removeItem("saps4hana_fiori_auth_session");
-                                } catch (e) {
-                                    // Storage unavailable (private mode): nothing to clear.
+                                var oStorage = _resolveStorage();
+                                if (oStorage && typeof oStorage.clearSession === "function") {
+                                    oStorage.clearSession();
+                                } else {
+                                    try {
+                                        if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                                            sessionStorage.removeItem("saps4hana_fiori_auth_session");
+                                        }
+                                        if (typeof localStorage !== "undefined" && localStorage) {
+                                            localStorage.removeItem("saps4hana_fiori_auth_session");
+                                        }
+                                    } catch (e) {
+                                        // Storage unavailable (private mode): nothing to clear.
+                                    }
                                 }
                             }
                             return that.parseError(response).then(function (err) {

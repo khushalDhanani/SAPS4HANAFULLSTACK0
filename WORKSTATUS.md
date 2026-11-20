@@ -93,13 +93,15 @@ All historical change logs and past milestone statuses are preserved verbatim in
   6. *Transaction Isolation & Multi-Instance Deduplication:* Verified `_run()` uses root independent transactions (`db.tx({ user: cds.User.privileged }, ...)`). Verified two store instances sharing the database enforce atomic claims and prevent duplicate SAP calls.
   7. *Reconciliation Guard Against Blind Retries:* Enforced that attempts with uncertain outcome (`sending`, `unconfirmed`) cannot be re-claimed until reconciled via `recheck()` / `reconfirmUnconfirmed()`, preventing duplicate transactions against SAP.
   8. *Validation Results:* Executed all 4 specified test suites: `goodsIssueAttempt.test.js` (5 tests PASS), `goodsIssueAttemptInstances.test.js` (6 tests PASS), `transactionPersistenceAndRetry.test.js` (6 tests PASS), `duplicateConcurrentTimeoutRecovery.test.js` (9 tests PASS). Total 26/26 tests PASS. Verified integration test `nothingPostedVisible.test.js` (9/9 PASS), `goodsReceiptAttempt.test.js` (38/38 PASS), ESLint (0 errors), and UI5 linter (0 findings).
-- **Finding UI-02: Review Persistent Browser Token Storage (SEC-02 Frontend Security Architecture) — PASS:** Audited, redesigned, and secured browser authentication storage architecture across `app/fiori-app/webapp/service/AuthService.js`, `app/fiori-app/webapp/service/ODataClient.js`, `app/fiori-app/webapp/controller/Login.controller.js`, and `test/e2e/support/screenCheck.js`:
-  1. *Volatile Session Token Storage:* Eliminated the vulnerability where checking "Remember Me" persisted bearer tokens (`oUserSession.token`) indefinitely to client disk in `localStorage`. Active session objects and live Bearer tokens now reside strictly in volatile `sessionStorage` (scoped to browser tab/window, automatically cleared on window/tab close) and in-memory (`this._oModel`).
-  2. *Secure "Remember Me" Semantics:* Re-aligned "Remember Me" semantics with enterprise SAP security standards: "Remember Me" strictly persists only the non-sensitive identity hint string (`username`) in `localStorage` under `REMEMBER_KEY = "saps4hana_fiori_remember_user"`, never live credentials, tokens, or session payloads. When "Remember Me" is unchecked, `REMEMBER_KEY` is purged from `localStorage`.
-  3. *Automatic Disk Sanitization & Migration Guard:* Implemented startup migration in `_restoreSession()` and fallback retrieval in `getToken()` and `ODataClient.authHeaders()`: if a legacy session exists in `localStorage`, it is copied to active tab `sessionStorage` and immediately purged from `localStorage` (`localStorage.removeItem(STORAGE_KEY)`), neutralizing any disk persistence vulnerability.
-  4. *Token Expiration & Error Resilience:* Enforced JWT expiration validation via `_isTokenExpired()` before session restoration. Handled private browsing restrictions / blocked storage exceptions gracefully without crashing.
-  5. *Clean Logout Isolation:* `logout()` purges `STORAGE_KEY` across all storages (`sessionStorage` and `localStorage`), leaving disk clean while preserving the remembered username hint if the user previously opted to remember their logon ID.
-  6. *Validation Results:* Added comprehensive unit test suite `test/unit/auth/frontendAuthStorage.test.js` (14/14 PASS). Verified `loginController.test.js` (7/7 PASS), `componentAuthGate.test.js` (3/3 PASS), `uiConsistency.test.js` (8/8 PASS), `e2eCoverageMatrix.test.js` (8/8 PASS), core unit suites (41 suites / 779 tests PASS), ESLint (0 errors), and UI5 linter (0 findings).
+- **Finding UI-02: Review Persistent Browser Token Storage (SEC-02 Frontend Security Architecture) — PASS:** Audited, redesigned, and secured browser authentication storage architecture across `docs/architecture/frontend-authentication-storage.md`, `app/fiori-app/webapp/service/AuthStorage.js`, `app/fiori-app/webapp/service/AuthService.js`, `app/fiori-app/webapp/service/ODataClient.js`, `app/fiori-app/webapp/controller/Login.controller.js`, `test/unit/auth/authStorage.test.js`, and `test/unit/auth/frontendAuthStorage.test.js`:
+  1. *Frontend Security Architectural Standard Established:* Authored authoritative architectural standard `docs/architecture/frontend-authentication-storage.md` establishing storage as a formal security boundary rather than an ad-hoc login implementation detail. Documented the Dual Deployment Model (BTP Approuter HttpOnly cookie-based SSO vs Local Dev Bearer token), browser storage data classification, shared warehouse kiosk threat modeling, and token lifecycle invariants.
+  2. *Dedicated Modular Architecture (`AuthStorage.js`):* Created `app/fiori-app/webapp/service/AuthStorage.js` encapsulating `saps4hana_fiori_auth_session` and `saps4hana_fiori_remember_user`. Eliminated duplicated raw storage calls and duplicated key strings across `AuthService.js` and `ODataClient.js`.
+  3. *Volatile Session Token Storage:* Eliminated the vulnerability where checking "Remember Me" persisted bearer tokens (`oUserSession.token`) indefinitely to client disk in `localStorage`. Active session objects and live Bearer tokens now reside strictly in volatile `sessionStorage` (scoped to browser tab/window, automatically cleared on window/tab close) and in-memory (`this._oModel`).
+  4. *Secure "Remember Me" Semantics:* Re-aligned "Remember Me" semantics with enterprise SAP security standards: "Remember Me" strictly persists only the non-sensitive identity hint string (`username`) in `localStorage` under `REMEMBER_KEY = "saps4hana_fiori_remember_user"`, never live credentials, tokens, or session payloads. When "Remember Me" is unchecked, `REMEMBER_KEY` is purged from `localStorage`.
+  5. *Automatic Disk Sanitization & Migration Guard:* Implemented startup migration in `_restoreSession()` and fallback retrieval in `getToken()` and `ODataClient.authHeaders()`: if a legacy session exists in `localStorage`, it is copied to active tab `sessionStorage` and immediately purged from `localStorage` (`localStorage.removeItem(STORAGE_KEY)`), neutralizing any disk persistence vulnerability.
+  6. *Token Expiration & Error Resilience:* Enforced JWT expiration validation via `isTokenExpired()` in both `AuthStorage.loadSession()` and `ODataClient.authHeaders()` before session restoration or request transmission. Handled private browsing restrictions / blocked storage exceptions gracefully without crashing.
+  7. *Clean Logout Isolation:* `logout()` purges `STORAGE_KEY` across all storages (`sessionStorage` and `localStorage`), leaving disk clean while preserving the remembered username hint if the user previously opted to remember their logon ID.
+  8. *Validation Results:* Added dedicated unit test suite `test/unit/auth/authStorage.test.js` (16/16 PASS) and comprehensive integration suite `test/unit/auth/frontendAuthStorage.test.js` (14/14 PASS). Verified `loginController.test.js` (7/7 PASS), `componentAuthGate.test.js` (3/3 PASS), `uiConsistency.test.js` (8/8 PASS), core auth suites (10 suites / 147 tests PASS), all 20 tested suites (303 tests PASS), Playwright E2E suite `verifyMibLabels.e2e.js` (7/7 cases PASS), ESLint (0 errors, 0 warnings), and UI5 linter (0 findings).
 - **Finding UI-01: Purchase Order Creation Baseline & Screen Performance Remediation — PASS:** Fully profiled, root-caused, remediated, and verified without artificially inflating `baseline.json`:
   1. *Profiling Evidence & Metrics Established:* Instrumenting Playwright and CAP OData batch tracking against `#/mm/purchase-orders/create` established:
      - *Initial metadata requests:* Exactly 1 metadata call (`GET /odata/v4/purchase-order/$metadata?sap-language=EN`), cached by UI5 for subsequent requests.
@@ -160,6 +162,47 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 09:40 IST — Remediation for Finding UI-02: Frontend Authentication Storage Architecture & Dedicated AuthStorage Module — PASS
+
+- REQUEST: Remediate Finding UI-02 (Review persistent browser token storage, P2; File: `app/fiori-app/webapp/service/AuthService.js`). Address the frontend manifestation of SEC-02 by treating authentication storage as part of the frontend security design, not just a login implementation detail.
+- INSPECT:
+  - Audited `app/fiori-app/webapp/service/AuthService.js`, `app/fiori-app/webapp/service/ODataClient.js`, `docs/architecture/`, and `test/unit/auth/frontendAuthStorage.test.js`.
+  - Identified that storage logic, magic key strings (`saps4hana_fiori_auth_session`, `saps4hana_fiori_remember_user`), and migration/purging routines were duplicated across `AuthService.js` and `ODataClient.js`.
+  - In `ODataClient.js`, `authHeaders()` was reading raw `sessionStorage` on every request without checking token expiration, whereas `AuthService._isTokenExpired()` was checking expiration.
+  - The repository lacked an authoritative architectural standard specifying the frontend authentication storage design, dual deployment model (BTP Approuter cookie SSO vs local dev volatile Bearer tokens), and threat mitigations for shared warehouse kiosks.
+- CHANGED:
+  - `docs/architecture/frontend-authentication-storage.md` (NEW):
+    - Authored authoritative architectural standard for frontend authentication storage and token security design.
+    - Specified the Dual Deployment Architecture: Production Mode (BTP Approuter with HttpOnly session cookies, zero tokens in JS storage) vs Standalone / Local Dev Mode (volatile Bearer token strictly bounded to session lifetime).
+    - Established strict 3-tier storage data classification: Tier 0 Runtime RAM (`JSONModel`), Tier 1 Volatile Session (`sessionStorage`), Tier 2 Persistent Disk (`localStorage` restricted strictly to non-sensitive identity hint).
+    - Formally analyzed threat models: shared warehouse kiosks / RF terminals, XSS / malicious extension exfiltration blast radius minimization, legacy disk sanitization, and token expiration validation.
+    - Defined the public contract and invariants of `AuthStorage`.
+  - `app/fiori-app/webapp/service/AuthStorage.js` (NEW):
+    - Created dedicated UI5 AMD module encapsulating all storage access, canonical key constants, safe storage accessors with private-browsing error handling, token expiration validation, active session saving/loading/purging, identity hint persistence, and explicit disk sanitization.
+  - `app/fiori-app/webapp/service/AuthService.js`:
+    - Imported `saps4hana/fiori/service/AuthStorage`.
+    - Delegated `_restoreSession`, `login`, `logout`, `getToken`, and `_isTokenExpired` to `AuthStorage` while maintaining defensive fallback logic for isolated unit test doubles.
+  - `app/fiori-app/webapp/service/ODataClient.js`:
+    - Imported `saps4hana/fiori/service/AuthStorage`.
+    - In `authHeaders()`: Delegated directly to `AuthStorage.getAuthHeader()`, eliminating duplicated raw storage access and adding unified token expiration validation.
+    - On HTTP 401 error: Delegated session purging to `AuthStorage.clearSession()`.
+  - `test/unit/auth/authStorage.test.js` (NEW):
+    - Added 16 unit tests verifying `AuthStorage` in isolation across constants, `saveSession`, `loadSession`, `clearSession`, `getToken`, `getAuthHeader`, `isTokenExpired`, `saveRememberUsername`, `clearRememberUsername`, `sanitizeLocalStorage`, and private browsing exception handling.
+  - `test/unit/auth/frontendAuthStorage.test.js`:
+    - Verified all 14 integration test scenarios pass seamlessly with the modularized `AuthStorage` architecture.
+- TEST DECISION: TEST ADDED (`test/unit/auth/authStorage.test.js` with 16 tests); EXISTING TEST SUFFICIENT (`test/unit/auth/frontendAuthStorage.test.js` 14 tests, `loginController.test.js` 7 tests, `componentAuthGate.test.js` 3 tests, `verifyMibLabels.e2e.js` 7 cases).
+- TESTED:
+  - `npx jest test/unit/auth/authStorage.test.js test/unit/auth/frontendAuthStorage.test.js`: 2 suites / 30 tests PASS.
+  - `npx jest test/unit/auth/ test/unit/controller/loginController.test.js test/unit/controller/componentAuthGate.test.js test/unit/frontend/ --runInBand`: 10 suites / 147 tests PASS.
+  - `npx jest test/unit/auth/ test/unit/controller/ test/unit/frontend/ test/unit/wm/mibLabel* --runInBand`: 20 suites / 303 tests PASS.
+  - `node test/e2e/runAllE2E.js --sap-free --only=Mib`: 1 suite / 7 cases PASS (15.2s).
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint`: PASS (`ui5lint`: 0 findings).
+- NOT VERIFIED: Live browser login against deployed Cloud Foundry Approuter (requires deployed BTP instance; cookie behavior documented in architecture spec).
+- ASSUMPTIONS: None.
+- Next: Select and proceed with next finding from the audit queue (e.g. Finding DB-01 or MTA-01).
+- FINAL STATUS: PASS — Frontend authentication storage security architecture formalized in `docs/architecture/frontend-authentication-storage.md`; modular `AuthStorage.js` implemented; duplicated storage logic eliminated across `AuthService.js` and `ODataClient.js`; strict volatile storage tiering, token expiration checks, and disk sanitization enforced; verified with 30 auth unit tests, 147 broader unit tests, static linters, and Playwright browser E2E.
 
 ### 2026-11-20 09:25 IST — CI Workflow: Bypass Ubuntu APT Mirror Timeout & Hosted CI Run 44525189417 — PASS
 

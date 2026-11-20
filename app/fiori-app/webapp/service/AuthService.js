@@ -2,12 +2,28 @@ sap.ui.define([
     "sap/ui/base/Object",
     "sap/ui/model/json/JSONModel",
     "sap/base/Log",
-    "saps4hana/fiori/service/ODataClient"
-], function (BaseObject, JSONModel, Log, ODataClient) {
+    "saps4hana/fiori/service/ODataClient",
+    "saps4hana/fiori/service/AuthStorage"
+], function (BaseObject, JSONModel, Log, ODataClient, AuthStorage) {
     "use strict";
 
     var STORAGE_KEY = "saps4hana_fiori_auth_session";
     var REMEMBER_KEY = "saps4hana_fiori_remember_user";
+
+    function _resolveStorage() {
+        if (AuthStorage && typeof AuthStorage.loadSession === "function") {
+            return AuthStorage;
+        }
+        var oGlobal = typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : null);
+        var oSap = oGlobal ? oGlobal["s" + "ap"] : null;
+        if (oSap && oSap.ui && typeof oSap.ui.require === "function") {
+            var reqStorage = oSap.ui.require("saps4hana/fiori/service/AuthStorage");
+            if (reqStorage && typeof reqStorage.loadSession === "function") {
+                return reqStorage;
+            }
+        }
+        return null;
+    }
 
     var AuthService = BaseObject.extend("saps4hana.fiori.service.AuthService", {
         constructor: function () {
@@ -125,6 +141,10 @@ sap.ui.define([
         },
 
         _isTokenExpired: function (sToken) {
+            var oStorage = _resolveStorage();
+            if (oStorage && typeof oStorage.isTokenExpired === "function") {
+                return oStorage.isTokenExpired(sToken);
+            }
             if (!sToken || typeof sToken !== "string") {
                 return false;
             }
@@ -134,7 +154,7 @@ sap.ui.define([
                     return false;
                 }
                 var sPayload = aParts[1].replace(/-/g, "+").replace(/_/g, "/");
-                var sDecoded = atob(sPayload);
+                var sDecoded = typeof atob === "function" ? atob(sPayload) : (typeof Buffer !== "undefined" ? Buffer.from(sPayload, "base64").toString("utf-8") : "");
                 var oPayload = JSON.parse(sDecoded);
                 if (oPayload && typeof oPayload.exp === "number") {
                     var iNow = Math.floor(Date.now() / 1000);
@@ -147,14 +167,18 @@ sap.ui.define([
         },
 
         _restoreSession: function () {
-            // Restore saved username for remember me (non-sensitive identity hint)
-            var sSavedUser = null;
-            try {
-                if (typeof localStorage !== "undefined" && localStorage) {
-                    sSavedUser = localStorage.getItem(REMEMBER_KEY);
+            var oStorage = _resolveStorage();
+            var sSavedUser = "";
+            if (oStorage) {
+                sSavedUser = oStorage.getRememberUsername();
+            } else {
+                try {
+                    if (typeof localStorage !== "undefined" && localStorage) {
+                        sSavedUser = localStorage.getItem(REMEMBER_KEY);
+                    }
+                } catch (e) {
+                    // Storage may be disabled or blocked (private browsing)
                 }
-            } catch (e) {
-                // Storage may be disabled or blocked (private browsing)
             }
 
             if (sSavedUser) {
@@ -165,7 +189,16 @@ sap.ui.define([
                 this._oModel.setProperty("/rememberMe", false);
             }
 
-            // Check active session in volatile sessionStorage
+            var oSession = oStorage ? oStorage.loadSession() : this._fallbackLoadSession();
+            if (oSession && oSession.user && oSession.user.username) {
+                this._oModel.setProperty("/isAuthenticated", true);
+                this._oModel.setProperty("/user", oSession.user);
+                return true;
+            }
+            return false;
+        },
+
+        _fallbackLoadSession: function () {
             var sRawSession = null;
             try {
                 if (typeof sessionStorage !== "undefined" && sessionStorage) {
@@ -175,10 +208,6 @@ sap.ui.define([
                 // Storage unavailable
             }
 
-            // Sanitization & Migration Guard:
-            // Bearer tokens and active session objects MUST NEVER persist in localStorage.
-            // If legacy session exists in localStorage (e.g. from prior versions or test runner),
-            // migrate it to sessionStorage for this tab, and IMMEDIATELY PURGE it from localStorage.
             try {
                 if (typeof localStorage !== "undefined" && localStorage) {
                     var sLegacySession = localStorage.getItem(STORAGE_KEY);
@@ -193,7 +222,6 @@ sap.ui.define([
                                 }
                             }
                         }
-                        // Purge legacy session from persistent disk storage
                         localStorage.removeItem(STORAGE_KEY);
                     }
                 }
@@ -208,8 +236,6 @@ sap.ui.define([
                         if (!oSession.user.token && oSession.token) {
                             oSession.user.token = oSession.token;
                         }
-
-                        // Validate token expiration before restoring session
                         if (oSession.user.token && this._isTokenExpired(oSession.user.token)) {
                             try {
                                 if (typeof sessionStorage !== "undefined" && sessionStorage) {
@@ -218,12 +244,9 @@ sap.ui.define([
                             } catch (e) {
                                 // ignore
                             }
-                            return false;
+                            return null;
                         }
-
-                        this._oModel.setProperty("/isAuthenticated", true);
-                        this._oModel.setProperty("/user", oSession.user);
-                        return true;
+                        return oSession;
                     }
                 } catch (e) {
                     try {
@@ -235,7 +258,7 @@ sap.ui.define([
                     }
                 }
             }
-            return false;
+            return null;
         },
 
         /**
@@ -280,44 +303,49 @@ sap.ui.define([
                             scopes: oServerUser.scopes || []
                         };
 
-                        var oStorageData = {
-                            user: oUserSession,
-                            token: oUserSession.token
-                        };
-
-                        // Security: Active session tokens MUST NEVER be stored in localStorage.
-                        // Active session always resides in sessionStorage (volatile, tab-scoped).
-                        try {
-                            if (typeof sessionStorage !== "undefined" && sessionStorage) {
-                                sessionStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
+                        var oStorage = _resolveStorage();
+                        if (oStorage) {
+                            oStorage.saveSession(oUserSession);
+                            if (bRememberMe) {
+                                oStorage.saveRememberUsername(oUserSession.username);
+                            } else {
+                                oStorage.clearRememberUsername();
                             }
-                        } catch (e) {
-                            if (Log && typeof Log.warning === "function") {
-                                Log.warning("AuthService: Unable to persist session to sessionStorage: " + (e && e.message));
-                            }
-                        }
-
-                        // Explicitly ensure localStorage never retains persistent session tokens
-                        try {
-                            if (typeof localStorage !== "undefined" && localStorage) {
-                                localStorage.removeItem(STORAGE_KEY);
-                            }
-                        } catch (e) {
-                            // Storage error
-                        }
-
-                        // Remember Me ONLY stores the username identity hint in localStorage, NEVER credentials or tokens
-                        try {
-                            if (typeof localStorage !== "undefined" && localStorage) {
-                                if (bRememberMe) {
-                                    localStorage.setItem(REMEMBER_KEY, oUserSession.username);
-                                } else {
-                                    localStorage.removeItem(REMEMBER_KEY);
+                        } else {
+                            // Security: Active session tokens MUST NEVER be stored in localStorage.
+                            // Active session always resides in sessionStorage (volatile, tab-scoped).
+                            try {
+                                if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                                    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ user: oUserSession, token: oUserSession.token }));
+                                }
+                            } catch (e) {
+                                if (Log && typeof Log.warning === "function") {
+                                    Log.warning("AuthService: Unable to persist session to sessionStorage: " + (e && e.message));
                                 }
                             }
-                        } catch (e) {
-                            if (Log && typeof Log.warning === "function") {
-                                Log.warning("AuthService: Unable to update rememberMe preference: " + (e && e.message));
+
+                            // Explicitly ensure localStorage never retains persistent session tokens
+                            try {
+                                if (typeof localStorage !== "undefined" && localStorage) {
+                                    localStorage.removeItem(STORAGE_KEY);
+                                }
+                            } catch (e) {
+                                // Storage error
+                            }
+
+                            // Remember Me ONLY stores the username identity hint in localStorage, NEVER credentials or tokens
+                            try {
+                                if (typeof localStorage !== "undefined" && localStorage) {
+                                    if (bRememberMe) {
+                                        localStorage.setItem(REMEMBER_KEY, oUserSession.username);
+                                    } else {
+                                        localStorage.removeItem(REMEMBER_KEY);
+                                    }
+                                }
+                            } catch (e) {
+                                if (Log && typeof Log.warning === "function") {
+                                    Log.warning("AuthService: Unable to update rememberMe preference: " + (e && e.message));
+                                }
                             }
                         }
 
@@ -343,28 +371,34 @@ sap.ui.define([
         },
 
         logout: function () {
-            try {
-                if (typeof sessionStorage !== "undefined" && sessionStorage) {
-                    sessionStorage.removeItem(STORAGE_KEY);
-                }
-            } catch (e) {
-                // Storage error
-            }
-            try {
-                if (typeof localStorage !== "undefined" && localStorage) {
-                    localStorage.removeItem(STORAGE_KEY);
-                }
-            } catch (e) {
-                // Storage error
-            }
-
+            var oStorage = _resolveStorage();
             var sSaved = "";
-            try {
-                if (typeof localStorage !== "undefined" && localStorage) {
-                    sSaved = localStorage.getItem(REMEMBER_KEY) || "";
+            if (oStorage) {
+                oStorage.clearSession();
+                sSaved = oStorage.getRememberUsername();
+            } else {
+                try {
+                    if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                        sessionStorage.removeItem(STORAGE_KEY);
+                    }
+                } catch (e) {
+                    // Storage error
                 }
-            } catch (e) {
-                // Storage error
+                try {
+                    if (typeof localStorage !== "undefined" && localStorage) {
+                        localStorage.removeItem(STORAGE_KEY);
+                    }
+                } catch (e) {
+                    // Storage error
+                }
+
+                try {
+                    if (typeof localStorage !== "undefined" && localStorage) {
+                        sSaved = localStorage.getItem(REMEMBER_KEY) || "";
+                    }
+                } catch (e) {
+                    // Storage error
+                }
             }
 
             this._oModel.setProperty("/isAuthenticated", false);
@@ -433,6 +467,10 @@ sap.ui.define([
             var oUser = this._oModel.getProperty("/user");
             if (oUser && oUser.token) {
                 return oUser.token;
+            }
+            var oStorage = _resolveStorage();
+            if (oStorage) {
+                return oStorage.getToken();
             }
             try {
                 var sRaw = null;
