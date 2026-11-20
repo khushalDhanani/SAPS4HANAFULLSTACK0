@@ -16,7 +16,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`, `HEAD` `8ec7f711`. Zero staged files. Synchronized with `origin/feature01`.
+- **Current checkout:** `feature01`, `HEAD` `a34a4b2e`. Synchronized with `origin/feature01`.
 - **Complete Decommissioning of Goods Issue (LE-WM Movement 261 & EWM Outbound Delivery `postGoodsIssue`) — PASS:** Remediated and completely decommissioned Goods Issue functionality across the entire application in accordance with the user request and approved plan `file:///Users/khushaldhanani/.gemini/antigravity/brain/4dbe6a47-31fb-4cd9-8e1c-ec0d8b626859/GI-Decommission-Plan.md`:
   1. *Decommissioned Dedicated Components:*
      - Entire directory `srv/wm/goods-issue/` deleted (including previous `GoodsIssueAttemptStore.js`, `validation/common.js`).
@@ -191,6 +191,42 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 11:10 IST — Final Double-Check & Full Documentation Alignment for Goods Issue Decommissioning — PASS
+
+- REQUEST: Double-check and make sure Goods Issue functionality is properly and completely removed across the SAP S/4HANA application, including both the LE-WM Goods Issue Movement 261 workflow and the EWM Outbound Delivery Goods Issue posting functionality. Remove all dedicated frontend, backend, CAP, CDS, database, SAP integration, routing, navigation, translation, persistent queue, testing, and documentation references without deleting or breaking unrelated functionality. Preserve Goods Receipt, Outbound Picking, Warehouse Management, RF Terminal, and all other business modules. Do not leave dead code, unused imports, orphaned routes, obsolete API methods, or Goods Issue-specific UI elements. Verify the entire application after removal.
+- INSPECT:
+  - Conducted full-repository grep searches across all layers (`app/`, `srv/`, `db/`, `test/`, `docs/`, `tools/`) for `goods-issue`, `goodsissue`, `postgoodsissue`, `movement 261`, `mvt261`, `GoodsIssueAttemptStore`, and `GoodsIssuePostingAttempt`.
+  - Confirmed zero occurrences of Goods Issue business logic, actions, handlers, adapters, attempts, or UI elements in active runtime code.
+  - Confirmed all remaining occurrences of `GoodsIssueDate` / `PlannedGoodsIssueDate` in `app/fiori-app/` and `srv/le/outbound-delivery/` are standard SAP delivery header fields required for list binding and delivery creation dialogs, and must remain preserved.
+  - Identified remaining documentation touchpoints in `docs/` and `docs/abap/` needing alignment with the completed decommissioning:
+    1. `docs/sd-creatable-services.md`: Marked `SD_SOFM_CREDIT_BLOCK_SRV` `PostGoodsIssue` as `**DECOMMISSIONED**`.
+    2. `docs/creatable_services_report.md`: Marked `PostGoodsIssue` as `**DECOMMISSIONED**` and clarified batch lookup for Goods Receipt.
+    3. `docs/data-lineage-audit.md`: Updated posting attempt entity reference from `db/wm/goods-issue-attempt.cds` to `db/wm/goods-receipt-attempt.cds` and noted V4 service decommissioning.
+    4. `docs/architecture/posting-attempt-lifecycle.md`: Updated to canonical Goods Receipt (101) contract (`GoodsReceiptAttemptStore.js`, `GoodsReceiptPostingAttempt`), documenting decommissioning of Movement 261/201 reconciliation.
+    5. `docs/runbooks/rollback-and-reconciliation.md`: Updated applicable movement types, HDI container persistence entity (`GoodsReceiptPostingAttempt`), and store references (`GoodsReceiptAttemptStore`); marked Movement 261 as decommissioned.
+    6. `docs/decisions/ADR-0001-s4-centric-integration-facade.md` & `sap-only-persistence-migration.md`: Updated addenda to document HDI container usage for Goods Receipt (101) and admin state.
+    7. `docs/abap/zwm_post_attempt.*`: Updated DDL and FUGR comments to reference `GoodsReceiptPostingAttempt`.
+  - Investigated user IDE review bar issue ("6 Files With Changes: Reject all / Accept all - Unable to accept this"):
+    - Files listed in IDE buffer: `auditTraceability.test.js`, `goodsReceiptAttempt.test.js`, `goodsReceiptFormatChecks.test.js`, `goodsReceiptPlantScope.test.js`, `goodsReceiptService.test.js`, `goodsReceiptTwoInstances.test.js`.
+    - Cause: These edits were already committed to git HEAD in commit `8ec7f711`. The IDE diff viewer buffer was out of sync with disk. Clicking "Reject all" safely dismisses the redundant buffer and syncs the IDE with the clean disk/git state.
+- CHANGED:
+  - `docs/sd-creatable-services.md`
+  - `docs/creatable_services_report.md`
+  - `docs/data-lineage-audit.md`
+  - `docs/architecture/posting-attempt-lifecycle.md`
+  - `docs/runbooks/rollback-and-reconciliation.md`
+  - `docs/decisions/ADR-0001-s4-centric-integration-facade.md`
+  - `docs/decisions/sap-only-persistence-migration.md`
+  - `docs/abap/zwm_post_attempt.tabl.ddl`
+  - `docs/abap/zwm_post_attempt.fugr.abap`
+- TEST DECISION: EXISTING TEST SUFFICIENT (re-ran linters, CDS compile, matrix suite, and Goods Receipt suites).
+- TESTED:
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 findings).
+  - `npx cds compile srv/service.cds`: clean compile with 0 errors.
+  - `npx jest test/unit/tools/e2eCoverageMatrix.test.js test/unit/wm/goodsReceipt`: 7 suites passed, 163 tests passed.
+  - Full repo grep: zero remaining Goods Issue code, orphaned routes, or obsolete APIs.
 
 ### 2026-11-20 11:00 IST — Final Cleanliness Audit & Documentation Cleanup for Goods Issue Decommission — PASS
 

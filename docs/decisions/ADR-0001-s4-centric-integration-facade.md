@@ -36,15 +36,15 @@ The application will maintain zero local database persistence. S/4HANA Gateway s
 - `db/schema.cds` is annotated to clearly reflect this architectural decision.
 - `mta.yaml` defines modules for `approuter`, `srv` (CAP), and `fiori-app`, with backing services for `XSUAA`, `Destination`, `Connectivity`, and `HTML5 Application Repository`.
 
-## Addendum (2026-09-14): HDI container for the Goods Issue dispatch queue
+## Addendum (2026-09-14, Updated 2026-11-20): HDI container for Posting Attempts & Admin State
 
 ### Context
-The warehouse Goods Issue module queues movement-261 postings that S/4HANA cannot accept at posting time (posting service not activated or not authorised) so that they can be retried later. This queue is application-owned state: it holds transactions that do **not** yet exist in S/4HANA. It was first implemented as a JSON file on local disk, which is not durable on Cloud Foundry and is not shared between application instances.
+Goods Issue and its legacy dispatch queue have been completely decommissioned. The SAP HANA Cloud HDI container (`saps4hana-db`) is maintained exclusively for durable application-level transactional integrity: Movement 101 Goods Receipt posting attempts (`db/wm/goods-receipt-attempt.cds`), user lock notifications (`db/admin/user-lock.cds`), and password expiry monitoring (`db/admin/password-expiry.cds`).
 
 ### Decision
-Option A stays in force for all business documents: S/4HANA remains the single source of truth for purchase orders, sales documents, journal entries, stock, batches and warehouse objects, and nothing is cached or shadowed locally.
+Option A stays in force for all business documents: S/4HANA remains the single source of truth for purchase orders, sales documents, deliveries, journal entries, stock, batches and warehouse objects, and nothing is cached or shadowed locally.
 
-For the dispatch queue only, the application provisions an SAP HANA Cloud HDI container (`saps4hana-db`, plan `hdi-shared`) deployed by `saps4hana-db-deployer` from `gen/db`, holding the single entity `saps4hana.wm.GoodsIssueQueue` (`db/wm/goods-issue-queue.cds`). Local development and automated tests use the in-memory SQLite database of `@cap-js/sqlite` and need no HANA.
+For double-posting protection and administrative notifications only, the application provisions an SAP HANA Cloud HDI container (`saps4hana-db`, plan `hdi-shared`) deployed by `saps4hana-db-deployer` from `gen/db`. Local development and automated tests use the in-memory SQLite database of `@cap-js/sqlite` and need no HANA.
 
 ### Consequences
 - The "no HDI container" cost argument of Option A no longer applies; the marginal cost is nil where the subaccount already runs a HANA Cloud instance and is the price of one instance otherwise.

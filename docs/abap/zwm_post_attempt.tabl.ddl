@@ -2,7 +2,7 @@
 // Package ZAMM (user's choice, 2026-11-03). Transport request and target system are pending.
 // One row per posting attempt, written and committed BEFORE the goods movement is sent, so that a second
 // request or a second app instance cannot post the same movement. The primary key is what makes a claim atomic.
-// Replaces db/wm/goods-issue-attempt.cds; fields match that entity, without its createdBy and modified fields.
+// Replaces db/wm/goods-receipt-attempt.cds; fields match that entity, without its createdBy and modified fields.
 // Function group: docs/abap/zwm_post_attempt.fugr.abap. Design and live proof: docs/decisions/sap-only-persistence-migration.md.
 @EndUserText.label : 'WM posting attempts (double-post guard)'
 @AbapCatalog.enhancement.category : #NOT_EXTENSIBLE

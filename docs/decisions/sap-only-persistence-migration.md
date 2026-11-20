@@ -75,13 +75,13 @@ Use references starting `ZTEST` and end every test row in `rejected`, so the app
 
 ### After the proof
 
-Add one client under `srv/integration/s4hana/` that calls these modules with `RfcClient.call`, never inside a posting `session()`. Point `GoodsIssueAttemptStore` at it and remove its database and memory branches. Keep the fail-closed behaviour: if a claim cannot be written, nothing is posted. Then carry over production rows: open attempts must be resolved first, and `posted` rows matter too, because re-claim logic reads them. Only then remove the attempts entity, the database configuration and the HDI resources.
+Add one client under `srv/integration/s4hana/` that calls these modules with `RfcClient.call`, never inside a posting `session()`. Point `GoodsReceiptAttemptStore` at it and remove its database and memory branches. Keep the fail-closed behaviour: if a claim cannot be written, nothing is posted. Then carry over production rows: open attempts must be resolved first, and `posted` rows matter too, because re-claim logic reads them. Only then remove the attempts entity, the database configuration and the HDI resources.
 
 ## Required replacement behavior
 
 ### Durable posting attempts and duplicate protection
 
-Current source: `srv/wm/goods-issue/GoodsIssueAttemptStore.js:24-39`, `:84`, `:150`, `:205`, `:221`, `:429`, `:499`. Consumers include goods issue, movement 261 and goods receipt handlers/services. This is application attempt state, separate from a successfully posted SAP material document.
+Current source: `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js`. Following the complete decommissioning of Goods Issue, the store now protects Goods Receipt (Movement 101) transactions against duplicate execution and lost responses. This is application attempt state, separate from a successfully posted SAP material document.
 
 A verified SAP implementation must provide:
 
@@ -139,9 +139,8 @@ The original architecture decision and its later persistence exception are recor
 
 Existing tests to preserve or adapt include:
 
-- `test/unit/wm/goodsIssueAttemptInstances.test.js` — shared state and single claims across instances.
-- `test/unit/wm/goodsIssueAttempt.test.js` and `transactionPersistenceAndRetry.test.js` — attempts and retry outcomes.
-- `test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js` — concurrent/timeout behavior.
+- `test/unit/wm/goodsReceiptTwoInstances.test.js` — shared state and single claims across instances.
+- `test/unit/wm/goodsReceiptAttempt.test.js` — attempts, leasing, and retry outcomes.
 - `test/unit/common/BusinessConfigResolver.test.js` — configuration resolution and errors.
 - `test/unit/wm/reservationTrack.test.js` and tr-to coverage — tracking/API behavior.
 - `test/unit/tools/readHuStockEvidence.test.js` — read-only guard and redaction behavior used during discovery.

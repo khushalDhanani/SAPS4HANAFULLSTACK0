@@ -46,7 +46,7 @@ If the CAP server simply retries the request upon timeout, S/4HANA risks creatin
 
 ### Architectural Rules
 1. **Durable Persistence Before SAP Call**: The attempt record must be committed to durable persistence (SAP HANA) *before* the S/4HANA network call is dispatched.
-2. **Fail-Closed on Database Loss**: If the durable database is unavailable, the application must immediately throw HTTP 503 (`DB_UNAVAILABLE`) and block the SAP write. In-memory fallback is completely removed; the store strictly requires durable database persistence (`db/wm/goods-issue-attempt.cds`) in all environments.
+2. **Fail-Closed on Database Loss**: If the durable database is unavailable, the application must immediately throw HTTP 503 (`DB_UNAVAILABLE`) and block the SAP write. In-memory fallback is completely removed; the store strictly requires durable database persistence (`db/wm/goods-receipt-attempt.cds`) in all environments.
 3. **Reconciliation Over Blind Retry**: An attempt with an uncertain outcome (`sending`, `unconfirmed`) must be reconciled by querying backend SAP tables before any retry is permitted.
 4. **Multi-Instance Distributed Leases**: Cloud Foundry environments run multiple instances (HA topology). Background rechecks and attempt claims must use distributed worker leases and atomic Compare-And-Swap (CAS) operations to prevent concurrent processing.
 
@@ -91,9 +91,9 @@ stateDiagram-v2
 
 ### Reclaim Generations & Audit Trail
 
-When an initial attempt (`GI261_1001-0`) is definitively rejected or marked `not_posted`, the user may correct input parameters and retry. To preserve the complete audit trail:
+When an initial attempt (`GR101_1001-0`) is definitively rejected or marked `not_posted`, the user may correct input parameters and retry. To preserve the complete audit trail:
 - Prior attempt rows are preserved intact in HANA.
-- The new attempt generates the next sequence suffix (`GI261_1001-1`).
+- The new attempt generates the next sequence suffix (`GR101_1001-1`).
 - `RequestHash` tracks identity across generations.
 - If an attempt is still in an open status (`sending`, `unconfirmed`), blind re-claim is rejected with HTTP 409 Conflict.
 
@@ -101,10 +101,10 @@ When an initial attempt (`GI261_1001-0`) is definitively rejected or marked `not
 
 ## 4. The Shared Storage Contract (`IPostingAttemptStore`)
 
-The underlying persistence model is defined in `db/wm/goods-issue-attempt.cds` as `saps4hana.wm.GoodsIssuePostingAttempt`. The shared contract comprises three tiers of attributes:
+The underlying persistence model is defined in `db/wm/goods-receipt-attempt.cds` as `saps4hana.wm.GoodsReceiptPostingAttempt`. The shared contract comprises three tiers of attributes:
 
 ```cds
-entity GoodsIssuePostingAttempt : cuid, managed {
+entity GoodsReceiptPostingAttempt : cuid, managed {
     // Tier 1: Generic Lifecycle & Idempotency Attributes
     ReferenceDocument : String(16) not null;   // Correlated SAP reference / key
     RequestHash       : String(64);            // Payload idempotency hash
@@ -157,17 +157,11 @@ interface IPostingAttemptStore {
 
 ---
 
-## 5. Movement-Specific Reconciliation Protocols
+## 5. Movement Reconciliation Protocol
 
-Movement types correlate with SAP backend documents differently. The store currently implements two distinct reconciliation strategies:
+Following the complete decommissioning of Goods Issue (Movement 261/201), the posting attempt store is dedicated to protecting Movement 101 Goods Receipt against inbound deliveries.
 
-### Strategy A: Goods Issue Reconciliation (Movement 201, 261, etc.)
-- **SAP Reference Field**: The material document header `ReferenceDocument` (`BKTXT` / `XBLNR` / `MATDOC-LIFEX`) carries our exact attempt `ReferenceDocument`.
-- **Query Mechanism**: `adapter.findPostedGoodsIssueByReference(ref, movementType, postingDate)` queries `MATDOC` (or `MKPF` fallback).
-- **Outbound Delivery Detection**: In WM-managed locations (error L9/514), SAP creates an outbound delivery instead of a material document. The reconciler invokes `_findDeliveryForAttempt(adapter, attempt)` to inspect `LIKP-LIFEX` and sets status to `delivery_created`.
-- **Unconfirmed Resolution**: `reconfirmUnconfirmed(adapter)` retries read-backs for open documents, confirming persistence or flagging attention when exceeding `unconfirmedMaxAgeMs` (30 min).
-
-### Strategy B: Goods Receipt Reconciliation (Movement 101 against Inbound Delivery)
+### Goods Receipt Reconciliation (Movement 101 against Inbound Delivery)
 - **SAP Reference Field**: Receipts against inbound deliveries do not populate the material document header reference with our application key. S/4HANA links the receipt via the delivery document number (`ReservationNo`) and item (`ReservationItem` / `POSNR`).
 - **Query Mechanism**: `adapter.findReceiptForAttempt(attempt)` searches `MATDOC` for Movement 101 matching the delivery item.
 - **Single-Worker Scheduling**: Background recheck timer is enabled exclusively on Cloud Foundry instance 0 (`(env.CF_INSTANCE_INDEX ?? '0') === '0'`).
@@ -175,30 +169,12 @@ Movement types correlate with SAP backend documents differently. The store curre
 
 ---
 
-## 6. Separation of Concerns & Future Modularization Blueprint
+## 6. Separation of Concerns & Completed Decoupling
 
-To remediate Technical Debt (Finding DEBT-01) without destabilizing existing production code, the architecture establishes a 2-stage modularization blueprint:
-
-### Phase 1: In-Place Documentation, Typing & Generic Aliasing (Current Implementation)
-1. **Document Contract**: Establish this specification (`docs/architecture/posting-attempt-lifecycle.md`) as the canonical standard.
-2. **Generic Aliasing**: Export `PostingAttemptStore` as an alias alongside `GoodsIssueAttemptStore` in `srv/wm/goods-issue/GoodsIssueAttemptStore.js`.
-3. **Structured Regions**: Delineate `GoodsIssueAttemptStore.js` into distinct internal blocks:
-   - *Region 1*: Core Generic Persistence & Distributed CAS Leasing
-   - *Region 2*: Goods Issue Reconciliation Strategy
-   - *Region 3*: Goods Receipt Reconciliation Strategy
-4. **Zero Breaking Changes**: Existing callers in `srv/wm/goods-receipt/`, `srv/wm/goods-issue/`, and unit test suites continue importing `GoodsIssueAttemptStore` without disruption.
-
-### Phase 2: Structural Factorization (When further movements or modules are added)
-When a third movement type (e.g. Physical Inventory 701/702 or Stock Transfer 311) is integrated:
-1. Extract generic attempt lifecycle logic into `srv/wm/common/PostingAttemptStore.js`.
-2. Extract Movement 261/201 reconciliation into `srv/wm/goods-issue/GoodsIssueReconciliationStrategy.js`.
-3. Extract Movement 101 reconciliation into `srv/wm/goods-receipt/GoodsReceiptReconciliationStrategy.js`.
-4. Maintain `GoodsIssueAttemptStore.js` as a facade forwarding to the generic store and strategy modules.
-5. In CDS, introduce an entity alias or projection:
-   ```cds
-   entity PostingAttempt as projection on saps4hana.wm.GoodsIssuePostingAttempt;
-   ```
-   This guarantees that database tables in SAP HANA Cloud HDI containers are never dropped or recreated during MTA redeployment.
+The posting attempt infrastructure has been fully decoupled:
+1. **Goods Issue Decommissioned**: All Movement 261/201 and Outbound Delivery PGI functionality, entities, adapters, and stores have been removed.
+2. **Dedicated Goods Receipt Store**: `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js` and `db/wm/goods-receipt-attempt.cds` provide fail-closed persistence, distributed worker leasing, and background reconciliation exclusively for Movement 101 Goods Receipts.
+3. **Multi-Instance CAS Protection**: Preserves zero double-posting guarantees in Cloud Foundry multi-instance topologies.
 
 ---
 
@@ -210,6 +186,6 @@ When a third movement type (e.g. Physical Inventory 701/702 or Stock Transfer 31
 4. **Multi-Worker Safety**: Background recheck jobs must be gated by `isWorker()` and distributed worker leasing.
 5. **Validation Verification**: Any changes touching attempt persistence must execute:
    - `test/unit/wm/goodsReceiptTwoInstances.test.js`
-   - `test/unit/wm/goodsIssueAttemptInstances.test.js`
-   - `test/unit/wm/transactionPersistenceAndRetry.test.js`
-   - `test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js`
+   - `test/unit/wm/goodsReceiptAttempt.test.js`
+   - `test/unit/wm/goodsReceiptPlantScope.test.js`
+   - `test/unit/wm/goodsReceiptService.test.js`

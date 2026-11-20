@@ -8,7 +8,7 @@
 *&   never executed. Table: docs/abap/zwm_post_attempt.tabl.ddl.
 *&
 *& Purpose: durable double-post guard for the CAP layer, replacing the
-*&   application table GoodsIssuePostingAttempt. A claim is committed before
+*&   application table GoodsReceiptPostingAttempt. A claim is committed before
 *&   the goods movement is sent, so it survives a crash, and the primary key
 *&   lets only one of two parallel claims win (UNSURE until proven with two
 *&   parallel sessions, see the migration document).

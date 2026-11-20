@@ -27,7 +27,7 @@ The following services are authentic, verified transactional endpoints capable o
 | **2** | **Delivery with Reference** | **`LE_SHP_QC_DLVREF_SRV`** *(LE/SD)* | `POST /C_DelivWthRefQuickCreate` | `ReferenceSDDocument` (Sales Order #), `ShippingPoint`, `DeliveryDate` | **Recorded as created** (Delivery `13000526`). No read-back proof in the repo. |
 | **3** | **Delivery for Order (Direct)** | **`SD_SOFM_DELIVERY_SRV_01`** | `POST /CreateDeliveryForOrder` or `CreateDeliveryForOrderItems` | `SalesOrderID`, `ItemID`, `DueDate`, `RollbackOnError` | **Active in Gateway**, verified in metadata. |
 | **4** | **Delivery without Reference** | **`LE_SHP_QC_DLVNOREF_SRV`** | `POST /C_DelivWthoutRefQuickCreate` + `C_DelivItmWthoutRefQuickCrte` | `ShippingPoint`, `DeliveryDocumentType`, `SoldToParty`, items | **Active in Gateway**, verified in metadata. |
-| **5** | **Post Goods Issue (PGI)** | **`SD_SOFM_CREDIT_BLOCK_SRV`** | `POST /PostGoodsIssue` | `DeliveryNumber` (String). Returns `PostGoodsReturnInfo` (`Done`, `ErrorAny`). | **Code implemented**, awaiting picked candidate delivery (candidate: `13000515`). |
+| **5** | **Post Goods Issue (PGI)** | **`SD_SOFM_CREDIT_BLOCK_SRV`** | `POST /PostGoodsIssue` | `DeliveryNumber` (String). Returns `PostGoodsReturnInfo` (`Done`, `ErrorAny`). | **DECOMMISSIONED** (Goods Issue removed across application). |
 | **6** | **Credit Block Release** | **`SD_SOFM_CREDIT_BLOCK_SRV`** | `POST /ReleaseCreditOrder`, `ReleaseCreditDelivery` | `SalesOrderNumber` or `DeliveryNumber` | **Not proven.** No live run is recorded in the repo. `docs/creatable_services_report.md` lists it as untested. |
 | **7** | **Customer Invoice (from Delivery/Order)** | **`SD_CUSTOMER_INVOICES_CREATE`** | `POST /CreateBillingDocuments` | `ReferenceSDDocument` (Delivery/Order #), `ReferenceSDDocumentCategory` ('J'/'C'), `BillingDocumentType` (optional), `BillingDocumentDate` | **Active in Gateway**, verified in metadata. Code implemented in `OutboundDeliveryAdapter.js`. |
 | **8** | **Customer Invoice (Direct from Order/Delivery)** | **`SD_SOFM_INVOICE_SRV`** / `SD_SOF` | `POST /createInvoice` | `DeliveryDocumentNumber`, `SalesDocumentNumber` | **Active in Gateway**, verified in metadata. |
@@ -54,6 +54,6 @@ The following services are authentic, verified transactional endpoints capable o
 
 * For **Sales Order & Sales Inquiry creation**, **`LORD_ODATA_ORDER_SRV`** is the only active, proven live transactional service available on this system.
 * For **Delivery creation**, **`LE_SHP_QC_DLVREF_SRV`** (`C_DelivWthRefQuickCreate`) is the service in use. A created delivery is recorded, without read-back proof.
-* For **Goods Issue & Credit release**, **`SD_SOFM_CREDIT_BLOCK_SRV`** (`PostGoodsIssue`, `ReleaseCreditOrder`) is the proper transactional service.
+* For **Credit release**, **`SD_SOFM_CREDIT_BLOCK_SRV`** (`ReleaseCreditOrder`) is the proper transactional service (Post Goods Issue decommissioned across application).
 * For **Billing Document creation**, **`SD_CUSTOMER_INVOICES_CREATE`** (`CreateBillingDocuments`) is the proper transactional service.
 * For **Accounting release & cancellation**, **`SD_CUSTOMER_INVOICES_MANAGE`** (`PostBillingDocumentToAccounting`, `CancelBillingDocument`) is the proper transactional service.

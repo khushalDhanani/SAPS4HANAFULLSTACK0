@@ -3,7 +3,7 @@
 **Document ID:** RUNBOOK-PROD-004  
 **Classification:** Enterprise Production Assurance  
 **Target Architecture:** SAP BTP Cloud Foundry + SAP HANA Cloud + SAP S/4HANA (AnyPremise / Cloud)  
-**Applicable Movement Types:** 201 (Cost Center), 241 (Asset), 311 (SLoc Transfer), 301 (Plant Transfer), 261 (Process Order)  
+**Applicable Movement Types:** 101 (Goods Receipt against Inbound Delivery), 311 (SLoc Transfer), 301 (Plant Transfer)  
 
 ---
 
@@ -11,7 +11,7 @@
 
 Per [ADR-0001: S/4HANA-Centric Integration Façade](../decisions/ADR-0001-s4-centric-integration-facade.md), this application operates as a **pure integration façade**:
 1. **SAP S/4HANA is the Single System of Record (SoR)** for all business transactions, document numbering, inventory valuation, and warehouse bin quant balances across DDIC transparent tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `MATDOC`, `MARD`, `LQUA`, `AFKO`).
-2. **CAP Persistence (HDI Container)** owns only application-level logs: the in-flight Goods Issue posting attempts (`saps4hana.wm.GoodsIssuePostingAttempt`).
+2. **CAP Persistence (HDI Container)** owns only application-level logs: the in-flight Goods Receipt posting attempts (`saps4hana.wm.GoodsReceiptPostingAttempt`).
 3. **Zero Synthetic State**: The application never generates synthetic document numbers, never fakes transaction success, and never stores business documents in local tables as substitutes for SAP persistence.
 
 When production incidents occur (such as network partitioning, SAP Gateway work process exhaustion, incomplete multi-step WM staging, or failed MTA deployments), operators must execute the standardized rollback and reconciliation procedures defined in this runbook.
@@ -86,7 +86,7 @@ The system categorizes all transactional errors into four operational categories
 
 ### 3.3 Supervisor Alerting State (`needs-attention`)
 
-The in-memory and database attempt store (`GoodsIssueAttemptStore`) monitors all in-flight postings:
+The in-memory and database attempt store (`GoodsReceiptAttemptStore`) monitors all in-flight postings:
 - **Age < 3 minutes**: Attempt is too young; ignored by background re-check to allow SAP DB commits to finish.
 - **Age 3 to 15 minutes**: Re-checked against SAP. If still not found, remains `unconfirmed` / `sending`.
 - **Age > 15 minutes (without document)**: Marked as `not_posted` (confirmed absent in SAP).
@@ -144,7 +144,7 @@ If the frontend bundle in `html5-apps-repo` exhibits UI defects:
 
 ### 5.1 HDI Container Compatibility Policy
 
-The application's SAP HANA Cloud HDI Container (`saps4hana-db`) stores **only** the posting-attempt entity (`saps4hana.wm.GoodsIssuePostingAttempt`).
+The application's SAP HANA Cloud HDI Container (`saps4hana-db`) stores **only** the posting-attempt entity (`saps4hana.wm.GoodsReceiptPostingAttempt`).
 - **Rule of Non-Destructive Migrations**: All CDS entity modifications MUST be purely additive (new optional columns or new tables).
 - **Zero Column Deletions**: Never drop columns or rename existing tables in production CDS definitions.
 - **Backward Compatibility**: If a new version of `saps4hana-srv` is rolled back, the existing HDI container schema remains fully compatible with the older version.
@@ -266,19 +266,10 @@ Because the application interacts with SAP S/4HANA via a multi-step orchestratio
 
 ---
 
-### 6.6 Movement 261: Goods Issue to Process / Production Order
+### 6.6 Movement 261: Goods Issue (Decommissioned)
 
-- **SAP Components**: Process Order (`AFKO`/`AFPO`), Component Reservation (`RESB`), TR (`BWLVS: 261`, `BETYP: 'F'`), TO (`LTAK`), Quant (`LQUA`), Material Document (`MATDOC`).
-- **Interim Storage Bin**: Storage Type `914`, Bin `<OrderID>` (e.g. `914/0001002790`).
-
-#### Failure Scenarios & Resolution:
-1. **Order Status Locked in JEST (`LKD`, `TECO`, `CLSD`)**:
-   - *Diagnostic Error*: `BS/013` "Order status TECO forbids goods movement".
-   - *Resolution*: Inspect order status in transaction `COR3` (Process Order) or `CO03` (Production Order). If technically completed or locked, revoke status in `COR2`/`CO02` before attempting goods issue.
-2. **Outbound Delivery Generated Instead of Material Document (SAP Message `L9/514`)**:
-   - In certain WM-managed configurations, SAP automatically routes goods issue to an outbound delivery instead of posting MIGO directly.
-   - *System Behavior*: `GoodsIssueAttemptStore` detects message `L9/514` and transitions attempt to `delivery_created`, recording `DeliveryNumber`.
-   - *Resolution*: Query delivery in transaction `VL02N` / `VL03N`. Execute Post Goods Issue (PGI) on the outbound delivery via `executeDeliveryPgi.js` or SAP GUI.
+- **Application Status**: Movement 261 Goods Issue has been completely decommissioned from the application codebase, including all dedicated frontend, backend, CAP, CDS, SAP integration, and routing.
+- **SAP Reference Only**: For manual SAP GUI investigations, component reservations (`RESB`), process orders (`COR3`), production orders (`CO03`), or material documents (`MB03`/`MIGO`) may be referenced directly in SAP S/4HANA.
 
 ---
 
@@ -295,5 +286,5 @@ Because the application interacts with SAP S/4HANA via a multi-step orchestratio
 | Role | Contact / Channel | Responsibilities |
 | :--- | :--- | :--- |
 | **L1 Operations / NOC** | Cloud Monitoring Dashboard / Pager | Acknowledge alerts; run `npm run test:smoke`; execute blue-green CF restart if pods are unhealthy. |
-| **L2 Application Support** | CAP Full-Stack Engineering Team | Inspect `GoodsIssueAttemptStore`; run background re-check jobs; reconcile orphan reservations and TOs in interim bins. |
+| **L2 Application Support** | CAP Full-Stack Engineering Team | Inspect `GoodsReceiptAttemptStore`; run background re-check jobs; reconcile orphan inbound deliveries. |
 | **L3 SAP Functional / Basis** | SAP ERP & Gateway Competence Center | Check RFC destination, work process locks in `SM50`/`SM66`, system aliases in `/IWFND/MAINT_SERVICE`, and DDIC locks in `SM12`. |

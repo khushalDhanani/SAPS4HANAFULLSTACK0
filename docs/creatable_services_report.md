@@ -64,7 +64,7 @@ These are the SAP OData services listed as referenced in `srv/integration/s4hana
 
 | Service | Module | Create Capability | App Usage | Pending |
 |---|---|---|---|---|
-| `SD_SOFM_CREDIT_BLOCK_SRV` | SD | `PostGoodsIssue(DeliveryNumber)` + credit release/reject actions (7 POST actions) | Post Goods Issue from delivery | **Code done**, awaiting supervised PGI on a picked delivery (candidate: 13000515) |
+| `SD_SOFM_CREDIT_BLOCK_SRV` | SD | `PostGoodsIssue(DeliveryNumber)` + credit release/reject actions (7 POST actions) | Post Goods Issue from delivery | **DECOMMISSIONED** (Goods Issue removed across application) |
 | `SD_CUSTOMER_INVOICES_CREATE` | SD | `CreateBillingDocuments(...)` + `GetBillingDocumentTypes(...)` | Create Billing Document | **Code done**, awaiting supervised billing test on a goods-issued delivery (candidate: 13000522) |
 
 ### Recorded READ-only app use (metadata declared creatable in the snapshot)
@@ -72,7 +72,7 @@ These are the SAP OData services listed as referenced in `srv/integration/s4hana
 | Service | Module | Declared Create Capability | App Usage (READ only) | Pending |
 |---|---|---|---|---|
 | `SD_F1873_SO_WL_SRV` | SD | `C_SalesOrderWl_F1873` (creatable in metadata) | Sales order worklist + approval status lookup | No CREATE planned — worklist is read-only by design |
-| `LO_BM_BATCH_SRV` | WM | 4 creatable entity sets + 34 POST actions (batch management) | Batch info lookup for GR/GI | No batch CREATE planned currently |
+| `LO_BM_BATCH_SRV` | WM | 4 creatable entity sets + 34 POST actions (batch management) | Batch info lookup for Goods Receipt | No batch CREATE planned currently |
 | `PACK_OUTBDLV_SRV` | EWM | 6 creatable entity sets + 9 POST actions (packing station) | Delivery packing info | Packing module not yet built |
 | `PICKLIST_PAPER_SRV` | EWM | 5 creatable entity sets + 5 POST actions (pick confirmation) | Pick list info | Pick confirmation not yet built |
 | `SIMPLE_INB_DLV_SRV` | EWM | 7 creatable entity sets + 9 POST actions (inbound delivery) | Inbound delivery info for GR | Inbound delivery management not yet built |
