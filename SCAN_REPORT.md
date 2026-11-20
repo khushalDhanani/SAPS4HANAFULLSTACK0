@@ -29,8 +29,8 @@ To guarantee total precision, files were evaluated under strict discovery rules 
 - **Total Tracked Files in Git:** 911 files.
 - **Total Non-Excluded Repository Artifacts (including docs/evidence):** 834 files.
 - **Total First-Party Source Files Scanned:** **657 files** (increased from initial 558 due to the 69 new focused sub-modules created).
-- **Total First-Party Source Files Exceeding 300 Lines:** **119 files** (down from 137 files).
-- **Application & Integration Source Files Exceeding 300 Lines:** **59 files** (27 Frontend, 20 Integrations, 6 Backend, 5 Utilities, 1 Schema Config).
+- **Total First-Party Source Files Exceeding 300 Lines:** **117 files** (down from 137 files).
+- **Application & Integration Source Files Exceeding 300 Lines:** **57 files** (25 Frontend, 20 Integrations, 6 Backend, 5 Utilities, 1 Schema Config).
 - **Automated Test Suites Exceeding 300 Lines:** **60 files** (51 Unit test suites, 4 Integration test suites, 5 Browser E2E/support suites).
 
 ### 1.3 Modularization Accomplishments (Phases 1 to 5 — 100% PASS)
@@ -53,7 +53,9 @@ Through the systematic execution of Phases 1 through 5, **18 major monolithic mo
 16. **`MibLabelPdf.js`:** Slashed from **811 lines down to 264 lines** (-547 lines, **-67.4%**). Extracted 4 dedicated submodules (`MibBarcodeLayout.js` [94], `MibLabelRows.js` [132], `MibStandardSticker.js` [187], `MibLabelLayout.js` [250]). All 25 WM tests PASS.
 17. **`ValueHelpService.js`:** Slashed from **669 lines down to 285 lines** (-384 lines, **-57.4%**). Extracted 2 dedicated dialog submodules (`InquiryTypeValueHelpDialog.js` [277], `MaterialValueHelpDialog.js` [131]). All 36 frontend test suites PASS.
 18. **`filterUtils.js`:** Slashed from **349 lines down to 214 lines** (-135 lines, **-38.7%**). Extracted `cqnFilterEvaluator.js` [167]. All common tests PASS.
-9. **Integration Adapters Heavily Trimmed:**
+19. **`SalesOrderModel.js`:** Slashed from **668 lines down to 137 lines** (-531 lines, **-79.5%**). Extracted 2 dedicated submodules (`SalesOrderValidator.js` [268], `SalesOrderPayloadBuilder.js` [240]). All 7 sales-order test suites (123 tests) and all 33 SD suites (535 tests) PASS, UI5 linter 0 findings.
+20. **`SalesInquiryModel.js`:** Slashed from **669 lines down to 122 lines** (-547 lines, **-81.8%**). Extracted 2 dedicated submodules (`SalesInquiryValidator.js` [257], `SalesInquiryPayloadBuilder.js` [297]). All 15 sales-inquiry suites (198 tests) and all 33 SD suites (535 tests) PASS, UI5 linter 0 findings.
+21. **Integration Adapters Heavily Trimmed:**
    - `SalesInquiryAdapter.js`: Reduced from **1,434 to 676 lines** (-758 lines, **-52.9%**). Knocked out of the Top 20 largest files.
    - `UserManagementAdapter.js`: Reduced from **797 to 530 lines** (-267 lines, **-33.5%**).
    - `lockNotifier.js`: Reduced from **650 to 509 lines** (-141 lines, **-21.7%**).
@@ -120,7 +122,7 @@ The following table presents the 20 largest first-party source files across the 
 
 ---
 
-## 4. Complete Inventory of All 119 Files Exceeding 300 Lines
+## 4. Complete Inventory of All 117 Files Exceeding 300 Lines
 
 The table below lists every single first-party file exceeding 300 lines in descending order of exact `wc -l` line count:
 
@@ -152,99 +154,97 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **24** | **679** | `test/unit/purchase-order/purchaseOrdersFilterSort.test.js` | Tests |
 | **25** | **676** | `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js` | Integrations |
 | **26** | **675** | `test/unit/wm/zquarLabel.test.js` | Tests |
-| **27** | **669** | `app/fiori-app/webapp/modules/sd/sales-inquiry/model/SalesInquiryModel.js` | Frontend |
-| **28** | **668** | `app/fiori-app/webapp/modules/sd/sales-order/model/SalesOrderModel.js` | Frontend |
-| **29** | **652** | `tools/test-po-creation-all-types.js` | Utilities |
-| **30** | **641** | `test/unit/wm/goodsReceiptController.test.js` | Tests |
-| **31** | **635** | `test/unit/sd/customerReturnAdapter.test.js` | Tests |
-| **32** | **634** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js` | Frontend |
-| **33** | **632** | `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDocumentCreator.js` | Integrations |
-| **34** | **620** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderDefaults.js` | Frontend |
-| **35** | **573** | `srv/integration/s4hana/wm/GoodsReceiptAdapter.js` | Integrations |
-| **36** | **556** | `test/unit/sd/createCustomerReturnController.test.js` | Tests |
-| **37** | **551** | `test/unit/wm/handlingUnitAdapter.test.js` | Tests |
-| **38** | **549** | `app/fiori-app/webapp/service/AuthService.js` | Frontend |
-| **39** | **547** | `srv/integration/s4hana/wm/GoodsReceiptPostingHelper.js` | Integrations |
-| **40** | **532** | `srv/integration/s4hana/admin/SystemLogAdapter.js` | Integrations |
-| **41** | **530** | `srv/integration/s4hana/admin/UserManagementAdapter.js` | Integrations |
-| **42** | **522** | `test/unit/sales-order/salesOrdersController.test.js` | Tests |
-| **43** | **509** | `srv/admin/lockNotifier.js` | Backend |
-| **44** | **506** | `test/unit/admin/SystemLogAdapter.test.js` | Tests |
-| **45** | **497** | `test/unit/purchase-order/poConfigDefaulting.test.js` | Tests |
-| **46** | **495** | `srv/integration/s4hana/wm/GoodsReceiptStorageUnitResolver.js` | Integrations |
-| **47** | **490** | `test/unit/purchase-order/createPurchaseOrderStatus.test.js` | Tests |
-| **48** | **485** | `test/unit/sd/customerInvoicesController.test.js` | Tests |
-| **49** | **478** | `test/unit/sales-order/createSalesOrderController.test.js` | Tests |
-| **50** | **476** | `test/unit/purchase-order/poTypeDynamicRules.test.js` | Tests |
-| **51** | **470** | `test/unit/sd/customerReturnsController.test.js` | Tests |
-| **52** | **465** | `test/unit/sales-inquiry/salesInquiryModel.test.js` | Tests |
-| **53** | **459** | `test/unit/sales-inquiry/salesInquiryAdapter.test.js` | Tests |
-| **54** | **449** | `srv/common/BusinessConfigResolver.js` | Utilities |
-| **55** | **448** | `srv/admin/service.js` | Backend |
-| **56** | **444** | `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrderDetail.view.xml` | Frontend |
-| **57** | **441** | `srv/integration/s4hana/S4HttpClient.js` | Integrations |
-| **58** | **437** | `test/unit/sales-order/salesOrderModel.test.js` | Tests |
-| **59** | **436** | `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js` | Frontend |
-| **60** | **436** | `srv/common/integrationDiagnostics.js` | Utilities |
-| **61** | **436** | `test/unit/sd/customerInvoiceAdapter.test.js` | Tests |
-| **62** | **429** | `test/unit/wm/quarantineLabelAdapter.test.js` | Tests |
-| **63** | **420** | `srv/integration/s4hana/wm/MibLabelAdapter.js` | Integrations |
-| **64** | **419** | `srv/integration/s4hana/wm/QuarantineLabelAdapter.js` | Integrations |
-| **65** | **417** | `config/schema/purchaseOrderRules.json` | Config / Schema |
-| **66** | **416** | `app/fiori-app/webapp/service/BarcodeScanService.js` | Frontend |
-| **67** | **416** | `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js` | Backend |
-| **68** | **416** | `test/e2e/negative/verifyActionFailures.e2e.js` | Tests |
-| **69** | **411** | `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js` | Frontend |
-| **70** | **411** | `test/unit/purchase-order/purchaseOrderDetail.test.js` | Tests |
-| **71** | **410** | `app/fiori-app/webapp/manifest.json` | Frontend |
-| **72** | **407** | `test/integration/userManagement.test.js` | Tests |
-| **73** | **405** | `test/integration/lockNotificationQueue.test.js` | Tests |
-| **74** | **399** | `test/unit/sales-inquiry/salesInquiryMapping.test.js` | Tests |
-| **75** | **397** | `test/unit/auth/frontendAuthStorage.test.js` | Tests |
-| **76** | **386** | `app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js` | Frontend |
-| **77** | **386** | `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js` | Integrations |
-| **78** | **384** | `test/unit/s4HttpClient.test.js` | Tests |
-| **79** | **383** | `test/unit/le/outboundDeliveryHandler.test.js` | Tests |
-| **80** | **382** | `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js` | Integrations |
-| **81** | **381** | `test/unit/admin/SapLogsService.test.js` | Tests |
-| **82** | **380** | `test/unit/wm/mibLabelPdf.test.js` | Tests |
-| **83** | **379** | `test/e2e/wm/verifyMibLabels.e2e.js` | Tests |
-| **84** | **378** | `test/unit/wm/mibLabelAdapter.test.js` | Tests |
-| **85** | **374** | `test/unit/le/deliveryNoRefAdapter.test.js` | Tests |
-| **86** | **373** | `test/unit/wm/quarantineLabelsController.test.js` | Tests |
-| **87** | **372** | `app/fiori-app/webapp/service/ODataClient.js` | Frontend |
-| **88** | **372** | `srv/integration/s4hana/RfcClient.js` | Integrations |
-| **89** | **370** | `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml` | Frontend |
-| **90** | **369** | `app/fiori-app/webapp/modules/sd/sales-inquiry/service/SalesInquiryService.js` | Frontend |
-| **91** | **365** | `tools/sandbox-discovery.js` | Utilities |
-| **92** | **363** | `srv/admin/lockEventStore.js` | Backend |
-| **93** | **360** | `srv/integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter.js` | Integrations |
-| **94** | **360** | `test/unit/admin/UserManagementService.test.js` | Tests |
-| **95** | **359** | `test/unit/common/BusinessConfigResolver.test.js` | Tests |
-| **96** | **358** | `test/unit/admin/passwordExpiryStore.test.js` | Tests |
-| **97** | **355** | `test/unit/wm/goodsReceiptAttempt.test.js` | Tests |
-| **98** | **354** | `test/unit/wm/mibLabelController.test.js` | Tests |
-| **99** | **353** | `test/unit/admin/lockNotifierRules.test.js` | Tests |
-| **100** | **351** | `app/fiori-app/webapp/modules/sd/sales-inquiry/view/CreateSalesInquiry.view.xml` | Frontend |
-| **101** | **351** | `srv/integration/s4hana/admin/SecurityAuditLogAdapter.js` | Integrations |
-| **102** | **350** | `app/fiori-app/webapp/modules/sd/sales-order/view/CreateSalesOrder.view.xml` | Frontend |
-| **103** | **347** | `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml` | Frontend |
-| **104** | **346** | `test/unit/wm/auditTraceability.test.js` | Tests |
-| **105** | **335** | `app/fiori-app/webapp/modules/admin/sap-logs/util/SapLogsLogic.js` | Frontend |
-| **106** | **331** | `test/unit/sales-order/salesOrderService.test.js` | Tests |
-| **107** | **330** | `test/unit/sales-inquiry/salesInquiriesController.test.js` | Tests |
-| **108** | **328** | `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` | Backend |
-| **109** | **327** | `app/fiori-app/webapp/modules/sd/customer-invoice/view/CustomerInvoices.view.xml` | Frontend |
-| **110** | **325** | `app/fiori-app/webapp/modules/admin/user-management/util/UserListLogic.js` | Frontend |
-| **111** | **325** | `test/e2e/support/screenCheck.js` | Tests |
-| **112** | **322** | `app/fiori-app/webapp/service/AuthStorage.js` | Frontend |
-| **113** | **322** | `test/unit/purchase-order/materialSelection.test.js` | Tests |
-| **114** | **310** | `test/unit/admin/SecurityAuditLogAdapter.test.js` | Tests |
-| **115** | **309** | `srv/admin/lockEmail.js` | Backend |
-| **116** | **309** | `test/unit/auth/authService.test.js` | Tests |
-| **117** | **308** | `test/unit/sd/customerInvoiceHandler.test.js` | Tests |
-| **118** | **307** | `test/unit/purchase-order/purchaseOrderValidator.test.js` | Tests |
-| **119** | **306** | `srv/integration/s4hana/S4ErrorMapper.js` | Integrations |
+| **27** | **652** | `tools/test-po-creation-all-types.js` | Utilities |
+| **28** | **641** | `test/unit/wm/goodsReceiptController.test.js` | Tests |
+| **29** | **635** | `test/unit/sd/customerReturnAdapter.test.js` | Tests |
+| **30** | **634** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js` | Frontend |
+| **31** | **632** | `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDocumentCreator.js` | Integrations |
+| **32** | **620** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderDefaults.js` | Frontend |
+| **33** | **573** | `srv/integration/s4hana/wm/GoodsReceiptAdapter.js` | Integrations |
+| **34** | **556** | `test/unit/sd/createCustomerReturnController.test.js` | Tests |
+| **35** | **551** | `test/unit/wm/handlingUnitAdapter.test.js` | Tests |
+| **36** | **549** | `app/fiori-app/webapp/service/AuthService.js` | Frontend |
+| **37** | **547** | `srv/integration/s4hana/wm/GoodsReceiptPostingHelper.js` | Integrations |
+| **38** | **532** | `srv/integration/s4hana/admin/SystemLogAdapter.js` | Integrations |
+| **39** | **530** | `srv/integration/s4hana/admin/UserManagementAdapter.js` | Integrations |
+| **40** | **522** | `test/unit/sales-order/salesOrdersController.test.js` | Tests |
+| **41** | **509** | `srv/admin/lockNotifier.js` | Backend |
+| **42** | **506** | `test/unit/admin/SystemLogAdapter.test.js` | Tests |
+| **43** | **497** | `test/unit/purchase-order/poConfigDefaulting.test.js` | Tests |
+| **44** | **495** | `srv/integration/s4hana/wm/GoodsReceiptStorageUnitResolver.js` | Integrations |
+| **45** | **490** | `test/unit/purchase-order/createPurchaseOrderStatus.test.js` | Tests |
+| **46** | **485** | `test/unit/sd/customerInvoicesController.test.js` | Tests |
+| **47** | **478** | `test/unit/sales-order/createSalesOrderController.test.js` | Tests |
+| **48** | **476** | `test/unit/purchase-order/poTypeDynamicRules.test.js` | Tests |
+| **49** | **470** | `test/unit/sd/customerReturnsController.test.js` | Tests |
+| **50** | **465** | `test/unit/sales-inquiry/salesInquiryModel.test.js` | Tests |
+| **51** | **459** | `test/unit/sales-inquiry/salesInquiryAdapter.test.js` | Tests |
+| **52** | **449** | `srv/common/BusinessConfigResolver.js` | Utilities |
+| **53** | **448** | `srv/admin/service.js` | Backend |
+| **54** | **444** | `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrderDetail.view.xml` | Frontend |
+| **55** | **441** | `srv/integration/s4hana/S4HttpClient.js` | Integrations |
+| **56** | **437** | `test/unit/sales-order/salesOrderModel.test.js` | Tests |
+| **57** | **436** | `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js` | Frontend |
+| **58** | **436** | `srv/common/integrationDiagnostics.js` | Utilities |
+| **59** | **436** | `test/unit/sd/customerInvoiceAdapter.test.js` | Tests |
+| **60** | **429** | `test/unit/wm/quarantineLabelAdapter.test.js` | Tests |
+| **61** | **420** | `srv/integration/s4hana/wm/MibLabelAdapter.js` | Integrations |
+| **62** | **419** | `srv/integration/s4hana/wm/QuarantineLabelAdapter.js` | Integrations |
+| **63** | **417** | `config/schema/purchaseOrderRules.json` | Config / Schema |
+| **64** | **416** | `app/fiori-app/webapp/service/BarcodeScanService.js` | Frontend |
+| **65** | **416** | `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js` | Backend |
+| **66** | **416** | `test/e2e/negative/verifyActionFailures.e2e.js` | Tests |
+| **67** | **411** | `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js` | Frontend |
+| **68** | **411** | `test/unit/purchase-order/purchaseOrderDetail.test.js` | Tests |
+| **69** | **410** | `app/fiori-app/webapp/manifest.json` | Frontend |
+| **70** | **407** | `test/integration/userManagement.test.js` | Tests |
+| **71** | **405** | `test/integration/lockNotificationQueue.test.js` | Tests |
+| **72** | **399** | `test/unit/sales-inquiry/salesInquiryMapping.test.js` | Tests |
+| **73** | **397** | `test/unit/auth/frontendAuthStorage.test.js` | Tests |
+| **74** | **386** | `app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js` | Frontend |
+| **75** | **386** | `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js` | Integrations |
+| **76** | **384** | `test/unit/s4HttpClient.test.js` | Tests |
+| **77** | **383** | `test/unit/le/outboundDeliveryHandler.test.js` | Tests |
+| **78** | **382** | `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js` | Integrations |
+| **79** | **381** | `test/unit/admin/SapLogsService.test.js` | Tests |
+| **80** | **380** | `test/unit/wm/mibLabelPdf.test.js` | Tests |
+| **81** | **379** | `test/e2e/wm/verifyMibLabels.e2e.js` | Tests |
+| **82** | **378** | `test/unit/wm/mibLabelAdapter.test.js` | Tests |
+| **83** | **374** | `test/unit/le/deliveryNoRefAdapter.test.js` | Tests |
+| **84** | **373** | `test/unit/wm/quarantineLabelsController.test.js` | Tests |
+| **85** | **372** | `app/fiori-app/webapp/service/ODataClient.js` | Frontend |
+| **86** | **372** | `srv/integration/s4hana/RfcClient.js` | Integrations |
+| **87** | **370** | `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml` | Frontend |
+| **88** | **369** | `app/fiori-app/webapp/modules/sd/sales-inquiry/service/SalesInquiryService.js` | Frontend |
+| **89** | **365** | `tools/sandbox-discovery.js` | Utilities |
+| **90** | **363** | `srv/admin/lockEventStore.js` | Backend |
+| **91** | **360** | `srv/integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter.js` | Integrations |
+| **92** | **360** | `test/unit/admin/UserManagementService.test.js` | Tests |
+| **93** | **359** | `test/unit/common/BusinessConfigResolver.test.js` | Tests |
+| **94** | **358** | `test/unit/admin/passwordExpiryStore.test.js` | Tests |
+| **95** | **355** | `test/unit/wm/goodsReceiptAttempt.test.js` | Tests |
+| **96** | **354** | `test/unit/wm/mibLabelController.test.js` | Tests |
+| **97** | **353** | `test/unit/admin/lockNotifierRules.test.js` | Tests |
+| **98** | **351** | `app/fiori-app/webapp/modules/sd/sales-inquiry/view/CreateSalesInquiry.view.xml` | Frontend |
+| **99** | **351** | `srv/integration/s4hana/admin/SecurityAuditLogAdapter.js` | Integrations |
+| **100** | **350** | `app/fiori-app/webapp/modules/sd/sales-order/view/CreateSalesOrder.view.xml` | Frontend |
+| **101** | **347** | `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml` | Frontend |
+| **102** | **346** | `test/unit/wm/auditTraceability.test.js` | Tests |
+| **103** | **335** | `app/fiori-app/webapp/modules/admin/sap-logs/util/SapLogsLogic.js` | Frontend |
+| **104** | **331** | `test/unit/sales-order/salesOrderService.test.js` | Tests |
+| **105** | **330** | `test/unit/sales-inquiry/salesInquiriesController.test.js` | Tests |
+| **106** | **328** | `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` | Backend |
+| **107** | **327** | `app/fiori-app/webapp/modules/sd/customer-invoice/view/CustomerInvoices.view.xml` | Frontend |
+| **108** | **325** | `app/fiori-app/webapp/modules/admin/user-management/util/UserListLogic.js` | Frontend |
+| **109** | **325** | `test/e2e/support/screenCheck.js` | Tests |
+| **110** | **322** | `app/fiori-app/webapp/service/AuthStorage.js` | Frontend |
+| **111** | **322** | `test/unit/purchase-order/materialSelection.test.js` | Tests |
+| **112** | **310** | `test/unit/admin/SecurityAuditLogAdapter.test.js` | Tests |
+| **113** | **309** | `srv/admin/lockEmail.js` | Backend |
+| **114** | **309** | `test/unit/auth/authService.test.js` | Tests |
+| **115** | **308** | `test/unit/sd/customerInvoiceHandler.test.js` | Tests |
+| **116** | **307** | `test/unit/purchase-order/purchaseOrderValidator.test.js` | Tests |
+| **117** | **306** | `srv/integration/s4hana/S4ErrorMapper.js` | Integrations |
 
 ---
 
@@ -335,6 +335,16 @@ Below is the detailed architectural evaluation for each qualifying first-party f
    - Slashed from 366 lines down to **87 lines** (-279 lines, **-76.2%**).
    - Modularized into `AppShellRouteTitleManager.js` (229) and `AppShellNavigationManager.js` (101).
    - All 12 tests in `AppController.test.js` PASS.
+19. **`SalesOrderModel.js` (Completed):**
+   - Slashed from 668 lines down to **137 lines** (-531 lines, **-79.5%**).
+   - Modularized into `SalesOrderValidator.js` (268) and `SalesOrderPayloadBuilder.js` (240).
+   - Preserved `getCurrentUserName`, `createInitialModel`, `createEmptyItem`, `calculateTotals`, `applyCustomerDefaults`, `applyMaterialDefaults`, `applyServerDefaults`, `validateForm`, `getIncompletionGaps`, `buildPayload`, `validateSingleField`, and `clearErrors`.
+   - All 7 sales-order suites (123 tests) and all 33 SD suites (535 tests) PASS, UI5 linter 0 findings.
+20. **`SalesInquiryModel.js` (Completed):**
+   - Slashed from 669 lines down to **122 lines** (-547 lines, **-81.8%**).
+   - Modularized into `SalesInquiryValidator.js` (257) and `SalesInquiryPayloadBuilder.js` (297).
+   - Preserved `getCurrentUserName`, `createInitialModel`, `markUserModified`, `setFieldValidation`, `applyConfigurationDefaults`, `deriveCustomerDefaults`, `addItem`, `deleteItem`, `applyMaterialDefaults`, `calculateTotals`, `applyCapabilities`, `getIncompletionGaps`, `updateStatus`, `validateForm`, `validateSingleField`, `clearErrors`, and `buildPayload`.
+   - All 15 sales-inquiry suites (198 tests) and all 33 SD suites (535 tests) PASS, UI5 linter 0 findings.
 
 ### 5.2 Remaining Frontend UI5 Controllers (>300 lines)
 
@@ -418,7 +428,9 @@ Phase 6: Documentation, Final Verification & Test Suite Decomposition [CURRENT]
 ### Phase 4: Frontend View Models & Client Services (STATUS: COMPLETED — PASS)
 - Slashed `MibLabelPdf.js` (from 811 to 264 lines) by extracting `MibBarcodeLayout.js`, `MibLabelRows.js`, `MibStandardSticker.js`, and `MibLabelLayout.js`.
 - Slashed `ValueHelpService.js` (from 669 to 285 lines) by extracting `InquiryTypeValueHelpDialog.js` and `MaterialValueHelpDialog.js`.
-- Added 3 dedicated test suites; all 36 suites passed.
+- Slashed `SalesOrderModel.js` (from 668 to 137 lines) by extracting `SalesOrderValidator.js` (268 lines) and `SalesOrderPayloadBuilder.js` (240 lines).
+- Slashed `SalesInquiryModel.js` (from 669 to 122 lines) by extracting `SalesInquiryValidator.js` (257 lines) and `SalesInquiryPayloadBuilder.js` (297 lines).
+- Added dedicated test suites; all 36 frontend test suites passed.
 
 ### Phase 5: UI5 Controllers & XML Views (STATUS: COMPLETED — PASS)
 - Slashed `PurchaseOrders.controller.js` (from 1,836 to 293 lines, -84.0%) by extracting 7 submodules.

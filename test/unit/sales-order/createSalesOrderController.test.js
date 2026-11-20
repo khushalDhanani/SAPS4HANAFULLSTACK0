@@ -141,7 +141,7 @@ beforeAll(() => {
     global.sap = {
         ui: {
             define: jest.fn((deps, factory) => {
-                if (deps.length === 1 && deps[0] === "sap/ui/model/json/JSONModel") {
+                if (deps[0] === "sap/ui/model/json/JSONModel" && deps.indexOf("saps4hana/fiori/controller/BaseController") === -1) {
                     SalesOrderModel = factory(MockJSONModel);
                 } else {
                     ControllerClass = factory(
