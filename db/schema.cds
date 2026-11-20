@@ -12,8 +12,8 @@
  *
  * Consequently, no business documents are stored locally.
  *
- * NOTE: All Goods Issue transactions post directly to SAP S/4HANA via API_MATERIAL_DOCUMENT_SRV.
- * No dispatch queue is persisted; S/4HANA remains the authoritative system of record.
+ * NOTE: All warehouse transactions post directly to SAP S/4HANA via standard OData/RFC APIs.
+ * No local queue is persisted; S/4HANA remains the authoritative system of record.
  */
 
 namespace saps4hana.fullstack;
