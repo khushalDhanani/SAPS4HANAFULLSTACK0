@@ -8,87 +8,58 @@ sap.ui.define([
     "sap/m/MessageBox",
     "saps4hana/fiori/service/AuthService",
     "saps4hana/fiori/service/ODataClient",
-    "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService"
-], function (BaseController, JSONModel, Filter, FilterOperator, FilterType, Fragment, MessageBox, AuthService, ODataClient, OutboundDeliveryService) {
+    "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService",
+    "saps4hana/fiori/modules/sd/sales-order/controller/SalesOrderFormatters",
+    "saps4hana/fiori/modules/sd/sales-order/controller/SalesOrderTableManager",
+    "saps4hana/fiori/modules/sd/sales-order/controller/SalesOrderDeliveryActions"
+], function (
+    BaseController,
+    JSONModel,
+    Filter,
+    FilterOperator,
+    FilterType,
+    Fragment,
+    MessageBox,
+    AuthService,
+    ODataClient,
+    OutboundDeliveryService,
+    SalesOrderFormatters,
+    SalesOrderTableManager,
+    SalesOrderDeliveryActions
+) {
     "use strict";
 
-    return BaseController.extend("saps4hana.fiori.modules.sd.sales-order.controller.SalesOrders", {
-        formatter: {
-            statusText: function (sStatus) {
-                if (!sStatus || sStatus === "A" || sStatus === "Open") {
-                    return "Open";
-                }
-                if (sStatus === "B") {
-                    return "In Process";
-                }
-                if (sStatus === "C" || sStatus === "Completed") {
-                    return "Completed";
-                }
-                return sStatus;
-            },
+    var isNode = typeof module !== "undefined" && module.exports;
+    function req(mod, path) {
+        if (mod && Object.keys(mod).length > 0) { return mod; }
+        if (isNode) {
+            try { return require(path); } catch (e) { return {}; }
+        }
+        return mod || {};
+    }
 
-            statusState: function (sStatus) {
-                if (!sStatus || sStatus === "A" || sStatus === "Open") {
-                    return "Information";
-                }
-                if (sStatus === "B") {
-                    return "Warning";
-                }
-                if (sStatus === "C" || sStatus === "Completed") {
-                    return "Success";
-                }
-                return "None";
-            },
+    var modFormatters = req(SalesOrderFormatters, "./SalesOrderFormatters");
+    var modTable = req(SalesOrderTableManager, "./SalesOrderTableManager");
+    var modDelivery = req(SalesOrderDeliveryActions, "./SalesOrderDeliveryActions");
 
-            approvalStatusText: function (sStatus) {
-                if (sStatus === "unknown") {
-                    return "Unknown";
-                }
-                if (sStatus === "A") {
-                    return "In Approval";
-                }
-                if (sStatus === "B") {
-                    return "Released";
-                }
-                if (sStatus === "C") {
-                    return "Rejected";
-                }
-                if (sStatus === "D") {
-                    return "To Be Reworked";
-                }
-                return sStatus ? sStatus : "Not Relevant";
-            },
+    var fnFormatters = typeof createSalesOrderFormatters === "function" ? createSalesOrderFormatters : (modFormatters && modFormatters.createSalesOrderFormatters);
+    var fnTable = typeof createSalesOrderTableManager === "function" ? createSalesOrderTableManager : (modTable && modTable.createSalesOrderTableManager);
+    var fnDelivery = typeof createSalesOrderDeliveryActions === "function" ? createSalesOrderDeliveryActions : (modDelivery && modDelivery.createSalesOrderDeliveryActions);
 
-            approvalStatusState: function (sStatus) {
-                if (sStatus === "unknown" || sStatus === "A" || sStatus === "D") {
-                    return "Warning";
-                }
-                if (sStatus === "B") {
-                    return "Success";
-                }
-                if (sStatus === "C") {
-                    return "Error";
-                }
-                return "None";
-            },
+    var mFormatters = typeof fnFormatters === "function" ? fnFormatters() : {};
+    var mTable = typeof fnTable === "function" ? fnTable({
+        Filter: Filter,
+        FilterOperator: FilterOperator,
+        FilterType: FilterType,
+        ODataClient: ODataClient
+    }) : {};
+    var mDelivery = typeof fnDelivery === "function" ? fnDelivery({
+        Fragment: Fragment,
+        MessageBox: MessageBox,
+        OutboundDeliveryService: OutboundDeliveryService
+    }) : {};
 
-            approvalStatusIcon: function (sStatus) {
-                if (sStatus === "A") {
-                    return "sap-icon://pending";
-                }
-                if (sStatus === "B") {
-                    return "sap-icon://accept";
-                }
-                if (sStatus === "C") {
-                    return "sap-icon://decline";
-                }
-                if (sStatus === "D") {
-                    return "sap-icon://reopen-page";
-                }
-                return "";
-            }
-        },
-
+    var oMembers = {
         onInit: function () {
             if (AuthService && typeof AuthService.syncModelHeaders === "function") {
                 AuthService.syncModelHeaders(this.getOwnerComponent(), true);
@@ -143,94 +114,8 @@ sap.ui.define([
             this._loadServerMetrics();
         },
 
-        onUpdateFinished: function (oEvent) {
-            var oTable = oEvent.getSource();
-            var oKpis = this.calculateKpiMetrics(oTable, oEvent);
-            var oViewModel = this.getView().getModel("salesOrdersView");
-            if (oViewModel) {
-                oViewModel.setProperty("/totalCount", oKpis.totalCount);
-            }
-        },
-
-        _loadServerMetrics: function () {
-            var oViewModel = this.getView().getModel("salesOrdersView");
-            if (!oViewModel) {
-                return Promise.resolve();
-            }
-
-            var pOrderMetrics = ODataClient.get("/odata/v4/sales-order/getSalesOrderMetrics()")
-                .then(function (res) {
-                    var data = res && res.value ? res.value : res;
-                    if (data && data.openOrdersCount != null) {
-                        oViewModel.setProperty("/openCount", data.openOrdersCount);
-                    } else {
-                        oViewModel.setProperty("/openCount", "-");
-                    }
-                    if (data && data.totalOrdersCount != null) {
-                        oViewModel.setProperty("/totalCount", data.totalOrdersCount);
-                    }
-                })
-                .catch(function () {
-                    oViewModel.setProperty("/openCount", "-");
-                });
-
-            var pCustomerMetrics = ODataClient.get("/odata/v4/purchase-order/getDashboardMetrics()")
-                .then(function (res) {
-                    var oMetrics = res;
-                    if (typeof oMetrics === "string") {
-                        try {
-                            oMetrics = JSON.parse(oMetrics);
-                        } catch (e) {
-                            oMetrics = null;
-                        }
-                    }
-                    if (oMetrics && typeof oMetrics.value === "string") {
-                        try {
-                            oMetrics = JSON.parse(oMetrics.value);
-                        } catch (e) {
-                            oMetrics = null;
-                        }
-                    }
-                    if (oMetrics && oMetrics.customerCount != null) {
-                        oViewModel.setProperty("/customerCount", oMetrics.customerCount);
-                    } else {
-                        oViewModel.setProperty("/customerCount", "-");
-                    }
-                })
-                .catch(function () {
-                    oViewModel.setProperty("/customerCount", "-");
-                });
-
-            return Promise.all([pOrderMetrics, pCustomerMetrics]);
-        },
-
         onNavigateToCreateSalesOrder: function () {
             this.getOwnerComponent().getRouter().navTo("createSalesOrder");
-        },
-
-        onSearch: function (oEvent) {
-            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue");
-            var oTable = this.byId("salesOrdersTable");
-            var oBinding = oTable ? oTable.getBinding("items") : null;
-            if (!oBinding) return;
-
-            var aFilters = [];
-            if (sQuery && sQuery.trim() !== "") {
-                var sTrimmed = sQuery.trim();
-                // SAP rejects any filter on SoldToPartyName (HTTP 501) and contains() longer than the 4-character
-                // SalesOrderType (HTTP 400); either would fail the whole OR, so neither is sent.
-                var aSearch = [
-                    new Filter("SalesOrder", FilterOperator.Contains, sTrimmed),
-                    new Filter("SoldToParty", FilterOperator.Contains, sTrimmed),
-                    new Filter("PurchaseOrderByCustomer", FilterOperator.Contains, sTrimmed)
-                ];
-                if (sTrimmed.length <= 4) {
-                    aSearch.push(new Filter("SalesOrderType", FilterOperator.Contains, sTrimmed));
-                }
-                aFilters.push(new Filter({ filters: aSearch, and: false }));
-            }
-
-            oBinding.filter(aFilters, FilterType.Application);
         },
 
         onRefresh: function () {
@@ -248,148 +133,6 @@ sap.ui.define([
             this._loadServerMetrics();
         },
 
-        _getTodayDateString: function () {
-            var d = new Date();
-            var sMonth = String(d.getMonth() + 1).padStart(2, "0");
-            var sDay = String(d.getDate()).padStart(2, "0");
-            return d.getFullYear() + "-" + sMonth + "-" + sDay;
-        },
-
-        onCreateDeliveryPress: function (oEvent) {
-            var oCtx = oEvent.getSource().getBindingContext("salesOrder");
-            if (!oCtx) return;
-
-            var sSalesOrder = oCtx.getProperty("SalesOrder");
-            var sApprovalStatus = oCtx.getProperty("SalesDocApprovalStatus");
-            var sDeliveryBlock = oCtx.getProperty("DeliveryBlockReason");
-
-            if (sApprovalStatus === "unknown") {
-                MessageBox.warning(this._text("msgOrderApprovalUnknown", "Approval status for Sales Order {0} could not be verified from S/4HANA. Delivery creation is blocked until status is confirmed.", [sSalesOrder]));
-                return;
-            }
-            if (sApprovalStatus === "A") {
-                MessageBox.warning(this._text("msgOrderInApproval", "Sales Order {0} is currently in approval and cannot be delivered.", [sSalesOrder]));
-                return;
-            }
-            if (sApprovalStatus === "C") {
-                MessageBox.warning(this._text("msgOrderRejected", "Sales Order {0} has been rejected and cannot be delivered.", [sSalesOrder]));
-                return;
-            }
-            if (sApprovalStatus === "D") {
-                MessageBox.warning(this._text("msgOrderRework", "Sales Order {0} is being reworked and cannot be delivered.", [sSalesOrder]));
-                return;
-            }
-            if (sDeliveryBlock) {
-                MessageBox.warning(this._text("msgOrderDeliveryBlocked", "Sales Order {0} has a delivery block ({1}) and cannot be delivered.", [sSalesOrder, sDeliveryBlock]));
-                return;
-            }
-
-            var oDialogModel = this.getView().getModel("deliveryDialog");
-            if (oDialogModel) {
-                oDialogModel.setProperty("/salesOrder", sSalesOrder);
-                // The sales order worklist has no ShippingPoint; the user enters it in the dialog
-                oDialogModel.setProperty("/shippingPoint", "");
-                oDialogModel.setProperty("/deliveryDate", this._getTodayDateString());
-            }
-
-            this._openCreateDeliveryDialog();
-        },
-
-        _openCreateDeliveryDialog: function () {
-            var oView = this.getView();
-            var that = this;
-
-            if (!this._pCreateDeliveryDialog) {
-                this._pCreateDeliveryDialog = Fragment.load({
-                    id: oView.getId(),
-                    name: "saps4hana.fiori.modules.le.outbound-delivery.view.CreateDeliveryDialog",
-                    controller: this
-                }).then(function (oDialog) {
-                    oView.addDependent(oDialog);
-                    if (oDialog.addStyleClass && that.getContentDensityClass) {
-                        oDialog.addStyleClass(that.getContentDensityClass());
-                    }
-                    return oDialog;
-                });
-            }
-
-            this._pCreateDeliveryDialog.then(function (oDialog) {
-                oDialog.open();
-            });
-        },
-
-        onCancelCreateDelivery: function () {
-            if (this._pCreateDeliveryDialog) {
-                this._pCreateDeliveryDialog.then(function (oDialog) {
-                    oDialog.close();
-                });
-            }
-        },
-
-        onConfirmCreateDelivery: function () {
-            var that = this;
-            var oDialogModel = this.getView().getModel("deliveryDialog");
-            var sSalesOrder = oDialogModel.getProperty("/salesOrder");
-            var sShippingPoint = oDialogModel.getProperty("/shippingPoint");
-            var sDeliveryDate = oDialogModel.getProperty("/deliveryDate");
-
-            if (!sSalesOrder) {
-                MessageBox.error(this._text("msgSalesOrderRequired", "Sales Order is required."));
-                return;
-            }
-            if (!sShippingPoint) {
-                MessageBox.error(this._text("msgShippingPointRequired", "Shipping Point is required."));
-                return;
-            }
-
-            this._setDialogBusy(true);
-
-            OutboundDeliveryService.createOutboundDelivery({
-                salesOrder: sSalesOrder,
-                shippingPoint: sShippingPoint,
-                deliveryDate: sDeliveryDate
-            })
-                .then(function (sDeliveryNo) {
-                    that.onCancelCreateDelivery();
-                    if (sDeliveryNo && String(sDeliveryNo).trim() !== "" && sDeliveryNo !== "Delivery created") {
-                        var sSuccessTemplate = that._text("msgDeliveryCreatedSuccess", "Delivery {0} created");
-                        var sSuccessMessage = sSuccessTemplate.replace("{0}", sDeliveryNo);
-                        MessageBox.success(sSuccessMessage, {
-                            onClose: function () {
-                                that.onRefresh();
-                            }
-                        });
-                    } else {
-                        var sWarningTemplate = that._text(
-                            "msgDeliveryCreatedNoNumberWarning",
-                            "Delivery created in SAP S/4HANA for Sales Order {0}, but no delivery number was returned. Please check transaction VL03N."
-                        );
-                        var sWarningMessage = sWarningTemplate.replace("{0}", sSalesOrder);
-                        MessageBox.warning(sWarningMessage, {
-                            onClose: function () {
-                                that.onRefresh();
-                            }
-                        });
-                    }
-                })
-                .catch(function (err) {
-                    // Show SAP's own message on failure
-                    var sErrorMessage = (err && (err.message || err.statusText)) || "Failed to create outbound delivery.";
-                    MessageBox.error(sErrorMessage);
-                })
-                .finally(function () {
-                    that._setDialogBusy(false);
-                });
-        },
-
-        _setDialogBusy: function (bBusy) {
-            if (this._pCreateDeliveryDialog) {
-                this._pCreateDeliveryDialog.then(function (oDialog) {
-                    oDialog.setBusy(bBusy);
-                });
-            }
-        },
-
         _text: function (sKey, sDefault) {
             try {
                 var oComp = this.getOwnerComponent();
@@ -403,5 +146,12 @@ sap.ui.define([
             }
             return sDefault;
         }
-    });
+    };
+
+    Object.assign(oMembers, mFormatters, mTable, mDelivery);
+
+    var ControllerClass = BaseController.extend("saps4hana.fiori.modules.sd.sales-order.controller.SalesOrders", oMembers);
+    Object.assign(ControllerClass.prototype || ControllerClass, mFormatters, mTable, mDelivery);
+
+    return ControllerClass;
 });
