@@ -2,6 +2,7 @@
 
 const { RfcClient } = require('../RfcClient');
 const { parseSapNumber } = require('../sapFacts');
+const { sapKey } = require('../sapKey');
 
 /**
  * Quarantine labels from SAP: plants of the material document (MATDOC) for authorization, then the PDF rendered by the
@@ -138,7 +139,9 @@ class QuarantineLabelAdapter {
 
   /** Distinct plants of the material document (MATDOC fields MBLNR/MJAHR/WERKS, read live elsewhere in this app). */
   async documentPlants(mblnr, mjahr) {
-    const rows = await this.rfc.readTable('MATDOC', ['WERKS'], [`MBLNR = '${mblnr}'`, `AND MJAHR = '${mjahr}'`]);
+    const cleanMblnr = sapKey(mblnr, 'mblnr', 'Material Document number');
+    const cleanMjahr = sapKey(mjahr, 'mjahr', 'Material Document year');
+    const rows = await this.rfc.readTable('MATDOC', ['WERKS'], [`MBLNR = '${cleanMblnr}'`, `AND MJAHR = '${cleanMjahr}'`]);
     return [...new Set(rows.map((r) => String(r.WERKS || '').trim().toUpperCase()).filter(Boolean))];
   }
 

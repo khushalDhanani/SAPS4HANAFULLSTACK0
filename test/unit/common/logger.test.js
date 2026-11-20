@@ -73,6 +73,25 @@ describe('Unit: Logger Module (srv/common/logger.js)', () => {
       expect(formatted[0]).toBe('[diag] [req-obj-1] -');
       expect(formatted[1]).toBe(payload);
     });
+
+    it('scrubs sensitive credentials from string logs and object payloads', () => {
+      cds.context = { id: 'req-sec-1' };
+      const formattedStr = correlationPlainFormat('auth', 2, 'User logged in with Bearer eyJhbGciOiJIUzI1NiJ9.test and Basic dXNlcjpwYXNz');
+      expect(formattedStr[0]).toBe('[auth] [req-sec-1] - User logged in with [REDACTED_CREDENTIAL] and [REDACTED_CREDENTIAL]');
+
+      const payload = {
+        username: 'alice',
+        password: 'super-secret-password',
+        token: 'Bearer eyJhbGciOiJIUzI1NiJ9.test',
+        nested: 'normal'
+      };
+      const formattedObj = correlationPlainFormat('auth', 2, 'Auth attempt:', payload);
+      expect(formattedObj[0]).toBe('[auth] [req-sec-1] - Auth attempt:');
+      expect(formattedObj[1].username).toBe('alice');
+      expect(formattedObj[1].password).toBe('[REDACTED_CREDENTIAL]');
+      expect(formattedObj[1].token).toBe('[REDACTED_CREDENTIAL]');
+      expect(formattedObj[1].nested).toBe('normal');
+    });
   });
 
   describe('Log Level Control', () => {

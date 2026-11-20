@@ -2,6 +2,7 @@
 
 const LOG = require('../../../../common/logger')('customer-return-rfc');
 const { RfcClient } = require('../../RfcClient');
+const { sapKey } = require('../../sapKey');
 const { failure, clean, sapDate, partnerNumber, materialNumber, documentNumber, todaySap, runCreateBapi } = require('../salesDocBapi');
 
 /**
@@ -116,7 +117,7 @@ class CustomerReturnRfcCreator {
 
     /** What SAP stored for the document (VBAK header + VBAP items), for the caller's persistence check. */
     async readBack(docNo) {
-        const vbeln = clean(docNo).padStart(10, '0');
+        const vbeln = sapKey(clean(docNo).padStart(10, '0'), 'vbeln', 'Document number');
         const [head] = await this.rfc.readTable('VBAK', ['VBELN', 'AUART', 'AUGRU', 'KUNNR', 'VGBEL'], [`VBELN = '${vbeln}'`], 1);
         if (!head) return null;
         const items = await this.rfc.readTable('VBAP', ['POSNR', 'MATNR', 'KWMENG', 'VRKME', 'WERKS', 'LGORT', 'VGBEL', 'VGPOS'], [`VBELN = '${vbeln}'`], 50);

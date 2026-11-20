@@ -17,6 +17,26 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
+- **Phase 3: SAP Integration & Security Hardening — PASS:** Completed evidence-driven security hardening and integration fixes across App Router, runtime dependencies, role governance, RFC parameterization, and logger credential masking:
+  1. *App Router Route Hardening (SEC-APP-01):* Updated `app/router/xs-app.json` to route `^/ai/chat/stream$` to `srv-api` with `xsuaa` auth and `csrfProtection: true`, and `^/health(/.*)?$` without auth or CSRF before the catch-all HTML5 repo fallback. Added `test/unit/guard/routerConfig.test.js` (5/5 tests PASS).
+  2. *Production Dependency Resolution (SEC-AUTH-01):* Added `@sap/xssec` (`^4.15.0`) as a direct production dependency in `package.json` to guarantee offline XSUAA JWT validation in containerized Cloud Foundry environments.
+  3. *AI Service Operational Role Governance (SEC-AI-01):* Hardened `srv/ai/service.cds` with service-level and action-level role restrictions (`@(requires: ['Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])`). Hardened `streamHandler` and `_run` in `srv/ai/service.js` to reject unprivileged callers with HTTP 403 Forbidden. Updated `test/unit/ai/aiService.test.js` (24/24 tests PASS).
+  4. *RFC_READ_TABLE Parameterization & Injection Defense (SEC-INJ-01):* Enforced `sapKey(val, type)` in `CustomerReturnRfcCreator.js`, `SalesInquiryRfcCreator.js`, and `QuarantineLabelAdapter.js`, preventing dynamic Open SQL injection in ABAP WHERE clauses. Verified all SD and WM unit tests pass (24/24 suites, 458/458 tests).
+  5. *Plaintext Logger Credential Scrubbing (SEC-LOG-01):* Added recursive token, secret, and password masking in `srv/common/logger.js` plain formatter. Updated `test/unit/common/logger.test.js` (11/11 tests PASS).
+  6. *Validation Results (100% PASS):*
+     - Linters: Root ESLint (`npm run lint`): PASSED (0 errors, 0 warnings). UI5 linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+     - CDS compilation (`npx cds compile srv/service.cds`): PASSED (0 errors).
+     - Unit test suites across guard, ai, common, auth, sd, wm, po: ALL PASSED (over 1,900 unit tests verified).
+- **Phase 2: Controlled Code Cleanup and Refactoring — PASS:** Completed Phase 2 code cleanup, adapter modularization, and repository organization with 100% preservation of SAP integration contracts, RFC/BAPI behavior, OData structures, and UI routing:
+  1. *17 Exports Verification:* Verified all 17 flagged exports; confirmed 14 are internal module helpers with zero external consumers across runtime and tests, while 3 (`OPEN_STATUSES`, `FINAL_STATUSES`, `RECEIPT_MOVEMENT` in `GoodsReceiptAttemptStore.js`) represent the public architectural contract for `IPostingAttemptStore`.
+  2. *Scratch Directory Archival:* Moved 12 one-off syslog investigation scripts and JSON payloads (7,410 LOC) from root `scratch/` into `tools/archive/syslog-investigations/` with full historical documentation in `tools/archive/syslog-investigations/README.md`.
+  3. *SalesInquiryAdapter Modularization:* Extracted `PartialSalesInquiryError.js`, `salesInquiryODataHelper.js`, and `salesInquiryDocumentCreator.js`. Slashed `SalesInquiryAdapter.js` from 2,257 to 1,437 LOC while maintaining 100% API and prototype compatibility.
+  4. *GoodsReceiptAdapter Modularization:* Extracted `GoodsReceiptStorageUnitResolver.js` (490 LOC) and `GoodsReceiptPostingHelper.js` (540 LOC). Slashed `GoodsReceiptAdapter.js` from 1,562 to 576 LOC while preserving all public and prototype methods.
+  5. *PO & Dashboard Controller Decomposition Evaluation:* Completed architectural decomposition evaluation; established modularization blueprints for `PurchaseOrders.controller.js` (AI helper extraction) and `Dashboard.controller.js` (formatter/admin mixin extraction) detailing UI5 view-binding and test-fixture safety constraints.
+  6. *Validation Results (100% PASS):*
+     - Linters: Root ESLint (`npm run lint`): PASSED (0 errors, 0 warnings). UI5 linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+     - CDS compilation (`npx cds compile srv/service.cds`): PASSED (0 errors).
+     - Unit test suites across affected domains (`npx jest test/unit/sales-inquiry/ test/unit/wm/goodsReceipt test/unit/purchase-order/ test/unit/dashboard/ test/unit/admin/SecurityAuditLogAdapter.test.js test/unit/admin/SystemLogAdapter.test.js test/unit/admin/UserManagementAdapter.test.js test/unit/admin/adminDashboardList.test.js`): 50/50 suites PASSED (1,113 passed, 0 failed).
 - **Complete Hard Deletion of Goods Issue Functionality (LE-WM Movement 261 & EWM Outbound Delivery PGI) — PASS:** Fully decommissioned and permanently deleted Goods Issue functionality across the entire repository in accordance with the task specification and approved plan:
   1. *Complete Elimination of Both Goods Issue Implementations:*
      - **LE-WM Goods Issue (Movement 261):** Deleted frontend controllers, views, fragments, backend handlers, service definitions, S/4HANA adapters (`GoodsIssueAdapter.js`, `BaseGoodsIssueClient.js`, `GoodsIssuePostingClient.js`, `s4common.js`), stock validation, queue models, and database persistence (`db/wm/goods-issue-attempt.cds`).
@@ -207,6 +227,91 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 12:25 IST — Phase 3: SAP Integration & Security Hardening — PASS
+
+- REQUEST: Execute Phase 3 SAP Integration & Security Hardening on repository `SAPS4HANAFULLSTACK0`, branch `feature01`.
+  Remediate approved audit findings:
+  1. Fix App Router route shadowing for `/ai/chat/stream` and `/health` endpoints in `app/router/xs-app.json` (SEC-APP-01).
+  2. Add `@sap/xssec` to direct production `dependencies` in `package.json` (SEC-AUTH-01).
+  3. Enforce operational role governance on `AIService` in `srv/ai/service.cds` and `srv/ai/service.js` (SEC-AI-01).
+  4. Enforce strict `sapKey` parameterization in `RFC_READ_TABLE` WHERE clauses across RFC adapters (SEC-INJ-01).
+  5. Add recursive credential and secret scrubbing in plaintext logger formatter `srv/common/logger.js` (SEC-LOG-01).
+- INSPECT:
+  - Audited `app/router/xs-app.json`: Identified that `/ai/chat/stream` and `/health` routes fell into the catch-all `^(.*)$` to `html5-apps-repo-rt`, causing 404 in BTP and lacking CSRF protection.
+  - Audited `package.json`: Identified that `@sap/xssec` was only present transitively in `package-lock.json`, creating startup crash risks in production Cloud Foundry containers pruned with `--omit=dev`.
+  - Audited `srv/ai/service.cds` and `srv/ai/service.js`: Identified that `AIService` had generic `@(requires: 'authenticated-user')` without entity-level role restrictions, permitting any user to consume expensive LLM tokens.
+  - Audited `CustomerReturnRfcCreator.js`, `SalesInquiryRfcCreator.js`, and `QuarantineLabelAdapter.js`: Identified direct string interpolation in `RFC_READ_TABLE` WHERE options without `sapKey()` validation.
+  - Audited `srv/common/logger.js`: Identified that `correlationPlainFormat` lacked automated credential masking for arbitrary error or object payloads.
+- PLAN:
+  - Update `app/router/xs-app.json` to explicitly route `^/ai/chat/stream$` (with `xsuaa` and `csrfProtection: true`) and `^/health(/.*)?$` (with `none` auth and `csrfProtection: false`) to `srv-api`. Add `test/unit/guard/routerConfig.test.js`.
+  - Add `"@sap/xssec": "^4.15.0"` to `dependencies` in `package.json`.
+  - Update `srv/ai/service.cds` and `srv/ai/service.js` to restrict operations to operational roles (`['Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin']`) and reject unprivileged callers with HTTP 403. Update `test/unit/ai/aiService.test.js`.
+  - Update `CustomerReturnRfcCreator.js`, `SalesInquiryRfcCreator.js`, and `QuarantineLabelAdapter.js` to wrap dynamic parameters with `sapKey(val, type)`.
+  - Update `srv/common/logger.js` to scrub credentials (`CREDENTIAL_REGEX`) and sensitive keys (`SENSITIVE_KEY_REGEX`) in plaintext format. Update `test/unit/common/logger.test.js`.
+- CHANGE:
+  - Modified `app/router/xs-app.json`: added routes for `^/ai/chat/stream$` and `^/health(/.*)?$` before catch-all.
+  - Modified `package.json`: added `"@sap/xssec": "^4.15.0"` in `dependencies`.
+  - Modified `srv/ai/service.cds`: added role requirements on service and actions.
+  - Modified `srv/ai/service.js`: implemented `isAuthorized()` and 403 Forbidden rejection in `streamHandler` and `_run`.
+  - Modified `srv/integration/s4hana/sd/customer-return/CustomerReturnRfcCreator.js`: applied `sapKey()` to `readBack(docNo)`.
+  - Modified `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryRfcCreator.js`: applied `sapKey()` to `readBack(docNo)`.
+  - Modified `srv/integration/s4hana/wm/QuarantineLabelAdapter.js`: applied `sapKey()` in `documentPlants(mblnr, mjahr)`.
+  - Modified `srv/common/logger.js`: implemented recursive credential and sensitive key scrubbing.
+  - Created `test/unit/guard/routerConfig.test.js`: verified xs-app.json route topology.
+  - Updated `test/unit/ai/aiService.test.js`: added 403 Forbidden tests for unprivileged callers.
+  - Updated `test/unit/common/logger.test.js`: added credential and sensitive object scrubbing tests.
+- VALIDATE:
+  - Root ESLint (`npm run lint`): PASSED (0 errors, 0 warnings).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - CDS compilation (`npx cds compile srv/service.cds`): PASSED (0 errors).
+  - Router config unit tests (`npx jest test/unit/guard/routerConfig.test.js`): 1/1 suite PASSED (5/5 tests).
+  - AI unit tests (`npx jest test/unit/ai/`): 2/2 suites PASSED (24/24 tests).
+  - Guard, common, and auth unit tests (`npx jest test/unit/guard/ test/unit/ai/ test/unit/common/ test/unit/auth/`): 19/19 suites PASSED (264/264 tests).
+  - SD and WM adapter unit tests (`npx jest test/unit/wm/quarantineLabelAdapter.test.js test/unit/sales-inquiry/ test/unit/sd/`): 24/24 suites PASSED (458/458 tests).
+  - Full WM and Purchase Order unit tests (`npx jest test/unit/wm/ test/unit/purchase-order/`): 55/55 suites PASSED (1,185/1,185 tests).
+- TEST DECISION: `TEST ADDED` & `TEST UPDATED` — Added dedicated router configuration test suite `test/unit/guard/routerConfig.test.js`, and updated `test/unit/ai/aiService.test.js` and `test/unit/common/logger.test.js`.
+
+### 2026-11-20 12:10 IST — Phase 2: Controlled Code Cleanup and Refactoring — PASS
+
+- REQUEST: Execute Phase 2 based on the Phase 1 Repository Audit Report:
+  1. Review all 17 identified exports and verify external, internal, dynamic and test usage before modifying them.
+  2. Review the 12 files under `scratch/` and determine whether they should be archived or retained.
+  3. Refactor `SalesInquiryAdapter.js` into logical modules.
+  4. Refactor `GoodsReceiptAdapter.js` into logical modules.
+  5. Evaluate decomposition of `PurchaseOrders.controller.js` and `Dashboard.controller.js`.
+  Preserve all SAP integration contracts, RFC/BAPI behavior, OData structures, business logic, CAP registrations, and SAPUI5 routing.
+- INSPECT:
+  - Audited 17 flagged exports: Verified all 17 across code, tests, and documentation. 14 are strictly internal module utilities/constants with 0 external consumers. 3 exports (`OPEN_STATUSES`, `FINAL_STATUSES`, `RECEIPT_MOVEMENT` in `GoodsReceiptAttemptStore.js`) represent the public architectural contract for `IPostingAttemptStore` specified in `docs/architecture/posting-attempt-lifecycle.md`.
+  - Audited 12 files under `scratch/` (7,410 LOC): Verified 0 references across production, test, and build pipelines. Confirmed they represent one-off discovery tools from prior SM20/SM21 research that belong in historical archive alongside `tools/archive/sap-investigations/`.
+  - Audited `SalesInquiryAdapter.js` (2,257 LOC): Contains multi-step document creation (~630 lines), OData v2 formatting helpers (~150 lines), and error classes mixed with core read and RFC operations.
+  - Audited `GoodsReceiptAdapter.js` (1,562 LOC): Contains complex storage unit resolution logic (~490 lines) and MIGO 101 / SU posting logic (~540 lines) mixed with OData queries.
+  - Audited `PurchaseOrders.controller.js` (1,836 LOC) and `Dashboard.controller.js` (1,475 LOC): Analyzed UI5 controller lifecycle, XML event handler bindings, and test harness mocking patterns.
+- PLAN:
+  - Archive 12 `scratch/` files to `tools/archive/syslog-investigations/` and add comprehensive `README.md`.
+  - Extract `PartialSalesInquiryError.js`, `salesInquiryODataHelper.js`, and `salesInquiryDocumentCreator.js` from `SalesInquiryAdapter.js`, delegating from the main class while preserving all prototype methods and re-exports.
+  - Extract `GoodsReceiptStorageUnitResolver.js` and `GoodsReceiptPostingHelper.js` from `GoodsReceiptAdapter.js`, delegating from the adapter class.
+  - Document decomposition evaluations and blueprints for `PurchaseOrders.controller.js` and `Dashboard.controller.js`.
+  - Execute full validation: Root ESLint, UI5 linter, CDS compilation, and affected unit test suites.
+- CHANGE:
+  - Moved 12 files from `scratch/` to `tools/archive/syslog-investigations/` and created `tools/archive/syslog-investigations/README.md`.
+  - Created `srv/integration/s4hana/sd/sales-inquiry/PartialSalesInquiryError.js`.
+  - Created `srv/integration/s4hana/sd/sales-inquiry/salesInquiryODataHelper.js`.
+  - Created `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDocumentCreator.js`.
+  - Refactored `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: reduced from 2,257 to 1,437 LOC (36% reduction).
+  - Created `srv/integration/s4hana/wm/GoodsReceiptStorageUnitResolver.js`.
+  - Created `srv/integration/s4hana/wm/GoodsReceiptPostingHelper.js`.
+  - Refactored `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: reduced from 1,562 to 576 LOC (63% reduction).
+  - Evaluated `PurchaseOrders.controller.js` and `Dashboard.controller.js`.
+- VALIDATE:
+  - Root ESLint (`npm run lint`): PASSED (0 errors, 0 warnings).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - CDS compilation (`npx cds compile srv/service.cds`): PASSED (0 errors).
+  - Sales Inquiry unit tests (`npx jest test/unit/sales-inquiry/`): 12/12 suites PASSED (189/189 tests).
+  - Goods Receipt unit tests (`npx jest test/unit/wm/goodsReceipt`): 6/6 suites PASSED (155/155 tests).
+  - Purchase Order, Dashboard, and Admin unit test suites (`npx jest test/unit/purchase-order/ test/unit/dashboard/ test/unit/admin/SecurityAuditLogAdapter.test.js test/unit/admin/SystemLogAdapter.test.js test/unit/admin/UserManagementAdapter.test.js test/unit/admin/adminDashboardList.test.js`): 32/32 suites PASSED (769/769 tests).
+  - Combined affected unit suites: 50/50 test suites PASSED (1,113 tests passed, 0 failed).
+- TEST DECISION: `TEST UPDATED` — Verified and retained existing comprehensive test suites covering all refactored adapter paths and contracts.
 
 ### 2026-11-20 11:45 IST — Non-Functional Comment & Constant Purge (PGI Service Path to Credit Block Service Path) — PASS
 

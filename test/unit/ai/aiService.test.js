@@ -106,6 +106,26 @@ describe('AIService & prepareChat Security & Validation', () => {
     }
   });
 
+  test('streamHandler rejects authenticated callers lacking operational roles with 403 Forbidden', async () => {
+    const origContext = cds.context;
+    try {
+      cds.context = { user: null };
+      const req = {
+        user: { id: 'unprivileged-user', is: (role) => role === 'authenticated-user' },
+        body: { messages: [{ role: 'user', content: 'hi' }] }
+      };
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn()
+      };
+      await streamHandler(req, res);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Forbidden' });
+    } finally {
+      cds.context = origContext;
+    }
+  });
+
   test('AIService._run rejects unauthenticated callers with 401', async () => {
     const srv = new AIService();
     const mockReject = jest.fn();
@@ -115,5 +135,16 @@ describe('AIService & prepareChat Security & Validation', () => {
     };
     await srv._run(req, { messages: [{ role: 'user', content: 'hi' }] });
     expect(mockReject).toHaveBeenCalledWith(401, 'Unauthorized');
+  });
+
+  test('AIService._run rejects authenticated callers lacking operational roles with 403', async () => {
+    const srv = new AIService();
+    const mockReject = jest.fn();
+    const req = {
+      user: { id: 'unprivileged-user', is: (role) => role === 'authenticated-user' },
+      reject: mockReject
+    };
+    await srv._run(req, { messages: [{ role: 'user', content: 'hi' }] });
+    expect(mockReject).toHaveBeenCalledWith(403, 'Forbidden');
   });
 });

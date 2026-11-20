@@ -82,6 +82,16 @@ function mapError(err) {
   return { status: err.status === 429 ? 429 : 502, message: `AI provider error: ${safeMsg}` };
 }
 
+const ALLOWED_AI_ROLES = Object.freeze([
+  'Viewer',
+  'PurchasingManager',
+  'SalesRepresentative',
+  'SalesManager',
+  'WarehouseClerk',
+  'WarehouseManager',
+  'Admin'
+]);
+
 function isAuthenticated(user) {
   return Boolean(
     user &&
@@ -93,15 +103,24 @@ function isAuthenticated(user) {
   );
 }
 
+function isAuthorized(user) {
+  if (!isAuthenticated(user)) return false;
+  return ALLOWED_AI_ROLES.some((role) => user.is(role));
+}
+
 /**
  * Express handler for POST /ai/chat/stream — Server-Sent Events with {delta} chunks, then {done, model}.
- * Mounted from server.js behind the CAP auth middlewares; strictly requires an authenticated user.
+ * Mounted from server.js behind the CAP auth middlewares; strictly requires an authenticated user with an operational role.
  */
 async function streamHandler(req, res) {
   const user = (req && req.user) || (cds.context && cds.context.user);
   if (!isAuthenticated(user)) {
     logger.warn('streamHandler: rejected unauthenticated request');
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!isAuthorized(user)) {
+    logger.warn(`streamHandler: rejected unauthorized user ${user.id} (lacks operational role)`);
+    return res.status(403).json({ error: 'Forbidden' });
   }
 
   let input;
@@ -134,6 +153,9 @@ module.exports = class AIService extends cds.ApplicationService {
   async _run(req, data) {
     if (!isAuthenticated(req && req.user)) {
       return req.reject(401, 'Unauthorized');
+    }
+    if (!isAuthorized(req && req.user)) {
+      return req.reject(403, 'Forbidden');
     }
     let input;
     try { input = prepareChat(data); } catch (e) { return req.reject(e.status || 400, e.message); }

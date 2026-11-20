@@ -2,6 +2,7 @@
 
 const LOG = require('../../../../common/logger')('sales-inquiry-rfc');
 const { RfcClient } = require('../../RfcClient');
+const { sapKey } = require('../../sapKey');
 
 /**
  * Creates a sales inquiry through the remote-enabled BAPI_INQUIRY_CREATEFROMDATA2.
@@ -123,7 +124,8 @@ class SalesInquiryRfcCreator {
 
     /** Confirms the committed document exists in SAP (VBAK) before the caller reports success. */
     async readBack(docNo) {
-        const rows = await this.rfc.readTable('VBAK', ['VBELN', 'AUART', 'VBTYP', 'KUNNR'], [`VBELN = '${docNo}'`], 1);
+        const vbeln = sapKey(clean(docNo).padStart(10, '0'), 'vbeln', 'Document number');
+        const rows = await this.rfc.readTable('VBAK', ['VBELN', 'AUART', 'VBTYP', 'KUNNR'], [`VBELN = '${vbeln}'`], 1);
         return rows && rows[0] ? rows[0] : null;
     }
 }
