@@ -211,8 +211,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
     - Files listed in IDE buffer: `auditTraceability.test.js`, `goodsReceiptAttempt.test.js`, `goodsReceiptFormatChecks.test.js`, `goodsReceiptPlantScope.test.js`, `goodsReceiptService.test.js`, `goodsReceiptTwoInstances.test.js`.
     - Cause: These edits were already committed to git HEAD in commit `8ec7f711`. The IDE diff viewer buffer was out of sync with disk. Clicking "Reject all" safely dismisses the redundant buffer and syncs the IDE with the clean disk/git state.
 - CHANGED:
+  - `xs-security.json`: Updated role descriptions for `WarehouseClerk` and `SAPS4HANA_WarehouseClerk` to remove "goods issue" references.
+  - `tools/sandbox-discovery.js`: Removed obsolete `cds.s4.mvt261NotReadyBins` configuration accessor and sanitized output logging.
+  - `docs/creatable_services_report.md`: Updated historical action list and service notes for `API_MATERIAL_DOCUMENT_SRV`, `ZMMIM_MATDOC_SRV`, and `SD_SOFM_CREDIT_BLOCK_SRV` to marked decommissioned.
+  - `docs/creatable-services-classification.md`: Marked Movement 261 material document entry as decommissioned.
   - `docs/sd-creatable-services.md`
-  - `docs/creatable_services_report.md`
   - `docs/data-lineage-audit.md`
   - `docs/architecture/posting-attempt-lifecycle.md`
   - `docs/runbooks/rollback-and-reconciliation.md`

@@ -77,18 +77,13 @@ These are the SAP OData services listed as referenced in `srv/integration/s4hana
 | `PICKLIST_PAPER_SRV` | EWM | 5 creatable entity sets + 5 POST actions (pick confirmation) | Pick list info | Pick confirmation not yet built |
 | `SIMPLE_INB_DLV_SRV` | EWM | 7 creatable entity sets + 9 POST actions (inbound delivery) | Inbound delivery info for GR | Inbound delivery management not yet built |
 | `SD_SOF` | SD | `ItemCollection` + 4 POST actions (`CreateDeliveryForOrderItems`, `CheckATP`, `createInvoice`, `postToAccount`) | Delivery status lookup | Alternative delivery/billing path — not yet wired |
-| `UI_RESERVATION_ITM_MNG_V2` | MM | 0 entity sets but 10 POST actions (`CreateDraft`, `MarkAsCompleted`, `Copy`, etc.) | Reservation lookup for Goods Issue | Reservation creation not yet built |
-
-### Recorded READ-only app use (metadata declared non-creatable in the snapshot)
-
-| Service | Module | App Usage | Notes |
-|---|---|---|---|
+| `UI_RESERVATION_ITM_MNG_V2` | MM | 0 entity sets but 10 POST actions (`CreateDraft`, `MarkAsCompleted`, `Copy`, etc.) | Reservation lookup | Reservation creation not yet built |
 | `C_PURCHASEORDER_FS_SRV` | MM | PO list/detail fact sheet | Read-only by metadata (`sap:creatable="false"`) |
-| `C_STOCKQUANTITYVALUEBYTYPE_CDS` | MM | Stock quantity queries for GI | Read-only CDS view |
+| `C_STOCKQUANTITYVALUEBYTYPE_CDS` | MM | Stock quantity queries | Read-only CDS view |
 | `FAC_GL_JOURNALENTRY_VER_SRV` | FI | Journal entry items to verify | Read-only by metadata |
 | `SD_F2369_INQY_FS_SRV` | SD | Sales inquiry fact sheet | Read-only |
 | `SD_F2370_INQY_WL_SRV` | SD | Sales inquiry worklist | Read-only |
-| `MMIM_MATERIAL_DATA_SRV` | MM | Material data for GI | Read-only |
+| `MMIM_MATERIAL_DATA_SRV` | MM | Material data queries | Read-only |
 | `MMIM_MULTIPLE_MATERIAL_SRV` | MM | Multiple material lookup | Read-only |
 | `ZAPI_GETBUPA_SRV` | MD | Business partner lookup | Read-only custom service |
 
@@ -96,8 +91,8 @@ These are the SAP OData services listed as referenced in `srv/integration/s4hana
 
 | Service | Module | Needed For | Blocker | Ticket |
 |---|---|---|---|---|
-| `API_MATERIAL_DOCUMENT_SRV` | MM | Goods Issue movement 261 posting | **Not registered** — `/IWFND/MED/170` | [Item 2 in gateway ticket](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/docs/ticket-gateway-remediation-ds4.md) |
-| `ZMMIM_MATDOC_SRV` | MM | Goods Issue (fallback) | Registered but returns **HTTP 501** `CREATE_ENTITY not implemented` | Not viable — use `API_MATERIAL_DOCUMENT_SRV` |
+| `API_MATERIAL_DOCUMENT_SRV` | MM | Movement 261 posting (decommissioned) | **Not registered** — `/IWFND/MED/170` | [Item 2 in gateway ticket](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/docs/ticket-gateway-remediation-ds4.md) |
+| `ZMMIM_MATDOC_SRV` | MM | Material document posting (decommissioned) | Registered but returns **HTTP 501** `CREATE_ENTITY not implemented` | Decommissioned |
 
 ---
 
@@ -161,8 +156,8 @@ These are the SAP OData services listed as referenced in `srv/integration/s4hana
 
 | # | Action | Owner | Status |
 |---|---|---|---|
-| 1 | **Register `API_MATERIAL_DOCUMENT_SRV`** on Gateway | Basis team | Blocked — Goods Issue 261 cannot post |
-| 2 | **Supervised PGI test** on delivery 13000515 | User/Dev | Code ready, needs explicit go-ahead |
+| 1 | **Register `API_MATERIAL_DOCUMENT_SRV`** on Gateway | Basis team | Decommissioned (Movement 261 removed) |
+| 2 | **Supervised PGI test** on delivery 13000515 | User/Dev | Decommissioned (Goods Issue removed across application) |
 | 3 | **Supervised billing test** on delivery 13000522 | User/Dev | Code ready, needs explicit go-ahead |
 
 ### Historically marked important (snapshot action list)

@@ -93,7 +93,7 @@ A verified SAP implementation must provide:
 6. Preservation of retry generations and unresolved attempts during migration. A reference search alone is not an atomic claim; a session lock alone does not preserve pending state after connection loss.
 7. Authorization, error semantics, transaction/commit behavior and retention defined by an inspected SAP contract.
 
-The existing database-free Map is process-local (`GoodsIssueAttemptStore.js:40`, `:111-114`, `:186`). Using it would not meet the requested SAP-only persistence goal or preserve restart/multi-instance guarantees. New SAP technical names, payloads, and parameter types are **Not verified**; no adapter is implemented against assumed names.
+The previous database-free Map in the legacy attempt store was process-local. Following the complete decommissioning of Goods Issue, `GoodsReceiptAttemptStore` strictly requires persistent database availability (fail-closed) and has zero in-memory fallback. New SAP technical names, payloads, and parameter types are **Not verified**; no adapter is implemented against assumed names.
 
 ### Reservation workflow tracking: removed, not replaced (2026-11-03)
 

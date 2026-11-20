@@ -25,7 +25,7 @@
     },
     {
       "name": "$XSAPPNAME.WarehouseClerk",
-      "description": "Post goods issue and goods receipt, confirm and create warehouse tasks"
+      "description": "Post goods receipt, confirm and create warehouse tasks"
     },
     {
       "name": "$XSAPPNAME.WarehouseManager",
@@ -171,7 +171,7 @@
     },
     {
       "name": "SAPS4HANA_WarehouseClerk",
-      "description": "SAP S/4HANA Full-Stack: goods issue, goods receipt and warehouse task execution",
+      "description": "SAP S/4HANA Full-Stack: goods receipt and warehouse task execution",
       "role-template-references": [
         "$XSAPPNAME.WarehouseClerk"
       ]

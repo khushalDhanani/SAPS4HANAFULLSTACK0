@@ -27,7 +27,7 @@ Proper services: about **73** (4 proven + 69 likely). This is not a final count.
 | `MM_PUR_PO_MAINT_V2_SRV` | PO 300002151 | `docs/e2e-coverage-matrix.md:75` |
 | `LORD_ODATA_ORDER_SRV` | Sales order 5000534 | `docs/e2e-coverage-matrix.md:77` |
 | `API_PACKINGINSTRUCTION` | Packing instruction 55 | `docs/e2e-coverage-matrix.md:86` |
-| `API_MATERIAL_DOCUMENT_SRV` | 261 document 4900050350/2026; 262 reversal 4900050348/2026 | `WORKSTATUS.md` entry "Live 261 post on reservation 528779/1"; route traced in `srv/integration/s4hana/wm/Mvt261Adapter.js` and `goods-issue/GoodsIssuePostingClient.js` (INFERRED: the log names the CAP action, not the SAP service) |
+| `API_MATERIAL_DOCUMENT_SRV` | 261 document 4900050350/2026; 262 reversal 4900050348/2026 | Evaluated for Movement 261 (now DECOMMISSIONED) |
 
 Return 4500184 also went through `LORD_ODATA_ORDER_SRV`, but its reason, reference and storage location were not persisted (`docs/e2e-coverage-matrix.md:80`).
 

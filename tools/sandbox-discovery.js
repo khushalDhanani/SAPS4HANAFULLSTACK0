@@ -21,8 +21,8 @@ const num = (v) => { let s = String(v ?? '').trim(); if (!s) return 0; const neg
 /** OR list as one short WHERE line per value (RFC_READ_TABLE rejects long / "suspicious" lines). */
 const orList = (field, values) => values.map((v, i) => `${i === 0 ? '( ' : 'OR '}${field} = '${v}'`).concat([')']);
 const andOr = (field, values) => orList(field, values).map((l, i) => (i === 0 ? `AND ${l}` : l));
-/** Storage types the repo marks as not pickable (package.json cds.s4.mvt261NotReadyBins). */
-const notReadyTypes = () => { try { return (require('@sap/cds').env.s4.mvt261NotReadyBins || []).map((b) => b.storageType); } catch (_) { return []; } };
+/** Storage types the repo marks as not pickable (package.json cds.s4.notReadyBins). */
+const notReadyTypes = () => { try { return (require('@sap/cds').env.s4.notReadyBins || []).map((b) => b.storageType); } catch (_) { return []; } };
 
 function createReaders(rfc) {
   const dd03l = async (tab) => {
@@ -298,7 +298,7 @@ if (require.main === module) {
     let allInterim = [];
     try { allInterim = await r.interimTypes(wh); } catch (e) { notRead('T333 interim types', e); }
     const interim = [...new Set([...allInterim, ...notReadyTypes()])];
-    out(`Storage types excluded: interim types named by any T333 row of ${wh} (VLTYP/NLTYP/RLTYP) = ${allInterim.join(', ') || '-'}; repo config cds.s4.mvt261NotReadyBins = ${notReadyTypes().join(', ') || '-'}`);
+    out(`Storage types excluded: interim types named by any T333 row of ${wh} (VLTYP/NLTYP/RLTYP) = ${allInterim.join(', ') || '-'}; repo config notReadyBins = ${notReadyTypes().join(', ') || '-'}`);
     try {
       stock = await r.stock(wh, interim);
       const inWm = stock.filter((s) => pairs.some((p) => p.WERKS === s.WERKS && p.LGORT === s.LGORT));
