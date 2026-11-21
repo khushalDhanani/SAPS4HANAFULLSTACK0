@@ -17,9 +17,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
-- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 676 first-party source files (up from 558 initially, due to 88 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
-  1. *Decomposition Milestones (Phases 1-5):* 26 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
-  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 111 files. Total first-party files scanned: 676 files.
+- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 682 first-party source files (up from 558 initially, due to 94 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
+  1. *Decomposition Milestones (Phases 1-5):* 28 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `salesInquiryDocumentCreator.js` [68], `GoodsReceiptPostingHelper.js` [11], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
+  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 109 files. Total first-party files scanned: 682 files.
   3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors). All unit tests pass across all modularized domains.
 - **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting all fifteen monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], `HandlingUnits.controller.js` [643 lines], `CreateCustomerReturn.controller.js` [668 lines], `GoodsReceipt.controller.js` [613 lines], `MibLabel.controller.js` [588 lines], `QuarantineLabels.controller.js` [540 lines], `CustomerInvoices.controller.js` [540 lines], `SalesOrders.controller.js` [407 lines], `CustomerReturns.controller.js` [378 lines], and `App.controller.js` [366 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
@@ -397,6 +397,66 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 23:00 IST — Phase 2: S/4 Integration Adapters Modularization (GoodsReceiptPostingHelper.js) — PASS
+
+- REQUEST: Modularize monolithic S/4HANA Goods Receipt posting helper `GoodsReceiptPostingHelper.js` (547 lines) below 300 lines per `SCAN_REPORT.md` Phase 2 without breaking changes or integration contract deviations.
+- INSPECT:
+  - Audited `srv/integration/s4hana/wm/GoodsReceiptPostingHelper.js` (547 lines).
+  - Traced consumers: `GoodsReceiptAdapter.js`, `test/unit/wm/goodsReceiptService.test.js` (33 tests), `test/unit/wm/goodsReceiptAttempt.test.js` (26 tests), `test/unit/wm/goodsReceiptPlantScope.test.js` (7 tests), `test/unit/wm/plantLimits.test.js` (9 tests), and all 30 WM test suites (652 tests).
+  - Identified 4 distinct functional responsibilities:
+    1. BAPI error extraction and error classification mapping: `bapiError`, `classifyBapiError` (`HUDIALOG 018`, `VLBAPI 004`, `VLMOVE 029`, `VL 608`, `12 008`, `M7 006`, `VLA 307`, `VLA 311`, `VLA 317`, `BS 013`, `IO 206`, `M7 021`).
+    2. Material document query and receipt attempt resolution: `_read101Docs`, `findReceiptForAttempt`.
+    3. OData Movement 101 posting: `postGoodsReceipt` via `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers`.
+    4. Storage Unit and Delivery BAPI posting: `postGoodsReceiptWithStorageUnit` via `BAPI_INB_DELIVERY_CONFIRM_DEC`, LIKP status verification, VEKP handling unit lookup, and MATDOC read-back verification.
+- PLAN:
+  - Extract BAPI error classification into `GoodsReceiptBapiErrorClassifier.js` (44 lines).
+  - Extract MATDOC queries into `GoodsReceiptDocFinder.js` (32 lines).
+  - Extract OData posting into `GoodsReceiptODataPoster.js` (202 lines).
+  - Extract BAPI confirmation posting into `GoodsReceiptBapiPoster.js` (293 lines).
+  - Retain facade coordinator in `GoodsReceiptPostingHelper.js` (11 lines), preserving all exports and signatures (`postGoodsReceipt`, `_read101Docs`, `findReceiptForAttempt`, `postGoodsReceiptWithStorageUnit`, `GR_MOVEMENT_TYPE`).
+- CHANGE:
+  - Created `srv/integration/s4hana/wm/GoodsReceiptBapiErrorClassifier.js` (44 lines).
+  - Created `srv/integration/s4hana/wm/GoodsReceiptDocFinder.js` (32 lines).
+  - Created `srv/integration/s4hana/wm/GoodsReceiptODataPoster.js` (202 lines).
+  - Created `srv/integration/s4hana/wm/GoodsReceiptBapiPoster.js` (293 lines).
+  - Refactored `srv/integration/s4hana/wm/GoodsReceiptPostingHelper.js` (slashed from 547 to 11 lines, -536 lines, -98.0%).
+- VALIDATE:
+  - Exact line count: All 5 files strictly $\le 300$ lines (`wc -l`: 11, 44, 32, 202, 293).
+  - Total first-party files > 300 lines reduced from 110 to **109 files**.
+  - Total first-party JS application files > 300 lines reduced from 33 to **32 files**.
+  - ESLint (`npx eslint srv/integration/s4hana/wm/GoodsReceipt*.js`): PASSED (0 errors, 0 warnings).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Unit test suites: `test/unit/wm/goodsReceiptService.test.js`, `test/unit/wm/goodsReceiptAttempt.test.js`, `test/unit/wm/goodsReceiptPlantScope.test.js`, `test/unit/wm/plantLimits.test.js`, `test/unit/wm/goodsReceiptController.test.js`, `test/unit/wm/goodsReceiptTwoInstances.test.js` (6/6 suites, 147/147 tests PASS); full WM test suite (30/30 suites, 652/652 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 147 Goods Receipt tests and 652 WM unit tests pass cleanly with zero regression.
+
+### 2026-11-20 22:30 IST — Phase 2: S/4 Integration Adapters Modularization (salesInquiryDocumentCreator.js) — PASS
+
+- REQUEST: Modularize monolithic S/4HANA Sales Document creator `salesInquiryDocumentCreator.js` (632 lines) below 300 lines per `SCAN_REPORT.md` Phase 2 without breaking changes or integration contract deviations.
+- INSPECT:
+  - Audited `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDocumentCreator.js` (632 lines).
+  - Traced consumers: `SalesInquiryAdapter.js`, `test/unit/sales-order/salesOrderAdapter.test.js` (37 tests), `test/unit/sales-inquiry/salesInquiryAdapter.test.js` (33 tests), and all SD suites (22 suites, 321 tests).
+  - Identified 4 distinct functional responsibilities:
+    1. Common item unit & quantity validation: `validateItems`.
+    2. Order Branch (OData Deep Insert): `createSalesOrderDocument` (deep item payload building, condition type ZPR1 resolution, header partner SH / ContactPerson ZP assembly, POST to `LORD_ODATA_ORDER_SRV/HeaderSet`, and read-back verification of Payment Terms & Contact Person).
+    3. Inquiry Branch (Sequential 3-step POSTs): `createSalesInquiryDocument` (Step 1 Header POST, Step 2 sequential ItemSet POSTs, Step 3 PriceCondSet POSTs, `PartialSalesInquiryError` wrapping, and read-back verification).
+    4. Metadata discovery and RFC facade: `createSalesInquiryViaRfc`, `_getLeanOrderFields`, `getInquiryCreationCapabilities`.
+- PLAN:
+  - Extract Sales Order creation flow into `SalesOrderDocumentCreator.js` (298 lines).
+  - Extract Sales Inquiry sequential creation flow into `SalesInquirySequentialCreator.js` (277 lines).
+  - Retain coordinator router and metadata discovery in `salesInquiryDocumentCreator.js` (68 lines), preserving all method signatures and exports (`createSalesDocument`, `createSalesInquiryViaRfc`, `_getLeanOrderFields`, `getInquiryCreationCapabilities`).
+- CHANGE:
+  - Created `srv/integration/s4hana/sd/sales-inquiry/SalesOrderDocumentCreator.js` (298 lines).
+  - Created `srv/integration/s4hana/sd/sales-inquiry/SalesInquirySequentialCreator.js` (277 lines).
+  - Refactored `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDocumentCreator.js` (slashed from 632 to 68 lines, -564 lines, -89.2%).
+- VALIDATE:
+  - Exact line count: All 3 files strictly $\le 300$ lines (`wc -l`: 68, 298, 277).
+  - Total first-party files > 300 lines reduced from 111 to **110 files**.
+  - Total first-party JS application files > 300 lines reduced from 34 to **33 files**.
+  - ESLint (`npx eslint srv/integration/s4hana/sd/sales-inquiry/`): PASSED (0 errors, 0 warnings).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Unit test suites: `test/unit/sales-inquiry/` and `test/unit/sales-order/` (22/22 suites, 321/321 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 321 tests across sales-inquiry and sales-order suites pass cleanly with zero regression.
 
 ### 2026-11-20 22:00 IST — Phase 2: S/4 Integration Adapters Modularization (GoodsReceiptAdapter.js) — PASS
 

@@ -28,13 +28,13 @@ To guarantee total precision, files were evaluated under strict discovery rules 
 ### 1.2 Summary of Scan Results
 - **Total Tracked Files in Git:** 911 files.
 - **Total Non-Excluded Repository Artifacts (including docs/evidence):** 834 files.
-- **Total First-Party Source Files Scanned:** **676 files** (increased from initial 558 due to the 88 new focused sub-modules created).
-- **Total First-Party Source Files Exceeding 300 Lines:** **111 files** (down from 137 files).
-- **Application & Integration Source Files Exceeding 300 Lines:** **51 files** (23 Frontend, 16 Integrations, 6 Backend, 5 Utilities, 1 Schema Config).
+- **Total First-Party Source Files Scanned:** **682 files** (increased from initial 558 due to the 94 new focused sub-modules created).
+- **Total First-Party Source Files Exceeding 300 Lines:** **109 files** (down from 137 files).
+- **Application & Integration Source Files Exceeding 300 Lines:** **49 files** (23 Frontend, 14 Integrations, 6 Backend, 5 Utilities, 1 Schema Config).
 - **Automated Test Suites Exceeding 300 Lines:** **60 files** (51 Unit test suites, 4 Integration test suites, 5 Browser E2E/support suites).
 
 ### 1.3 Modularization Accomplishments (Phases 1 to 5 & Phase 2 — 100% PASS)
-Through the systematic execution of Phases 1 through 5, **26 major monolithic modules were completely knocked below the 300-line threshold**, while retaining 100% backward compatibility and test coverage:
+Through the systematic execution of Phases 1 through 5, **28 major monolithic modules were completely knocked below the 300-line threshold**, while retaining 100% backward compatibility and test coverage:
 1. **`PurchaseOrders.controller.js`:** Slashed from **1,836 lines down to 293 lines** (-1,543 lines, **-84.0%**). Extracted 7 dedicated submodules (`PurchaseOrderAiChat.js` [212], `PurchaseOrderAiDataFetcher.js` [240], `PurchaseOrderAiIntent.js` [265], `PurchaseOrderAiPrompt.js` [290], `PurchaseOrderAiStream.js` [196], `PurchaseOrderAiWidget.js` [197], `PurchaseOrderTableFilter.js` [262]). All 28 test suites (545 tests) PASS.
 2. **`Dashboard.controller.js`:** Slashed from **1,475 lines down to 275 lines** (-1,200 lines, **-81.4%**). Extracted 8 dedicated submodules (`AdminLockMonitorSection.js` [115], `AdminLogsSection.js` [102], `AdminUserBulkSection.js` [258], `AdminUserDetailSection.js` [223], `AdminUserFilterSection.js` [129], `AdminUserFormatters.js` [138], `AdminUserListSection.js` [234], `DashboardMetricsSection.js` [77]). All 109 tests PASS.
 3. **`CreatePurchaseOrder.controller.js`:** Slashed from **1,223 lines down to 223 lines** (-1,000 lines, **-81.8%**). Extracted 5 dedicated submodules (`CreatePurchaseOrderContextFilter.js` [237], `CreatePurchaseOrderHeaderSync.js` [284], `CreatePurchaseOrderItemManager.js` [153], `CreatePurchaseOrderMessages.js` [223], `CreatePurchaseOrderValueHelp.js` [128]). All 28 test suites (545 tests) PASS.
@@ -61,7 +61,9 @@ Through the systematic execution of Phases 1 through 5, **26 major monolithic mo
 24. **`OutboundDeliveryAdapter.js`:** Slashed from **762 lines down to 106 lines** (-656 lines, **-86.1%**). Extracted 4 dedicated submodules and 1 date utility (`OutboundDeliveryShippingPoints.js` [223], `OutboundDeliveryOrdersDue.js` [258], `OutboundDeliveryCreator.js` [128], `OutboundDeliveryBilling.js` [168], `outboundDeliveryDateUtils.js` [41]). All 6 Outbound Delivery test suites (179 tests; 55/55 in `outboundDeliveryAdapter.test.js`) PASS, ESLint 0 errors, UI5 linter 0 findings.
 25. **`CustomerReturnAdapter.js`:** Slashed from **683 lines down to 72 lines** (-611 lines, **-89.5%**). Extracted 3 dedicated submodules and 1 shared utility (`CustomerReturnReader.js` [116], `CustomerReturnValueHelp.js` [218], `CustomerReturnWriter.js` [269], `customerReturnUtils.js` [175]). All 6 Customer Return test suites (136 tests; 40/40 in `customerReturnAdapter.test.js`) PASS, ESLint 0 errors, UI5 linter 0 findings.
 26. **`GoodsReceiptAdapter.js`:** Slashed from **573 lines down to 159 lines** (-414 lines, **-72.3%**). Extracted 2 dedicated submodules (`GoodsReceiptItemReader.js` [224], `GoodsReceiptMasterDataReader.js` [166]). All 5 Goods Receipt test suites (141 tests) and all 30 WM test suites (652 tests) PASS, ESLint 0 errors, UI5 linter 0 findings.
-27. **Integration Adapters Heavily Trimmed:**
+27. **`salesInquiryDocumentCreator.js`:** Slashed from **632 lines down to 68 lines** (-564 lines, **-89.2%**). Extracted 2 dedicated submodules (`SalesOrderDocumentCreator.js` [298], `SalesInquirySequentialCreator.js` [277]). All 22 sales-inquiry and sales-order test suites (321 tests) PASS, ESLint 0 errors, UI5 linter 0 findings.
+28. **`GoodsReceiptPostingHelper.js`:** Slashed from **547 lines down to 11 lines** (-536 lines, **-98.0%**). Extracted 4 dedicated submodules (`GoodsReceiptBapiErrorClassifier.js` [44], `GoodsReceiptDocFinder.js` [32], `GoodsReceiptODataPoster.js` [202], `GoodsReceiptBapiPoster.js` [293]). All 30 WM test suites (652 tests; 147/147 in Goods Receipt suites) PASS, ESLint 0 errors, UI5 linter 0 findings.
+29. **Integration Adapters Heavily Trimmed:**
    - `SalesInquiryAdapter.js`: Reduced from **1,434 to 676 lines** (-758 lines, **-52.9%**). Knocked out of the Top 20 largest files.
    - `UserManagementAdapter.js`: Reduced from **797 to 530 lines** (-267 lines, **-33.5%**).
    - `lockNotifier.js`: Reduced from **650 to 509 lines** (-141 lines, **-21.7%**).
@@ -123,11 +125,11 @@ The following table presents the 20 largest first-party source files across the 
 | **19** | **724** | `test/unit/dashboard/dashboardMetrics.test.js` | Tests | Unit Test Suite | Unit tests for dashboard metrics loader, live SAP figures, and tile state formatters. |
 | **20** | **712** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderRules.js` | Frontend | PO Rules | Authoritative schema rules for 16 PO types (machine-generated from JSON schema). |
 
-*(Note: Prior top-tier monoliths `PurchaseOrders.controller.js` [now 293 lines], `Dashboard.controller.js` [now 275 lines], `CreatePurchaseOrder.controller.js` [now 223 lines], `CreateSalesOrder.controller.js` [now 280 lines], `CreateSalesInquiry.controller.js` [now 271 lines], `OrdersDueForDelivery.controller.js` [now 178 lines], `OutboundDeliveryAdapter.js` [now 106 lines], `CustomerReturnAdapter.js` [now 72 lines], `HandlingUnitAdapter.js` [now 99 lines], `GoodsReceiptAdapter.js` [now 159 lines], and `SalesInquiryAdapter.js` [now 676 lines] have all been completely eliminated from the top tier).*
+*(Note: Prior top-tier monoliths `PurchaseOrders.controller.js` [now 293 lines], `Dashboard.controller.js` [now 275 lines], `CreatePurchaseOrder.controller.js` [now 223 lines], `CreateSalesOrder.controller.js` [now 280 lines], `CreateSalesInquiry.controller.js` [now 271 lines], `OrdersDueForDelivery.controller.js` [now 178 lines], `OutboundDeliveryAdapter.js` [now 106 lines], `CustomerReturnAdapter.js` [now 72 lines], `HandlingUnitAdapter.js` [now 99 lines], `GoodsReceiptAdapter.js` [now 159 lines], `salesInquiryDocumentCreator.js` [now 68 lines], `GoodsReceiptPostingHelper.js` [now 11 lines], and `SalesInquiryAdapter.js` [now 676 lines] have all been completely eliminated from the top tier).*
 
 ---
 
-## 4. Complete Inventory of All 111 Files Exceeding 300 Lines
+## 4. Complete Inventory of All 109 Files Exceeding 300 Lines
 
 The table below lists every single first-party file exceeding 300 lines in descending order of exact `wc -l` line count:
 
@@ -159,11 +161,9 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **27** | **652** | `tools/test-po-creation-all-types.js` | Utilities |
 | **28** | **641** | `test/unit/wm/goodsReceiptController.test.js` | Tests |
 | **29** | **635** | `test/unit/sd/customerReturnAdapter.test.js` | Tests |
-| **30** | **632** | `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDocumentCreator.js` | Integrations |
 | **33** | **556** | `test/unit/sd/createCustomerReturnController.test.js` | Tests |
 | **34** | **551** | `test/unit/wm/handlingUnitAdapter.test.js` | Tests |
 | **35** | **549** | `app/fiori-app/webapp/service/AuthService.js` | Frontend |
-| **36** | **547** | `srv/integration/s4hana/wm/GoodsReceiptPostingHelper.js` | Integrations |
 | **37** | **532** | `srv/integration/s4hana/admin/SystemLogAdapter.js` | Integrations |
 | **38** | **530** | `srv/integration/s4hana/admin/UserManagementAdapter.js` | Integrations |
 | **39** | **522** | `test/unit/sales-order/salesOrdersController.test.js` | Tests |
