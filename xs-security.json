@@ -25,7 +25,7 @@
     },
     {
       "name": "$XSAPPNAME.WarehouseClerk",
-      "description": "Post goods receipt, confirm and create warehouse tasks"
+      "description": "Manage handling units and packing instructions, print warehouse labels, create outbound deliveries"
     },
     {
       "name": "$XSAPPNAME.WarehouseManager",
@@ -171,7 +171,7 @@
     },
     {
       "name": "SAPS4HANA_WarehouseClerk",
-      "description": "SAP S/4HANA Full-Stack: goods receipt and warehouse task execution",
+      "description": "SAP S/4HANA Full-Stack: handling units, packing instructions, warehouse labels and delivery creation",
       "role-template-references": [
         "$XSAPPNAME.WarehouseClerk"
       ]
