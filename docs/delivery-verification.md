@@ -1,5 +1,7 @@
 # Delivery Verification
 
+> **Decommission note (2026-11-21):** the Goods Receipt feature (movement 101) was removed from this application on branch `feature01`. Passages below that describe Goods Receipt screens, the `/odata/v4/goods-receipt` service, `GoodsReceipt*` code or the posting-attempt store are historical: that code no longer exists. See `WORKSTATUS.md` (entry "Goods Receipt feature removal").
+
 **Scope:** what this application and this S/4HANA system actually deliver, measured by execution.
 `service-map.md` proves the services answer. This proves what is behind them.
 

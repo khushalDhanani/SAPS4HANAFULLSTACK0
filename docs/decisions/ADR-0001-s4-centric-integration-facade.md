@@ -52,6 +52,15 @@ For double-posting protection and administrative notifications only, the applica
 - Without a bound database (for example a deployment that omits the container), the queue is unavailable: `getQueueSummary` reports `StoreAvailable: false`, reads are empty, and a failed SAP posting is returned to the user as an error instead of a queued success. Nothing is ever recorded locally in that case.
 - Queued items are always marked `QUEUED` / `FAILED` until S/4HANA confirms a material document; the queue never claims SAP persistence (AGENTS.md).
 
+## Addendum (2026-11-21): Goods Receipt removed; the HDI container holds monitoring state only
+
+The Goods Receipt feature (movement 101) was removed from the application: frontend module, `/odata/v4/goods-receipt` service, posting adapters, recheck timer and the `GoodsReceiptPostingAttempt` entity (`db/wm/goods-receipt-attempt.cds`). The application now makes no stock-relevant goods-movement posting of its own, and it no longer persists posting attempts.
+
+- The HDI container `saps4hana-db` is kept. Its remaining purpose is administrator monitoring state: user lock notifications (`db/admin/user-lock.cds`) and password expiry monitoring (`db/admin/password-expiry.cds`).
+- The CAP model no longer contains the attempt table. **No physical table was dropped.** A table created by an earlier deployment (`SAPS4HANA_WM_GOODSRECEIPTPOSTINGATTEMPT`) stays in the container until an explicitly approved cleanup; before that, existing rows and unresolved attempts must be reviewed and exported.
+- The 2026-09-14 addendum above is historical where it speaks of posting attempts and a queue.
+- SAP material documents posted earlier are untouched.
+
 ## Addendum (2026-11-05): lock notification tables
 
 The user chose to keep lock notification state in the existing HDI container for now. The lock monitor's four tables (`db/admin/user-lock.cds`) are operational markers for detecting locks and deduplicating alerts, not business documents; SAP stays the system of record for users and locks. They must move with the rest when the application database is removed (`docs/decisions/sap-only-persistence-migration.md`).

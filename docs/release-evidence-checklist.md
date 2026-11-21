@@ -1,5 +1,7 @@
 # Release Evidence Checklist & Validation Protocol
 
+> **Decommission note (2026-11-21):** the Goods Receipt feature (movement 101) was removed from this application on branch `feature01`. Passages below that describe Goods Receipt screens, the `/odata/v4/goods-receipt` service, `GoodsReceipt*` code or the posting-attempt store are historical: that code no longer exists. See `WORKSTATUS.md` (entry "Goods Receipt feature removal").
+
 ## 1. Executive Summary & Purpose (Finding CI-03)
 
 This document establishes the official **Release Evidence Checklist and Validation Protocol** for the SAP S/4HANA Full-Stack Cloud Application, resolving **Finding CI-03: SAP-dependent validation remains separate (P1)**.

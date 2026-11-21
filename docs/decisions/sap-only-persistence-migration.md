@@ -2,6 +2,16 @@
 
 Date: 2026-11-03 IST. Status: **Phase 1 removed tracking and settings; complete removal is BLOCKED on the SAP posting-attempt table**.
 
+## Update 2026-11-21 — Goods Receipt removed, posting-attempt table no longer needed
+
+The Goods Receipt feature was removed from the application on 2026-11-21 (frontend, `/odata/v4/goods-receipt`, posting adapters, recheck timer, `GoodsReceiptAttemptStore` and the `GoodsReceiptPostingAttempt` entity). This changes the basis of this record:
+
+- **The blocker named in the status line no longer applies.** The SAP table `ZWM_POST_ATTEMPT` was needed only to replace the posting-attempt store. Nothing in the application writes posting attempts now, so that table is not required.
+- **What still keeps the HANA/HDI container:** the administrator monitoring tables (`db/admin/user-lock.cds`, `db/admin/password-expiry.cds`). Their move to SAP is still open and is the only remaining condition for removing the application database.
+- **Prepared artefacts kept but obsolete:** `docs/abap/zwm_post_attempt.tabl.ddl`, `docs/abap/zwm_post_attempt.fugr.abap`, `tools/adt-create-post-attempt.js` and its test. They were not deleted in the removal because they are SAP design artefacts with a create tool; they have no consumer and should not be run. Deleting them is a separate decision.
+- **Physical cleanup is not done.** The model no longer contains the attempt table, but no table was dropped in any database. Before a drop is approved: read the row count and the unresolved (`sending`, `unconfirmed`) attempts in each environment, export the rows with their SAP material-document references, and resolve open attempts against SAP.
+- Sections below that name `GoodsReceiptAttemptStore` or `srv/wm/goods-receipt/` describe code that no longer exists; they are kept as the historical record of the decision.
+
 The user confirmed removing the application database and approved proceeding with SAP-side replacement investigation. This document defines required behavior; it does not define a verified new SAP API or authorize deployment or SAP writes.
 
 ## Live evidence

@@ -1,5 +1,7 @@
 # No assumed data — actual source for every remaining assumed value
 
+> **Decommission note (2026-11-21):** the Goods Receipt feature (movement 101) was removed from this application on branch `feature01`. Passages below that describe Goods Receipt screens, the `/odata/v4/goods-receipt` service, `GoodsReceipt*` code or the posting-attempt store are historical: that code no longer exists. See `WORKSTATUS.md` (entry "Goods Receipt feature removal").
+
 Scanned at commit `e0c8796` (21-Sep-2026). "Verified" = the field/entity exists in the service
 metadata saved in this repo (`srv/external/*.edmx`, `docs/delivery-metadata/*.xml`) or the row count
 comes from `catalog-data-reality-classified.csv` (19-Sep scan). "Not verified" = no metadata in the

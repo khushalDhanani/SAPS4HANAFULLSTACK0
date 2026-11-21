@@ -1,5 +1,7 @@
 # Data lineage audit - actual vs assumed data
 
+> **Decommission note (2026-11-21):** the Goods Receipt feature (movement 101) was removed from this application on branch `feature01`. Passages below that describe Goods Receipt screens, the `/odata/v4/goods-receipt` service, `GoodsReceipt*` code or the posting-attempt store are historical: that code no longer exists. See `WORKSTATUS.md` (entry "Goods Receipt feature removal").
+
 Snapshot: branch `feature/CL01`, commit `0bb173d` (21-Sep-2026), one uncommitted test file. Scope: `srv/`, `server.js`, `db/`, `config/`, `app/fiori-app/webapp/`, `test/`, `tools/`, `package.json`, env files (keys only), docs. About 30,000 lines read or pattern-scanned; `srv/external/*` (SAP metadata copies) excluded from code findings.
 
 OData source: SAP S/4HANA DS4 client 220 through SAP Gateway (OData V2, one V4 service). The auditor could not call SAP (network policy), so 'live' below means *the code reads it from SAP at request time*, not that a value was observed.

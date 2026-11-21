@@ -1,5 +1,7 @@
 # Common Posting-Attempt Lifecycle & Shared Contract
 
+> **Decommission note (2026-11-21):** the Goods Receipt feature (movement 101) was removed from this application on branch `feature01`. Passages below that describe Goods Receipt screens, the `/odata/v4/goods-receipt` service, `GoodsReceipt*` code or the posting-attempt store are historical: that code no longer exists. See `WORKSTATUS.md` (entry "Goods Receipt feature removal").
+
 **Document Reference**: `docs/architecture/posting-attempt-lifecycle.md`  
 **Related Decision**: `docs/decisions/ADR-0001-s4-centric-integration-facade.md`  
 **Finding Reference**: DEBT-01 (Posting-attempt store multiple responsibilities)  

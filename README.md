@@ -11,15 +11,14 @@ MM, WM, LE, SD, FI, and AI service areas, automated tests, and SAP BTP deploymen
 | Fiori application | `app/fiori-app/` | SAPUI5 views, controllers, routing, and user experience |
 | CAP services | `srv/` | HTTP/OData APIs, authorization, validation, and orchestration |
 | S/4HANA integration | `srv/integration/s4hana/` | Technical clients, adapters, and SAP payload mappings |
-| Persistence | `db/` | CAP data model for posting attempts only; the MTA provisions HANA for it |
+| Persistence | `db/` | CAP data model for administrator monitoring state only (user lock and password expiry); the MTA provisions HANA for it |
 | Configuration | `config/`, `mta/`, `mta.yaml`, `xs-security.json` | Destination/Connectivity templates, deployment topology, and XSUAA roles |
 | Tests | `test/` | Unit, integration, and end-to-end tests with controlled fixtures |
 
 ## Business areas
 
 - **Materials Management:** Purchase order worklist, value helps, draft creation, and activation.
-- **Warehouse Management:** Goods receipt,
-  handling units, packing instructions, and reservation tracking.
+- **Warehouse Management:** Handling units, packing instructions, quarantine labels, and MIB labels.
 - **Logistics Execution:** Outbound delivery workflows.
 - **Sales and Distribution:** Sales inquiries, sales orders, customer invoices, and returns.
 - **Financial Accounting:** Journal entry verification.
@@ -37,7 +36,7 @@ flowchart LR
     CAP --> ADAPTER["S/4HANA adapters<br/>srv/integration/s4hana/"]
     ADAPTER --> DEST["BTP Destination and Connectivity"]
     DEST --> SAP["SAP S/4HANA"]
-    CAP --> DB["CAP persistence<br/>db/ and HANA HDI posting attempts"]
+    CAP --> DB["CAP persistence<br/>db/ and HANA HDI monitoring state"]
     CAP --> AI["AI provider client<br/>SAP AI Core or configured provider"]
 ```
 
@@ -131,7 +130,7 @@ does not verify live SAP connectivity, destination credentials, or backend trans
 | --- | --- |
 | `srv/mm/`, `srv/wm/`, `srv/le/`, `srv/sd/`, `srv/fi/`, `srv/ai/` | CAP domain services and handlers |
 | `srv/integration/s4hana/` | S/4HANA clients and adapters |
-| `db/` | CDS persistence model for posting attempts |
+| `db/` | CDS persistence model for administrator monitoring state |
 | `app/fiori-app/webapp/modules/` | Fiori business-area modules |
 | `test/unit/`, `test/integration/`, `test/e2e/` | Automated test suites |
 | `docs/` | Architecture, SAP discovery evidence, decisions, and runbooks |

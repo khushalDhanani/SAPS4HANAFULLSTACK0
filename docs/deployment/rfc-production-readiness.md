@@ -135,7 +135,7 @@ To establish production least-privilege security, the technical user designated 
   - `RSAU_LOG`: `RSAU_API_GET_LOG_DATA` (Security Audit Log / SM20)
   - `SU01`, `USER`: `BAPI_USER_GET_DETAIL`, `BAPI_USER_GETLIST`, `BAPI_USER_LOCK`, `BAPI_USER_UNLOCK` (User administration)
   - `BAPI`: `BAPI_TRANSACTION_COMMIT`, `BAPI_TRANSACTION_ROLLBACK` (Transaction boundaries)
-  - `V55K`: `BAPI_INB_DELIVERY_CONFIRM_DEC` (Warehouse Goods Receipt confirmation)
+  - `V55K`: `BAPI_INB_DELIVERY_CONFIRM_DEC` — **no longer called** since the Goods Receipt feature was removed on 2026-11-21; this authorization should be withdrawn from the technical user
   - `HU_BAPI`: `BAPI_HU_CREATE`, `BAPI_HU_PACK`, `BAPI_HU_UNPACK`, `BAPI_HU_DELETE` (Handling Unit management)
 
 ### 2. `S_TABU_DIS` / `S_TABU_NAM` (Table Access for RFC_READ_TABLE)
