@@ -676,4 +676,39 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             expect(controller._loadServerSupplierCount).toHaveBeenCalled();
         });
     });
+
+    describe('onInit table wiring and 401 guidance', () => {
+        it('registers the KPI handler exactly once on updateFinished', () => {
+            const oTable = mockControls.purchaseOrdersTable;
+            expect(oTable.attachUpdateFinished).toHaveBeenCalledTimes(1);
+            expect(oTable.attachUpdateFinished).toHaveBeenCalledWith(controller._updateKpiMetrics, controller);
+            expect(oTable.attachEventOnce).not.toHaveBeenCalled();
+        });
+
+        it('reports a diagnostic instead of throwing when the table control is missing', () => {
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            delete mockControls.purchaseOrdersTable;
+            try {
+                expect(() => controller.onInit()).not.toThrow();
+                expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("purchaseOrdersTable"));
+            } finally {
+                errorSpy.mockRestore();
+            }
+        });
+
+        it('401 guidance names the BTP destination as well as .env.local in both bundles and the fallback', () => {
+            const fs = require('fs');
+            const path = require('path');
+            const webapp = path.join(__dirname, '../../../app/fiori-app/webapp');
+            const sources = [
+                fs.readFileSync(path.join(webapp, 'i18n/i18n.properties'), 'utf8').split('\n').find(l => l.startsWith('poAuthErrorMsg=')),
+                fs.readFileSync(path.join(webapp, 'i18n/i18n_en.properties'), 'utf8').split('\n').find(l => l.startsWith('poAuthErrorMsg=')),
+                fs.readFileSync(path.join(webapp, 'modules/mm/purchase-order/controller/PurchaseOrders.controller.js'), 'utf8').split('\n').find(l => l.includes('"poAuthErrorMsg"'))
+            ];
+            sources.forEach((text) => {
+                expect(text).toContain('BTP destination in a deployed system');
+                expect(text).toContain('.env.local in local development');
+            });
+        });
+    });
 });

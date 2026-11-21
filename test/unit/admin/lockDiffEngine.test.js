@@ -15,7 +15,6 @@ const {
   calculateNextRetry,
   SOURCE_APP,
   SOURCE_SAP,
-  SERVICE_ACCOUNT,
   SHORT_LIVED_LOCK
 } = require('../../../srv/admin/LockDiffEngine');
 

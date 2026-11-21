@@ -5,9 +5,7 @@ const {
     formatSapDate,
     addDays,
     diffCalendarDays,
-    calculatePasswordStatus,
-    PWD_POLICY_DEFAULT_DAYS,
-    PWD_WARNING_DEFAULT_DAYS
+    calculatePasswordStatus
 } = require('../../../srv/integration/s4hana/admin/UserPasswordExpiryUtil');
 
 describe('Unit: UserPasswordExpiryUtil', () => {

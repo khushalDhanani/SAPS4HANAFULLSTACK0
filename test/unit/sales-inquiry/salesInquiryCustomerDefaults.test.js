@@ -23,7 +23,7 @@ describe('Unit: salesInquiryCustomerDefaults', () => {
                 })
             },
             s4hanaWL: {
-                run: jest.fn().mockImplementation((q) => {
+                run: jest.fn().mockImplementation(() => {
                     return Promise.resolve([
                         { TransactionCurrency: 'USD', SalesOffice: 'US01', SalesGroup: '101' }
                     ]);

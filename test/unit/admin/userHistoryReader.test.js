@@ -3,9 +3,7 @@
 const {
     readUSH02,
     compareHistoryRows,
-    compareHistoryCursor,
-    historyCursor,
-    USH02_PAGE_SIZE
+    historyCursor
 } = require('../../../srv/integration/s4hana/admin/UserHistoryReader');
 
 describe('Unit: UserHistoryReader', () => {

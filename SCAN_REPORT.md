@@ -3,7 +3,7 @@
 **Repository:** `SAPS4HANAFULLSTACK0`  
 **Active Branch:** `feature01`  
 **Execution Timestamp:** 2026-11-20 15:45 IST  
-**Corrected:** 2026-11-21 — figures re-validated against commit `1ef485dd`; see Sections 8.3 and 8.4 for what changed.\
+**Corrected:** 2026-11-21 — figures re-validated against commit `1ef485dd`; see Sections 8.3 to 8.5 for what changed.\
 **Compliance Standard:** Mandatory adherence to `AGENTS.md` & `WORKSTATUS.md`  
 **Audit Scope:** Comprehensive line count audit (`wc -l`), architectural decomposition, tight-coupling analysis, and safest refactoring sequencing across all first-party application source code, integration adapters, backend handlers, utilities, and test suites.
 
@@ -29,7 +29,7 @@ To guarantee total precision, files were evaluated under strict discovery rules 
 ### 1.2 Summary of Scan Results
 - **Total Tracked Files in Git:** 1,067 files (`git ls-files | wc -l`, 2026-11-21).
 - **Total Non-Excluded Repository Artifacts (including docs/evidence):** 834 files.
-- **Total First-Party Source Files Scanned:** **722 files** (715 at the original scan plus the 7 sub-modules added on 2026-11-21; increased from initial 558).
+- **Total First-Party Source Files Scanned:** **713 files** by the reproducible filter recorded in Section 8.5 (2026-11-21). The earlier figures of 715 and 722 came from the original scan, whose exclusion list was not recorded as a command and could not be reproduced.
 - **Total First-Party Source Files Exceeding 300 Lines:** **94 files** (down from 137 files).
 - **Application & Integration Source Files Exceeding 300 Lines:** **34 files** (20 Frontend, 7 Integrations, 3 Backend, 3 Utilities, 1 Schema Config).
 - **Automated Test Suites Exceeding 300 Lines:** **60 files** (53 Unit test suites, 3 Integration test suites, 4 Browser E2E/support suites).
@@ -133,9 +133,9 @@ The following table presents the 20 largest first-party source files across the 
 | **15** | **790** | `app/fiori-app/webapp/css/style.css` | Frontend | Stylesheet | Application styling rules, Fiori theme customizations, responsive grid layouts. |
 | **16** | **741** | `app/fiori-app/webapp/view/Dashboard.view.xml` | Frontend | XML View | Dashboard view layout, tiles, tab containers, responsive layouts. |
 | **17** | **724** | `test/unit/dashboard/dashboardMetrics.test.js` | Tests | Unit Test Suite | Unit tests for dashboard metrics loader, live SAP figures, and tile state formatters. |
-| **18** | **712** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderRules.js` | Frontend | PO Rules | Authoritative schema rules for 16 PO types (machine-generated from JSON schema). |
-| **19** | **695** | `test/unit/wm/goodsReceiptService.test.js` | Tests | Unit Test Suite | Unit tests for the Goods Receipt CAP service. |
-| **20** | **679** | `test/unit/purchase-order/purchaseOrdersFilterSort.test.js` | Tests | Unit Test Suite | Unit tests for the Purchase Orders list filter and sort logic. |
+| **18** | **714** | `test/unit/purchase-order/purchaseOrdersFilterSort.test.js` | Tests | Unit Test Suite | Unit tests for the Purchase Orders list filter and sort logic. |
+| **19** | **712** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderRules.js` | Frontend | PO Rules | Authoritative schema rules for 16 PO types (machine-generated from JSON schema). |
+| **20** | **695** | `test/unit/wm/goodsReceiptService.test.js` | Tests | Unit Test Suite | Unit tests for the Goods Receipt CAP service. |
 
 *(Note: Prior top-tier monoliths `PurchaseOrders.controller.js` [now 293 lines], `Dashboard.controller.js` [now 275 lines], `CreatePurchaseOrder.controller.js` [now 223 lines], `CreateSalesOrder.controller.js` [now 280 lines], `CreateSalesInquiry.controller.js` [now 271 lines], `OrdersDueForDelivery.controller.js` [now 178 lines], `OutboundDeliveryAdapter.js` [now 106 lines], `CustomerReturnAdapter.js` [now 72 lines], `HandlingUnitAdapter.js` [now 99 lines], `GoodsReceiptAdapter.js` [now 159 lines], `salesInquiryDocumentCreator.js` [now 68 lines], `GoodsReceiptPostingHelper.js` [now 11 lines], `AuthService.js` [now 291 lines], `AuthStorage.js` [now 222 lines], `SystemLogAdapter.js` [now 212 lines], `UserManagementAdapter.js` [now 273 lines], `lockNotifier.js` [now 263 lines], `GoodsReceiptStorageUnitResolver.js` [now 47 lines], `BusinessConfigResolver.js` [now 268 lines], `service.js` (UserManagementService) [now 113 lines], `S4HttpClient.js` [now 225 lines], `integrationDiagnostics.js` [now 116 lines], `MibLabelAdapter.js` [now 118 lines], `QuarantineLabelAdapter.js` [now 130 lines], `GoodsReceiptAttemptStore.js` [now 254 lines], and `SalesInquiryAdapter.js` [now 676 lines] have all been completely eliminated from the top tier).*
 
@@ -164,9 +164,9 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **15** | **790** | `app/fiori-app/webapp/css/style.css` | Frontend |
 | **16** | **741** | `app/fiori-app/webapp/view/Dashboard.view.xml` | Frontend |
 | **17** | **724** | `test/unit/dashboard/dashboardMetrics.test.js` | Tests |
-| **18** | **712** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderRules.js` | Frontend |
-| **19** | **695** | `test/unit/wm/goodsReceiptService.test.js` | Tests |
-| **20** | **679** | `test/unit/purchase-order/purchaseOrdersFilterSort.test.js` | Tests |
+| **18** | **714** | `test/unit/purchase-order/purchaseOrdersFilterSort.test.js` | Tests |
+| **19** | **712** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderRules.js` | Frontend |
+| **20** | **695** | `test/unit/wm/goodsReceiptService.test.js` | Tests |
 | **21** | **675** | `test/unit/wm/zquarLabel.test.js` | Tests |
 | **22** | **652** | `tools/test-po-creation-all-types.js` | Utilities |
 | **23** | **641** | `test/unit/wm/goodsReceiptController.test.js` | Tests |
@@ -488,6 +488,14 @@ The `git status` snapshot originally printed here was stale: those files were co
 - Old-vs-new validator comparison on randomized inputs: 56,000 comparisons, identical output and model state.
 - `node test/e2e/runAllE2E.js --sap-free`: 6/6 suites passed (includes the Create Purchase Order empty-submit validation in the browser).
 - Not verified: SAP-connected E2E and live SAP reads through the moved adapter methods.
+
+### 8.5 Follow-up fixes and reconciliation (2026-11-21)
+- **Scanned-file count — 713.** Reproducible rule: `git ls-files`, minus `node_modules/`, `gen/`, `mta_archives/`, `coverage/`, `test-results/`, `docs/`, `tools/archive/`, `srv/external/`, `secrets/`, `certs/`, `skills/`, dot-directories and dot-files, `dist/`, `thirdparty/`, `QrCode.js`, `package-lock.json`, minified files, `Component-preload`, and `.md/.png/.pdf/.xlsx/.svg/.log/.sqlite/.csv` files. Tracked files: 1,074. The earlier 715 / 722 totals and the "834 non-excluded" total could not be reproduced and should not be relied on.
+- **Files over 300 lines — 94**, unchanged. `purchaseOrdersFilterSort.test.js` grew from 679 to 714 lines (three new tests) and moved from rank 20 to rank 18.
+- **`PurchaseOrders.controller.js` is now 296 lines** (293 in the milestone text above): the duplicate `updateFinished` registration was removed, a guard with a diagnostic was added for a missing `purchaseOrdersTable`, and the 401 guidance now names the BTP destination as well as `.env.local`.
+- **Skipped tests — 13, all intentional.** `test/unit/admin/sapLogsLive.test.js` (7) and `test/unit/admin/sapLogsHttpLive.test.js` (6) are live-SAP suites wrapped in `describe.skip` unless `ALLOW_LIVE_SAP_TOOLS=1`. They stay skipped: running them makes live SAP calls.
+- **ESLint warnings — 8 resolved, now 0.** All were `no-unused-vars` in test files (unused imports or mock arguments) in `lockDiffEngine.test.js` (1), `userHistoryReader.test.js` (2), `userPasswordExpiryUtil.test.js` (2), `salesInquiryCustomerDefaults.test.js` (1), `salesInquiryDetailReader.test.js` (1), and `salesOrderReader.test.js` (1).
+- **Validation:** `npx jest` 212 suites, 3,510 passed, 13 skipped, 0 failed; `npx eslint .` 0 errors, 0 warnings; UI5 linter 0 findings; `node test/e2e/runAllE2E.js --sap-free` 6/6 suites passed.
 
 ---
 *Line counts verified with POSIX `wc -l`; validation status is as recorded in Section 8.3.*

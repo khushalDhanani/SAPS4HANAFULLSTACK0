@@ -11,7 +11,7 @@ describe('Unit: salesInquiryDetailReader', () => {
         const mockAdapter = {
             init: jest.fn().mockResolvedValue(),
             s4hanaWL: {
-                run: jest.fn().mockImplementation((q) => {
+                run: jest.fn().mockImplementation(() => {
                     wlCalled = true;
                     return Promise.resolve({
                         SalesInquiry: '100005',

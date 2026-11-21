@@ -72,8 +72,11 @@ sap.ui.define([
             this._loadServerSupplierCount();
 
             var oTable = this.byId("purchaseOrdersTable");
-            oTable.attachEventOnce("updateFinished", this._updateKpiMetrics, this);
-            oTable.attachUpdateFinished(this._updateKpiMetrics, this);
+            if (oTable) {
+                oTable.attachUpdateFinished(this._updateKpiMetrics, this);
+            } else {
+                console.error("[PurchaseOrders] Control 'purchaseOrdersTable' was not found in the view; the KPI tiles will not update.");
+            }
 
             var oOwnerComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
             var oRouter = oOwnerComp ? oOwnerComp.getRouter() : null;
@@ -118,7 +121,7 @@ sap.ui.define([
                         }
                         if (iStatus === 401) {
                             MessageBox.error(
-                                that.getText("poAuthErrorMsg", null, "Failed to load Purchase Orders from SAP S/4HANA.\n\nThe SAP S/4HANA Gateway rejected the configured credentials with HTTP 401 Unauthorized.\n\nAction Required:\n1. Verify that the password in .env.local is current.\n2. Check transaction SU01 in SAP to ensure user account is not locked due to failed logon attempts."),
+                                that.getText("poAuthErrorMsg", null, "Failed to load Purchase Orders from SAP S/4HANA.\n\nThe SAP S/4HANA Gateway rejected the configured credentials with HTTP 401 Unauthorized.\n\nAction Required:\n1. Ask your administrator to verify the SAP connection credentials: the BTP destination in a deployed system, or .env.local in local development.\n2. Check transaction SU01 in SAP to ensure user account is not locked due to failed logon attempts."),
                                 { title: that.getText("poAuthErrorTitle", null, "S/4HANA Authentication Error") }
                             );
                         } else {

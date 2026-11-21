@@ -29,7 +29,7 @@ describe('Unit: salesOrderReader', () => {
         const mockAdapter = {
             init: jest.fn().mockResolvedValue(),
             s4hanaSO: {
-                run: jest.fn().mockImplementation((query) => {
+                run: jest.fn().mockImplementation(() => {
                     const results = [{ SalesOrder: '500001' }];
                     results.$count = 1;
                     return Promise.resolve(results);
