@@ -253,6 +253,42 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
       await expect(adapter.postGoodsReceiptWithStorageUnit(PAYLOAD)).rejects.toMatchObject({ outcomeUnknown: true });
     });
 
+    describe('RFC timeout during the posting (real RfcClient timeout, fake connection)', () => {
+      const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
+      const withRealSession = (fakeCall) => {
+        const { adapter } = make({ before: [] });
+        const connection = { open: jest.fn(async () => {}), call: jest.fn(fakeCall), close: jest.fn(async () => {}) };
+        const rfc = new RfcClient({
+          S4_DESTINATION_URL: 'https://sap.local:44300', S4_RFC_SYSNR: '00', S4_CLIENT: '100', S4_USERNAME: 'U', S4_PASSWORD: 'P', S4_RFC_TIMEOUT_MS: '30'
+        }, () => ({ Client: jest.fn(() => connection) }));
+        adapter.rfc.session = (fn) => rfc.session(fn);
+        return { adapter, connection };
+      };
+      const never = () => new Promise(() => {});
+
+      it('marks the outcome unknown when the COMMIT gets no answer in time', async () => {
+        const { adapter } = withRealSession((fm) => (fm === 'BAPI_TRANSACTION_COMMIT' ? never() : Promise.resolve({ RETURN: [] })));
+
+        await expect(adapter.postGoodsReceiptWithStorageUnit(PAYLOAD)).rejects.toMatchObject({ outcomeUnknown: true, timedOut: true });
+      });
+
+      it('marks the outcome unknown when the posting BAPI itself gets no answer in time', async () => {
+        const { adapter } = withRealSession(never);
+
+        await expect(adapter.postGoodsReceiptWithStorageUnit(PAYLOAD)).rejects.toMatchObject({ outcomeUnknown: true, timedOut: true });
+      });
+
+      it('keeps a failure to connect definite, because nothing was sent', async () => {
+        const { adapter } = make({ before: [] });
+        adapter.rfc.session = jest.fn().mockRejectedValue(Object.assign(new Error('RFC call to connection open timed out after 30ms'), { status: 503 }));
+
+        const err = await adapter.postGoodsReceiptWithStorageUnit(PAYLOAD).catch((e) => e);
+
+        expect(err.status).toBe(503);
+        expect(err.outcomeUnknown).toBeFalsy();
+      });
+    });
+
     it('keeps a BAPI rejection as a definite 422', async () => {
       const call = jest.fn().mockResolvedValue({ RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '021', MESSAGE: 'deficit' }] });
       const { adapter } = make({ call });

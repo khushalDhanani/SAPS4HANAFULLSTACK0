@@ -189,14 +189,14 @@ describe('RfcClient concurrency limits and queueing', () => {
     const p2 = rfc.call('HANG2');
 
     await Promise.all([
-      expect(p1).rejects.toMatchObject({ status: 503, message: expect.stringMatching(/timed out/) }),
+      expect(p1).rejects.toMatchObject({ status: 504, message: expect.stringMatching(/timed out/) }), // sent, no answer
       expect(p2).rejects.toMatchObject({ status: 503, message: expect.stringMatching(/concurrency limit reached|timed out/) })
     ]);
   });
 });
 
 describe('RfcClient timeout protection and lifecycle', () => {
-  test('aborts hanging call with 503 timeout and forcefully closes client connection', async () => {
+  test('aborts hanging call with a 504 timeout and forcefully closes client connection', async () => {
     const mockClient = {
       open: jest.fn(async () => {}),
       call: jest.fn(() => new Promise((resolve) => setTimeout(resolve, 200))),
@@ -213,7 +213,7 @@ describe('RfcClient timeout protection and lifecycle', () => {
     }, loader);
 
     await expect(rfc.call('HANGING_FM')).rejects.toMatchObject({
-      status: 503,
+      status: 504,
       message: expect.stringMatching(/RFC call to HANGING_FM timed out after 30ms/)
     });
     expect(mockClient.close).toHaveBeenCalledTimes(1);

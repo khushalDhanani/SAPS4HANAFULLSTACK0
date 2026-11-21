@@ -398,6 +398,22 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 12:46 IST — Highest-risk findings, step 1: an RFC timeout during a write means "outcome unknown" — PARTIAL
+
+- REQUEST: Pasted "Highest-risk findings" (P1/P2 list); approved plan `zany-shimmying-shell.md`, step 1 (findings "RFC timeout and pool lifecycle" plus a defect found while checking it).
+- DEFECT (CONFIRMED by tests that failed before the fix): `RfcClient.withTimeout` rejected every timeout with status 503. `GoodsReceiptBapiPoster.js` treats 503 as "SAP never reached", so a timeout of `BAPI_INB_DELIVERY_CONFIRM_DEC` or of `BAPI_TRANSACTION_COMMIT` ended the attempt as `rejected` and made the item retryable, although the timeout does not cancel the call in SAP. A duplicate Goods Receipt was possible.
+- CHANGED:
+  - `srv/integration/s4hana/RfcClient.js`: a timeout of a call that was sent, or of a session after its first call, now rejects with status 504, `code: 'RFC_TIMEOUT'`, `timedOut: true`. Timeouts before anything was sent (connection open, pool acquire, wait queue, session before its first call) stay 503.
+  - `srv/integration/s4hana/wm/GoodsReceiptBapiPoster.js`: comment only; its existing rule (`status !== 503` → `outcomeUnknown`) now classifies these timeouts as unknown, so the attempt becomes `unconfirmed` and stays blocked until the recheck resolves it.
+- OTHER RFC WRITERS CHECKED (no change): `HandlingUnitBapiWriter.js` and `sd/salesDocBapi.js` already report a missing COMMIT answer as "not confirmed"; a timeout before their COMMIT leaves nothing committed.
+- BEHAVIOUR CHANGE: a read that times out over RFC now answers 504 instead of 503.
+- TEST DECISION: TEST ADDED and TEST UPDATED. New `test/unit/rfcClientTimeout.test.js` (12 tests: sent-call timeout, COMMIT timeout, slow session, late answer, open/acquire/queue timeouts stay 503, faulted connection closed and not returned to the pool, next call gets a new connection, slot freed, failing close). `test/unit/wm/goodsReceiptAttempt.test.js` (+3: COMMIT timeout and BAPI timeout → `outcomeUnknown`; connection failure stays definite). `test/unit/rfcClientDestination.test.js`: two expectations 503 → 504.
+- TESTED: before the fix 10 of the new tests failed; after it `npx jest` → 217 suites, 3,633 passed, 13 skipped, 0 failed. `npx eslint .` exit 0. UI5 lint 0 findings. `git diff --check` clean.
+- NOT VERIFIED: a real RFC timeout against SAP; whether `node-rfc`'s pool accounting is correct when a leased connection is closed instead of released (library behaviour not checked); whether `BAPI_INB_DELIVERY_CONFIRM_DEC` commits anything before the explicit COMMIT (treated as possible). No SAP call made.
+- ASSUMPTIONS: none.
+- STATUS: PARTIAL — fixed and unit-tested; no live verification.
+- NEXT: Step 2 of the plan (idempotency key).
+
 ### 2026-11-21 12:35 IST — Phase 4 — Full integration validation (evidence per tier) — PARTIAL
 
 - REQUEST: Pasted roadmap Phase 4: CDS compile, full Jest, ESLint + UI5 lint, SAP-free browser E2E, controlled read-only SAP connectivity and metadata checks, SAP read-back with approved test data.

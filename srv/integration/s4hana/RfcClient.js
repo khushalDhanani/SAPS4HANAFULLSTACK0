@@ -12,12 +12,15 @@ const REQUIRED_ENV = ['S4_DESTINATION_URL', 'S4_RFC_SYSNR', 'S4_CLIENT', 'S4_USE
 const LOG = require('./logger')('rfc-client');
 
 const unavailable = (msg) => Object.assign(new Error(msg), { status: 503 });
+// A call that was sent and got no answer in time. The timeout does not cancel the function module in SAP, so
+// this is never "not sent" (503): for a write the outcome is unknown.
+const timedOut = (msg) => Object.assign(new Error(msg), { status: 504, statusCode: 504, code: 'RFC_TIMEOUT', timedOut: true });
 
 const DEFAULT_RFC_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_CONCURRENT = 10;
 const DESTINATION_PARAMS_TTL_MS = 5 * 60 * 1000;
 
-function withTimeout(promise, timeoutMs, operationName) {
+function withTimeout(promise, timeoutMs, operationName, makeError = unavailable) {
   if (!promise || typeof promise.then !== 'function') {
     promise = Promise.resolve(promise);
   }
@@ -25,7 +28,7 @@ function withTimeout(promise, timeoutMs, operationName) {
   let timer;
   const timeoutPromise = new Promise((_, reject) => {
     timer = setTimeout(() => {
-      reject(unavailable(`RFC call to ${operationName} timed out after ${timeoutMs}ms`));
+      reject(makeError(`RFC call to ${operationName} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
     if (timer && typeof timer.unref === 'function') {
       timer.unref();
@@ -294,6 +297,7 @@ class RfcClient {
    * Run several function modules on ONE connection (= one ABAP session / LUW), e.g.
    * `session(async (call) => { await call('BAPI_HU_CREATE', ...); await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' }); })`.
    * Enforces concurrency limits and timeout protection. On error or timeout, the connection is closed/discarded.
+   * A timeout of a call that was sent rejects with 504 / RFC_TIMEOUT / timedOut; a timeout before that with 503.
    */
   async session(fn) {
     let noderfc;
@@ -312,17 +316,20 @@ class RfcClient {
       try {
         client = await this._acquireConnection(noderfc, params);
         const timeoutMs = this.timeoutMs;
+        let callSent = false;
         const callWrapper = (fm, callParams = {}) => {
+          callSent = true;
           const callPromise = client.call(fm, callParams);
           if (timeoutMs > 0) {
-            return withTimeout(callPromise, timeoutMs, fm);
+            return withTimeout(callPromise, timeoutMs, fm, timedOut);
           }
           return callPromise;
         };
 
         const sessionPromise = fn(callWrapper);
         if (timeoutMs > 0) {
-          return await withTimeout(sessionPromise, timeoutMs, 'session');
+          // Before the first call nothing reached SAP (503); afterwards the outcome is unknown (504).
+          return await withTimeout(sessionPromise, timeoutMs, 'session', (msg) => (callSent ? timedOut(msg) : unavailable(msg)));
         }
         return await sessionPromise;
       } catch (err) {

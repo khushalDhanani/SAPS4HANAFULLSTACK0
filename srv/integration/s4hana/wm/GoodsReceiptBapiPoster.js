@@ -243,7 +243,8 @@ async function postGoodsReceiptWithStorageUnit(adapter, payload = {}) {
       }
     });
   } catch (e) {
-    // A BAPI error return is a definite refusal and 503 means SAP was never reached; anything else may have posted.
+    // A BAPI error return is a definite refusal and 503 means SAP was never reached; anything else may have posted,
+    // including an RFC timeout of a call that was sent (504 / RFC_TIMEOUT), which SAP may still complete.
     if (!e.bapiReturn && e.status !== 503) e.outcomeUnknown = !isSimulate;
     throw e;
   }
