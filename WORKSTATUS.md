@@ -16,10 +16,10 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
-- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 695 first-party source files (up from 558 initially, due to 107 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
-  1. *Decomposition Milestones (Phases 1-5 & Phase 2 Admin/Auth/WM):* 33 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `salesInquiryDocumentCreator.js` [68], `GoodsReceiptPostingHelper.js` [11], `AuthService.js` [291], `AuthStorage.js` [222], `SystemLogAdapter.js` [212], `UserManagementAdapter.js` [273], `lockNotifier.js` [263], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 2 key monoliths heavily trimmed (`SalesInquiryAdapter.js` [-53%], `PurchaseOrderValidator.js` [-18%]).
-  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 104 files. Total first-party files scanned: 695 files.
+- **Current checkout:** `feature01`.
+- **Codebase Modularization Progress — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 715 first-party source files (up from 558 initially, due to 127 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
+  1. *Decomposition Milestones (41 Monoliths Eliminated):* 41 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `salesInquiryDocumentCreator.js` [68], `GoodsReceiptPostingHelper.js` [11], `AuthService.js` [291], `AuthStorage.js` [222], `SystemLogAdapter.js` [212], `UserManagementAdapter.js` [273], `lockNotifier.js` [263], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214], `GoodsReceiptStorageUnitResolver.js` [47], `BusinessConfigResolver.js` [268], `service.js` [113], `S4HttpClient.js` [225], `integrationDiagnostics.js` [116], `MibLabelAdapter.js` [118], `QuarantineLabelAdapter.js` [130], `GoodsReceiptAttemptStore.js` [254]); 2 key monoliths heavily trimmed (`SalesInquiryAdapter.js` [-53%], `PurchaseOrderValidator.js` [-18%]).
+  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 96 files. Total first-party files scanned: 715 files.
   3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors). All unit tests pass across all modularized domains.
 - **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting all fifteen monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], `HandlingUnits.controller.js` [643 lines], `CreateCustomerReturn.controller.js` [668 lines], `GoodsReceipt.controller.js` [613 lines], `MibLabel.controller.js` [588 lines], `QuarantineLabels.controller.js` [540 lines], `CustomerInvoices.controller.js` [540 lines], `SalesOrders.controller.js` [407 lines], `CustomerReturns.controller.js` [378 lines], and `App.controller.js` [366 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
@@ -2680,3 +2680,64 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: None. All public interfaces, prototype contracts, and module exports preserved.
 - NEXT: Continue decomposition of remaining oversized JS application files on roadmap (`srv/integration/s4hana/wm/GoodsReceiptStorageUnitResolver.js` [495 lines], `srv/common/BusinessConfigResolver.js` [449 lines], `srv/admin/service.js` [448 lines]).
 - FINAL STATUS: PASS — Admin integration and lock notifier modularization fully verified across all unit suites and linters; zero regressions.
+
+### 2026-11-21 11:40 IST — S/4 Clients, Admin Service, WM Adapters & Attempt Store Modularization — PASS
+
+- REQUEST: Decompose oversized files exceeding 300 lines on branch `feature01`: `srv/integration/s4hana/wm/GoodsReceiptStorageUnitResolver.js` (495 lines), `srv/common/BusinessConfigResolver.js` (449 lines), `srv/admin/service.js` (448 lines), `srv/integration/s4hana/S4HttpClient.js` (441 lines), `srv/common/integrationDiagnostics.js` (436 lines), `srv/integration/s4hana/wm/MibLabelAdapter.js` (420 lines), `srv/integration/s4hana/wm/QuarantineLabelAdapter.js` (419 lines), and `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js` (416 lines) into cohesive sub-modules strictly under 300 lines while preserving 100% public contracts, tests, and security invariants.
+- INSPECT:
+  - Read `AGENTS.md`, `WORKSTATUS.md`, and `SCAN_REPORT.md`.
+  - Inspected `GoodsReceiptStorageUnitResolver.js`: identified 7 tiers of barcode resolution and storage unit enrichment.
+  - Inspected `BusinessConfigResolver.js`: identified RFC/customizer queries, trusted server-side overrides, and TTL cache.
+  - Inspected `srv/admin/service.js`: identified user management, lock/unlock coordination, password expiry queries, and diagnostics routing.
+  - Inspected `S4HttpClient.js`: identified destination resolution, error normalization, session/CSRF token fetch, and HTTP request dispatch.
+  - Inspected `integrationDiagnostics.js`: identified 6-stage lifecycle checks across OData and RFC channels.
+  - Inspected `MibLabelAdapter.js`: identified ZMIB PDF generation, direct table data extraction (LTAK, LTAP, AFPO, MAKT), and chunked transfer order listing.
+  - Inspected `QuarantineLabelAdapter.js`: identified ZQUAR PDF generation, MATDOC plant verification, label rows read-back, and chunked GR document listing.
+  - Inspected `GoodsReceiptAttemptStore.js`: identified attempt creation/idempotency CAS, distributed worker leasing, background recheck, and unconfirmed re-confirmation.
+- CHANGED:
+  - `srv/integration/s4hana/wm/GoodsReceiptBarcodeMatcher.js` (created, 62 lines): Tier sequencing barcode coordinator.
+  - `srv/integration/s4hana/wm/GoodsReceiptDocumentMatcher.js` (created, 187 lines): Tiers 0, 1, 2 (HU, Inbound Delivery, Purchase Order matchers).
+  - `srv/integration/s4hana/wm/GoodsReceiptItemEnricher.js` (created, 191 lines): Storage location, batch & SLED resolution, quantity enrichment.
+  - `srv/integration/s4hana/wm/GoodsReceiptObjectMatcher.js` (created, 209 lines): Tiers 3, 4, 5, 6 (Batch, Material, Production Order, Delivery Fallback matchers).
+  - `srv/integration/s4hana/wm/GoodsReceiptStorageUnitResolver.js` (modified, slashed from 495 to 47 lines, -90.5%): Clean resolver facade.
+  - `srv/common/BusinessConfigCustomizer.js` (created, 144 lines): RFC customizing table reader and data application.
+  - `srv/common/BusinessConfigOverrides.js` (created, 77 lines): Trusted server-side override extraction.
+  - `srv/common/BusinessConfigResolver.js` (modified, slashed from 449 to 268 lines, -40.3%): Business config resolver coordinator.
+  - `srv/admin/AdminPasswordExpiryHandler.js` (created, 145 lines): Password expiry summary, list, and monitor status queries.
+  - `srv/admin/AdminUserLockHandler.js` (created, 177 lines): User lock/unlock validation, protection context, audit, and execution.
+  - `srv/admin/AdminUserQueryHandler.js` (created, 123 lines): User list, SU01 detail, and diagnostics query handlers.
+  - `srv/admin/service.js` (modified, slashed from 448 to 113 lines, -74.8%): CAP UserManagementService coordinator.
+  - `srv/integration/s4hana/S4DestinationResolver.js` (created, 84 lines): BTP Destination and local credential resolution.
+  - `srv/integration/s4hana/S4HttpErrors.js` (created, 106 lines): S4HttpError, unansweredWrite, error classification.
+  - `srv/integration/s4hana/S4HttpUtils.js` (created, 101 lines): URL helpers, query joining, header sanitation, JWT extraction.
+  - `srv/integration/s4hana/S4HttpClient.js` (modified, slashed from 441 to 225 lines, -49.0%): SAP Cloud SDK HTTP client coordinator.
+  - `srv/common/integrationDiagnosticsUtil.js` (created, 58 lines): Diagnostic stage measurement, timing, URL redaction.
+  - `srv/common/ODataDiagnostics.js` (created, 165 lines): 6-stage OData Gateway diagnostics.
+  - `srv/common/RfcDiagnostics.js` (created, 141 lines): 6-stage RFC Gateway diagnostics.
+  - `srv/common/integrationDiagnostics.js` (modified, slashed from 436 to 116 lines, -73.4%): Integration diagnostics coordinator.
+  - `srv/integration/s4hana/wm/MibLabelUtils.js` (created, 111 lines): MIB sticker normalization, formatting, constants.
+  - `srv/integration/s4hana/wm/MibLabelDataReader.js` (created, 247 lines): MIB sticker table reads and transfer order listing.
+  - `srv/integration/s4hana/wm/MibLabelAdapter.js` (modified, slashed from 420 to 118 lines, -71.9%): MIB sticker adapter facade.
+  - `srv/integration/s4hana/wm/QuarantineLabelUtils.js` (created, 123 lines): Quarantine label normalization, formatting, constants.
+  - `srv/integration/s4hana/wm/QuarantineLabelDataReader.js` (created, 215 lines): Quarantine label table reads and GR document listing.
+  - `srv/integration/s4hana/wm/QuarantineLabelAdapter.js` (modified, slashed from 419 to 130 lines, -69.0%): Quarantine label adapter facade.
+  - `srv/wm/goods-receipt/GoodsReceiptAttemptConfig.js` (created, 49 lines): Attempt store constants and timing configurations.
+  - `srv/wm/goods-receipt/GoodsReceiptRecheckService.js` (created, 191 lines): Attempt CAS leasing, background recheck, unconfirmed reconfirmation.
+  - `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js` (modified, slashed from 416 to 254 lines, -38.9%): Attempt store coordinator.
+  - `SCAN_REPORT.md` (modified): Updated Executive Summary metrics, milestones 34-41, and Section 4 inventory table (8 files removed from >300 list; count down from 104 to 96).
+- TEST DECISION: EXISTING TEST SUFFICIENT — Existing unit test suites (`test/unit/wm/goodsReceiptService.test.js`, `test/unit/wm/goodsReceiptController.test.js`, `test/unit/common/BusinessConfigResolver.test.js`, `test/unit/admin/UserManagementService.test.js`, `test/unit/s4HttpClient.test.js`, `test/unit/monitoring/integrationDiagnostics.test.js`, `test/unit/wm/mibLabelAdapter.test.js`, `test/unit/wm/quarantineLabelAdapter.test.js`, `test/unit/wm/goodsReceiptAttempt.test.js`, `test/unit/wm/goodsReceiptTwoInstances.test.js`) cover all functionality with zero modifications required.
+- VALIDATION:
+  - Exact Line Counts: All 29 modified/created files are strictly <= 300 lines (range: 47 to 268 lines).
+  - Linters: Root ESLint (`npm run lint`): PASSED (0 errors); all 29 target files clean.
+  - Unit Tests:
+    - WM suites: 30 passed, 30 total (652 passed, 0 failed).
+    - Common suites: 10 passed, 10 total (132 passed, 0 failed).
+    - User Management service: 25 passed, 0 failed.
+    - S4HttpClient: 38 passed, 0 failed.
+    - Integration Diagnostics: 11 passed, 0 failed.
+    - MibLabelAdapter: 23 passed, 0 failed.
+    - QuarantineLabelAdapter: 55 passed, 0 failed.
+    - Goods Receipt Attempts: 42 passed, 0 failed.
+- ASSUMPTIONS: None. All public interfaces, prototype contracts, and module exports preserved.
+- NEXT: Continue decomposition of remaining oversized JS application files on roadmap (`app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js` [436 lines], `app/fiori-app/webapp/service/BarcodeScanService.js` [416 lines], `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js` [411 lines]).
+- FINAL STATUS: PASS — S/4 Clients, Admin Service, WM Adapters & Attempt Store modularization fully verified across all unit suites and linters; zero regressions.

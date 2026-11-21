@@ -11,14 +11,26 @@
  */
 
 const cds = require('@sap/cds');
-const LOG = require('../../common/logger')('goods-receipt-attempts');
-
 const { INSERT, SELECT, UPDATE } = cds.ql;
 
-const ATTEMPT_ENTITY = 'saps4hana.wm.GoodsReceiptPostingAttempt';
-const RECEIPT_MOVEMENT = '101';
-const OPEN_STATUSES = ['sending', 'unconfirmed'];
-const FINAL_STATUSES = ['posted', 'rejected', 'not_posted'];
+const {
+  ATTEMPT_ENTITY,
+  RECEIPT_MOVEMENT,
+  OPEN_STATUSES,
+  FINAL_STATUSES,
+  recheckIntervalMs,
+  recheckAgeMs,
+  notPostedAgeMs,
+  unconfirmedMaxAgeMs,
+  distributedLeaseDurationMs,
+} = require('./GoodsReceiptAttemptConfig');
+
+const {
+  claimAttemptForRecheck,
+  releaseAttemptLease,
+  recheckReceipts,
+  reconfirmUnconfirmed,
+} = require('./GoodsReceiptRecheckService');
 
 class GoodsReceiptAttemptStore {
   /**
@@ -80,7 +92,7 @@ class GoodsReceiptAttemptStore {
       DeliveryNumber: data.DeliveryNumber || '',
       LastError: data.LastError || '',
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
     if (!row.ReferenceDocument) {
       throw new Error('ReferenceDocument is required to record a posting attempt');
@@ -106,10 +118,6 @@ class GoodsReceiptAttemptStore {
 
   /**
    * Atomically claims a posting reference with generation re-claim support.
-   *
-   * @param {Object} data - carries ReferenceDocument and RequestHash
-   * @param {{reclaimableStatuses: string[], isReclaimable?: function(Object): boolean}} [reclaim]
-   * @returns {Promise<{ created: boolean, row: Object }>}
    */
   async createOrGet(data, reclaim = null) {
     this._assertDb();
@@ -143,7 +151,7 @@ class GoodsReceiptAttemptStore {
         );
         if (rival) {
           await this.setStatus(newRef, 'rejected', {
-            LastError: `Stepped back for open attempt ${rival.ReferenceDocument}; not sent to SAP.`
+            LastError: `Stepped back for open attempt ${rival.ReferenceDocument}; not sent to SAP.`,
           });
           return { created: false, row: rival };
         }
@@ -179,7 +187,7 @@ class GoodsReceiptAttemptStore {
     const ref = String(referenceDocument || '').trim();
     const updateData = {
       Status: status,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     if (FINAL_STATUSES.includes(status)) {
@@ -199,210 +207,40 @@ class GoodsReceiptAttemptStore {
     return this.getByReference(ref);
   }
 
-  /**
-   * Distributed worker leasing: acquires an atomic CAS lease for background recheck.
-   *
-   * @param {string} referenceDocument
-   * @param {string} [workerId]
-   * @param {number} [leaseMs=60000]
-   * @param {number} [now=Date.now()]
-   * @returns {Promise<boolean>}
-   */
-  async claimAttemptForRecheck(referenceDocument, workerId = (process.env.CF_INSTANCE_INDEX || '0'), leaseMs = 60000, now = Date.now()) {
-    this._assertDb();
-    const ref = String(referenceDocument).trim();
-    const expiresAtIso = new Date(now + leaseMs).toISOString();
-    const leaseTag = `lease:${workerId}:${expiresAtIso}`;
-
-    const current = await this.getByReference(ref);
-    if (!current || !OPEN_STATUSES.includes(current.Status)) {
-      return false;
-    }
-    if (current.LastError && current.LastError.startsWith('lease:')) {
-      const match = current.LastError.match(/^lease:([^:]+):(.+)$/);
-      if (match) {
-        const [, owner, expiresIso] = match;
-        const expiresAtMs = new Date(expiresIso).getTime();
-        if (owner !== String(workerId) && Number.isFinite(expiresAtMs) && expiresAtMs > now) {
-          return false;
-        }
-      }
-    }
-
-    const currentLastError = current.LastError ?? '';
-    let query;
-    if (currentLastError === '') {
-      query = UPDATE(ATTEMPT_ENTITY)
-        .set({ LastError: leaseTag, updatedAt: new Date(now).toISOString() })
-        .where({ ReferenceDocument: ref, Status: current.Status })
-        .and(`(LastError is null or LastError = '')`);
-    } else {
-      query = UPDATE(ATTEMPT_ENTITY)
-        .set({ LastError: leaseTag, updatedAt: new Date(now).toISOString() })
-        .where({ ReferenceDocument: ref, Status: current.Status, LastError: currentLastError });
-    }
-
-    const updated = await this._run(query);
-    return Boolean(updated && (typeof updated === 'number' ? updated > 0 : true));
+  async claimAttemptForRecheck(referenceDocument, workerId, leaseMs, now) {
+    return claimAttemptForRecheck(this, referenceDocument, workerId, leaseMs, now);
   }
 
   async releaseAttemptLease(referenceDocument, workerId) {
-    this._assertDb();
-    const ref = String(referenceDocument).trim();
-    const expectedOwner = String(workerId ?? process.env.CF_INSTANCE_INDEX ?? '0');
-    const current = await this.getByReference(ref);
-    if (current && current.LastError && current.LastError.startsWith(`lease:${expectedOwner}:`)) {
-      await this._run(
-        UPDATE(ATTEMPT_ENTITY)
-          .set({ LastError: '', updatedAt: new Date().toISOString() })
-          .where({ ReferenceDocument: ref, LastError: current.LastError })
-      );
-    }
+    return releaseAttemptLease(this, referenceDocument, workerId);
   }
 
-  /**
-   * Background re-check for unresolved Goods Receipt attempts (Movement 101).
-   * Protected by distributed worker leases so multiple instances cannot redundantly query SAP.
-   *
-   * @param {Object} adapter - GoodsReceiptAdapter (findReceiptForAttempt)
-   * @param {number} [now]
-   * @param {Object} [options]
-   * @returns {Promise<{ Checked: number, Posted: number, NotPosted: number, StillOpen: number, Errors: number, SkippedLocked: number }>}
-   */
   async recheckReceipts(adapter, now = Date.now(), options = {}) {
-    this._assertDb();
-    const summary = { Checked: 0, Posted: 0, NotPosted: 0, StillOpen: 0, Errors: 0, SkippedLocked: 0 };
-    if (!adapter || typeof adapter.findReceiptForAttempt !== 'function') return summary;
-
-    const workerId = String(options.workerId ?? process.env.CF_INSTANCE_INDEX ?? '0');
-    const leaseMs = options.leaseMs || 60000;
-    const open = await this._run(
-      SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES }, MovementType: RECEIPT_MOVEMENT })
-    );
-
-    const ageOf = (a) => now - new Date(a.createdAt || now).getTime();
-
-    for (const attempt of (open || []).filter((a) => ageOf(a) >= GoodsReceiptAttemptStore.recheckAgeMs())) {
-      summary.Checked++;
-      const ref = attempt.ReferenceDocument;
-
-      const claimed = await this.claimAttemptForRecheck(ref, workerId, leaseMs, now);
-      if (!claimed) {
-        summary.SkippedLocked = (summary.SkippedLocked || 0) + 1;
-        summary.StillOpen++;
-        continue;
-      }
-
-      let doc;
-      try {
-        doc = await adapter.findReceiptForAttempt(attempt);
-      } catch (err) {
-        LOG.warn(`Re-check of receipt attempt ${ref} failed, status ${attempt.Status} kept: ${err.message}`);
-        await this.releaseAttemptLease(ref, workerId);
-        summary.Errors++;
-        continue;
-      }
-
-      if (doc && doc.MaterialDocument) {
-        await this.setStatus(ref, 'posted', {
-          MaterialDocument: doc.MaterialDocument,
-          MaterialDocYear: doc.MaterialDocumentYear || '',
-          LastError: ''
-        });
-        summary.Posted++;
-      } else if (ageOf(attempt) >= GoodsReceiptAttemptStore.notPostedAgeMs()) {
-        const finding = `Recheck: no goods receipt for delivery ${attempt.ReservationNo} item ${attempt.ReservationItem} in S/4HANA; marked not_posted`;
-        await this.setStatus(ref, 'not_posted', { LastError: finding });
-        summary.NotPosted++;
-      } else {
-        await this.releaseAttemptLease(ref, workerId);
-        summary.StillOpen++;
-      }
-    }
-
-    return summary;
+    return recheckReceipts(this, adapter, now, options);
   }
 
-  /**
-   * Promotes stale unconfirmed attempts to needs-attention or posted via read-back.
-   */
-  async reconfirmUnconfirmed(adapter, now = Date.now(), _options = {}) {
-    this._assertDb();
-    const summary = { Checked: 0, Confirmed: 0, StillUnconfirmed: 0, Errors: 0, MarkedNeedsAttention: 0 };
-    const unconfirmedAttempts = await this._run(
-      SELECT.from(ATTEMPT_ENTITY).where({ Status: 'unconfirmed' })
-    );
-
-    if (!unconfirmedAttempts || unconfirmedAttempts.length === 0) {
-      return summary;
-    }
-
-    const readBack = (adapter && typeof adapter.readBackDocument === 'function')
-      ? adapter.readBackDocument.bind(adapter)
-      : null;
-
-    if (!readBack) {
-      LOG.warn('No readBackDocument function available on adapter');
-      return summary;
-    }
-
-    const maxAge = GoodsReceiptAttemptStore.unconfirmedMaxAgeMs();
-
-    for (const attempt of unconfirmedAttempts) {
-      summary.Checked++;
-      const age = now - new Date(attempt.createdAt || now).getTime();
-
-      try {
-        const verified = await readBack(attempt.MaterialDocument, attempt.MaterialDocYear);
-        if (verified && verified.Confirmed) {
-          const confYear = verified.MaterialDocYear || attempt.MaterialDocYear || '';
-          await this.setStatus(attempt.ReferenceDocument, 'posted', {
-            MaterialDocument: verified.MaterialDocument || attempt.MaterialDocument,
-            MaterialDocYear: confYear,
-            LastError: ''
-          });
-          summary.Confirmed++;
-        } else if (age >= maxAge) {
-          const finding = `Document unconfirmed after maximum age (${Math.round(age / 60000)} min); marked needs-attention`;
-          await this.setStatus(attempt.ReferenceDocument, 'needs-attention', {
-            LastError: finding
-          });
-          summary.MarkedNeedsAttention = (summary.MarkedNeedsAttention || 0) + 1;
-        } else {
-          summary.StillUnconfirmed++;
-        }
-      } catch (err) {
-        LOG.warn(`Re-confirm job failed for attempt ${attempt.ReferenceDocument} (${attempt.MaterialDocument}): ${err.message}`);
-        summary.Errors++;
-      }
-    }
-
-    return summary;
+  async reconfirmUnconfirmed(adapter, now = Date.now(), options = {}) {
+    return reconfirmUnconfirmed(this, adapter, now, options);
   }
 
   static recheckIntervalMs() {
-    const v = parseInt(process.env.RECEIPT_RECHECK_INTERVAL_MS || process.env.ATTEMPT_RECHECK_INTERVAL_MS || '60000', 10);
-    return isNaN(v) ? 60000 : v;
+    return recheckIntervalMs();
   }
 
   static recheckAgeMs() {
-    const v = parseInt(process.env.RECEIPT_RECHECK_AGE_MS || '180000', 10);
-    return isNaN(v) ? 180000 : v;
+    return recheckAgeMs();
   }
 
   static notPostedAgeMs() {
-    const v = parseInt(process.env.RECEIPT_NOT_POSTED_AGE_MS || '900000', 10);
-    return isNaN(v) ? 900000 : v;
+    return notPostedAgeMs();
   }
 
   static unconfirmedMaxAgeMs() {
-    const v = parseInt(process.env.RECEIPT_UNCONFIRMED_MAX_AGE_MS || '1800000', 10);
-    return isNaN(v) ? 1800000 : v;
+    return unconfirmedMaxAgeMs();
   }
 
   static distributedLeaseDurationMs() {
-    const v = parseInt(process.env.RECEIPT_RECHECK_LEASE_MS || '30000', 10);
-    return isNaN(v) ? 30000 : v;
+    return distributedLeaseDurationMs();
   }
 }
 

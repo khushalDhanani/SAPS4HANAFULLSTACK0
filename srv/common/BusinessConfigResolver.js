@@ -17,15 +17,11 @@
  *       2. Cached valid entry (per plant/warehouse key)
  *       3. SAP customizing tables (T001L, T320 via RFC or customizer provider)
  *       4. Throw BusinessConfigError with actionable diagnostic message
- *
- * Fields resolved:
- *   salesOrg / salesOrganization, distChannel / distributionChannel, division, currency,
- *   orderType, inquiryType, conditionType,
- *   shippingPoints (string[]), materialTypes / salesMaterialTypes (string[]),
- *   differenceStorageType
  */
 
 const { sapKey } = require('../integration/s4hana/sapKey');
+const { querySapCustomizing, applySapCustomizingData } = require('./BusinessConfigCustomizer');
+const { extractTrustedOverrides } = require('./BusinessConfigOverrides');
 
 class BusinessConfigError extends Error {
   constructor(message) {
@@ -45,10 +41,6 @@ function parseCsv(csv) {
 
 /**
  * Flow-specific required fields mappings.
- * Each flow specifies only the business config fields it actually needs:
- * - delivery-no-ref: salesOrganization, distributionChannel, division
- * - scan-to:        warehouseNumber, plant
- * - sd:             salesOrganization, distributionChannel, division, currency, orderType, inquiryType, conditionType, shippingPoints, salesMaterialTypes
  */
 const FLOW_REQUIRED_FIELDS = Object.freeze({
   'delivery-no-ref': Object.freeze(['salesOrganization', 'distributionChannel', 'division']),
@@ -143,98 +135,7 @@ class BusinessConfigResolver {
    * @private
    */
   async _querySapCustomizing(context) {
-    const customizer = context.sapCustomizing || this._sapCustomizing;
-    if (typeof customizer === 'function') {
-      try {
-        const res = await customizer(context);
-        if (res && typeof res === 'object') return res;
-      } catch (_err) {
-        // Continue to next resolution step
-      }
-    } else if (customizer && typeof customizer === 'object') {
-      return customizer;
-    }
-
-    const rfc = context.rfc || this._rfc;
-    if (rfc && typeof rfc.readTable === 'function') {
-      const result = {};
-      const plant = context.plant;
-      const sLoc = context.storageLocation;
-      const wh = context.warehouse;
-      // Read failures are not silent: they are reported in the final error when a field stays unresolved.
-      const sapReadErrors = [];
-      const readFailed = (table, e) => sapReadErrors.push(`${table}: ${e && e.message ? e.message : e}`);
-
-      // 1. T001L: Storage Location in Plant (gives VKORG, VTWEG, SPART)
-      if (plant && sLoc) {
-        try {
-          const t001l = await rfc.readTable('T001L', ['WERKS', 'LGORT', 'VKORG', 'VTWEG', 'SPART'], [
-            `WERKS = '${plant}'`,
-            `AND LGORT = '${sLoc}'`
-          ]);
-          if (t001l && t001l[0]) {
-            if (t001l[0].VKORG && t001l[0].VKORG.trim()) result.salesOrganization = t001l[0].VKORG.trim();
-            if (t001l[0].VTWEG && t001l[0].VTWEG.trim()) result.distributionChannel = t001l[0].VTWEG.trim();
-            if (t001l[0].SPART && t001l[0].SPART.trim()) result.division = t001l[0].SPART.trim();
-          }
-        } catch (e) { readFailed('T001L', e); }
-      }
-
-      // 1b. T001K (valuation area = plant) -> company code, T001 -> company code currency
-      if (plant) {
-        try {
-          const t001k = await rfc.readTable('T001K', ['BWKEY', 'BUKRS'], [`BWKEY = '${plant}'`], 1);
-          const bukrs = String(t001k?.[0]?.BUKRS || '').trim();
-          if (bukrs) {
-            result.companyCode = bukrs;
-            const t001 = await rfc.readTable('T001', ['BUKRS', 'WAERS'], [`BUKRS = '${bukrs}'`], 1);
-            const waers = String(t001?.[0]?.WAERS || '').trim();
-            if (waers) result.currency = waers;
-          }
-        } catch (e) { readFailed('T001K/T001', e); }
-      }
-
-      // 2. T320: Warehouse assignment
-      if (plant && sLoc && !wh) {
-        try {
-          const t320 = await rfc.readTable('T320', ['LGNUM'], [
-            `WERKS = '${plant}'`,
-            `AND LGORT = '${sLoc}'`
-          ]);
-          if (t320 && t320[0] && t320[0].LGNUM) {
-            result.warehouseNumber = t320[0].LGNUM.trim();
-            result.warehouse = result.warehouseNumber;
-          }
-        } catch (e) { readFailed('T320', e); }
-      } else if (wh && !plant) {
-        try {
-          const t320 = await rfc.readTable('T320', ['WERKS'], [`LGNUM = '${wh}'`]);
-          if (t320 && t320[0] && t320[0].WERKS) {
-            result.plant = t320[0].WERKS.trim();
-          }
-        } catch (e) { readFailed('T320', e); }
-      }
-
-      // 3. TVSTZ: Plant to Shipping Point assignment
-      if (plant && result.shippingPoints === undefined) {
-        try {
-          const tvstz = await rfc.readTable('TVSTZ', ['WERKS', 'VSTEL'], [
-            `WERKS = '${plant}'`
-          ]);
-          if (Array.isArray(tvstz) && tvstz.length > 0) {
-            const points = Array.from(new Set(tvstz.map(r => r.VSTEL && r.VSTEL.trim()).filter(Boolean)));
-            if (points.length > 0) {
-              result.shippingPoints = points;
-            }
-          }
-        } catch (e) { readFailed('TVSTZ', e); }
-      }
-
-      if (sapReadErrors.length) result.sapReadErrors = sapReadErrors;
-      return Object.keys(result).length > 0 ? result : null;
-    }
-
-    return null;
+    return querySapCustomizing(context, this._sapCustomizing, this._rfc);
   }
 
   /**
@@ -254,7 +155,6 @@ class BusinessConfigResolver {
    * @throws {BusinessConfigError} if a required field cannot be resolved
    */
   async resolve(context = {}) {
-    // Keys are validated before they are used in any SAP WHERE text or cache key; an invalid key fails closed.
     const keyOf = (value, field, label) => {
       const v = String(value || '').trim();
       if (!v) return '';
@@ -281,61 +181,7 @@ class BusinessConfigResolver {
     };
 
     // ─── Step 1: Trusted Server-Side Overrides (Tamper Protection) ───────────
-    // Overrides are accepted ONLY from trusted server-side context.
-    // Untrusted request bodies with salesOrg/currency/etc. are strictly ignored.
-    const isTrusted = context.isTrusted === true || context.trustedContext === true;
-    let overrides = {};
-
-    if (context.trustedOverrides && typeof context.trustedOverrides === 'object') {
-      overrides = { ...context.trustedOverrides };
-    } else if (isTrusted && context.overrides && typeof context.overrides === 'object') {
-      overrides = { ...context.overrides };
-    } else if (isTrusted) {
-      const DIRECT_KEYS = [
-        'salesOrganization', 'salesOrg',
-        'distributionChannel', 'distChannel',
-        'division', 'currency',
-        'inquiryType', 'orderType', 'conditionType',
-        'shippingPoints',
-        'salesMaterialTypes', 'materialTypes',
-        'differenceStorageType',
-        'pickableStorageTypes',
-        'holdStorageTypes',
-        'interimStorageTypes'
-      ];
-      for (const k of DIRECT_KEYS) {
-        if (context[k] !== undefined) {
-          overrides[k] = context[k];
-        }
-      }
-    }
-
-    // Normalize trusted override keys
-    if (overrides.salesOrg !== undefined && overrides.salesOrganization === undefined) {
-      overrides.salesOrganization = overrides.salesOrg;
-    }
-    if (overrides.distChannel !== undefined && overrides.distributionChannel === undefined) {
-      overrides.distributionChannel = overrides.distChannel;
-    }
-    if (overrides.materialTypes !== undefined && overrides.salesMaterialTypes === undefined) {
-      overrides.salesMaterialTypes = overrides.materialTypes;
-    }
-
-    for (const [k, v] of Object.entries(overrides)) {
-      if (v !== undefined && v !== null && v !== '') {
-        if (k === 'shippingPoints' && typeof v === 'string') {
-          result[k] = parseCsv(v);
-        } else if (k === 'salesMaterialTypes' && typeof v === 'string') {
-          result[k] = parseCsv(v);
-        } else if ((k === 'pickableStorageTypes' || k === 'holdStorageTypes' || k === 'interimStorageTypes') && typeof v === 'string') {
-          result[k] = parseCsv(v);
-        } else if ((k === 'pickableStorageTypes' || k === 'holdStorageTypes' || k === 'interimStorageTypes') && Array.isArray(v)) {
-          result[k] = v.map(s => String(s).trim().toUpperCase()).filter(Boolean);
-        } else {
-          result[k] = v;
-        }
-      }
-    }
+    const overrides = extractTrustedOverrides(context, result, parseCsv);
 
     let missing = requiredFields.filter(f => result[f] === undefined);
 
@@ -371,33 +217,7 @@ class BusinessConfigResolver {
 
       if (sapData) {
         if (Array.isArray(sapData.sapReadErrors)) sapReadErrors = sapData.sapReadErrors;
-        if (sapData.companyCode && result.companyCode === undefined) result.companyCode = sapData.companyCode;
-        if (sapData.salesOrganization && result.salesOrganization === undefined) result.salesOrganization = sapData.salesOrganization;
-        if (sapData.salesOrg && result.salesOrganization === undefined) result.salesOrganization = sapData.salesOrg;
-        if (sapData.distributionChannel && result.distributionChannel === undefined) result.distributionChannel = sapData.distributionChannel;
-        if (sapData.distChannel && result.distributionChannel === undefined) result.distributionChannel = sapData.distChannel;
-        if (sapData.division && result.division === undefined) result.division = sapData.division;
-        if (sapData.currency && result.currency === undefined) result.currency = sapData.currency;
-        if (sapData.orderType && result.orderType === undefined) result.orderType = sapData.orderType;
-        if (sapData.inquiryType && result.inquiryType === undefined) result.inquiryType = sapData.inquiryType;
-        if (sapData.conditionType && result.conditionType === undefined) result.conditionType = sapData.conditionType;
-        if (sapData.shippingPoints && result.shippingPoints === undefined) {
-          result.shippingPoints = typeof sapData.shippingPoints === 'string' ? parseCsv(sapData.shippingPoints) : sapData.shippingPoints;
-        }
-        if (sapData.salesMaterialTypes && result.salesMaterialTypes === undefined) {
-          result.salesMaterialTypes = typeof sapData.salesMaterialTypes === 'string' ? parseCsv(sapData.salesMaterialTypes) : sapData.salesMaterialTypes;
-        }
-        if (sapData.materialTypes && result.salesMaterialTypes === undefined) {
-          result.salesMaterialTypes = typeof sapData.materialTypes === 'string' ? parseCsv(sapData.materialTypes) : sapData.materialTypes;
-        }
-        if (sapData.differenceStorageType && result.differenceStorageType === undefined) {
-          result.differenceStorageType = sapData.differenceStorageType;
-        }
-        if (sapData.plant && !result.plant) result.plant = sapData.plant;
-        if (sapData.warehouse && !result.warehouse) {
-          result.warehouse = sapData.warehouse;
-          result.warehouseNumber = sapData.warehouse;
-        }
+        applySapCustomizingData(sapData, result, parseCsv);
       }
 
       missing = requiredFields.filter(f => result[f] === undefined);
@@ -438,7 +258,6 @@ class BusinessConfigResolver {
 
     return result;
   }
-
 }
 
 // Singleton export with class constructors attached
