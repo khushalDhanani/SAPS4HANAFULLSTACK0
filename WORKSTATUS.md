@@ -398,6 +398,27 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 12:11 IST — Review of authentication and destination fallback; deployed-environment tests added — PARTIAL
+
+- REQUEST: Pasted review item "Authentication and destination fallback" (`S4DestinationResolver.js`, `AuthService.js`, `ODataClient.js`): verify that a failed BTP destination lookup cannot silently downgrade authentication; add explicit tests.
+- INSPECT (no production code changed):
+  1. Destination fallback — CONFIRMED as described: `resolveDestination` catches every lookup error without logging and then tries `S4_DESTINATION_URL` Basic credentials, then `cds.requires` credentials of `MM_PUR_PO_MAINT_V2_SRV` / `C_PURCHASEORDER_FS_SRV`. In production this cannot downgrade today, because (a) `assertS4ConnectionConfig` (`server.js:19`) refuses `S4_DESTINATION_URL`, `S4_USERNAME`, `S4_PASSWORD`, `S4_CLIENT` at startup when `NODE_ENV=production`, and (b) the `[production]` profile of every remote service in `package.json` carries `destination` + `path`, no URL. A failed lookup then ends in `S4_DESTINATION_NOT_CONFIGURED` (502). The protection lives in configuration and the startup guard, not in the resolver.
+  2. Browser storage errors — swallowed by design and fail closed: an unreadable or expired stored session is cleared and treated as signed out. Already covered by `test/unit/auth/frontendAuthStorage.test.js` ("does not crash if localStorage or sessionStorage throws", "returns empty object … unreadable").
+  3. CSRF — CONFIRMED as described: `fetchCsrfToken` resolves `null` on failure and the write is sent without a token. The enforcement point is the approuter (`app/router/xs-app.json`: `csrfProtection: true` on `/odata/v4/` and `/ai/chat/stream`, covered by `test/unit/guard/routerConfig.test.js`). The client retries a CSRF 403 exactly once and then fails.
+- TEST DECISION: TEST ADDED.
+  - `test/unit/s4DestinationNoDowngrade.test.js` (13 tests): startup guard refuses each S/4 credential variable in production; production profile has destination references only; lookup throws / returns nothing / returns no URL → nothing resolved, 502 `S4_DESTINATION_NOT_CONFIGURED`, no HTTP request sent; caller JWT is forwarded to the lookup; outside production the fallback to local Basic credentials is recorded as known behaviour.
+  - `test/unit/frontend/odataClientCsrf.test.js` (5 tests): write carries the issued token; reads fetch no token; no token + server requires one → exactly two write attempts, then rejection; rejected token is refreshed once; a non-CSRF 403 is not retried.
+- TESTED: `npx jest` → 214 suites, 3,527 passed, 13 skipped (live-SAP suites), 0 failed. `npx eslint .` → exit 0, 0 warnings. `npm --prefix app/fiori-app run lint` → 0 findings. `git diff --check` → clean.
+- OPEN RISKS (not changed; each would change security or runtime behaviour and needs a decision):
+  - The no-downgrade guarantee depends on `NODE_ENV=production` in the deployed app. `mta.yaml` does not set it. **Not verified** that the Cloud Foundry buildpack sets it for this app. With any other value the guard takes the development branch and the environment fallback is permitted.
+  - The resolver swallows the lookup error, so a destination-service outage is reported as "not configured" with no log line.
+  - `/sap/bc/lrep/` is routed to `srv-api` with `csrfProtection: false` and has no test.
+  - The CAP service itself does not enforce CSRF; a deployment that bypasses the approuter relies on bearer-token authentication only.
+- NOT VERIFIED: behaviour against a real BTP Destination service or approuter; no deployment and no SAP call was made.
+- ASSUMPTIONS: none. The test's profile resolution (base entry overlaid with `[production]`) was checked for one service with `NODE_ENV=production npx cds env get requires.MM_PUR_PO_MAINT_V2_SRV.credentials`, which returns `destination` and `path` only.
+- STATUS: PARTIAL — review done and tests added; hardening not implemented pending a decision. Uncommitted at the time of writing.
+- NEXT: Decide on hardening the resolver (refuse local fallback when `NODE_ENV=production` or when a configured lookup throws, and log the cause).
+
 ### 2026-11-21 12:06 IST — Purchase Orders list fixes, test reporting, count reconciliation — PARTIAL
 
 - REQUEST: Pasted review list "Fix these first" (5 findings). Each was validated against the code before changing anything.
