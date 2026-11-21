@@ -190,21 +190,6 @@ describe('Integration: a SAP write that reading it back does not confirm (produc
             });
         });
 
-        it('goods receipt with an unknown outcome: shows the warning not to post again', async () => {
-            const posts = stubSap({ get: () => ({ status: 200, headers: {}, data: { d: {} } }), post: () => { throw Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }); } });
-
-            const res = await direct({
-                path: '/odata/v4/goods-receipt',
-                action: 'postGoodsReceipt',
-                body: { DeliveryDocument: `18${Date.now() % 100000000}`, DeliveryDocumentItem: '10', Material: '1000000045', Plant: '1120', StorageLocation: 'CS01', Quantity: 10, Unit: 'KG' }
-            });
-
-            expect(res.status).toBe(504);
-            expect(res.data.error.message).toContain('Please do not post again.');
-            expect(posts).toHaveLength(1);
-        });
-
-
         it('handling unit whose read-back fails after the commit: shows the number and the warning', async () => {
             jest.spyOn(RfcClient.prototype, 'session').mockImplementation((fn) => fn(async (fm) => (fm === 'BAPI_HU_CREATE' ? { HUKEY: '00000000002000020166', RETURN: [] } : {})));
             jest.spyOn(RfcClient.prototype, 'readTable').mockRejectedValue(new Error('RFC down'));

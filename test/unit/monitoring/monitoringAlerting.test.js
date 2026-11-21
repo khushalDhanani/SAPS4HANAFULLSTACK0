@@ -6,15 +6,13 @@
  * Automated Monitoring & Alerting Assurance Suite.
  * Validates:
  * 1. Correlation ID propagation & structured logging in plain & JSON formats
- * 2. Supervisor alerting state transition ('needs-attention') for stale unconfirmed transactions
- * 3. Gateway error message content
+ * 2. Gateway error message content
  */
 
 const cds = require('@sap/cds');
 cds.test(__dirname + '/../../../');
 
 const getLogger = require('../../../srv/common/logger');
-const { GoodsReceiptAttemptStore, ATTEMPT_ENTITY } = require('../../../srv/wm/goods-receipt/GoodsReceiptAttemptStore');
 const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
 
 describe('Production Assurance: Monitoring & Alerting Verification', () => {
@@ -24,9 +22,6 @@ describe('Production Assurance: Monitoring & Alerting Verification', () => {
   beforeEach(async () => {
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    if (cds.db) {
-      await cds.db.run(cds.ql.DELETE.from(ATTEMPT_ENTITY));
-    }
   });
 
   afterEach(() => {
@@ -57,85 +52,7 @@ describe('Production Assurance: Monitoring & Alerting Verification', () => {
     });
   });
 
-  describe('2. Transaction Alerting: needs-attention State for Stale Attempts', () => {
-    it('promotes stale unconfirmed attempts (> 30 min) to needs-attention status to trigger supervisor alerts', async () => {
-      const store = new GoodsReceiptAttemptStore();
-      const staleTime = new Date(Date.now() - 35 * 60 * 1000).toISOString(); // 35 minutes ago
-
-      const ref = 'REF-ALERT-001';
-      await store.create({
-        ReferenceDocument: ref,
-        MovementType: '101',
-        ReservationNo: '0000533316',
-        ReservationItem: '0001'
-      });
-      await cds.db.run(
-        cds.ql.UPDATE(ATTEMPT_ENTITY)
-          .set({
-            MaterialDocument: '4900050304',
-            MaterialDocYear: '2026',
-            Status: 'unconfirmed',
-            createdAt: staleTime,
-            updatedAt: staleTime
-          })
-          .where({ ReferenceDocument: ref })
-      );
-
-      // Mock adapter finding unconfirmed state
-      const mockAdapter = {
-        readBackDocument: jest.fn().mockResolvedValue({ Confirmed: false })
-      };
-
-      const summary = await store.reconfirmUnconfirmed(mockAdapter);
-      expect(summary.Checked).toBe(1);
-      expect(summary.MarkedNeedsAttention).toBe(1);
-
-      const updated = await store.getByReference(ref);
-      expect(updated.Status).toBe('needs-attention');
-    });
-
-    it('promotes unconfirmed attempts to posted when read-back proves SAP persistence', async () => {
-      const store = new GoodsReceiptAttemptStore();
-      const recentTime = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-
-      const ref = 'REF-CONFIRM-002';
-      await store.create({
-        ReferenceDocument: ref,
-        MovementType: '101',
-        ReservationNo: '0000533317',
-        ReservationItem: '0001'
-      });
-      await cds.db.run(
-        cds.ql.UPDATE(ATTEMPT_ENTITY)
-          .set({
-            MaterialDocument: '4900050305',
-            MaterialDocYear: '2026',
-            Status: 'unconfirmed',
-            createdAt: recentTime,
-            updatedAt: recentTime
-          })
-          .where({ ReferenceDocument: ref })
-      );
-
-      const mockAdapter = {
-        readBackDocument: jest.fn().mockResolvedValue({
-          Confirmed: true,
-          MaterialDocument: '4900050305',
-          MaterialDocYear: '2026'
-        })
-      };
-
-      const summary = await store.reconfirmUnconfirmed(mockAdapter);
-      expect(summary.Checked).toBe(1);
-      expect(summary.Confirmed).toBe(1);
-
-      const updated = await store.getByReference(ref);
-      expect(updated.Status).toBe('posted');
-      expect(updated.MaterialDocument).toBe('4900050305');
-    });
-  });
-
-  describe('3. Gateway Error Message', () => {
+  describe('2. Gateway Error Message', () => {
     // Body keeps the earlier fixture; that SAP answers in exactly this shape is not proven here.
     it('builds the error message from method, path and the SAP text, without the host from the raw error', () => {
       const rawError = Object.assign(new Error('Request to https://s4.internal.example:44300 failed'), {

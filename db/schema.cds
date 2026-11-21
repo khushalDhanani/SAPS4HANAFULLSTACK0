@@ -18,9 +18,6 @@
 
 namespace saps4hana.fullstack;
 
-// Posting attempts (double-post guard), until the SAP table ZWM_POST_ATTEMPT replaces it
-using from './wm/goods-receipt-attempt';
-
 // Lock notifications (dedupe and last seen lock state), until an SAP table replaces them
 using from './admin/user-lock';
 

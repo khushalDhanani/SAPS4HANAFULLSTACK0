@@ -48,11 +48,11 @@ describe('Phase 3: Observability, Correlation Tracking & Security Gating', () =>
           formattedMsg = args.join(' ');
         });
 
-        testLog.info('Processing goods receipt for delivery 180000003');
+        testLog.info('Processing handling unit for delivery 180000003');
 
         expect(formattedMsg).toContain('[test-wm]');
         expect(formattedMsg).toContain('[req-corr-uuid-12345]');
-        expect(formattedMsg).toContain('Processing goods receipt for delivery 180000003');
+        expect(formattedMsg).toContain('Processing handling unit for delivery 180000003');
       } finally {
         cds.context = origContext;
       }

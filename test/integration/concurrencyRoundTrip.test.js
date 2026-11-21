@@ -77,38 +77,4 @@ describe('Integration: If-Match round trip to the S/4 HTTP boundary', () => {
             expect(res.data.error.message).toBe('Billing document was changed by another user');
         });
     });
-
-    describe('Goods receipt', () => {
-        const receipt = (delivery) => ({
-            DeliveryDocument: delivery,
-            DeliveryDocumentItem: '10',
-            Material: '1000000045',
-            Plant: '1120',
-            StorageLocation: 'CS01',
-            Quantity: 10,
-            Unit: 'KG'
-        });
-
-        it('postGoodsReceipt sends If-Match to S/4 and answers 409 when S/4 returns 412', async () => {
-            const posts = stubSap({ post: () => { throw etagFailure('Inbound Delivery 18000001 condition check failed'); } });
-
-            const res = await send('/odata/v4/goods-receipt/postGoodsReceipt', receipt('18000001'), 'W/"GR333"');
-
-            expect(posts).toHaveLength(1);
-            expect(posts[0].url).toBe('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers');
-            expect(posts[0].headers['If-Match']).toBe('W/"GR333"');
-            expect(res.status).toBe(409);
-            expect(res.data.error.message).toContain('Inbound Delivery 18000001 condition check failed');
-        });
-
-        it('postGoodsReceipt sends If-Match to S/4 and returns the material document S/4 created', async () => {
-            const posts = stubSap({ post: () => ({ status: 201, headers: {}, data: { d: { MaterialDocument: '5000009999' } } }) });
-
-            const res = await send('/odata/v4/goods-receipt/postGoodsReceipt', receipt('18000002'), 'W/"GRMATCH"');
-
-            expect(posts[0].headers['If-Match']).toBe('W/"GRMATCH"');
-            expect(res.status).toBe(200);
-            expect(res.data.MaterialDocument).toBe('5000009999');
-        });
-    });
 });

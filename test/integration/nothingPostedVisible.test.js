@@ -2,21 +2,17 @@
 
 /**
  * Integration: refusals that say nothing was posted keep their text in production, where CAP replaces 5xx text with a
- * generic message unless the error opts out. Real CAP HTTP, roles and handlers; only SAP and the attempt log are doubled.
+ * generic message unless the error opts out. Real CAP HTTP, roles and handlers; only SAP is doubled.
  */
 
 const cds = require('@sap/cds');
 
 const { axios } = cds.test(__dirname + '/../../');
 const outbound = require('../../srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
-const goodsReceipt = require('../../srv/integration/s4hana/wm/GoodsReceiptAdapter');
-const GoodsReceiptAttemptStore = require('../../srv/wm/goods-receipt/GoodsReceiptAttemptStore');
 
 const LE = '/odata/v4/outbound-delivery';
 const call = (user, path, body) => axios.post(path, body, { auth: { username: user, password: '' }, validateStatus: () => true });
 const SHIPPING_POINTS_TEXT = 'The shipping points of plant 1120 could not be read from SAP, so nothing was read or posted. Try again.';
-const LOG_TEXT = 'The goods receipt posting-attempt log is unavailable; the goods receipt was NOT posted. Check the document list before retrying.';
-const RECEIPT = { DeliveryDocument: '180000003', DeliveryDocumentItem: '10', Material: 'TG11', Plant: '1120', StorageLocation: 'HS01', Quantity: 1, Unit: 'KG' };
 const plantText = (doc) => `The plant of delivery ${doc} could not be read from SAP; nothing was posted (NOT posted). Try again.`;
 
 describe('Integration: "nothing was posted" stays visible in production', () => {
@@ -63,29 +59,4 @@ describe('Integration: "nothing was posted" stays visible in production', () => 
         expect(res.status).toBe(503);
         expect(res.data.error.message).toBe(SHIPPING_POINTS_TEXT);
     });
-
-    describe.each([['postGoodsReceipt'], ['postGoodsReceiptWithStorageUnit']])('%s', (action) => {
-        const post = (extra = {}) => call('test-clerk-1120', `/odata/v4/goods-receipt/${action}`, { ...RECEIPT, StorageUnit: '180000003', ...extra });
-
-        it('shows why when the plant of the delivery cannot be read', async () => {
-            jest.spyOn(goodsReceipt, 'readDeliveryPlant').mockRejectedValue(new Error('RFC down'));
-
-            const res = await post();
-
-            expect(res.status).toBe(503);
-            expect(res.data.error.message).toBe(plantText('180000003'));
-        });
-
-        it('shows why when the posting-attempt log is unavailable', async () => {
-            jest.spyOn(goodsReceipt, 'readDeliveryPlant').mockResolvedValue('1120');
-            jest.spyOn(GoodsReceiptAttemptStore, 'createOrGet').mockRejectedValue(new Error('database down'));
-
-            const res = await post();
-
-            expect(res.status).toBe(503);
-            expect(res.data.error.message).toBe(LOG_TEXT);
-        });
-    });
-
-
 });

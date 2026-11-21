@@ -19,7 +19,7 @@ describe('E2E write guard', () => {
         ['an action POST', { method: 'POST', url: `${BASE}/odata/v4/purchase-order/createPurchaseOrder` }],
         ['a PATCH', { method: 'PATCH', url: `${BASE}/odata/v4/handling-unit/HandlingUnits('1')` }],
         ['a DELETE', { method: 'DELETE', url: `${BASE}/odata/v4/handling-unit/HandlingUnits('1')` }],
-        ['a $batch with a POST', { method: 'POST', url: `${BASE}/odata/v4/goods-receipt/$batch`, postData: batch('GET Items', 'POST postGoodsReceipt') }],
+        ['a $batch with a POST', { method: 'POST', url: `${BASE}/odata/v4/customer-invoice/$batch`, postData: batch('GET Items', 'POST releaseInvoiceToAccounting') }],
         ['a $batch with a PATCH', { method: 'POST', url: `${BASE}/odata/v4/sales-order/$batch`, postData: batch('PATCH SalesOrders(1)') }],
         ['a $batch with no readable lines', { method: 'POST', url: `${BASE}/odata/v4/sales-order/$batch`, postData: 'garbage' }],
         ['a $batch with no body', { method: 'POST', url: `${BASE}/odata/v4/sales-order/$batch` }],
