@@ -45,6 +45,8 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
     let originalSessionStorage;
     let PurchaseOrderModel;
     let AuthService;
+    let authServiceFactory;
+    let BaseObjectMock;
 
     const createStorageMock = () => {
         let store = {};
@@ -87,6 +89,8 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             ui: {
                 define: function (deps, factory) {
                     if (deps.includes("saps4hana/fiori/service/ODataClient")) {
+                        authServiceFactory = factory;
+                        BaseObjectMock = BaseObject;
                         AuthService = factory(
                             BaseObject,
                             MockJSONModel,
@@ -196,6 +200,24 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             expect(() => {
                 AuthService.syncModelHeaders(mockComponent);
             }).not.toThrow();
+        });
+
+        it('should warn instead of silently skipping when AuthModelSync cannot be resolved', () => {
+            const log = { warning: jest.fn() };
+            const defaultModel = { changeHttpHeaders: jest.fn() };
+            const mockComponent = { getModel: jest.fn(() => defaultModel), setModel: jest.fn() };
+            const serviceWithoutSync = authServiceFactory(
+                BaseObjectMock,
+                MockJSONModel,
+                log,
+                { post: jest.fn(), get: jest.fn().mockResolvedValue(null) }
+            );
+
+            serviceWithoutSync.init(mockComponent);
+            serviceWithoutSync.syncModelHeaders(mockComponent);
+
+            expect(defaultModel.changeHttpHeaders).not.toHaveBeenCalled();
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining("AuthModelSync could not be resolved"));
         });
     });
 

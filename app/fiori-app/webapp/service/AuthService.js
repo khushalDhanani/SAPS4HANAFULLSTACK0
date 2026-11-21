@@ -173,6 +173,8 @@ sap.ui.define([
             var oSync = _resolveHelper(AuthModelSync, "saps4hana/fiori/service/AuthModelSync");
             if (oSync) {
                 this._sLastSyncedAuthHeader = oSync.sync(oComp, this.getToken(), bForce, this._sLastSyncedAuthHeader, Log);
+            } else if (Log && typeof Log.warning === "function") {
+                Log.warning("AuthService: AuthModelSync could not be resolved; model authorization headers were not updated.");
             }
         },
 

@@ -386,17 +386,32 @@ All historical change logs and past milestone statuses are preserved verbatim in
 1. Phase 5 Complete (0 UI5 controllers exceed 300 lines). Proceed to Phase 6: Monolithic Automated Test Suites Modularization (60 test suites exceeding 300 lines, e.g. `salesOrderAdapter.test.js` [1,058], `headerValueHelpSelection.test.js` [1,033], `verifyShellScreens.e2e.js` [1,005]).
 2. Execute Phase 6: Monolithic Unit Test Suites Modularization (target oversized test suites exceeding 600-900 lines).
 3. Validate full-stack integrity across linters, CDS compilation, unit tests, and E2E suites.
-2. For Cloud Foundry RFC production deployment, configure the multi-buildpack pipeline (or container runtime) with the enterprise-hosted SAP NW RFC SDK 7.50 Linux x86-64 archive per `docs/deployment/rfc-production-readiness.md`, provision technical user authorizations per the matrix in Section 5, and bind BTP RFC destination `S4HANA_RFC`.
-3. User tests and verifies the updated Material Issued To Batch Sticker screen in the browser at `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/mib-label` (Direct form, Transfer Order date range filter, table multi-selection, bulk download, row barcode preview & scroll, row download, row print, in-viewport notifications).
-4. Review the Phase 2 implementation of SM21/SM20 log monitoring (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`, `sapLogsService.js`, `sap-logs-service.cds`, unit and live test suites, and `SAP_SYSLOG_DISCOVERY.md`).
-5. Provide the Basis handoff note (Section 10.2 of `SAP_SYSLOG_DISCOVERY.md`) to Basis to create the dedicated technical user `S4LOGS_SRV` with restricted authorizations (`S_RFC` for `RSLG`, `THFB`, `RSAU_LOG`, `RFC1` and `S_ADMI_FCD` `SYSL`, `AUDD`), then re-run `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npx jest test/unit/admin/sapLogsLive.test.js --runInBand` to confirm least-privilege authorizations.
-6. Review and commit the focused local changes when authorized, then request/push a hosted CI run for the resulting current head. Do not treat the prior ancestor run as validation of these changes.
-7. For a future SAP-connected validation, supply approved test data and explicit written authorization naming each live write and target. Verify resulting SAP documents by direct read-back; do not execute the SAP E2E suites without that authorization.
-8. Keep HANA/HDI until a verified SAP persistence contract and implementation prove atomic claims, durable status transitions, concurrency safety, restart recovery and read-back. The current migration remains blocked.
-9. Verify `/health` and `/health/ready` against a deployed CAP service with HANA available and unavailable; no deployment has been made for the smoke change.
-10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
+4. For Cloud Foundry RFC production deployment, configure the multi-buildpack pipeline (or container runtime) with the enterprise-hosted SAP NW RFC SDK 7.50 Linux x86-64 archive per `docs/deployment/rfc-production-readiness.md`, provision technical user authorizations per the matrix in Section 5, and bind BTP RFC destination `S4HANA_RFC`.
+5. User tests and verifies the updated Material Issued To Batch Sticker screen in the browser at `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/mib-label` (Direct form, Transfer Order date range filter, table multi-selection, bulk download, row barcode preview & scroll, row download, row print, in-viewport notifications).
+6. Review the Phase 2 implementation of SM21/SM20 log monitoring (`SystemLogAdapter.js`, `SecurityAuditLogAdapter.js`, `sapLogsService.js`, `sap-logs-service.cds`, unit and live test suites, and `SAP_SYSLOG_DISCOVERY.md`).
+7. Provide the Basis handoff note (Section 10.2 of `SAP_SYSLOG_DISCOVERY.md`) to Basis to create the dedicated technical user `S4LOGS_SRV` with restricted authorizations (`S_RFC` for `RSLG`, `THFB`, `RSAU_LOG`, `RFC1` and `S_ADMI_FCD` `SYSL`, `AUDD`), then re-run `ALLOW_LIVE_SAP_TOOLS=1 DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npx jest test/unit/admin/sapLogsLive.test.js --runInBand` to confirm least-privilege authorizations.
+8. Review and commit the focused local changes when authorized, then request/push a hosted CI run for the resulting current head. Do not treat the prior ancestor run as validation of these changes.
+9. For a future SAP-connected validation, supply approved test data and explicit written authorization naming each live write and target. Verify resulting SAP documents by direct read-back; do not execute the SAP E2E suites without that authorization.
+10. Keep HANA/HDI until a verified SAP persistence contract and implementation prove atomic claims, durable status transitions, concurrency safety, restart recovery and read-back. The current migration remains blocked.
+11. Verify `/health` and `/health/ready` against a deployed CAP service with HANA available and unavailable; no deployment has been made for the smoke change.
+12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-21 11:55 IST — AuthService warns when AuthModelSync is unresolved; WORKSTATUS corrections; i18n finding retracted — PARTIAL
+
+- REQUEST: User go "1": fix the three small defects listed after the SCAN_REPORT work.
+- CHANGED:
+  - `app/fiori-app/webapp/service/AuthService.js` (291 → 293 lines): `syncModelHeaders` now logs a warning when `AuthModelSync` cannot be resolved instead of silently doing nothing. Behaviour when the module resolves is unchanged.
+  - `test/unit/purchase-order/createPORefreshRouting.test.js`: new case "should warn instead of silently skipping when AuthModelSync cannot be resolved".
+  - `WORKSTATUS.md`: "Next Steps" renumbered 1–12 (was 1, 2, 3, 2, 3 … 10; text unchanged); stale "uncommitted" line in the 11:51 entry now cites `03e51215`.
+- RETRACTED FINDING (no change made): the earlier open finding "`i18n_en.properties` lacks `btnAddItem` / `btnDeleteItem`" was wrong. `i18n_en.properties` has both keys (lines 852–853). The actual difference is that `i18n.properties` defines each key twice (lines 689–690 and 879–880; `btnDeleteItem` = "Delete" then "Delete Item"). INFERRED: the later definition wins, so both bundles resolve to the same texts and nothing is user-visible; not verified in a browser. The duplicate pair is left in place (not requested).
+- TEST DECISION: TEST ADDED (`createPORefreshRouting.test.js`, 8 tests). Verified the new test fails without the `AuthService.js` change (1 failed, 7 passed) and passes with it.
+- TESTED: `npx jest` → 212 suites, 3,507 passed, 13 skipped, 0 failed. `npm run lint` → 0 errors, 8 warnings (unchanged). `npm --prefix app/fiori-app run lint` → 0 findings. `git diff --check` → clean.
+- NOT VERIFIED: browser E2E was not re-run for this change (the warning path is not reachable when UI5 loads the module normally); no SAP calls made.
+- ASSUMPTIONS: none beyond the INFERRED i18n resolution order above.
+- STATUS: PARTIAL — unit and lint validation passed; no browser run. Uncommitted at the time of writing.
+- NEXT: Commit, then push `feature01` for hosted CI when authorized.
 
 ### 2026-11-21 11:51 IST — Split PurchaseOrderValidator.js and SalesInquiryAdapter.js below 300 lines — PARTIAL
 
@@ -418,7 +433,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - NOT VERIFIED: SAP-connected E2E; live S/4 reads through the moved adapter methods; CDS compile and MTA validation (not affected, not run).
 - ASSUMPTIONS: none beyond the above.
 - STATUS: PARTIAL — unit, lint and SAP-free browser validation passed; no SAP-connected validation.
-- COMMIT STATE: the 2026-11-21 11:45 entry's changes are committed as `7443d2d7`; this entry's changes are uncommitted.
+- COMMIT STATE: the 2026-11-21 11:45 entry's changes are committed as `7443d2d7`; this entry's changes are committed as `03e51215`.
 - NEXT: Commit when authorized. Remaining over-300 code files (306–436 lines) are left as is by recommendation.
 
 ### 2026-11-21 11:45 IST — SCAN_REPORT.md validation, stale AuthService test mock fix, report corrections — PARTIAL
