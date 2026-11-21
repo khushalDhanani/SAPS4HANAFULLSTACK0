@@ -410,12 +410,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - TIER 5 — Read-only SAP connectivity and metadata: PASS. Tools inspected first: they issue only OData GETs and `RFC_READ_TABLE`. Target checked without printing values: matches the documented dev sandbox, client 220, not production. Configuration is in the git-ignored `.env`.
   - READ-ONLY `tools/rfc-preflight.js` (07:03 UTC): `RFC PREFLIGHT PASS [ok]: Connected to client 220`.
   - READ-ONLY `tools/check-sap-integration-diagnostic.js --allow-live-sap` (07:03 UTC): 12 stages, 12 PASSED. OData channel: configured, reachable, authenticated, authorized, `$metadata` of `C_PURCHASEORDER_FS_SRV` valid, one read of `C_PurchaseOrderFs` succeeded. RFC channel: all six stages passed.
-  - Not run: `tools/validate-sap-sandbox.js` (T001W read).
-- TIER 6 — SAP read-back with approved test data: BLOCKED. No approved test data or document numbers were provided, and no live write is authorized.
+  - READ-ONLY `tools/validate-sap-sandbox.js --allow-live-sap` (07:05 UTC, added in a follow-up run): SUCCESS. Client 220 confirmed in `T000`; plant 1120 found in `T001W`.
+- TIER 6 — SAP read-back with approved test data: SKIPPED by user decision (2026-11-21, "Skip tier 6"). No approved test data was provided, so no read-back was run. It remains NOT VERIFIED.
 - OBSERVATION: both clients logged a fallback to local connection parameters because no Destination service binding exists locally; `RfcClient` still has that fallback in every environment (not part of Phase 2).
 - NOT VERIFIED: MTA validation; SAP-connected browser E2E; the Phase 1 lease on HANA; BTP destinations and Principal Propagation.
-- STATUS: PARTIAL — tiers 1–5 have evidence; tier 6 is blocked on approved test data.
-- NEXT: Provide approved test data (document numbers to read back) for tier 6; install `mbt` or rely on hosted CI for MTA validation.
+- STATUS: PARTIAL — tiers 1–5 have evidence; tier 6 was skipped by user decision and is not verified.
+- NEXT: Push `feature01` so hosted CI runs MTA validation. SAP read-back can be done later with approved document numbers.
 
 ### 2026-11-21 12:31 IST — Phase 3 — Frontend reliability (scanner lifecycle, consumers, role fallback) — PARTIAL
 
