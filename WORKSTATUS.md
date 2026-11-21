@@ -20,7 +20,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **Codebase Modularization Progress — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 715 first-party source files (up from 558 initially, due to 127 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
   1. *Decomposition Milestones (41 Monoliths Eliminated):* 41 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `salesInquiryDocumentCreator.js` [68], `GoodsReceiptPostingHelper.js` [11], `AuthService.js` [291], `AuthStorage.js` [222], `SystemLogAdapter.js` [212], `UserManagementAdapter.js` [273], `lockNotifier.js` [263], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214], `GoodsReceiptStorageUnitResolver.js` [47], `BusinessConfigResolver.js` [268], `service.js` [113], `S4HttpClient.js` [225], `integrationDiagnostics.js` [116], `MibLabelAdapter.js` [118], `QuarantineLabelAdapter.js` [130], `GoodsReceiptAttemptStore.js` [254]); 2 key monoliths heavily trimmed (`SalesInquiryAdapter.js` [-53%], `PurchaseOrderValidator.js` [-18%]).
   2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 96 files. Total first-party files scanned: 715 files.
-  3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors). All unit tests pass across all modularized domains.
+  3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors, 8 warnings). Full `npx jest` re-run 2026-11-21: 2 failures found in `createPORefreshRouting.test.js` (stale test mock after the `AuthModelSync.js` extraction), fixed the same day; now 212 suites / 3,506 passed / 13 skipped / 0 failed. See the 2026-11-21 11:45 IST log entry.
 - **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting all fifteen monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], `HandlingUnits.controller.js` [643 lines], `CreateCustomerReturn.controller.js` [668 lines], `GoodsReceipt.controller.js` [613 lines], `MibLabel.controller.js` [588 lines], `QuarantineLabels.controller.js` [540 lines], `CustomerInvoices.controller.js` [540 lines], `SalesOrders.controller.js` [407 lines], `CustomerReturns.controller.js` [378 lines], and `App.controller.js` [366 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
      - Extracted AI chat submission, SSE stream processing, and fallback into `PurchaseOrderAiChat.js` (212 lines).
@@ -397,6 +397,26 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-21 11:45 IST — SCAN_REPORT.md validation, stale AuthService test mock fix, report corrections — PARTIAL
+
+- REQUEST: Validate `SCAN_REPORT.md`, then (user go: "Yes, steps 1–2") fix the failing tests found and correct the report.
+- INSPECT: Read `AGENTS.md`, `WORKSTATUS.md`, `SCAN_REPORT.md`; `git status` clean at `1ef485dd`. Recounted with `git ls-files` + `wc -l`: 96 first-party files over 300 lines, every line count matching the report (CONFIRMED).
+- FINDING (FAIL as found): `npx jest` → 2 failed, 3,504 passed, 13 skipped. Both in `test/unit/purchase-order/createPORefreshRouting.test.js` (`AuthService.syncModelHeaders`). Root cause: the suite's `sap.ui.define` mock injected 4 of `AuthService`'s 7 dependencies; after commit `082df8d0` moved header sync into `AuthModelSync.js`, `AuthModelSync` was undefined in the test and `syncModelHeaders` became a no-op. Production code INFERRED unaffected (real UI5 injects the module); not verified in a browser.
+- CHANGED:
+  - `test/unit/purchase-order/createPORefreshRouting.test.js`: load the real `AuthModelSync` and inject it into the `AuthService` factory. No production code changed.
+  - `SCAN_REPORT.md`: tracked files 911 → 1,067; Section 1.2 split (8 Integrations / 3 Backend; 53 unit / 3 integration / 4 E2E); Section 2 tables 119 → 96; Top 20 ranks 17 and 20; Section 4 rank gaps removed; Phase 2 marked PARTIAL (`SalesInquiryAdapter.js` still 676 lines); stale Section 8.2 replaced; new Section 8.3 with the re-validation results.
+- TEST DECISION: TEST UPDATED (`createPORefreshRouting.test.js`).
+- TESTED (after fix):
+  - `npx jest test/unit/purchase-order/createPORefreshRouting.test.js` → 7/7 PASS.
+  - `npx jest` → 212 suites, 3,506 passed, 13 skipped, 0 failed.
+  - `npm run lint` → 0 errors, 8 warnings (pre-existing `no-unused-vars` in test files). `npm --prefix app/fiori-app run lint` → 0 findings.
+  - `git diff --check` → clean.
+- NOT VERIFIED: Playwright E2E, CDS compile, MTA validation, browser check of header sync; the report's "834 non-excluded" / "715 scanned" totals (approximate recount gave 706). No SAP calls were made.
+- OPEN FINDINGS (not acted on): `i18n_en.properties` lacks `btnAddItem` / `btnDeleteItem` used by `CreateCustomerReturn.view.xml:183,188`; "Next Steps" below has duplicate numbering; `AuthService.syncModelHeaders` silently skips when `AuthModelSync` cannot be resolved.
+- ASSUMPTIONS: the 13 skipped tests are the live-SAP gated ones (INFERRED).
+- STATUS: PARTIAL — unit/lint validation passed; browser E2E not run. Nothing committed.
+- NEXT: User decides on splitting `PurchaseOrderValidator.js` (930) and `SalesInquiryAdapter.js` (676); commit these changes when authorized.
 
 ### 2026-11-20 23:00 IST — Phase 2: S/4 Integration Adapters Modularization (GoodsReceiptPostingHelper.js) — PASS
 

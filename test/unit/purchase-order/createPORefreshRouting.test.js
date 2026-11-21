@@ -77,6 +77,11 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             return Subclass;
         };
 
+        // AuthService delegates header sync to AuthModelSync; load the real module so it can be injected.
+        let AuthModelSync;
+        global.sap = { ui: { define: function (deps, factory) { AuthModelSync = factory(); } } };
+        require('../../../app/fiori-app/webapp/service/AuthModelSync');
+
         // Mock sap environment for UI5 modules
         global.sap = {
             ui: {
@@ -86,7 +91,10 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
                             BaseObject,
                             MockJSONModel,
                             { warning: jest.fn() },
-                            { post: jest.fn(), get: jest.fn().mockResolvedValue(null) }
+                            { post: jest.fn(), get: jest.fn().mockResolvedValue(null) },
+                            undefined, // AuthStorage: not exercised by this suite
+                            undefined, // AuthUserHelper: not exercised by this suite
+                            AuthModelSync
                         );
                     } else {
                         PurchaseOrderModel = factory(MockJSONModel);
