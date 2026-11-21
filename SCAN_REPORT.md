@@ -3,7 +3,7 @@
 **Repository:** `SAPS4HANAFULLSTACK0`  
 **Active Branch:** `feature01`  
 **Execution Timestamp:** 2026-11-20 15:45 IST  
-**Corrected:** 2026-11-21 — figures re-validated against commit `1ef485dd`; see Sections 8.3 to 8.7 for what changed. **Sections 1.2, 2 and 3 predate the Goods Receipt removal; Section 4 and Section 8.7 are current.**\
+**Corrected:** 2026-11-21 — figures re-validated against commit `1ef485dd`; see Sections 8.3 to 8.8 for what changed. **Sections 1.2, 2 and 3 predate the Goods Receipt removal; Section 4 and Section 8.7 are current.**\
 **Compliance Standard:** Mandatory adherence to `AGENTS.md` & `WORKSTATUS.md`  
 **Audit Scope:** Comprehensive line count audit (`wc -l`), architectural decomposition, tight-coupling analysis, and safest refactoring sequencing across all first-party application source code, integration adapters, backend handlers, utilities, and test suites.
 
@@ -514,6 +514,12 @@ The `git status` snapshot originally printed here was stale: those files were co
 - Left the inventory: `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`, `test/unit/wm/goodsReceiptAttempt.test.js`, `test/unit/wm/goodsReceiptController.test.js`, `test/unit/wm/goodsReceiptRecheckLease.test.js`, `test/unit/wm/goodsReceiptService.test.js`.
 - Joined the inventory: none.
 - **Sections 1.2, 2 and 3 above are a snapshot from before the removal** (96 files) and were not rewritten; Section 4 and this section are current. Milestone text that names Goods Receipt files (Sections 1.3, 5 and 7) is historical: those files no longer exist.
+
+### 8.8 Final Goods Receipt decommissioning audit (2026-11-21)
+- Scanned with the filter of Section 8.5: **681 first-party files, 91 over 300 lines.** Section 8.7 counted 682: since then the guard test was added and two files were removed. The 91 are unchanged. Section 4 was rebuilt from the tree again.
+- Files removed in the audit: `tools/adt-create-post-attempt.js` and `test/unit/tools/adtCreatePostAttempt.test.js` (neither was over 300 lines). Two ABAP sources moved to `docs/archive/` (documentation, outside this scan).
+- Kept although they have no consumer (shared utilities, not Goods Receipt-exclusive): `app/fiori-app/webapp/service/BarcodeScanService.js` (437 lines, in the inventory) and `srv/common/batchUtils.js`, each with its test.
+- Regression on the audited state: ESLint exit 0; UI5 lint 0 findings; Jest 210 suites, 3,439 passed, 13 skipped; accessibility 5 passed; performance 3 passed; SAP-free browser E2E 6/6; CDS production build completed; UI5 production build exit 0; `mbt validate -x paths` exit 0 (also with each environment extension); `mbt build` exit 0 at commit `471ac332`.
 
 ---
 *Line counts verified with POSIX `wc -l`; validation status is as recorded in Section 8.3.*
