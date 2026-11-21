@@ -17,9 +17,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
-- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 666 first-party source files (up from 558 initially, due to 78 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
-  1. *Decomposition Milestones (Phases 1-5):* 23 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `HandlingUnitAdapter.js` [99], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
-  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 114 files. Total first-party files scanned: 666 files.
+- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 676 first-party source files (up from 558 initially, due to 88 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
+  1. *Decomposition Milestones (Phases 1-5):* 26 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
+  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 111 files. Total first-party files scanned: 676 files.
   3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors). All unit tests pass across all modularized domains.
 - **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting all fifteen monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], `HandlingUnits.controller.js` [643 lines], `CreateCustomerReturn.controller.js` [668 lines], `GoodsReceipt.controller.js` [613 lines], `MibLabel.controller.js` [588 lines], `QuarantineLabels.controller.js` [540 lines], `CustomerInvoices.controller.js` [540 lines], `SalesOrders.controller.js` [407 lines], `CustomerReturns.controller.js` [378 lines], and `App.controller.js` [366 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
@@ -397,6 +397,101 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 22:00 IST — Phase 2: S/4 Integration Adapters Modularization (GoodsReceiptAdapter.js) — PASS
+
+- REQUEST: Modularize monolithic S/4HANA Goods Receipt adapter `GoodsReceiptAdapter.js` (573 lines) below 300 lines per `SCAN_REPORT.md` Phase 2 without breaking changes or integration contract deviations.
+- INSPECT:
+  - Audited `srv/integration/s4hana/wm/GoodsReceiptAdapter.js` (573 lines).
+  - Traced consumers: `srv/wm/goods-receipt/service.js`, `test/unit/wm/goodsReceiptService.test.js` (33 tests), `test/unit/wm/goodsReceiptAttempt.test.js` (26 tests), `test/unit/wm/goodsReceiptPlantScope.test.js` (7 tests), `test/unit/wm/plantLimits.test.js` (9 tests), and all 30 WM suites (652 tests).
+  - Identified 4 distinct functional responsibilities:
+    1. Gateway communication and client error helpers: `_isOutage`, `_toGatewayError`, `_get`, `_post`, `_getDestination`, `_enrichBatchStatus`, `_formatDate`.
+    2. Open inbound deliveries, plant storage locations, and batches query: `getOpenInboundDeliveries`, `getMaterialStorageLocations`, `getMaterialBatches`.
+    3. Delivery item facts and goods receipt item query (LIPS/LIKP RFC & MMIM_GR4PO_DL_SRV): `_readDeliveryItemFacts`, `readDeliveryPlant`, `getGoodsReceiptItem`.
+    4. Storage unit resolution and posting delegation (pre-extracted): `resolveStorageUnit`, `postGoodsReceipt`, `_read101Docs`, `findReceiptForAttempt`, `postGoodsReceiptWithStorageUnit`.
+- PLAN:
+  - Extract delivery item facts and goods receipt item resolution into `GoodsReceiptItemReader.js` (224 lines).
+  - Extract open inbound deliveries, storage locations, and batches querying into `GoodsReceiptMasterDataReader.js` (166 lines).
+  - Retain coordinator facade, error mapper, and static helpers in `GoodsReceiptAdapter.js` (159 lines), preserving all method signatures and static exports (`GoodsReceiptAdapter`, `CSRF_FETCH_PATH`, `_enrichBatchStatus`, `_formatDate`, `_isOutage`, `_toGatewayError`).
+- CHANGE:
+  - Created `srv/integration/s4hana/wm/GoodsReceiptItemReader.js` (224 lines).
+  - Created `srv/integration/s4hana/wm/GoodsReceiptMasterDataReader.js` (166 lines).
+  - Refactored `srv/integration/s4hana/wm/GoodsReceiptAdapter.js` (slashed from 573 to 159 lines, -414 lines, -72.3%).
+- VALIDATE:
+  - Exact line count: All 3 files strictly $\le 300$ lines (`wc -l`: 159, 224, 166).
+  - Total first-party files > 300 lines reduced from 112 to **111 files**.
+  - Total first-party JS application files > 300 lines reduced from 35 to **34 files**.
+  - ESLint (`npx eslint srv/integration/s4hana/wm/`): PASSED (0 errors, 0 warnings).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Unit test suites: `test/unit/wm/goodsReceiptService.test.js`, `test/unit/wm/goodsReceiptAttempt.test.js`, `test/unit/wm/goodsReceiptPlantScope.test.js`, `test/unit/wm/plantLimits.test.js`, `test/unit/wm/goodsReceiptController.test.js` (5/5 suites, 141/141 tests PASS). Full WM suites (30/30 suites, 652/652 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 141 Goods Receipt tests and all 652 tests across WM pass cleanly with zero regression.
+
+### 2026-11-20 21:30 IST — Phase 2: S/4 Integration Adapters Modularization (CustomerReturnAdapter.js) — PASS
+
+- REQUEST: Modularize monolithic S/4HANA Customer Return adapter `CustomerReturnAdapter.js` (683 lines) below 300 lines per `SCAN_REPORT.md` Phase 2 without breaking changes or integration contract deviations.
+- INSPECT:
+  - Audited `srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter.js` (683 lines).
+  - Traced consumers: `srv/sd/customer-return/service.js`, `test/unit/sd/customerReturnAdapter.test.js` (40 tests), `test/unit/sd/customerReturnRfcCreator.test.js` (28 tests), and all Customer Return suites (136 tests).
+  - Identified 4 distinct functional responsibilities:
+    1. Pure helpers, row formatters, OData V2 date parser, and constants: `_cleanOptions`, `_sleep`, `_parseODataV2Date`, `_formatReturnHeaderRow`, `_formatReturnItemRow`, `_unconfirmedReturn`, `_sameNumber`.
+    2. Customer Return OData document queries: `getCustomerReturns`, `getCustomerReturn`, `getCustomerReturnItems`.
+    3. S/4HANA Value Helps: `getReturnReasons`, `getCustomers`, `getMaterials`, `getPlants`, `getDocumentTypes`, `getReferenceDocuments`.
+    4. S/4HANA Return creation: `createCustomerReturn` (Lean Order framework LORD_ODATA_ORDER_SRV deep insert + readback) and `createCustomerReturnViaRfc` (BAPI RFC + readback).
+- PLAN:
+  - Extract shared utilities, constants, and row formatters into `customerReturnUtils.js` (175 lines).
+  - Extract return document queries into `CustomerReturnReader.js` (116 lines).
+  - Extract value help queries into `CustomerReturnValueHelp.js` (218 lines).
+  - Extract return creation and readback verification into `CustomerReturnWriter.js` (269 lines).
+  - Retain unified coordinator facade in `CustomerReturnAdapter.js` (72 lines), preserving all method signatures and exports (`CustomerReturnAdapter`, `_parseODataV2Date`, `_formatReturnHeaderRow`, `_formatReturnItemRow`, `_cleanOptions`).
+- CHANGE:
+  - Created `srv/integration/s4hana/sd/customer-return/customerReturnUtils.js` (175 lines).
+  - Created `srv/integration/s4hana/sd/customer-return/CustomerReturnReader.js` (116 lines).
+  - Created `srv/integration/s4hana/sd/customer-return/CustomerReturnValueHelp.js` (218 lines).
+  - Created `srv/integration/s4hana/sd/customer-return/CustomerReturnWriter.js` (269 lines).
+  - Refactored `srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter.js` (slashed from 683 to 72 lines, -611 lines, -89.5%).
+- VALIDATE:
+  - Exact line count: All 6 files strictly $\le 300$ lines (`wc -l`: 72, 116, 218, 269, 128, 175).
+  - Total first-party files > 300 lines reduced from 113 to **112 files**.
+  - Total first-party JS application files > 300 lines reduced from 36 to **35 files**.
+  - ESLint (`npx eslint srv/integration/s4hana/sd/customer-return/`): PASSED (0 errors, 0 warnings).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Unit test suites: `test/unit/sd/customerReturnAdapter.test.js` (40/40 tests PASS), `test/unit/sd/customerReturnRfcCreator.test.js` (28/28 tests PASS), all Customer Return suites (6/6 suites, 136/136 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 136 tests across Customer Return suites pass cleanly with zero regression.
+
+### 2026-11-20 21:00 IST — Phase 2: S/4 Integration Adapters Modularization (OutboundDeliveryAdapter.js) — PASS
+
+- REQUEST: Modularize monolithic S/4HANA Outbound Delivery adapter `OutboundDeliveryAdapter.js` (762 lines) below 300 lines per `SCAN_REPORT.md` Phase 2 without breaking changes or integration contract deviations.
+- INSPECT:
+  - Audited `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js` (762 lines).
+  - Traced consumers: `srv/le/outbound-delivery/service.js`, `test/unit/le/outboundDeliveryAdapter.test.js` (55 tests), and all LE suites (179 tests).
+  - Identified 4 distinct functional responsibilities:
+    1. Shipping point resolution, TVSTZ plant checks, TVSTZ fallback caches: `getShippingPoints`, `getShippingPointsForPlant`, `_shippingPointsInScope`, `_checkTvstz`, `_tvstzCache`.
+    2. Orders due for delivery worklist query, plant resolution, sales order approval status: `getOrdersDueForDelivery`, `getOrdersDueMetrics`, `_resolvePlant`, `_getOrderApprovalStatus`, `_approvalCache`.
+    3. Outbound delivery document creation via `API_OUTBOUND_DELIVERY_SRV;v=0002`: `createOutboundDelivery`, `_mapHeader`, `_mapItem`.
+    4. Delivery status querying & billing document creation: `getDeliveryStatus`, `createBillingDocument`, `_buildBillingPayload`.
+    5. OData V2 JSON date conversions and formatting: `toODataV2Date`, `toIsoDateString`.
+- PLAN:
+  - Extract pure date conversion utilities into `outboundDeliveryDateUtils.js` (41 lines).
+  - Extract shipping points and TVSTZ resolution into `OutboundDeliveryShippingPoints.js` (223 lines).
+  - Extract orders due for delivery worklist querying and approval status checking into `OutboundDeliveryOrdersDue.js` (258 lines).
+  - Extract outbound delivery creation and payload mapping into `OutboundDeliveryCreator.js` (128 lines).
+  - Extract billing document creation and payload mapping into `OutboundDeliveryBilling.js` (168 lines).
+  - Retain unified coordinator facade in `OutboundDeliveryAdapter.js` (106 lines), preserving `_approvalCache`, `_tvstzCache`, and method dispatch delegation.
+- CHANGE:
+  - Created `srv/integration/s4hana/le/outbound-delivery/outboundDeliveryDateUtils.js` (41 lines).
+  - Created `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryShippingPoints.js` (223 lines).
+  - Created `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryOrdersDue.js` (258 lines).
+  - Created `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryCreator.js` (128 lines).
+  - Created `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryBilling.js` (168 lines).
+  - Refactored `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js` (slashed from 762 to 106 lines, -656 lines, -86.1%).
+- VALIDATE:
+  - Exact line count: All 6 files strictly $\le 300$ lines (`wc -l`: 106, 168, 128, 258, 223, 41).
+  - Total first-party files > 300 lines reduced from 114 to **113 files**.
+  - Total first-party JS application files > 300 lines reduced from 37 to **36 files**.
+  - ESLint (`npx eslint srv/integration/s4hana/le/`): PASSED (0 errors, 0 warnings).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Unit test suites: `test/unit/le/outboundDeliveryAdapter.test.js` (55/55 tests PASS); full `test/unit/le/` (6/6 suites, 179/179 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 55 tests in `test/unit/le/outboundDeliveryAdapter.test.js` and all 179 tests across LE pass cleanly with zero regression.
 
 ### 2026-11-20 20:30 IST — Phase 2: S/4 Integration Adapters Modularization (HandlingUnitAdapter.js) — PASS
 
