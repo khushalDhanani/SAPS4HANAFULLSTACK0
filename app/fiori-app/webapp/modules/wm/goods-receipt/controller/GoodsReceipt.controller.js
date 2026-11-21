@@ -122,6 +122,19 @@ sap.ui.define([
             if (oRouter) {
                 oRouter.getRoute("wmGoodsReceipt").attachPatternMatched(this._onListRouteMatched, this);
                 oRouter.getRoute("wmGoodsReceiptDetail").attachPatternMatched(this._onDetailRouteMatched, this);
+                if (typeof oRouter.attachRouteMatched === "function") {
+                    oRouter.attachRouteMatched(this._onAnyRouteMatched, this);
+                }
+            }
+        },
+
+        /** The scanner belongs to this screen only: the view stays alive after navigation, so detach on other routes. */
+        _onAnyRouteMatched: function (oEvent) {
+            var sRoute = oEvent.getParameter("name");
+            if (sRoute === "wmGoodsReceipt" || sRoute === "wmGoodsReceiptDetail") {
+                BarcodeScanService.attachHardwareScanner(this._scannerHandler);
+            } else {
+                BarcodeScanService.detachHardwareScanner(this._scannerHandler);
             }
         },
 
@@ -150,6 +163,10 @@ sap.ui.define([
         onExit: function () {
             if (this._scannerHandler) {
                 BarcodeScanService.detachHardwareScanner(this._scannerHandler);
+            }
+            var oRouter = this.getRouter();
+            if (oRouter && typeof oRouter.detachRouteMatched === "function") {
+                oRouter.detachRouteMatched(this._onAnyRouteMatched, this);
             }
             if (this._oSUValueHelpDialog) {
                 this._oSUValueHelpDialog.destroy();

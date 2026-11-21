@@ -65,6 +65,8 @@ const mockHistory = {
 
 const mockRouter = {
     getRoute: jest.fn().mockReturnValue({ attachPatternMatched: jest.fn() }),
+    attachRouteMatched: jest.fn(),
+    detachRouteMatched: jest.fn(),
     navTo: jest.fn()
 };
 
@@ -178,6 +180,38 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(mockGoodsReceiptService.fetchOpenInboundDeliveries).not.toHaveBeenCalled();
             expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsReceipt');
             expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsReceiptDetail');
+        });
+
+        describe('hardware scanner follows the route', () => {
+            const routeEvent = (name) => ({ getParameter: () => name });
+
+            it('watches every route and detaches the scanner when another screen is shown', () => {
+                expect(mockRouter.attachRouteMatched).toHaveBeenCalledWith(controller._onAnyRouteMatched, controller);
+                mockBarcodeScanService.detachHardwareScanner.mockClear();
+
+                controller._onAnyRouteMatched(routeEvent('purchaseOrders'));
+
+                expect(mockBarcodeScanService.detachHardwareScanner).toHaveBeenCalledWith(controller._scannerHandler);
+            });
+
+            it.each(['wmGoodsReceipt', 'wmGoodsReceiptDetail'])('re-attaches its own handler when %s is shown again', (route) => {
+                mockBarcodeScanService.attachHardwareScanner.mockClear();
+                mockBarcodeScanService.detachHardwareScanner.mockClear();
+
+                controller._onAnyRouteMatched(routeEvent(route));
+
+                expect(mockBarcodeScanService.attachHardwareScanner).toHaveBeenCalledWith(controller._scannerHandler);
+                expect(mockBarcodeScanService.detachHardwareScanner).not.toHaveBeenCalled();
+            });
+
+            it('detaches its own handler and stops watching routes on exit', () => {
+                mockBarcodeScanService.detachHardwareScanner.mockClear();
+
+                controller.onExit();
+
+                expect(mockBarcodeScanService.detachHardwareScanner).toHaveBeenCalledWith(controller._scannerHandler);
+                expect(mockRouter.detachRouteMatched).toHaveBeenCalledWith(controller._onAnyRouteMatched, controller);
+            });
         });
 
         it('should navigate back to the list route when the workflow is reset on the detail page', () => {

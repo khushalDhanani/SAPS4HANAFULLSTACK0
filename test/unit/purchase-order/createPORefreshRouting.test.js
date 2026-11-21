@@ -124,6 +124,25 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
         global.sessionStorage = originalSessionStorage;
     });
 
+    describe('AuthService role check without AuthUserHelper', () => {
+        it('fails closed: no role and no delivery permission is granted when the helper cannot be resolved', () => {
+            const log = { warning: jest.fn() };
+            const service = authServiceFactory(
+                BaseObjectMock,
+                MockJSONModel,
+                log,
+                { post: jest.fn(), get: jest.fn().mockResolvedValue(null) }
+            );
+            service.init({ getModel: jest.fn(() => null), setModel: jest.fn() });
+            service.getModel().setProperty("/user", { username: "admin", scopes: ["Admin"] });
+
+            expect(service.hasAnyRole(["Admin"])).toBe(false);
+            expect(service.hasAnyRole([])).toBe(false);
+            expect(service.canCreateDelivery()).toBe(false);
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining("role check denied"));
+        });
+    });
+
     describe('AuthService.syncModelHeaders', () => {
         it('should synchronize authorization header to active models (default, salesInquiry, goodsReceipt)', () => {
             const defaultModel = {

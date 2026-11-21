@@ -21,7 +21,9 @@ sap.ui.define([
 ) {
     "use strict";
 
-    var _fnHardwareCallback = null;
+    // Consumers of hardware scans, most recent last. Only the most recent one receives a scan, so a screen
+    // that attaches later does not lose its callback when an earlier screen detaches, and vice versa.
+    var _aHardwareCallbacks = [];
     var _sKeyBuffer = "";
     var _nLastKeyTime = 0;
     var _nMaxInterKeyDelay = 50; // ms between keys for laser hardware scanners
@@ -40,7 +42,16 @@ sap.ui.define([
     /**
      * Internal keydown listener to capture Zebra hardware laser scans in keystroke wedge mode
      */
+    function _activeCallback() {
+        return _aHardwareCallbacks.length ? _aHardwareCallbacks[_aHardwareCallbacks.length - 1] : null;
+    }
+
+    function _removeCallback(fnCallback) {
+        _aHardwareCallbacks = _aHardwareCallbacks.filter(function (fn) { return fn !== fnCallback; });
+    }
+
     function _onKeyDown(oEvent) {
+        var _fnHardwareCallback = _activeCallback();
         if (!_fnHardwareCallback) return;
 
         var nNow = Date.now();
@@ -80,6 +91,7 @@ sap.ui.define([
      * Custom DOM event listener for Zebra DataWedge Web intents
      */
     function _onDataWedgeCustomEvent(oEvent) {
+        var _fnHardwareCallback = _activeCallback();
         if (!_fnHardwareCallback) return;
         var sBarcode = (oEvent.detail && (oEvent.detail.data || oEvent.detail.barcode || oEvent.detail.value)) || "";
         if (sBarcode) {
@@ -89,11 +101,14 @@ sap.ui.define([
 
     var BarcodeScanService = {
         /**
-         * Attach a global listener for Zebra hardware laser scanners (both DataWedge events and keystroke wedge)
+         * Attach a global listener for Zebra hardware laser scanners (both DataWedge events and keystroke wedge).
+         * The most recently attached consumer receives the scans; attaching the same function again moves it to the front.
          * @param {Function} fnCallback - Function receiving (sBarcode, sSource)
          */
         attachHardwareScanner: function (fnCallback) {
-            _fnHardwareCallback = fnCallback;
+            if (typeof fnCallback !== "function") return;
+            _removeCallback(fnCallback);
+            _aHardwareCallbacks.push(fnCallback);
             _sKeyBuffer = "";
             _nLastKeyTime = 0;
 
@@ -106,12 +121,18 @@ sap.ui.define([
         },
 
         /**
-         * Detach the hardware scanner listener
+         * Detach one consumer; scans go back to the consumer attached before it. Without an argument every
+         * consumer is detached. The global listeners are removed when no consumer is left.
+         * @param {Function} [fnCallback] - The function passed to attachHardwareScanner
          */
-        detachHardwareScanner: function () {
-            _fnHardwareCallback = null;
+        detachHardwareScanner: function (fnCallback) {
+            if (typeof fnCallback === "function") {
+                _removeCallback(fnCallback);
+            } else {
+                _aHardwareCallbacks = [];
+            }
             _sKeyBuffer = "";
-            if (_bListenerAttached && typeof window !== "undefined") {
+            if (_aHardwareCallbacks.length === 0 && _bListenerAttached && typeof window !== "undefined") {
                 window.removeEventListener("keydown", _onKeyDown, true);
                 window.removeEventListener("datawedge:scan", _onDataWedgeCustomEvent);
                 document.removeEventListener("barcodeScan", _onDataWedgeCustomEvent);
@@ -124,7 +145,7 @@ sap.ui.define([
          * @returns {boolean}
          */
         isHardwareScannerAttached: function () {
-            return !!_fnHardwareCallback;
+            return _aHardwareCallbacks.length > 0;
         },
 
         /**

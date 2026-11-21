@@ -276,7 +276,9 @@ sap.ui.define([
             if (oHelper && typeof oHelper.hasAnyRole === "function") {
                 return oHelper.hasAnyRole(this.getCurrentUser(), aRoles);
             }
-            return true;
+            // Fail closed: without the role helper nothing can be checked, so nothing is granted.
+            if (Log && typeof Log.warning === "function") Log.warning("AuthService: AuthUserHelper could not be resolved; role check denied.");
+            return false;
         },
 
         canCreateDelivery: function () {

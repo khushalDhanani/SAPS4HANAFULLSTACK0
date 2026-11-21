@@ -168,6 +168,251 @@ describe('BarcodeScanService Unit Tests', () => {
         });
     });
 
+    describe('Multiple consumers', () => {
+        const scan = (text) => {
+            const onKeyDown = windowEventListeners['keydown'];
+            [...text, 'Enter'].forEach((key) => onKeyDown({ key, preventDefault: jest.fn(), stopPropagation: jest.fn() }));
+        };
+
+        it('a later consumer does not destroy the callback of an earlier one', () => {
+            const first = jest.fn();
+            const second = jest.fn();
+            BarcodeScanService.attachHardwareScanner(first);
+            BarcodeScanService.attachHardwareScanner(second);
+
+            scan('SU-001');
+            expect(second).toHaveBeenCalledWith('SU-001', 'ZEBRA_KEYSTROKE_WEDGE');
+            expect(first).not.toHaveBeenCalled();
+
+            BarcodeScanService.detachHardwareScanner(second);
+            scan('SU-002');
+            expect(first).toHaveBeenCalledWith('SU-002', 'ZEBRA_KEYSTROKE_WEDGE');
+            expect(second).toHaveBeenCalledTimes(1);
+        });
+
+        it('an earlier consumer that detaches does not switch off the later one', () => {
+            const first = jest.fn();
+            const second = jest.fn();
+            BarcodeScanService.attachHardwareScanner(first);
+            BarcodeScanService.attachHardwareScanner(second);
+
+            BarcodeScanService.detachHardwareScanner(first);
+
+            expect(BarcodeScanService.isHardwareScannerAttached()).toBe(true);
+            expect(global.window.removeEventListener).not.toHaveBeenCalled();
+            scan('SU-003');
+            expect(second).toHaveBeenCalledWith('SU-003', 'ZEBRA_KEYSTROKE_WEDGE');
+        });
+
+        it('each scan reaches exactly one consumer, also for DataWedge events', () => {
+            const first = jest.fn();
+            const second = jest.fn();
+            BarcodeScanService.attachHardwareScanner(first);
+            BarcodeScanService.attachHardwareScanner(second);
+
+            windowEventListeners['datawedge:scan']({ detail: { data: '000004000123' } });
+
+            expect(first).not.toHaveBeenCalled();
+            expect(second).toHaveBeenCalledTimes(1);
+        });
+
+        it('attaching the same function twice registers it once and makes it the active consumer', () => {
+            const first = jest.fn();
+            const second = jest.fn();
+            BarcodeScanService.attachHardwareScanner(first);
+            BarcodeScanService.attachHardwareScanner(second);
+            BarcodeScanService.attachHardwareScanner(first);
+
+            scan('SU-004');
+            expect(first).toHaveBeenCalledTimes(1);
+            expect(second).not.toHaveBeenCalled();
+
+            BarcodeScanService.detachHardwareScanner(first);
+            scan('SU-005');
+            expect(first).toHaveBeenCalledTimes(1);
+            expect(second).toHaveBeenCalledTimes(1);
+        });
+
+        it('detaching a function that was never attached changes nothing', () => {
+            const first = jest.fn();
+            BarcodeScanService.attachHardwareScanner(first);
+
+            BarcodeScanService.detachHardwareScanner(jest.fn());
+
+            scan('SU-006');
+            expect(first).toHaveBeenCalledTimes(1);
+        });
+
+        it('ignores an attach without a function', () => {
+            BarcodeScanService.attachHardwareScanner(undefined);
+
+            expect(BarcodeScanService.isHardwareScannerAttached()).toBe(false);
+            expect(global.window.addEventListener).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Lifecycle of the global listeners', () => {
+        it('registers the listeners once however many consumers attach, and removes them with the last one', () => {
+            const first = jest.fn();
+            const second = jest.fn();
+            BarcodeScanService.attachHardwareScanner(first);
+            BarcodeScanService.attachHardwareScanner(second);
+
+            expect(global.window.addEventListener.mock.calls.filter(([evt]) => evt === 'keydown')).toHaveLength(1);
+
+            BarcodeScanService.detachHardwareScanner(first);
+            expect(global.window.removeEventListener).not.toHaveBeenCalled();
+
+            BarcodeScanService.detachHardwareScanner(second);
+            expect(global.window.removeEventListener).toHaveBeenCalledWith('keydown', expect.any(Function), true);
+            expect(global.window.removeEventListener).toHaveBeenCalledWith('datawedge:scan', expect.any(Function));
+            expect(global.document.removeEventListener).toHaveBeenCalledWith('barcodeScan', expect.any(Function));
+            expect(BarcodeScanService.isHardwareScannerAttached()).toBe(false);
+        });
+
+        it('listens again after a full detach and a new attach', () => {
+            BarcodeScanService.attachHardwareScanner(jest.fn());
+            BarcodeScanService.detachHardwareScanner();
+            const again = jest.fn();
+
+            BarcodeScanService.attachHardwareScanner(again);
+
+            expect(global.window.addEventListener.mock.calls.filter(([evt]) => evt === 'keydown')).toHaveLength(2);
+            windowEventListeners['datawedge:scan']({ detail: { barcode: 'X-1' } });
+            expect(again).toHaveBeenCalledWith('X-1', 'ZEBRA_DATAWEDGE_EVENT');
+        });
+
+        it('does not carry half a scan from one consumer over to the next', () => {
+            const first = jest.fn();
+            const second = jest.fn();
+            const onKey = (key) => windowEventListeners['keydown']({ key, preventDefault: jest.fn(), stopPropagation: jest.fn() });
+            BarcodeScanService.attachHardwareScanner(first);
+            ['A', 'B', 'C', 'D'].forEach(onKey);
+
+            BarcodeScanService.attachHardwareScanner(second);
+            onKey('Enter');
+
+            expect(first).not.toHaveBeenCalled();
+            expect(second).not.toHaveBeenCalled();
+        });
+
+        it('keeps working when a consumer callback throws', () => {
+            const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+            const failing = jest.fn(() => { throw new Error('consumer bug'); });
+            BarcodeScanService.attachHardwareScanner(failing);
+            const onKey = (key) => windowEventListeners['keydown']({ key, preventDefault: jest.fn(), stopPropagation: jest.fn() });
+
+            expect(() => ['A', 'B', 'C', 'Enter'].forEach(onKey)).not.toThrow();
+            ['D', 'E', 'F', 'Enter'].forEach(onKey);
+
+            expect(failing).toHaveBeenCalledTimes(2);
+            error.mockRestore();
+        });
+    });
+
+    describe('Scanner input versus ordinary keyboard input', () => {
+        let now;
+        let cb;
+        const key = (k, gapMs, extra = {}) => {
+            now += gapMs;
+            const evt = { key: k, preventDefault: jest.fn(), stopPropagation: jest.fn(), ...extra };
+            windowEventListeners['keydown'](evt);
+            return evt;
+        };
+
+        beforeEach(() => {
+            now = 1000000;
+            jest.spyOn(Date, 'now').mockImplementation(() => now);
+            cb = jest.fn();
+            BarcodeScanService.attachHardwareScanner(cb);
+        });
+        afterEach(() => Date.now.mockRestore());
+
+        it('treats keys at scanner speed ending with Enter as a scan', () => {
+            [...'180000003'].forEach((k) => key(k, 10));
+            key('Enter', 10);
+
+            expect(cb).toHaveBeenCalledWith('180000003', 'ZEBRA_KEYSTROKE_WEDGE');
+        });
+
+        it('does not treat a person typing and pressing Enter as a scan', () => {
+            [...'180000003'].forEach((k) => key(k, 180));
+            key('Enter', 180);
+
+            expect(cb).not.toHaveBeenCalled();
+        });
+
+        it('does not treat fast keys followed by a late Enter as a scan', () => {
+            [...'ABCDEF'].forEach((k) => key(k, 10));
+            key('Enter', 400);
+
+            expect(cb).not.toHaveBeenCalled();
+        });
+
+        it('does not treat one or two fast keys and Enter as a scan', () => {
+            key('O', 10);
+            key('K', 10);
+            key('Enter', 10);
+
+            expect(cb).not.toHaveBeenCalled();
+        });
+
+        it('a key typed some time before a scan does not become part of the barcode', () => {
+            key('x', 300);
+            key('S', 300);
+            [...'U-42'].forEach((k) => key(k, 10));
+            key('Enter', 10);
+
+            expect(cb).toHaveBeenCalledTimes(1);
+            expect(cb).toHaveBeenCalledWith('SU-42', 'ZEBRA_KEYSTROKE_WEDGE');
+        });
+
+        it('ignores navigation and modifier keys inside a scan', () => {
+            key('A', 10);
+            key('Shift', 5);
+            key('B', 5);
+            key('ArrowLeft', 5);
+            key('C', 5);
+            key('Enter', 5);
+
+            expect(cb).toHaveBeenCalledWith('ABC', 'ZEBRA_KEYSTROKE_WEDGE');
+        });
+
+        it('an ordinary Enter is left alone: not consumed and no callback', () => {
+            const evt = key('Enter', 500);
+
+            expect(evt.preventDefault).not.toHaveBeenCalled();
+            expect(evt.stopPropagation).not.toHaveBeenCalled();
+            expect(cb).not.toHaveBeenCalled();
+        });
+
+        it('consumes the Enter of a scan when focus is not in an input, so it cannot press a focused control', () => {
+            global.document.activeElement = { tagName: 'LI' };
+            [...'SU-77'].forEach((k) => key(k, 10));
+            const enter = key('Enter', 10);
+
+            expect(enter.preventDefault).toHaveBeenCalled();
+            expect(enter.stopPropagation).toHaveBeenCalled();
+            expect(cb).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves the Enter of a scan to a focused input (known: that input then also submits)', () => {
+            global.document.activeElement = { tagName: 'INPUT' };
+            [...'SU-78'].forEach((k) => key(k, 10));
+            const enter = key('Enter', 10);
+
+            expect(enter.preventDefault).not.toHaveBeenCalled();
+            expect(cb).toHaveBeenCalledWith('SU-78', 'ZEBRA_KEYSTROKE_WEDGE');
+        });
+
+        it('does nothing at all once the consumer has detached', () => {
+            BarcodeScanService.detachHardwareScanner(cb);
+            const listener = windowEventListeners['keydown'];
+
+            expect(listener).toBeUndefined();
+        });
+    });
+
     describe('Camera Barcode Scanning', () => {
         // navigator.mediaDevices is undefined under Jest's node environment, so scanWithCamera takes the fallback path.
         beforeEach(() => {

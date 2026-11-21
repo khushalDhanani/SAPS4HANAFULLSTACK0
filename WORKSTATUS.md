@@ -19,7 +19,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **Current checkout:** `feature01`.
 - **Codebase Modularization Progress — PASS:** Executed full codebase scan using exact POSIX `wc -l` on first-party source files (713 by the reproducible filter in `SCAN_REPORT.md` Section 8.5; the earlier 715 and 722 figures came from the original scan and could not be reproduced). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
   1. *Decomposition Milestones (41 Monoliths Eliminated):* 41 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `salesInquiryDocumentCreator.js` [68], `GoodsReceiptPostingHelper.js` [11], `AuthService.js` [291], `AuthStorage.js` [222], `SystemLogAdapter.js` [212], `UserManagementAdapter.js` [273], `lockNotifier.js` [263], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214], `GoodsReceiptStorageUnitResolver.js` [47], `BusinessConfigResolver.js` [268], `service.js` [113], `S4HttpClient.js` [225], `integrationDiagnostics.js` [116], `MibLabelAdapter.js` [118], `QuarantineLabelAdapter.js` [130], `GoodsReceiptAttemptStore.js` [254]); on 2026-11-21 `SalesInquiryAdapter.js` [224] and `PurchaseOrderValidator.js` [285] were also brought below 300 (43 in total). `PurchaseOrders.controller.js` is 296 lines after the 2026-11-21 12:06 fixes.
-  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 94 files (2026-11-21: `PurchaseOrderValidator.js` 930 → 285 and `SalesInquiryAdapter.js` 676 → 224). Total first-party files scanned: 713 (see `SCAN_REPORT.md` Section 8.5 for the rule).
+  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 95 files (94 after the splits; a grown test file added one on 2026-11-21) (2026-11-21: `PurchaseOrderValidator.js` 930 → 285 and `SalesInquiryAdapter.js` 676 → 224). Total first-party files scanned: 713 (see `SCAN_REPORT.md` Section 8.5 for the rule).
   3. *Validation (2026-11-21 12:06 IST):* `ui5lint` 0 findings; `eslint` 0 errors, 0 warnings (8 `no-unused-vars` warnings in test files resolved). `npx jest`: 212 suites, 3,510 passed, 13 skipped, 0 failed. The 13 skipped tests are the live-SAP suites `sapLogsLive.test.js` (7) and `sapLogsHttpLive.test.js` (6), skipped unless `ALLOW_LIVE_SAP_TOOLS=1`. The earlier 2-test failure and its fix are in the Changes Log entry "2026-11-21 11:45 IST — SCAN_REPORT.md validation, stale AuthService test mock fix, report corrections".
 - **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting all fifteen monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], `HandlingUnits.controller.js` [643 lines], `CreateCustomerReturn.controller.js` [668 lines], `GoodsReceipt.controller.js` [613 lines], `MibLabel.controller.js` [588 lines], `QuarantineLabels.controller.js` [540 lines], `CustomerInvoices.controller.js` [540 lines], `SalesOrders.controller.js` [407 lines], `CustomerReturns.controller.js` [378 lines], and `App.controller.js` [366 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
@@ -397,6 +397,54 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-21 12:35 IST — Phase 4 — Full integration validation (evidence per tier) — PARTIAL
+
+- REQUEST: Pasted roadmap Phase 4: CDS compile, full Jest, ESLint + UI5 lint, SAP-free browser E2E, controlled read-only SAP connectivity and metadata checks, SAP read-back with approved test data.
+- STATE VALIDATED: commit `ad511dda` plus the uncommitted Phase 3 changes. No code was changed in this entry.
+- TIER 1 — CDS: PASS. `npx cds compile '*' --to json` exit 0; `npx cds compile srv --to edmx -o <dir>` exit 0 (20 files); `npx cds compile db --to hana` exit 0. (@sap/cds 10.1.1, cds-dk 10.2.0.)
+- TIER 1b — MTA: NOT VERIFIED. `npm run check:mbt` exit 1: the `mbt` binary is missing on this machine.
+- TIER 2 — Jest: PASS. `npx jest` → 216 suites, 3,618 passed, 13 skipped (live-SAP suites), 0 failed.
+- TIER 3 — Lint: PASS. `npx eslint .` exit 0; `npm --prefix app/fiori-app run lint` 0 findings; `npm run scan:secrets` 0 findings in 1,066 tracked files.
+- TIER 4 — SAP-free browser E2E: PASS. `node test/e2e/runAllE2E.js --sap-free` → 6/6 suites.
+- TIER 5 — Read-only SAP connectivity and metadata: PASS. Tools inspected first: they issue only OData GETs and `RFC_READ_TABLE`. Target checked without printing values: matches the documented dev sandbox, client 220, not production. Configuration is in the git-ignored `.env`.
+  - READ-ONLY `tools/rfc-preflight.js` (07:03 UTC): `RFC PREFLIGHT PASS [ok]: Connected to client 220`.
+  - READ-ONLY `tools/check-sap-integration-diagnostic.js --allow-live-sap` (07:03 UTC): 12 stages, 12 PASSED. OData channel: configured, reachable, authenticated, authorized, `$metadata` of `C_PURCHASEORDER_FS_SRV` valid, one read of `C_PurchaseOrderFs` succeeded. RFC channel: all six stages passed.
+  - Not run: `tools/validate-sap-sandbox.js` (T001W read).
+- TIER 6 — SAP read-back with approved test data: BLOCKED. No approved test data or document numbers were provided, and no live write is authorized.
+- OBSERVATION: both clients logged a fallback to local connection parameters because no Destination service binding exists locally; `RfcClient` still has that fallback in every environment (not part of Phase 2).
+- NOT VERIFIED: MTA validation; SAP-connected browser E2E; the Phase 1 lease on HANA; BTP destinations and Principal Propagation.
+- STATUS: PARTIAL — tiers 1–5 have evidence; tier 6 is blocked on approved test data.
+- NEXT: Provide approved test data (document numbers to read back) for tier 6; install `mbt` or rely on hosted CI for MTA validation.
+
+### 2026-11-21 12:31 IST — Phase 3 — Frontend reliability (scanner lifecycle, consumers, role fallback) — PARTIAL
+
+- REQUEST: Pasted remediation roadmap, Phase 3 "Frontend reliability": test barcode scanner lifecycle; prevent multiple consumers from overwriting each other's callbacks; test scanner input versus ordinary keyboard input; review the frontend role fallback. Exit condition: predictable component lifecycle and UI authorization behaviour.
+- INSPECT: `app/fiori-app/webapp/service/BarcodeScanService.js`, its only consumer `modules/wm/goods-receipt/controller/GoodsReceipt.controller.js` (+ `GoodsReceiptReferenceSearch.js`, `view/*.xml`), `service/AuthService.js`, `service/AuthUserHelper.js`, callers of `hasAnyRole` / `canCreateDelivery`, existing `test/unit/wm/barcodeScanService.test.js` and `goodsReceiptController.test.js`. ui5-mcp `get_api_reference` failed (CDN has no version file for 1.136.5), so `Router.attachRouteMatched` / `getParameter("name")` were taken from existing use in `controller/Dashboard.controller.js:110,129`.
+- FINDINGS:
+  1. One global scanner callback — CONFIRMED. A second `attachHardwareScanner` replaced the first callback, and `detachHardwareScanner` ignored its argument and switched the scanner off for everyone.
+  2. Scanner lifecycle — DEFECT CONFIRMED. The Goods Receipt controller attached in `onInit` and detached only in `onExit`. UI5 keeps the view alive after navigation, so after one visit a fast scan on any other screen ran the Goods Receipt handler (navigation to the receipt detail, or an SAP read), and its Enter was consumed.
+  3. Scanner versus keyboard — holds as designed: a scan needs at least 3 characters and Enter, all within 50 ms of each other. Now covered by tests.
+  4. Role fallback — DEFECT CONFIRMED. `AuthService.hasAnyRole` returned `true` when `AuthUserHelper` could not be resolved, so UI role checks (Admin menu, SAP Logs, User Master section) would open. The CAP services enforce authorization themselves; this affects only what the UI shows.
+- CHANGED:
+  - `BarcodeScanService.js` (416 → 437): consumers are kept in a list, the most recent one receives scans; `detachHardwareScanner(fn)` removes only that consumer and the global listeners are removed with the last one; without an argument it still detaches everything.
+  - `GoodsReceipt.controller.js` (275 → 292): attaches its scanner handler on its own two routes and detaches it on every other route; stops watching routes on exit.
+  - `AuthService.js` (293 → 295): `hasAnyRole` returns `false` and logs a warning when the helper cannot be resolved; `canCreateDelivery` inherits that.
+- TEST DECISION: TEST ADDED and TEST UPDATED.
+  - `test/unit/wm/barcodeScanService.test.js` (+20 tests): multiple consumers; listener lifecycle; half a scan not carried over; throwing consumer; scanner speed versus typing; late Enter; short input; modifier keys; ordinary Enter untouched; Enter consumed outside inputs.
+  - `test/unit/wm/goodsReceiptController.test.js` (+4): detach on another route, re-attach on its own routes, cleanup on exit.
+  - `test/unit/purchase-order/createPORefreshRouting.test.js` (+1): role check fails closed without the helper.
+  - `test/unit/auth/authUserHelperRoles.test.js` (new, 17 tests): role matching rules, Admin wildcard, non-string scopes, delivery permission per role.
+- TESTED: `npx jest` → 216 suites, 3,618 passed, 13 skipped (live-SAP suites), 0 failed. `npx eslint .` → exit 0. `npm --prefix app/fiori-app run lint` → 0 findings. `node test/e2e/runAllE2E.js --sap-free` → 6/6 suites PASS. `git diff --check` → clean.
+- NOT VERIFIED: the Goods Receipt screen in a browser. Its suite `test/e2e/wm/verifyWmScreens.e2e.js` is not part of the SAP-free set because the screen reads SAP, so it was not run; the route-following scanner and a real Zebra scanner were not exercised. No SAP call was made.
+- OPEN FINDINGS (not changed):
+  - A scan made while focus is in the Storage Unit input is handled twice on the detail page: the input's own submit and the scanner callback both call `onScanStorageUnit` (two read requests). The service leaves Enter to a focused input by design; a test records this.
+  - In keystroke-wedge mode the scanned characters are still typed into whichever input has focus.
+  - `AuthUserHelper.hasAnyRole` treats an empty or missing role list as "any signed-in user"; recorded in a test.
+  - A key pressed less than 50 ms before a scan starts becomes part of the barcode.
+- ASSUMPTIONS: only one screen consumes scans at a time, so the most recently attached consumer is the right recipient (INFERRED from there being one consumer today).
+- STATUS: PARTIAL — implemented and validated with unit tests and SAP-free browser tests; the Goods Receipt screen itself was not opened in a browser. Uncommitted at the time of writing, together with Phases 1 and 2.
+- NEXT: Run `verifyWmScreens.e2e.js` against an SAP-connected environment (read-only) and try a hardware scan on the Goods Receipt screen and on one other screen.
 
 ### 2026-11-21 12:26 IST — Phase 2 — SAP integration security (CSRF fail-closed, no write retry, destination errors) — PARTIAL
 
