@@ -202,16 +202,16 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **53** | **399** | `test/unit/sales-inquiry/salesInquiryMapping.test.js` | Tests |
 | **54** | **397** | `test/unit/auth/frontendAuthStorage.test.js` | Tests |
 | **55** | **394** | `app/fiori-app/webapp/service/ODataClient.js` | Frontend |
-| **56** | **386** | `app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js` | Frontend |
-| **57** | **386** | `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js` | Integrations |
-| **58** | **383** | `test/unit/le/outboundDeliveryHandler.test.js` | Tests |
-| **59** | **382** | `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js` | Integrations |
-| **60** | **381** | `test/unit/admin/SapLogsService.test.js` | Tests |
-| **61** | **380** | `test/unit/wm/mibLabelPdf.test.js` | Tests |
-| **62** | **379** | `srv/integration/s4hana/RfcClient.js` | Integrations |
-| **63** | **379** | `test/e2e/wm/verifyMibLabels.e2e.js` | Tests |
-| **64** | **378** | `test/unit/wm/mibLabelAdapter.test.js` | Tests |
-| **65** | **374** | `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` | Backend |
+| **56** | **391** | `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` | Backend |
+| **57** | **386** | `app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js` | Frontend |
+| **58** | **386** | `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js` | Integrations |
+| **59** | **383** | `test/unit/le/outboundDeliveryHandler.test.js` | Tests |
+| **60** | **382** | `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js` | Integrations |
+| **61** | **381** | `test/unit/admin/SapLogsService.test.js` | Tests |
+| **62** | **380** | `test/unit/wm/mibLabelPdf.test.js` | Tests |
+| **63** | **379** | `srv/integration/s4hana/RfcClient.js` | Integrations |
+| **64** | **379** | `test/e2e/wm/verifyMibLabels.e2e.js` | Tests |
+| **65** | **378** | `test/unit/wm/mibLabelAdapter.test.js` | Tests |
 | **66** | **374** | `test/unit/le/deliveryNoRefAdapter.test.js` | Tests |
 | **67** | **373** | `test/unit/wm/quarantineLabelsController.test.js` | Tests |
 | **68** | **370** | `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml` | Frontend |
@@ -510,6 +510,8 @@ The `git status` snapshot originally printed here was stale: those files were co
 - Highest-risk findings, step 4 (2026-11-21): `ODataClient.js` is now 394 lines; Section 4 counts refreshed.
 
 - Goods-receipt document attribution (2026-11-21): `goodsReceiptRecheckLease.test.js` grew to 318 lines and joined the inventory, which makes **96 files** (62 test files). Sections 1.2, 2 and 4 updated.
+
+- GR-03 (2026-11-21): `goodsReceipt.handler.js` is now 391 lines; Section 4 counts refreshed. The inventory stays at 96 files.
 
 ---
 *Line counts verified with POSIX `wc -l`; validation status is as recorded in Section 8.3.*

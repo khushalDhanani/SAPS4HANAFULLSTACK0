@@ -398,6 +398,31 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 13:04 IST — GR-03: plant authorization uses the SAP plant of the document that is posted against — PARTIAL
+
+- REQUEST: Pasted finding "GR-03 — Purchase Order posting has a plant authorization gap" (P1): read the actual Purchase Order item plant from SAP before posting and validate it against the user's scope; do not use the browser's Plant field.
+- FINDING (CONFIRMED, and wider than reported; proven by 6 tests that failed before the fix):
+  1. `postGoodsReceipt` validated the request's `Plant`, then `deliveryPlantFailure` returned at once when `DeliveryDocument` was empty. A Purchase Order receipt (`SourceOfGR='PURORD'`) was therefore posted without any check against the plant SAP holds for the order item.
+  2. The poster takes its target from `DeliveryDocument || PurchaseOrder || StorageUnit`. A delivery number sent only in the `StorageUnit` field was posted as an inbound delivery, again without the SAP plant check, and also without the posting-attempt log.
+  - Reach: the screen cannot produce either request (it always sends a delivery to the storage-unit action), but any user with the WarehouseClerk role can call the action directly.
+- ROOT CAUSE: the handler and the poster each decided separately which document a request targets.
+- CHANGED:
+  - `srv/integration/s4hana/wm/GoodsReceiptODataPoster.js`: new exported `receiptTarget(payload)` → `{ document, source, item }`; the poster now uses it.
+  - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` (`postGoodsReceipt`): uses the same `receiptTarget`. A delivery named only in `StorageUnit` is treated as `DeliveryDocument` from the start (SAP plant check and attempt log apply). For a Purchase Order target, new `purchaseOrderPlantFailure` checks the plant SAP holds for the exact order item with `assertPlantsInScope`; an unreadable or empty plant refuses the posting (503, not posted).
+  - `srv/integration/s4hana/wm/GoodsReceiptItemReader.js`, `GoodsReceiptAdapter.js`: new `readPurchaseOrderItemPlant(order, item)`. It reads `GR4PO_DL_Headers(InboundDelivery=…,SourceOfGR='PURORD')/Header2Items` of `MMIM_GR4PO_DL_SRV` and returns `Plant` of the exact item only (no fallback to another item); order and item are validated before they go into the URL.
+- SAP CONTRACT: read-only; no write and no payload change. Entity `GR4PO_DL_Item`, navigation `Header2Items` and property `Plant` are in `docs/sap-metadata-reference/MMIM_GR4PO_DL_SRV.edmx`; the same navigation is already read by `getGoodsReceiptItem` (`GoodsReceiptItemReader.js`).
+- UNCHANGED: `postGoodsReceiptWithStorageUnit` — its poster refuses a request without `DeliveryDocument` ("Inbound Delivery Number could not be resolved"), and `deliveryPlantFailure` covers the delivery. Admin stays unrestricted (no plant read).
+- TEST DECISION: TEST ADDED — `test/unit/wm/goodsReceiptTargetPlant.test.js` (21 tests): PO in another plant refused with 403 although the request names the user's plant; PO in scope posts; empty or unreadable PO plant → 503, not posted; Admin unrestricted; delivery in the `StorageUnit` field refused / not posted when unreadable / protected by the attempt log; delivery named in `DeliveryDocument` still checked against the delivery; `receiptTarget` cases; the poster sends the target the authorization checked; `readPurchaseOrderItemPlant` exact item, no fallback, malformed input never sent to SAP, SAP failure surfaces.
+- TESTED: 6 of the new tests failed before the fix. After it: `npx jest` → 220 suites, 3,706 passed, 13 skipped, 0 failed. `npx eslint .` exit 0. UI5 lint 0 findings. `npx cds compile '*'` exit 0. `node test/e2e/runAllE2E.js --sap-free` → 6/6. `git diff --check` clean.
+- NOT VERIFIED: `readPurchaseOrderItemPlant` against SAP (no Purchase Order number was available to read); that `Header2Items` lists every item a receipt can be posted for (an item missing from it is refused, which fails closed). No SAP call made.
+- OPEN FINDINGS (not changed):
+  - A Purchase Order receipt still runs without the posting-attempt log (`postWithAttempt` skips it when there is no delivery), so it has no double-post protection.
+  - `SourceOfGR` is read from the request although it is not a declared action parameter; whether CAP passes it through was not checked. The authorization and the poster use the same value either way.
+  - Other write actions (handling unit, outbound delivery, customer return) were not re-audited for the same "request plant versus SAP plant" pattern in this change.
+- ASSUMPTIONS: none.
+- STATUS: PARTIAL — fixed and unit-tested; the new SAP read is not proven live.
+- NEXT: Read one real Purchase Order item plant (read-only) once a Purchase Order number is provided; decide on attempt-log protection for Purchase Order receipts.
+
 ### 2026-11-21 12:59 IST — Highest-risk findings, step 3 (implementation): a document counts as the attempt's only with user and quantity evidence — PARTIAL
 
 - REQUEST: User go "Yes, implement it" for the proposal recorded in the step 3 discovery entry (finding P1 "the pre-post baseline cannot identify who created a new SAP document").

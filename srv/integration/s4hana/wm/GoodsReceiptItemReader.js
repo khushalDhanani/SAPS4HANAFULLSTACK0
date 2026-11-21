@@ -57,6 +57,22 @@ class GoodsReceiptItemReader {
   }
 
   /**
+   * The plant SAP holds for a purchase order item, read from MMIM_GR4PO_DL_SRV (GR4PO_DL_Headers/Header2Items,
+   * entity GR4PO_DL_Item, property Plant: docs/sap-metadata-reference/MMIM_GR4PO_DL_SRV.edmx). '' when the item
+   * is not among the order's open receipt items. Only the exact item counts: no fallback to another item.
+   */
+  async readPurchaseOrderItemPlant(purchaseOrder, purchaseOrderItem) {
+    const order = String(purchaseOrder || '').trim();
+    const item = String(purchaseOrderItem || '').trim().replace(/^0+(?=.)/, '');
+    if (!/^[A-Za-z0-9]{1,12}$/.test(order) || !/^[0-9]{1,6}$/.test(item)) return '';
+    const res = await this.adapter._get(
+      `/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers(InboundDelivery='${order}',SourceOfGR='PURORD')/Header2Items`, '$format=json');
+    const items = Array.isArray(res) ? res : (res?.results ? res.results : (res ? [res] : []));
+    const match = items.find((i) => String(i.DeliveryDocumentItem || '').trim().replace(/^0+(?=.)/, '') === item);
+    return match ? String(match.Plant || '').trim() : '';
+  }
+
+  /**
    * Retrieves authentic Goods Receipt item data (OpenQuantity, OrderedQuantity, UnitOfMeasure, EntryUnit, etc.)
    * from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items and GR4PO_DL_Headers, completed with the delivery item itself (LIPS/LIKP).
    * Eliminates hardcoded quantities in strict compliance with AGENTS.md.

@@ -2,6 +2,22 @@ const s4Config = require('../s4Config');
 
 const GR_MOVEMENT_TYPE = '101';
 
+/**
+ * The SAP document a receipt request is posted against, whichever request field names it:
+ * { document, source: 'INBDELIV' (inbound delivery) | 'PURORD' (purchase order), item }.
+ * The poster and the plant authorization both use this, so they cannot disagree about the target.
+ */
+function receiptTarget(payload = {}) {
+  const { DeliveryDocument, PurchaseOrder, StorageUnit } = payload;
+  const document = String(DeliveryDocument || PurchaseOrder || StorageUnit || '').trim();
+  const isPurchaseOrder = PurchaseOrder && !DeliveryDocument && document === String(PurchaseOrder).trim();
+  return {
+    document,
+    source: payload.SourceOfGR || (isPurchaseOrder ? 'PURORD' : 'INBDELIV'),
+    item: String(payload.DeliveryDocumentItem || payload.PurchaseOrderItem || '').trim()
+  };
+}
+
 async function postGoodsReceipt(adapter, payload = {}, options = {}) {
   const {
     StorageUnit,
@@ -43,20 +59,10 @@ async function postGoodsReceipt(adapter, payload = {}, options = {}) {
   }
 
   // Retargeted to MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers (Inventory Management / Movement 101)
-  const sDoc = DeliveryDocument || PurchaseOrder || StorageUnit;
+  const { document: sDoc, source: sourceOfGR } = receiptTarget(payload);
   const now = new Date();
   const todayFormatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T00:00:00`;
   const tempKey = `${sDoc}GR${now.toISOString().replace(/[-:T]/g, '').slice(0, 14)}`;
-
-  // Determine SourceOfGR: 'INBDELIV' (Inbound Delivery) or 'PURORD' (Purchase Order)
-  let sourceOfGR = payload.SourceOfGR;
-  if (!sourceOfGR) {
-    if (payload.PurchaseOrder && !payload.DeliveryDocument && String(sDoc) === String(payload.PurchaseOrder)) {
-      sourceOfGR = 'PURORD';
-    } else {
-      sourceOfGR = 'INBDELIV';
-    }
-  }
 
   const rawItemNo = payload.DeliveryDocumentItem || payload.PurchaseOrderItem;
   if (!rawItemNo && (!Array.isArray(payload.Items) || payload.Items.length === 0)) {
@@ -197,6 +203,7 @@ async function postGoodsReceipt(adapter, payload = {}, options = {}) {
 }
 
 module.exports = {
+  receiptTarget,
   postGoodsReceipt,
   GR_MOVEMENT_TYPE
 };

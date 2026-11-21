@@ -3,6 +3,7 @@ const { throwIfTextMustShow } = require('../../../common/visibleError');
 const crypto = require('crypto');
 const LOG = require('../../../common/logger')('goods-receipt');
 const GoodsReceiptAdapter = require('../../../integration/s4hana/wm/GoodsReceiptAdapter');
+const { receiptTarget } = require('../../../integration/s4hana/wm/GoodsReceiptODataPoster');
 const GoodsReceiptAttemptStore = require('../GoodsReceiptAttemptStore');
 const { extractFilterParam, extractFilterParams, applyPaging, extractIfMatch } = require('../../../common/filterUtils');
 const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../validation/common');
@@ -22,6 +23,16 @@ async function deliveryPlantFailure(req) {
     if (!DeliveryDocument) return null;
     try {
         await assertPlantsInScope(req.user, async () => [await GoodsReceiptAdapter.readDeliveryPlant(DeliveryDocument, DeliveryDocumentItem || PurchaseOrderItem || '10')], `delivery ${DeliveryDocument}`);
+        return null;
+    } catch (err) {
+        return err;
+    }
+}
+
+/** A purchase order receipt has no delivery: the plant SAP holds for the order item decides, never the request's Plant. */
+async function purchaseOrderPlantFailure(req, target) {
+    try {
+        await assertPlantsInScope(req.user, async () => [await GoodsReceiptAdapter.readPurchaseOrderItemPlant(target.document, target.item || '10')], `purchase order ${target.document}`);
         return null;
     } catch (err) {
         return err;
@@ -206,6 +217,12 @@ const init = (srv) => {
      * Posts Goods Receipt (101) directly to SAP S/4HANA
      */
     srv.on('postGoodsReceipt', async (req) => {
+        // The document that will be posted against, by the poster's own rule. A delivery named only in the
+        // StorageUnit field is a delivery: from here on it is checked and logged as one.
+        const target = receiptTarget(req.data);
+        if (target.source === 'INBDELIV' && target.document && !req.data.DeliveryDocument) {
+            req.data.DeliveryDocument = target.document;
+        }
         const {
             StorageUnit,
             DeliveryDocument,
@@ -252,7 +269,7 @@ const init = (srv) => {
         if (scopeErr) {
             return req.reject(403, scopeErr);
         }
-        const plantErr = await deliveryPlantFailure(req);
+        const plantErr = target.source === 'PURORD' ? await purchaseOrderPlantFailure(req, target) : await deliveryPlantFailure(req);
         if (plantErr) {
             throwIfTextMustShow(plantErr);
             return req.reject(plantErr.status, plantErr.message);

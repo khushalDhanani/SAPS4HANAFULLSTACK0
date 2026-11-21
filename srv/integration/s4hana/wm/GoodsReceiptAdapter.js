@@ -130,6 +130,10 @@ class GoodsReceiptAdapter {
     return (this.itemReader || new GoodsReceiptItemReader(this)).readDeliveryPlant(deliveryDocument, deliveryItem);
   }
 
+  async readPurchaseOrderItemPlant(purchaseOrder, purchaseOrderItem) {
+    return (this.itemReader || new GoodsReceiptItemReader(this)).readPurchaseOrderItemPlant(purchaseOrder, purchaseOrderItem);
+  }
+
   async getGoodsReceiptItem(deliveryDocument = '', deliveryItem = '', purchaseOrder = '', purchaseOrderItem = '') {
     return (this.itemReader || new GoodsReceiptItemReader(this)).getGoodsReceiptItem(deliveryDocument, deliveryItem, purchaseOrder, purchaseOrderItem);
   }
