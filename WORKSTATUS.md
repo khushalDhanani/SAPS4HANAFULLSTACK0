@@ -398,6 +398,22 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 12:51 IST — Highest-risk findings, step 3: read-only SAP discovery for document attribution — BLOCKED (awaiting decision)
+
+- REQUEST: Approved plan, step 3 (finding P1 "the pre-post baseline cannot identify who created a new SAP document"). Discovery only; no code changed.
+- READ-ONLY SAP CALLS (dev sandbox, client 220, 07:21 UTC; no writes):
+  1. `RFC_READ_TABLE` on `DD03L` for `MATDOC`: 333 fields. Present: `USNAM`, `CPUDT`, `CPUTM`, `BUDAT`, `BLDAT`, `BKTXT`, `XBLNR`, `MENGE`, `ERFMG`, `ERFME`, `MEINS`, `TCODE2`, `VBELN_IM`, `VBELP_IM`, `SGTXT`, `SMBLN`, `CANCELLED`, `REVERSAL_MOVEMENT`.
+  2. `RFC_GET_FUNCTION_INTERFACE` for `BAPI_INB_DELIVERY_CONFIRM_DEC`: import `HEADER_DATA` (`BAPIIBDLVHDRCON`: `DELIV_NUMB`, `EXTDELV_NO`, weights, volume, `DOOR`), `HEADER_CONTROL` (`BAPIIBDLVHDRCTRLCON`), `TECHN_CONTROL`, tables `ITEM_DATA`, `ITEM_CONTROL`, handling-unit tables, `EXTENSION1`, `EXTENSION2`, `RETURN`. **No parameter carries a material-document header text or reference**, so the attempt reference cannot be passed to SAP through this BAPI as it stands.
+  3. `RFC_READ_TABLE` on `MATDOC`, 5 rows with `BWART = '101'` and a delivery reference (values not printed): `USNAM`, `CPUDT` (8 chars), `CPUTM` (6 chars), `MENGE`, `ERFMG`, `MEINS`, `XBLNR`, `TCODE2` filled in 5/5; `BKTXT` filled in 0/5; `XBLNR` equals the delivery number in 5/5; `TCODE2` values `MIGO_GR`, `VL32N`; none of the five was posted by this application's technical user.
+- CONCLUSIONS:
+  - CONFIRMED: SAP stores the posting user, entry date and time, quantity and transaction code on every sampled receipt.
+  - CONFIRMED: an exact reference from the application to the document is not available on the BAPI path.
+  - NOT VERIFIED: which `USNAM` and `TCODE2` a receipt posted by this application carries (no such document was in the sample). INFERRED: `USNAM` is the RFC logon user.
+- PROPOSAL (not implemented): extend the existing read `_read101Docs` with `USNAM`, `CPUDT`, `CPUTM`, `ERFMG`, `ERFME`, and accept a new document as the attempt's only if all three hold: posted by the application's RFC user, entered at or after the attempt started, and quantity equal to the attempt's quantity. Anything else stays ambiguous and blocked. A receipt posted directly in SAP by another user (`MIGO_GR`, `VL32N`) would then no longer be mistaken for this application's posting.
+- OPEN DECISION: with a Principal Propagation RFC destination the posting user would be the end user, not a technical user; the rule would then have to compare against the attempt's `PostingUser`. Which identity posts in the target landscape is UNKNOWN.
+- STATUS: BLOCKED — discovery done; implementation waits for a decision on the proposal and on the posting identity.
+- NEXT: Decide the proposal; then verify one receipt posted by the application (needs a written go for that write, or an existing document number posted by it).
+
 ### 2026-11-21 12:50 IST — Highest-risk findings, step 2: idempotency key tells a replay from a new partial receipt — PARTIAL
 
 - REQUEST: Approved plan, step 2 (finding P1 "Goods Receipt idempotency does not distinguish a replay from a new partial receipt").
