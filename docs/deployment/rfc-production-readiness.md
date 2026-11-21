@@ -135,8 +135,37 @@ To establish production least-privilege security, the technical user designated 
   - `RSAU_LOG`: `RSAU_API_GET_LOG_DATA` (Security Audit Log / SM20)
   - `SU01`, `USER`: `BAPI_USER_GET_DETAIL`, `BAPI_USER_GETLIST`, `BAPI_USER_LOCK`, `BAPI_USER_UNLOCK` (User administration)
   - `BAPI`: `BAPI_TRANSACTION_COMMIT`, `BAPI_TRANSACTION_ROLLBACK` (Transaction boundaries)
-  - `V55K`: `BAPI_INB_DELIVERY_CONFIRM_DEC` — **no longer called** since the Goods Receipt feature was removed on 2026-11-21; this authorization should be withdrawn from the technical user
+  - `V55K`: `BAPI_INB_DELIVERY_CONFIRM_DEC` — **no longer called** since the Goods Receipt feature was removed on 2026-11-21. **The group name `V55K` is wrong for the connected system:** `ENLFDIR` shows the module in function group `V50I` (see "Verified on the dev sandbox" below).
   - `HU_BAPI`: `BAPI_HU_CREATE`, `BAPI_HU_PACK`, `BAPI_HU_UNPACK`, `BAPI_HU_DELETE` (Handling Unit management)
+
+#### Verified on the dev sandbox (client 220), 2026-11-21, READ-ONLY (`RFC_READ_TABLE` on `ENLFDIR`, `TFDIR`, `USOBX_C`)
+
+The function-group names in the list above were written from documentation and several do not match the connected system. For `S_RFC` with `RFC_TYPE = FUGR`, the group is what counts:
+
+| Function module(s) the code calls | Function group on the system | Listed above as |
+| --- | --- | --- |
+| `RFC_READ_TABLE` | `SDTX` | `SDST` |
+| `RFC_GET_FUNCTION_INTERFACE` | `RFC1` | `RFC1` |
+| `TH_SERVER_LIST` | `THFB` | `THFB` |
+| `RSLG_READ_SLG` | `RSLG` | `RSLG` |
+| `RSAU_API_GET_LOG_DATA` | `RSAU_LOG` | `RSAU_LOG` |
+| `BAPI_USER_GETLIST`, `BAPI_USER_GET_DETAIL`, `BAPI_USER_LOCK`, `BAPI_USER_UNLOCK` | `SU_USER` | `SU01`, `USER` |
+| `BAPI_TRANSACTION_COMMIT`, `BAPI_TRANSACTION_ROLLBACK` | `BAPT` | `BAPI` |
+| `BAPI_HU_CREATE`, `BAPI_HU_PACK`, `BAPI_HU_UNPACK`, `BAPI_HU_DELETE` | `HU_BASIC_BAPIS` | `HU_BAPI` |
+| `BAPI_INQUIRY_CREATEFROMDATA2` | `2030` | not listed |
+| `BAPI_CUSTOMERRETURN_CREATE` | `2102` | not listed |
+| `Z_MM_QUAR_LABEL_PDF` | `ZMM_QUAR_LABEL` | not listed |
+| `Z_MM_MIB_LABEL_PDF` | no `ENLFDIR` row: the module does not exist on this system | not listed |
+| `BAPI_INB_DELIVERY_CONFIRM_DEC` (removed feature) | `V50I` | `V55K` |
+
+**Authorization to review for withdrawal (Goods Receipt removed):**
+
+- `S_RFC`: `ACTVT = 16`, `RFC_TYPE = FUGR`, `RFC_NAME = V50I` — or, if the role grants by module, `RFC_TYPE = FUNC`, `RFC_NAME = BAPI_INB_DELIVERY_CONFIRM_DEC`. SAP's check-indicator data (`USOBX_C`) lists only `S_RFC` for this module. No function module the remaining code calls is in `V50I`, so withdrawing it does not affect another feature of this application.
+- `S_TABU_NAM` / `S_TABU_DIS`, `ACTVT = 03`: table `LIKP` was read only by the removed code. `LIPS` (outbound delivery), `MATDOC` (quarantine labels), `VEKP` and `VEPO` (handling units) are still read and must stay.
+- OData start authorization (`S_SERVICE`) for `MMIM_GR4PO_DL_SRV` and `LO_BM_BATCH_SRV`: no remaining code calls these services. The exact `S_SERVICE` values (service hash) were **not read** and are Not verified.
+- Business authorizations checked inside the delivery-confirm BAPI (delivery, goods movement, plant, storage location) are **Not verified**: they are not in `USOBX_C` for the module and were not traced. Review the technical user's role for goods-movement objects that no remaining function needs.
+
+Which role the technical user actually has was not read. Nothing was changed in SAP.
 
 ### 2. `S_TABU_DIS` / `S_TABU_NAM` (Table Access for RFC_READ_TABLE)
 - `ACTVT`: `03` (Display)

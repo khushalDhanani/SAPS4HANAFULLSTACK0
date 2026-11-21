@@ -104,7 +104,7 @@ modules:
           content-target: true
       - name: saps4hana-auth
 
-  # ------------------ HDI CONTAINER DEPLOYER (posting attempts) ------------------
+  # ------------------ HDI CONTAINER DEPLOYER (administrator monitoring tables) ------------------
   - name: saps4hana-db-deployer
     type: hdb
     path: gen/db
@@ -161,7 +161,8 @@ resources:
       service: html5-apps-repo
       service-plan: app-runtime
   # ------------------ SAP HANA CLOUD HDI CONTAINER ------------------
-  # Holds only the posting-attempt double-post guard, until the SAP table replaces it.
+  # Holds the administrator monitoring state (user lock, password expiry). The Goods Receipt posting-attempt
+  # table left the model on 2026-11-21; see docs/decisions/goods-receipt-database-cleanup-plan.md before deploying.
   - name: saps4hana-db
     type: com.sap.xs.hdi-container
     parameters:
