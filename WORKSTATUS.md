@@ -398,6 +398,19 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 12:00 IST — Push of feature01 and hosted CI result for `7da8f017` — PARTIAL
+
+- REQUEST: User go "Yes, push".
+- DONE: `git push origin feature01` → `a475f706..7da8f017` (9 commits, including `7443d2d7`, `03e51215`, `7da8f017`). The 11:5x entry that says "Uncommitted at the time of writing" is committed as `7da8f017`.
+- HOSTED CI: CI Pipeline run 44875506955 on `7da8f017` (push event) → **success**.
+  - "Build, Test & Validate" → success.
+  - "Browser E2E, SAP-free suites (PR gate)" → success.
+  - "Browser E2E, full suite (Separately Controlled)" → skipped.
+  - "Non-Production SAP Validation (Separately Controlled)" → skipped.
+- NOT VERIFIED: full Playwright suite against SAP and non-production SAP validation (both skipped by the pipeline); live S/4 reads through the moved `SalesInquiryAdapter` methods.
+- STATUS: PARTIAL — hosted build, tests and SAP-free browser E2E pass; no SAP-connected validation. This entry itself is uncommitted.
+- NEXT: SAP-connected validation needs a suitable runner, approved test data, and a written go per live write.
+
 ### 2026-11-21 11:55 IST — AuthService warns when AuthModelSync is unresolved; WORKSTATUS corrections; i18n finding retracted — PARTIAL
 
 - REQUEST: User go "1": fix the three small defects listed after the SCAN_REPORT work.
