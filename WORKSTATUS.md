@@ -17,9 +17,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
-- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 682 first-party source files (up from 558 initially, due to 94 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
-  1. *Decomposition Milestones (Phases 1-5):* 28 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `salesInquiryDocumentCreator.js` [68], `GoodsReceiptPostingHelper.js` [11], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
-  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 109 files. Total first-party files scanned: 682 files.
+- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 695 first-party source files (up from 558 initially, due to 107 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
+  1. *Decomposition Milestones (Phases 1-5 & Phase 2 Admin/Auth/WM):* 33 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `salesInquiryDocumentCreator.js` [68], `GoodsReceiptPostingHelper.js` [11], `AuthService.js` [291], `AuthStorage.js` [222], `SystemLogAdapter.js` [212], `UserManagementAdapter.js` [273], `lockNotifier.js` [263], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 2 key monoliths heavily trimmed (`SalesInquiryAdapter.js` [-53%], `PurchaseOrderValidator.js` [-18%]).
+  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 104 files. Total first-party files scanned: 695 files.
   3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors). All unit tests pass across all modularized domains.
 - **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting all fifteen monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], `HandlingUnits.controller.js` [643 lines], `CreateCustomerReturn.controller.js` [668 lines], `GoodsReceipt.controller.js` [613 lines], `MibLabel.controller.js` [588 lines], `QuarantineLabels.controller.js` [540 lines], `CustomerInvoices.controller.js` [540 lines], `SalesOrders.controller.js` [407 lines], `CustomerReturns.controller.js` [378 lines], and `App.controller.js` [366 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
@@ -2602,3 +2602,81 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - NEXT:
   - Deliver final comprehensive report to user.
 - FINAL STATUS: PASS — Phase 6 documentation and audit update complete. Working tree verified.
+
+### 2026-11-21 11:15 IST — Frontend Auth & WM Posting Modularization — PASS
+
+- REQUEST: Decompose oversized files exceeding 300 lines on branch `feature01`: `srv/integration/s4hana/wm/GoodsReceiptPostingHelper.js` (547 lines), `app/fiori-app/webapp/service/AuthService.js` (549 lines), and `app/fiori-app/webapp/service/AuthStorage.js` (322 lines) into cohesive sub-modules strictly under 300 lines while preserving 100% public contracts, tests, and security invariants.
+- INSPECT:
+  - Read `AGENTS.md`, `WORKSTATUS.md`, and `SCAN_REPORT.md`.
+  - Inspected `GoodsReceiptPostingHelper.js`: identified 4 distinct responsibilities: BAPI error message classification, MATDOC read-back / attempt finder, OData movement 101 posting with SLED validation, and BAPI storage unit / inbound delivery confirmation with HU verification.
+  - Inspected `AuthService.js` and `AuthStorage.js`: identified user identity resolution, role checks, OData V4 model header sync, storage encryption/security tiers (volatile sessionStorage vs persistent localStorage, token expiry), and core session management.
+- CHANGED:
+  - `srv/integration/s4hana/wm/GoodsReceiptBapiErrorClassifier.js` (created, 44 lines): BAPI error detection and message classification.
+  - `srv/integration/s4hana/wm/GoodsReceiptDocFinder.js` (created, 32 lines): Material document lookups and attempt matching.
+  - `srv/integration/s4hana/wm/GoodsReceiptODataPoster.js` (created, 202 lines): Movement 101 posting via OData, SLED expiry check, source resolution.
+  - `srv/integration/s4hana/wm/GoodsReceiptBapiPoster.js` (created, 293 lines): Storage Unit & Inbound Delivery posting via BAPI, LIKP verification, VEKP handling unit lookup.
+  - `srv/integration/s4hana/wm/GoodsReceiptPostingHelper.js` (modified, slashed from 547 to 11 lines, -98.0%): Facade preserving all export signatures.
+  - `app/fiori-app/webapp/service/AuthUserHelper.js` (created, 96 lines): FLP Container / Component user extraction, role checks, delivery permissions.
+  - `app/fiori-app/webapp/service/AuthModelSync.js` (created, 35 lines): Model header authorization synchronization across OData V4 models.
+  - `app/fiori-app/webapp/service/AuthStorage.js` (modified, slashed from 322 to 222 lines, -31.1%): Storage helper with dual-tier storage and token expiry invariants.
+  - `app/fiori-app/webapp/service/AuthService.js` (modified, slashed from 549 to 291 lines, -47.0%): Core authentication coordinator.
+- TEST DECISION: EXISTING TEST SUFFICIENT — Existing unit test suites (`test/unit/wm/goodsReceiptService.test.js`, `test/unit/wm/goodsReceiptAttempt.test.js`, `test/unit/wm/goodsReceiptPlantScope.test.js`, `test/unit/wm/plantLimits.test.js`, `test/unit/wm/goodsReceiptController.test.js`, `test/unit/wm/goodsReceiptTwoInstances.test.js`, `test/unit/auth/`, `test/unit/controller/`) cover all functionality.
+- VALIDATION:
+  - Exact Line Counts: All 9 files strictly <= 300 lines.
+  - Linters: `npm run lint` PASSED (0 errors); UI5 Linter PASSED (0 findings).
+  - Tests: All WM tests (30 suites, 652 passed), all Auth tests (8 suites, 121 passed), and all controller suites (7 suites, 78 passed) PASS.
+- ASSUMPTIONS: None.
+- NEXT: Modularize `SystemLogAdapter.js`, `UserManagementAdapter.js`, and `lockNotifier.js`.
+- FINAL STATUS: PASS.
+
+### 2026-11-21 11:20 IST — Admin Integration & Lock Notifier Modularization — PASS
+
+- REQUEST: Decompose oversized administrative integration and backend files exceeding 300 lines on branch `feature01`: `srv/integration/s4hana/admin/SystemLogAdapter.js` (532 lines), `srv/integration/s4hana/admin/UserManagementAdapter.js` (530 lines), and `srv/admin/lockNotifier.js` (509 lines) into cohesive sub-modules strictly under 300 lines while preserving 100% public contracts, tests, and security invariants.
+- INSPECT:
+  - Read `AGENTS.md`, `WORKSTATUS.md`, and `SCAN_REPORT.md`.
+  - Inspected `SystemLogAdapter.js`: identified message sanitization (PII, hostnames, IPs, user tokens), template parsing (`sm21-templates.json` strict grammar), timezone offset conversions (IST UTC+05:30), entry mapping, and adapter RFC instance/read logic.
+  - Inspected `UserManagementAdapter.js`: identified user detail reading and mapping (`BAPI_USER_GET_DETAIL`), user lock/unlock LUW coordination (`BAPI_USER_LOCK`/`BAPI_USER_UNLOCK` + commit/rollback), bounded concurrent list enrichment, and RFC table reads (`USR02`, `USER_ADDR`, `USH02`).
+  - Inspected `lockNotifier.js`: identified configuration/timing constants, atomic DB claim and email dispatch (`sendPending`), monitor health/status reporting (`monitorStatus`, `bulkEmailStatus`), app lock context helpers (`recordAppLock`, `notifyAppLock`), and main polling cycle (`pollOnce`, `runCycle`, `startJob`).
+- CHANGED:
+  - `srv/integration/s4hana/admin/SystemLogSanitizer.js` (created, 179 lines): `escapeRegExp`, `sanitizeMessage`, `sanitizeSyslogData`.
+  - `srv/integration/s4hana/admin/SystemLogTemplateParser.js` (created, 116 lines): `sm21Templates` catalog, `formatMessageText` strict placeholder resolution.
+  - `srv/integration/s4hana/admin/SystemLogTimeUtil.js` (created, 81 lines): `resolveTzOffset`, `toRslgTime`, `fromRslgTimeToUtc`.
+  - `srv/integration/s4hana/admin/SystemLogAdapter.js` (modified, slashed from 532 to 212 lines, -60.2%): Core adapter preserving all public class methods and function exports.
+  - `srv/integration/s4hana/admin/UserDetailReader.js` (created, 105 lines): `toMessage`, `mapDetail`, `readUserDetail`.
+  - `srv/integration/s4hana/admin/UserLockCoordinator.js` (created, 56 lines): `commitOrFail`, `changeLock`.
+  - `srv/integration/s4hana/admin/UserListEnricher.js` (created, 114 lines): `enrichUserList` with bounded concurrent RFC pool.
+  - `srv/integration/s4hana/admin/UserTableReader.js` (created, 109 lines): RFC table reads for `USR02`, `USER_ADDR`, and `USH02`.
+  - `srv/integration/s4hana/admin/UserManagementAdapter.js` (modified, slashed from 530 to 273 lines, -48.5%): Core adapter preserving all public class methods and password expiry exports.
+  - `srv/admin/LockNotifierConfig.js` (created, 52 lines): Central configuration, timing constants, positiveInt, recipient resolvers.
+  - `srv/admin/LockNotificationSender.js` (created, 122 lines): Atomic DB claim, retry loops, audit logging, `sendPending`.
+  - `srv/admin/LockNotifierStatus.js` (created, 91 lines): `monitorStatus`, `bulkEmailStatus`.
+  - `srv/admin/LockAppContext.js` (created, 119 lines): App lock recording, history link, context discard, immediate `notifyAppLock`.
+  - `srv/admin/lockNotifier.js` (modified, slashed from 509 to 263 lines, -48.3%): Core poller with `pollOnce`, `runCycle`, `startJob` and full re-exports.
+  - `SCAN_REPORT.md` (modified): Updated Executive Summary metrics, milestone accomplishments (Milestones 31, 32, 33), and Section 4 inventory table (removed rows 37, 38, 40; count down to 104 files).
+- TEST DECISION: EXISTING TEST SUFFICIENT — Existing unit and integration test suites (`test/unit/admin/SystemLogAdapter.test.js`, `test/unit/admin/SecurityAuditLogAdapter.test.js`, `test/unit/admin/SapLogsService.test.js`, `test/unit/admin/UserManagementAdapter.test.js`, `test/unit/admin/adminDashboardList.test.js`, `test/unit/admin/userHistoryReader.test.js`, `test/unit/admin/userPasswordExpiryUtil.test.js`, `test/unit/admin/lockNotifierRules.test.js`, `test/unit/admin/lockDiffEngine.test.js`, `test/unit/admin/lockNotifierConfig.test.js`, `test/unit/admin/lockNotifierJob.test.js`, `test/integration/lockNotificationQueue.test.js`) cover all functionality with zero modifications required.
+- VALIDATION:
+  - Exact Line Counts: All 15 files strictly <= 300 lines:
+    - `SystemLogAdapter.js`: 212 lines
+    - `SystemLogSanitizer.js`: 179 lines
+    - `SystemLogTemplateParser.js`: 116 lines
+    - `SystemLogTimeUtil.js`: 81 lines
+    - `UserManagementAdapter.js`: 273 lines
+    - `UserDetailReader.js`: 105 lines
+    - `UserListEnricher.js`: 114 lines
+    - `UserLockCoordinator.js`: 56 lines
+    - `UserTableReader.js`: 109 lines
+    - `lockNotifier.js`: 263 lines
+    - `LockAppContext.js`: 119 lines
+    - `LockNotificationSender.js`: 122 lines
+    - `LockNotifierConfig.js`: 52 lines
+    - `LockNotifierStatus.js`: 91 lines
+  - Linters: Root ESLint (`npm run lint`): PASSED (0 errors); UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Unit Tests:
+    - Admin log suites: 3 suites, 82 passed, 0 failed.
+    - User Management suites: 64 passed, 0 failed.
+    - Lock Notifier suites: 65 passed, 0 failed.
+    - Combined Admin suites: 7 suites, 218 passed, 0 failed.
+    - Queue integration suite: 46 passed, 0 failed.
+- ASSUMPTIONS: None. All public interfaces, prototype contracts, and module exports preserved.
+- NEXT: Continue decomposition of remaining oversized JS application files on roadmap (`srv/integration/s4hana/wm/GoodsReceiptStorageUnitResolver.js` [495 lines], `srv/common/BusinessConfigResolver.js` [449 lines], `srv/admin/service.js` [448 lines]).
+- FINAL STATUS: PASS — Admin integration and lock notifier modularization fully verified across all unit suites and linters; zero regressions.

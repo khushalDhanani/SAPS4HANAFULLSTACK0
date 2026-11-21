@@ -28,13 +28,13 @@ To guarantee total precision, files were evaluated under strict discovery rules 
 ### 1.2 Summary of Scan Results
 - **Total Tracked Files in Git:** 911 files.
 - **Total Non-Excluded Repository Artifacts (including docs/evidence):** 834 files.
-- **Total First-Party Source Files Scanned:** **682 files** (increased from initial 558 due to the 94 new focused sub-modules created).
-- **Total First-Party Source Files Exceeding 300 Lines:** **109 files** (down from 137 files).
-- **Application & Integration Source Files Exceeding 300 Lines:** **49 files** (23 Frontend, 14 Integrations, 6 Backend, 5 Utilities, 1 Schema Config).
+- **Total First-Party Source Files Scanned:** **695 files** (increased from initial 558 due to the 107 new focused sub-modules created).
+- **Total First-Party Source Files Exceeding 300 Lines:** **104 files** (down from 137 files).
+- **Application & Integration Source Files Exceeding 300 Lines:** **44 files** (21 Frontend, 12 Integrations, 5 Backend, 5 Utilities, 1 Schema Config).
 - **Automated Test Suites Exceeding 300 Lines:** **60 files** (51 Unit test suites, 4 Integration test suites, 5 Browser E2E/support suites).
 
 ### 1.3 Modularization Accomplishments (Phases 1 to 5 & Phase 2 — 100% PASS)
-Through the systematic execution of Phases 1 through 5, **28 major monolithic modules were completely knocked below the 300-line threshold**, while retaining 100% backward compatibility and test coverage:
+Through the systematic execution of Phases 1 through 5, **33 major monolithic modules were completely knocked below the 300-line threshold**, while retaining 100% backward compatibility and test coverage:
 1. **`PurchaseOrders.controller.js`:** Slashed from **1,836 lines down to 293 lines** (-1,543 lines, **-84.0%**). Extracted 7 dedicated submodules (`PurchaseOrderAiChat.js` [212], `PurchaseOrderAiDataFetcher.js` [240], `PurchaseOrderAiIntent.js` [265], `PurchaseOrderAiPrompt.js` [290], `PurchaseOrderAiStream.js` [196], `PurchaseOrderAiWidget.js` [197], `PurchaseOrderTableFilter.js` [262]). All 28 test suites (545 tests) PASS.
 2. **`Dashboard.controller.js`:** Slashed from **1,475 lines down to 275 lines** (-1,200 lines, **-81.4%**). Extracted 8 dedicated submodules (`AdminLockMonitorSection.js` [115], `AdminLogsSection.js` [102], `AdminUserBulkSection.js` [258], `AdminUserDetailSection.js` [223], `AdminUserFilterSection.js` [129], `AdminUserFormatters.js` [138], `AdminUserListSection.js` [234], `DashboardMetricsSection.js` [77]). All 109 tests PASS.
 3. **`CreatePurchaseOrder.controller.js`:** Slashed from **1,223 lines down to 223 lines** (-1,000 lines, **-81.8%**). Extracted 5 dedicated submodules (`CreatePurchaseOrderContextFilter.js` [237], `CreatePurchaseOrderHeaderSync.js` [284], `CreatePurchaseOrderItemManager.js` [153], `CreatePurchaseOrderMessages.js` [223], `CreatePurchaseOrderValueHelp.js` [128]). All 28 test suites (545 tests) PASS.
@@ -63,10 +63,13 @@ Through the systematic execution of Phases 1 through 5, **28 major monolithic mo
 26. **`GoodsReceiptAdapter.js`:** Slashed from **573 lines down to 159 lines** (-414 lines, **-72.3%**). Extracted 2 dedicated submodules (`GoodsReceiptItemReader.js` [224], `GoodsReceiptMasterDataReader.js` [166]). All 5 Goods Receipt test suites (141 tests) and all 30 WM test suites (652 tests) PASS, ESLint 0 errors, UI5 linter 0 findings.
 27. **`salesInquiryDocumentCreator.js`:** Slashed from **632 lines down to 68 lines** (-564 lines, **-89.2%**). Extracted 2 dedicated submodules (`SalesOrderDocumentCreator.js` [298], `SalesInquirySequentialCreator.js` [277]). All 22 sales-inquiry and sales-order test suites (321 tests) PASS, ESLint 0 errors, UI5 linter 0 findings.
 28. **`GoodsReceiptPostingHelper.js`:** Slashed from **547 lines down to 11 lines** (-536 lines, **-98.0%**). Extracted 4 dedicated submodules (`GoodsReceiptBapiErrorClassifier.js` [44], `GoodsReceiptDocFinder.js` [32], `GoodsReceiptODataPoster.js` [202], `GoodsReceiptBapiPoster.js` [293]). All 30 WM test suites (652 tests; 147/147 in Goods Receipt suites) PASS, ESLint 0 errors, UI5 linter 0 findings.
-29. **Integration Adapters Heavily Trimmed:**
+29. **`AuthService.js`:** Slashed from **549 lines down to 291 lines** (-258 lines, **-47.0%**). Extracted 2 dedicated submodules (`AuthUserHelper.js` [96], `AuthModelSync.js` [35]). All 8 auth test suites (121 tests) and all 7 controller suites (78 tests) PASS, UI5 linter 0 findings.
+30. **`AuthStorage.js`:** Slashed from **322 lines down to 222 lines** (-100 lines, **-31.1%**). Preserved all 10 storage methods and security invariants (volatile sessionStorage vs persistent localStorage, token expiry checks, legacy disk sanitization). All 8 auth test suites (121 tests) PASS, UI5 linter 0 findings.
+31. **`SystemLogAdapter.js`:** Slashed from **532 lines down to 212 lines** (-320 lines, **-60.2%**). Extracted 3 dedicated submodules (`SystemLogSanitizer.js` [179], `SystemLogTemplateParser.js` [116], `SystemLogTimeUtil.js` [81]). All 82 admin log unit tests PASS, ESLint 0 errors, UI5 linter 0 findings.
+32. **`UserManagementAdapter.js`:** Slashed from **530 lines down to 273 lines** (-257 lines, **-48.5%**; previously 797 lines, total **-65.7%**). Extracted 4 dedicated submodules (`UserDetailReader.js` [105], `UserListEnricher.js` [114], `UserLockCoordinator.js` [56], `UserTableReader.js` [109]). All 64 UserManagementAdapter unit tests PASS, ESLint 0 errors, UI5 linter 0 findings.
+33. **`lockNotifier.js`:** Slashed from **509 lines down to 263 lines** (-246 lines, **-48.3%**; previously 650 lines, total **-59.5%**). Extracted 4 dedicated submodules (`LockAppContext.js` [119], `LockNotificationSender.js` [122], `LockNotifierConfig.js` [52], `LockNotifierStatus.js` [91]). All 65 lockNotifier unit tests and 46 queue integration tests PASS, ESLint 0 errors, UI5 linter 0 findings.
+34. **Remaining Integration Monoliths Heavily Trimmed:**
    - `SalesInquiryAdapter.js`: Reduced from **1,434 to 676 lines** (-758 lines, **-52.9%**). Knocked out of the Top 20 largest files.
-   - `UserManagementAdapter.js`: Reduced from **797 to 530 lines** (-267 lines, **-33.5%**).
-   - `lockNotifier.js`: Reduced from **650 to 509 lines** (-141 lines, **-21.7%**).
    - `PurchaseOrderValidator.js`: Reduced from **1,140 to 930 lines** (-210 lines, **-18.4%**).
 
 ---
@@ -125,11 +128,11 @@ The following table presents the 20 largest first-party source files across the 
 | **19** | **724** | `test/unit/dashboard/dashboardMetrics.test.js` | Tests | Unit Test Suite | Unit tests for dashboard metrics loader, live SAP figures, and tile state formatters. |
 | **20** | **712** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderRules.js` | Frontend | PO Rules | Authoritative schema rules for 16 PO types (machine-generated from JSON schema). |
 
-*(Note: Prior top-tier monoliths `PurchaseOrders.controller.js` [now 293 lines], `Dashboard.controller.js` [now 275 lines], `CreatePurchaseOrder.controller.js` [now 223 lines], `CreateSalesOrder.controller.js` [now 280 lines], `CreateSalesInquiry.controller.js` [now 271 lines], `OrdersDueForDelivery.controller.js` [now 178 lines], `OutboundDeliveryAdapter.js` [now 106 lines], `CustomerReturnAdapter.js` [now 72 lines], `HandlingUnitAdapter.js` [now 99 lines], `GoodsReceiptAdapter.js` [now 159 lines], `salesInquiryDocumentCreator.js` [now 68 lines], `GoodsReceiptPostingHelper.js` [now 11 lines], and `SalesInquiryAdapter.js` [now 676 lines] have all been completely eliminated from the top tier).*
+*(Note: Prior top-tier monoliths `PurchaseOrders.controller.js` [now 293 lines], `Dashboard.controller.js` [now 275 lines], `CreatePurchaseOrder.controller.js` [now 223 lines], `CreateSalesOrder.controller.js` [now 280 lines], `CreateSalesInquiry.controller.js` [now 271 lines], `OrdersDueForDelivery.controller.js` [now 178 lines], `OutboundDeliveryAdapter.js` [now 106 lines], `CustomerReturnAdapter.js` [now 72 lines], `HandlingUnitAdapter.js` [now 99 lines], `GoodsReceiptAdapter.js` [now 159 lines], `salesInquiryDocumentCreator.js` [now 68 lines], `GoodsReceiptPostingHelper.js` [now 11 lines], `AuthService.js` [now 291 lines], `AuthStorage.js` [now 222 lines], `SystemLogAdapter.js` [now 212 lines], `UserManagementAdapter.js` [now 273 lines], `lockNotifier.js` [now 263 lines], and `SalesInquiryAdapter.js` [now 676 lines] have all been completely eliminated from the top tier).*
 
 ---
 
-## 4. Complete Inventory of All 109 Files Exceeding 300 Lines
+## 4. Complete Inventory of All 104 Files Exceeding 300 Lines
 
 The table below lists every single first-party file exceeding 300 lines in descending order of exact `wc -l` line count:
 
@@ -163,11 +166,7 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **29** | **635** | `test/unit/sd/customerReturnAdapter.test.js` | Tests |
 | **33** | **556** | `test/unit/sd/createCustomerReturnController.test.js` | Tests |
 | **34** | **551** | `test/unit/wm/handlingUnitAdapter.test.js` | Tests |
-| **35** | **549** | `app/fiori-app/webapp/service/AuthService.js` | Frontend |
-| **37** | **532** | `srv/integration/s4hana/admin/SystemLogAdapter.js` | Integrations |
-| **38** | **530** | `srv/integration/s4hana/admin/UserManagementAdapter.js` | Integrations |
 | **39** | **522** | `test/unit/sales-order/salesOrdersController.test.js` | Tests |
-| **40** | **509** | `srv/admin/lockNotifier.js` | Backend |
 | **41** | **506** | `test/unit/admin/SystemLogAdapter.test.js` | Tests |
 | **42** | **497** | `test/unit/purchase-order/poConfigDefaulting.test.js` | Tests |
 | **43** | **495** | `srv/integration/s4hana/wm/GoodsReceiptStorageUnitResolver.js` | Integrations |
@@ -236,7 +235,6 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **106** | **327** | `app/fiori-app/webapp/modules/sd/customer-invoice/view/CustomerInvoices.view.xml` | Frontend |
 | **107** | **325** | `app/fiori-app/webapp/modules/admin/user-management/util/UserListLogic.js` | Frontend |
 | **108** | **325** | `test/e2e/support/screenCheck.js` | Tests |
-| **109** | **322** | `app/fiori-app/webapp/service/AuthStorage.js` | Frontend |
 | **110** | **322** | `test/unit/purchase-order/materialSelection.test.js` | Tests |
 | **111** | **310** | `test/unit/admin/SecurityAuditLogAdapter.test.js` | Tests |
 | **112** | **309** | `srv/admin/lockEmail.js` | Backend |

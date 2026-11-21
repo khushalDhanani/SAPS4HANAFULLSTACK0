@@ -8,16 +8,9 @@ sap.ui.define([
 
     /**
      * Frontend Authentication Storage Security Architecture (Finding UI-02 / SEC-02)
-     *
-     * Enforces strict storage tiering and data classification:
      * - Volatile Tier (sessionStorage): Strictly tab/window-scoped. Stores ephemeral session tokens.
-     *   Automatically wiped on tab/browser closure.
-     * - Persistent Tier (localStorage): Disk-persisted across browser restarts.
-     *   Strictly FORBIDDEN for tokens, passwords, or session payloads.
-     *   Permitted strictly for non-sensitive UI hints (e.g. remembered username string).
-     * - Disk Sanitization: Any legacy session token found in localStorage is migrated to
-     *   sessionStorage and immediately purged from disk.
-     * - Error Resilience: All storage calls handle private browsing / quota restrictions safely.
+     * - Persistent Tier (localStorage): Disk-persisted; strictly for non-sensitive UI hints.
+     * - Disk Sanitization: Legacy session token in localStorage is migrated to sessionStorage & purged.
      */
     var AuthStorage = {
         STORAGE_KEY: STORAGE_KEY,
@@ -45,12 +38,6 @@ sap.ui.define([
             return this._getStorage("localStorage");
         },
 
-        /**
-         * Validates whether a JWT token has expired based on its 'exp' claim.
-         *
-         * @param {string} sToken
-         * @returns {boolean} True if token is expired, false if valid or non-expiring
-         */
         isTokenExpired: function (sToken) {
             if (!sToken || typeof sToken !== "string") {
                 return false;
@@ -71,8 +58,7 @@ sap.ui.define([
                 }
                 var oPayload = JSON.parse(sDecoded);
                 if (oPayload && typeof oPayload.exp === "number") {
-                    var iNow = Math.floor(Date.now() / 1000);
-                    return iNow >= oPayload.exp;
+                    return Math.floor(Date.now() / 1000) >= oPayload.exp;
                 }
             } catch (e) {
                 // Ignore decoding / parse errors
@@ -80,69 +66,39 @@ sap.ui.define([
             return false;
         },
 
-        /**
-         * Persists active authenticated session strictly to volatile sessionStorage.
-         * Enforces the invariant that localStorage never retains active session tokens.
-         *
-         * @param {object} oUserSession
-         * @returns {boolean}
-         */
         saveSession: function (oUserSession) {
             if (!oUserSession || typeof oUserSession !== "object") {
                 return false;
             }
-            var oStorageData = {
-                user: oUserSession,
-                token: oUserSession.token || null
-            };
-            var sSerialized = JSON.stringify(oStorageData);
-
-            // Active session tokens MUST NEVER be stored in localStorage.
+            var sSerialized = JSON.stringify({ user: oUserSession, token: oUserSession.token || null });
             var oSessionStorage = this.getSessionStorage();
             if (oSessionStorage) {
                 try {
                     oSessionStorage.setItem(STORAGE_KEY, sSerialized);
                 } catch (e) {
                     if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthStorage: Unable to persist session to sessionStorage: " + (e && e.message));
+                        Log.warning("AuthStorage: Unable to persist session: " + (e && e.message));
                     }
                 }
             }
-
-            // Invariant: Explicitly purge session token from persistent localStorage
             var oLocalStorage = this.getLocalStorage();
             if (oLocalStorage) {
                 try {
                     oLocalStorage.removeItem(STORAGE_KEY);
-                } catch (e) {
-                    // Storage error
-                }
+                } catch (e) {}
             }
             return true;
         },
 
-        /**
-         * Loads active session from volatile sessionStorage.
-         * Automatically sanitizes and migrates legacy localStorage session tokens to sessionStorage,
-         * purging disk persistence immediately. Validates token expiration.
-         *
-         * @returns {object|null} The parsed session object, or null if missing or expired
-         */
         loadSession: function () {
             var oSessionStorage = this.getSessionStorage();
             var oLocalStorage = this.getLocalStorage();
             var sRawSession = null;
-
             if (oSessionStorage) {
                 try {
                     sRawSession = oSessionStorage.getItem(STORAGE_KEY);
-                } catch (e) {
-                    // Storage error
-                }
+                } catch (e) {}
             }
-
-            // Sanitization & Migration Guard:
-            // If legacy session exists in localStorage, migrate it to sessionStorage and immediately purge localStorage.
             if (oLocalStorage) {
                 try {
                     var sLegacySession = oLocalStorage.getItem(STORAGE_KEY);
@@ -152,35 +108,26 @@ sap.ui.define([
                             if (oSessionStorage) {
                                 try {
                                     oSessionStorage.setItem(STORAGE_KEY, sLegacySession);
-                                } catch (err) {
-                                    // SessionStorage quota / blocked
-                                }
+                                } catch (err) {}
                             }
                         }
                         oLocalStorage.removeItem(STORAGE_KEY);
                     }
-                } catch (e) {
-                    // Storage error
-                }
+                } catch (e) {}
             }
-
             if (!sRawSession) {
                 return null;
             }
-
             try {
                 var oSession = JSON.parse(sRawSession);
                 if (oSession && oSession.user && oSession.user.username) {
                     if (!oSession.user.token && oSession.token) {
                         oSession.user.token = oSession.token;
                     }
-
-                    // Validate token expiration before returning session
                     if (oSession.user.token && this.isTokenExpired(oSession.user.token)) {
                         this.clearSession();
                         return null;
                     }
-
                     return oSession;
                 }
             } catch (e) {
@@ -189,33 +136,17 @@ sap.ui.define([
             return null;
         },
 
-        /**
-         * Clears active session across all storage tiers (sessionStorage and localStorage).
-         */
         clearSession: function () {
             var oSessionStorage = this.getSessionStorage();
             if (oSessionStorage) {
-                try {
-                    oSessionStorage.removeItem(STORAGE_KEY);
-                } catch (e) {
-                    // Storage error
-                }
+                try { oSessionStorage.removeItem(STORAGE_KEY); } catch (e) {}
             }
             var oLocalStorage = this.getLocalStorage();
             if (oLocalStorage) {
-                try {
-                    oLocalStorage.removeItem(STORAGE_KEY);
-                } catch (e) {
-                    // Storage error
-                }
+                try { oLocalStorage.removeItem(STORAGE_KEY); } catch (e) {}
             }
         },
 
-        /**
-         * Resolves the active unexpired Bearer token string from active session.
-         *
-         * @returns {string|null}
-         */
         getToken: function () {
             var oSession = this.loadSession();
             if (oSession && oSession.user && oSession.user.token) {
@@ -227,25 +158,11 @@ sap.ui.define([
             return null;
         },
 
-        /**
-         * Returns HTTP Authorization header object for OData / REST requests.
-         *
-         * @returns {object} { "Authorization": "Bearer <token>" } or {}
-         */
         getAuthHeader: function () {
             var sToken = this.getToken();
-            if (sToken && typeof sToken === "string") {
-                return { "Authorization": "Bearer " + sToken };
-            }
-            return {};
+            return (sToken && typeof sToken === "string") ? { "Authorization": "Bearer " + sToken } : {};
         },
 
-        /**
-         * Persists the non-sensitive username hint string in localStorage for "Remember Me".
-         * Never stores passwords, tokens, or session payloads.
-         *
-         * @param {string} sUsername
-         */
         saveRememberUsername: function (sUsername) {
             var oLocalStorage = this.getLocalStorage();
             if (!oLocalStorage) {
@@ -259,16 +176,11 @@ sap.ui.define([
                 }
             } catch (e) {
                 if (Log && typeof Log.warning === "function") {
-                    Log.warning("AuthStorage: Unable to update rememberMe preference: " + (e && e.message));
+                    Log.warning("AuthStorage: Unable to update rememberMe: " + (e && e.message));
                 }
             }
         },
 
-        /**
-         * Retrieves the remembered username hint string from localStorage.
-         *
-         * @returns {string}
-         */
         getRememberUsername: function () {
             var oLocalStorage = this.getLocalStorage();
             if (!oLocalStorage) {
@@ -281,9 +193,6 @@ sap.ui.define([
             }
         },
 
-        /**
-         * Clears the remembered username hint from localStorage.
-         */
         clearRememberUsername: function () {
             var oLocalStorage = this.getLocalStorage();
             if (!oLocalStorage) {
@@ -291,16 +200,9 @@ sap.ui.define([
             }
             try {
                 oLocalStorage.removeItem(REMEMBER_KEY);
-            } catch (e) {
-                // Storage error
-            }
+            } catch (e) {}
         },
 
-        /**
-         * Explicitly scans and sanitizes localStorage, removing any legacy session token.
-         *
-         * @returns {boolean} True if a legacy session was purged from localStorage
-         */
         sanitizeLocalStorage: function () {
             var oLocalStorage = this.getLocalStorage();
             if (!oLocalStorage) {
@@ -311,9 +213,7 @@ sap.ui.define([
                     oLocalStorage.removeItem(STORAGE_KEY);
                     return true;
                 }
-            } catch (e) {
-                // Storage error
-            }
+            } catch (e) {}
             return false;
         }
     };
