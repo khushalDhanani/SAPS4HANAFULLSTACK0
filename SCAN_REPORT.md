@@ -30,9 +30,9 @@ To guarantee total precision, files were evaluated under strict discovery rules 
 - **Total Tracked Files in Git:** 1,067 files (`git ls-files | wc -l`, 2026-11-21).
 - **Total Non-Excluded Repository Artifacts (including docs/evidence):** 834 files.
 - **Total First-Party Source Files Scanned:** **713 files** by the reproducible filter recorded in Section 8.5 (2026-11-21). The earlier figures of 715 and 722 came from the original scan, whose exclusion list was not recorded as a command and could not be reproduced.
-- **Total First-Party Source Files Exceeding 300 Lines:** **95 files** (down from 137 files).
+- **Total First-Party Source Files Exceeding 300 Lines:** **96 files** (down from 137 files).
 - **Application & Integration Source Files Exceeding 300 Lines:** **34 files** (20 Frontend, 7 Integrations, 3 Backend, 3 Utilities, 1 Schema Config).
-- **Automated Test Suites Exceeding 300 Lines:** **61 files** (54 Unit test suites, 3 Integration test suites, 4 Browser E2E/support suites).
+- **Automated Test Suites Exceeding 300 Lines:** **62 files** (55 Unit test suites, 3 Integration test suites, 4 Browser E2E/support suites).
 
 ### 1.3 Modularization Accomplishments (Phases 1 to 5 & Phase 2 — 100% PASS)
 Through the systematic execution of Phases 1 through 5, **41 major monolithic modules were completely knocked below the 300-line threshold**, while retaining 100% backward compatibility and test coverage:
@@ -88,25 +88,25 @@ Through the systematic execution of Phases 1 through 5, **41 major monolithic mo
 
 | Architectural Layer | Files > 300 Lines | % of Oversized Files | Primary File Types & Responsibilities |
 | :--- | :---: | :---: | :--- |
-| **Tests** | **61** | 64.2% | Unit, integration, and Playwright E2E suites verifying MM, SD, WM, LE, Admin, and Auth. |
-| **Frontend** (`app/fiori-app/`) | **20** | 21.1% | UI5 Controllers (0), Models/Services/Utilities `.js` (9), XML Views (7), i18n Resources (2), `manifest.json` (1), CSS (1). |
-| **Integrations** (`srv/integration/s4hana/`) | **7** | 7.4% | S/4HANA OData and RFC adapters, `RfcClient`, `S4ErrorMapper`, `sm21-templates.json`. |
-| **Backend** (`srv/admin/`, `srv/wm/`) | **3** | 3.2% | `goodsReceipt.handler.js`, `lockEventStore.js`, `lockEmail.js`. |
-| **Utilities** (`tools/`) | **3** | 3.2% | `check-label-pdf.py`, `test-po-creation-all-types.js`, `sandbox-discovery.js`. |
-| **Config / Root Schema** | **1** | 1.1% | Business configuration schema (`config/schema/purchaseOrderRules.json`). |
-| **TOTAL** | **95** | **100.0%** | Matches the Section 4 inventory. |
+| **Tests** | **62** | 64.6% | Unit, integration, and Playwright E2E suites verifying MM, SD, WM, LE, Admin, and Auth. |
+| **Frontend** (`app/fiori-app/`) | **20** | 20.8% | UI5 Controllers (0), Models/Services/Utilities `.js` (9), XML Views (7), i18n Resources (2), `manifest.json` (1), CSS (1). |
+| **Integrations** (`srv/integration/s4hana/`) | **7** | 7.3% | S/4HANA OData and RFC adapters, `RfcClient`, `S4ErrorMapper`, `sm21-templates.json`. |
+| **Backend** (`srv/admin/`, `srv/wm/`) | **3** | 3.1% | `goodsReceipt.handler.js`, `lockEventStore.js`, `lockEmail.js`. |
+| **Utilities** (`tools/`) | **3** | 3.1% | `check-label-pdf.py`, `test-po-creation-all-types.js`, `sandbox-discovery.js`. |
+| **Config / Root Schema** | **1** | 1.0% | Business configuration schema (`config/schema/purchaseOrderRules.json`). |
+| **TOTAL** | **96** | **100.0%** | Matches the Section 4 inventory. |
 
 ### 2.2 Distribution of >300 Line Files by Extension
 
 | File Extension | Count | Percentage | Description |
 | :--- | :---: | :---: | :--- |
-| `.js` | **81** | 85.3% | JavaScript source files (Models, Services, Adapters, Handlers, Jest & Playwright tests). |
-| `.xml` | **7** | 7.4% | SAPUI5 XML Views (`Dashboard`, `PurchaseOrderDetail`, `PurchaseOrders`, `CreateSalesOrder`, etc.). |
-| `.json` | **3** | 3.2% | Static templates & descriptors (`sm21-templates.json`, `purchaseOrderRules.json`, `manifest.json`). |
+| `.js` | **82** | 85.4% | JavaScript source files (Models, Services, Adapters, Handlers, Jest & Playwright tests). |
+| `.xml` | **7** | 7.3% | SAPUI5 XML Views (`Dashboard`, `PurchaseOrderDetail`, `PurchaseOrders`, `CreateSalesOrder`, etc.). |
+| `.json` | **3** | 3.1% | Static templates & descriptors (`sm21-templates.json`, `purchaseOrderRules.json`, `manifest.json`). |
 | `.properties` | **2** | 2.1% | Internationalization resource bundles (`i18n.properties`, `i18n_en.properties`). |
-| `.css` | **1** | 1.1% | Application styling rules (`app/fiori-app/webapp/css/style.css`). |
-| `.py` | **1** | 1.1% | Python label visual verification tool (`tools/check-label-pdf.py`). |
-| **TOTAL** | **95** | **100.0%** | |
+| `.css` | **1** | 1.0% | Application styling rules (`app/fiori-app/webapp/css/style.css`). |
+| `.py` | **1** | 1.0% | Python label visual verification tool (`tools/check-label-pdf.py`). |
+| **TOTAL** | **96** | **100.0%** | |
 
 ---
 
@@ -141,7 +141,7 @@ The following table presents the 20 largest first-party source files across the 
 
 ---
 
-## 4. Complete Inventory of All 95 Files Exceeding 300 Lines
+## 4. Complete Inventory of All 96 Files Exceeding 300 Lines
 
 The table below lists every single first-party file exceeding 300 lines in descending order of exact `wc -l` line count:
 
@@ -171,10 +171,10 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **22** | **675** | `test/unit/wm/zquarLabel.test.js` | Tests |
 | **23** | **652** | `tools/test-po-creation-all-types.js` | Utilities |
 | **24** | **635** | `test/unit/sd/customerReturnAdapter.test.js` | Tests |
-| **25** | **556** | `test/unit/sd/createCustomerReturnController.test.js` | Tests |
-| **26** | **551** | `test/unit/wm/handlingUnitAdapter.test.js` | Tests |
-| **27** | **522** | `test/unit/sales-order/salesOrdersController.test.js` | Tests |
-| **28** | **518** | `test/unit/wm/goodsReceiptAttempt.test.js` | Tests |
+| **25** | **579** | `test/unit/wm/goodsReceiptAttempt.test.js` | Tests |
+| **26** | **556** | `test/unit/sd/createCustomerReturnController.test.js` | Tests |
+| **27** | **551** | `test/unit/wm/handlingUnitAdapter.test.js` | Tests |
+| **28** | **522** | `test/unit/sales-order/salesOrdersController.test.js` | Tests |
 | **29** | **506** | `test/unit/admin/SystemLogAdapter.test.js` | Tests |
 | **30** | **497** | `test/unit/purchase-order/poConfigDefaulting.test.js` | Tests |
 | **31** | **490** | `test/unit/purchase-order/createPurchaseOrderStatus.test.js` | Tests |
@@ -236,12 +236,13 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **87** | **325** | `app/fiori-app/webapp/modules/admin/user-management/util/UserListLogic.js` | Frontend |
 | **88** | **325** | `test/e2e/support/screenCheck.js` | Tests |
 | **89** | **322** | `test/unit/purchase-order/materialSelection.test.js` | Tests |
-| **90** | **310** | `test/unit/admin/SecurityAuditLogAdapter.test.js` | Tests |
-| **91** | **309** | `srv/admin/lockEmail.js` | Backend |
-| **92** | **309** | `test/unit/auth/authService.test.js` | Tests |
-| **93** | **308** | `test/unit/sd/customerInvoiceHandler.test.js` | Tests |
-| **94** | **307** | `test/unit/purchase-order/purchaseOrderValidator.test.js` | Tests |
-| **95** | **306** | `srv/integration/s4hana/S4ErrorMapper.js` | Integrations |
+| **90** | **318** | `test/unit/wm/goodsReceiptRecheckLease.test.js` | Tests |
+| **91** | **310** | `test/unit/admin/SecurityAuditLogAdapter.test.js` | Tests |
+| **92** | **309** | `srv/admin/lockEmail.js` | Backend |
+| **93** | **309** | `test/unit/auth/authService.test.js` | Tests |
+| **94** | **308** | `test/unit/sd/customerInvoiceHandler.test.js` | Tests |
+| **95** | **307** | `test/unit/purchase-order/purchaseOrderValidator.test.js` | Tests |
+| **96** | **306** | `srv/integration/s4hana/S4ErrorMapper.js` | Integrations |
 
 ---
 
@@ -507,6 +508,8 @@ The `git status` snapshot originally printed here was stale: those files were co
 - Highest-risk findings, steps 1–2 (2026-11-21): Section 4 line counts refreshed from the tree (`goodsReceipt.handler.js` 374, `goodsReceiptAttempt.test.js` and `goodsReceiptController.test.js` grown). The inventory stays at 95 files.
 
 - Highest-risk findings, step 4 (2026-11-21): `ODataClient.js` is now 394 lines; Section 4 counts refreshed.
+
+- Goods-receipt document attribution (2026-11-21): `goodsReceiptRecheckLease.test.js` grew to 318 lines and joined the inventory, which makes **96 files** (62 test files). Sections 1.2, 2 and 4 updated.
 
 ---
 *Line counts verified with POSIX `wc -l`; validation status is as recorded in Section 8.3.*

@@ -241,11 +241,14 @@ describe('Goods Receipt recheck lease: concurrency review', () => {
 
   describe('no ambiguous attempt is resolved without reliable evidence', () => {
     const GoodsReceiptAdapter = require('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter').GoodsReceiptAdapter;
-    const doc = (MBLNR) => ({ MBLNR, MJAHR: '2026', ZEILE: '0001', BWART: '101' });
+    // The attempt quantity is 5 (ATTEMPT.IssueQty); APP_USER is the SAP logon user of this application.
+    const APP_USER = 'RFC_TECH';
+    const doc = (MBLNR, USNAM = APP_USER, qty = '5.000') => ({ MBLNR, MJAHR: '2026', ZEILE: '0001', BWART: '101', USNAM, ERFMG: qty, MENGE: qty });
     /** A real adapter whose only SAP access (MATDOC via RFC) is mocked. */
     const adapterSeeing = (rows) => {
       const adapter = new GoodsReceiptAdapter();
       adapter.rfc = { readTable: jest.fn().mockResolvedValue(rows) };
+      jest.spyOn(adapter, '_postingUsers').mockResolvedValue(new Set([APP_USER]));
       return adapter;
     };
 
@@ -280,6 +283,23 @@ describe('Goods Receipt recheck lease: concurrency review', () => {
 
       expect(summary).toMatchObject({ Ambiguous: 1, Posted: 0, NotPosted: 0 });
       expect((await row()).Status).toBe('sending');
+    });
+
+    it('a receipt posted directly in SAP by someone else does not resolve the attempt', async () => {
+      await store.setBaseline(REF, []);
+
+      const summary = await store.recheckReceipts(adapterSeeing([doc('5000000010', 'CLERK01')]), old, { workerId: '0' });
+
+      expect(summary).toMatchObject({ Ambiguous: 1, Posted: 0, NotPosted: 0 });
+      expect(await row()).toMatchObject({ Status: 'sending', MaterialDocument: '' });
+    });
+
+    it('its own document is found among foreign ones', async () => {
+      await store.setBaseline(REF, []);
+
+      await store.recheckReceipts(adapterSeeing([doc('5000000010', 'CLERK01'), doc('5000000011'), doc('5000000012', APP_USER, '1.000')]), soon, { workerId: '0' });
+
+      expect(await row()).toMatchObject({ Status: 'posted', MaterialDocument: '5000000011' });
     });
 
     it('no receipt in SAP at all: not_posted is reliable even without a baseline', async () => {

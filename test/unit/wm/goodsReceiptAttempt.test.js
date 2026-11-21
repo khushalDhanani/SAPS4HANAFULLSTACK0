@@ -393,24 +393,29 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
       expect(err.outcomeUnknown).toBeFalsy();
     });
 
-    describe('receipt of an attempt, matched against the pre-post baseline', () => {
-      const ATTEMPT = { ReservationNo: '0180000003', ReservationItem: '10', createdAt: '2026-11-02T00:30:00.000Z' };
-      const find = (rows, BaselineDocs) => {
+    describe('receipt of an attempt: baseline, posting user and quantity', () => {
+      const ATTEMPT = { ReservationNo: '0180000003', ReservationItem: '10', createdAt: '2026-11-02T00:30:00.000Z', IssueQty: 5 };
+      const APP_USER = 'RFC_TECH';
+      const row = (MBLNR, { USNAM = APP_USER, ERFMG = '5.000', MENGE = '5.000', ZEILE = '0001' } = {}) =>
+        ({ MBLNR, MJAHR: '2026', ZEILE, BWART: '101', USNAM, ERFMG, MENGE });
+      const find = (rows, BaselineDocs, { attempt = ATTEMPT, users = [APP_USER] } = {}) => {
         const { adapter } = make();
         adapter.rfc.readTable.mockResolvedValue(rows);
-        return { adapter, found: adapter.findReceiptForAttempt({ ...ATTEMPT, BaselineDocs }) };
+        jest.spyOn(adapter, '_postingUsers').mockResolvedValue(new Set(users));
+        return { adapter, found: adapter.findReceiptForAttempt({ ...attempt, BaselineDocs }) };
       };
+      const AMBIGUOUS = (text) => expect.objectContaining({ ambiguous: true, reason: expect.stringContaining(text) });
 
-      it('finds the one new document, searching from the day before the attempt started', async () => {
-        const { adapter, found } = find([doc('5000000009'), doc('5000000010')], '["2026/5000000009"]');
+      it('finds the one new document posted by this application with the attempt quantity', async () => {
+        const { adapter, found } = find([row('5000000009'), row('5000000010')], '["2026/5000000009"]');
 
         expect(await found).toEqual({ MaterialDocument: '5000000010', MaterialDocumentYear: '2026' });
-        expect(adapter.rfc.readTable).toHaveBeenCalledWith('MATDOC', expect.anything(),
+        expect(adapter.rfc.readTable).toHaveBeenCalledWith('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'USNAM', 'ERFMG', 'MENGE'],
           ["VBELN_IM = '0180000003'", "AND VBELP_IM = '000010'", "AND BWART = '101'", "AND CPUDT >= '20261101'"]);
       });
 
       it('does not report an earlier partial receipt as the document of this attempt', async () => {
-        expect(await find([doc('5000000009')], '["2026/5000000009"]').found).toBeNull();
+        expect(await find([row('5000000009')], '["2026/5000000009"]').found).toBeNull();
       });
 
       it('reports nothing when SAP has no receipt at all, with or without a baseline', async () => {
@@ -420,11 +425,67 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
 
       it.each([[undefined], [null], [''], ['not json'], ['{"a":1}']])(
         'is ambiguous when receipts exist but the stored baseline is %j', async (baseline) => {
-          expect(await find([doc('5000000009')], baseline).found).toMatchObject({ ambiguous: true, reason: expect.stringContaining('no pre-post baseline') });
+          expect(await find([row('5000000009')], baseline).found).toEqual(AMBIGUOUS('no pre-post baseline'));
         });
 
-      it('is ambiguous when more than one new document exists', async () => {
-        expect(await find([doc('5000000010'), doc('5000000011')], '[]').found).toMatchObject({ ambiguous: true, reason: expect.stringContaining('2 new') });
+      it('does not take a receipt posted directly in SAP by another user as this application\'s posting', async () => {
+        expect(await find([row('5000000010', { USNAM: 'CLERK01' })], '[]').found).toEqual(AMBIGUOUS('none was posted by this application'));
+      });
+
+      it('does not take a new receipt with another quantity as the attempt\'s document', async () => {
+        expect(await find([row('5000000010', { ERFMG: '2.000', MENGE: '2.000' })], '[]').found).toEqual(AMBIGUOUS('none was posted by this application'));
+      });
+
+      it('picks its own document among foreign ones posted in the same window', async () => {
+        const rows = [row('5000000010', { USNAM: 'CLERK01' }), row('5000000011'), row('5000000012', { ERFMG: '1.000', MENGE: '1.000' })];
+
+        expect(await find(rows, '[]').found).toEqual({ MaterialDocument: '5000000011', MaterialDocumentYear: '2026' });
+      });
+
+      it('is ambiguous when two new documents both match', async () => {
+        expect(await find([row('5000000010'), row('5000000011')], '[]').found).toEqual(AMBIGUOUS('2 new goods receipt documents match'));
+      });
+
+      it('compares the posting user without regard to case or padding', async () => {
+        expect(await find([row('5000000010', { USNAM: ' rfc_tech ' })], '[]').found).toMatchObject({ MaterialDocument: '5000000010' });
+      });
+
+      it('accepts a match on the base-unit quantity when the entry unit differs', async () => {
+        expect(await find([row('5000000010', { ERFMG: '1.000', MENGE: '5.000' })], '[]').found).toMatchObject({ MaterialDocument: '5000000010' });
+      });
+
+      it('sums the lines of one document (batch split) and ignores a repeated line', async () => {
+        const rows = [
+          row('5000000010', { ERFMG: '2.000', MENGE: '2.000', ZEILE: '0001' }),
+          row('5000000010', { ERFMG: '3.000', MENGE: '3.000', ZEILE: '0002' }),
+          row('5000000010', { ERFMG: '3.000', MENGE: '3.000', ZEILE: '0002' })
+        ];
+
+        expect(await find(rows, '[]').found).toMatchObject({ MaterialDocument: '5000000010' });
+      });
+
+      it('is ambiguous when the SAP user of this application cannot be determined', async () => {
+        expect(await find([row('5000000010')], '[]', { users: [] }).found).toEqual(AMBIGUOUS('cannot be determined'));
+      });
+
+      it('is ambiguous when the attempt has no quantity', async () => {
+        expect(await find([row('5000000010')], '[]', { attempt: { ...ATTEMPT, IssueQty: null } }).found).toEqual(AMBIGUOUS('no quantity'));
+      });
+
+      it('takes the logon users from the RFC connection and the HTTP destination', async () => {
+        const { adapter } = make();
+        adapter.rfc.resolveConnectionParams = jest.fn().mockResolvedValue({ user: 'rfc_tech' });
+        adapter.client = { resolveDestination: jest.fn().mockResolvedValue({ username: 'Http_Tech' }) };
+
+        expect([...(await adapter._postingUsers())].sort()).toEqual(['HTTP_TECH', 'RFC_TECH']);
+      });
+
+      it('knows no logon user for a destination without a user, such as Principal Propagation', async () => {
+        const { adapter } = make();
+        adapter.rfc.resolveConnectionParams = jest.fn().mockRejectedValue(new Error('no destination'));
+        adapter.client = { resolveDestination: jest.fn().mockResolvedValue({ authentication: 'PrincipalPropagation' }) };
+
+        expect((await adapter._postingUsers()).size).toBe(0);
       });
     });
   });

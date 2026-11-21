@@ -150,6 +150,11 @@ class GoodsReceiptAdapter {
     return postingHelper.findReceiptForAttempt(this, attempt);
   }
 
+  /** SAP logon users this application posts with (RFC logon user, HTTP destination user). */
+  async _postingUsers() {
+    return postingHelper._postingUsers(this);
+  }
+
   async postGoodsReceiptWithStorageUnit(payload = {}) {
     return postingHelper.postGoodsReceiptWithStorageUnit(this, payload);
   }
