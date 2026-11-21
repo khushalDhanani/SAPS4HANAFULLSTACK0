@@ -51,10 +51,6 @@
       "Plant": "NOT PROVIDED"
     }
   },
-  "goodsReceipt": {
-    "deliveryDocument": "NOT PROVIDED",
-    "quantity": "NOT PROVIDED"
-  },
   "customerReturn": {
     "ReferenceSDDocument": "NOT PROVIDED",
     "SoldToParty": "NOT PROVIDED",

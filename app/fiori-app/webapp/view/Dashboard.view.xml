@@ -100,18 +100,6 @@
                                         </GenericTile>
 
                                         <GenericTile
-                                            id="tileOverviewGoodsReceipt"
-                                            header="{i18n>dashGoodsReceipt101}"
-                                            subheader="{i18n>dashInboundDeliveries}"
-                                            press=".onNavigateToGoodsReceipt"
-                                            state="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>dashDeliveries}">
-                                                <NumericContent value="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatMetricValue'}" icon="sap-icon://inbox" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
                                             id="tileOverviewOrdersDueForDelivery"
                                             header="{i18n>tileOrdersDueForDeliveryTitle}"
                                             subheader="{i18n>tileOrdersDueForDeliverySub}"
@@ -252,11 +240,6 @@
 
 
                                 <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                    <GenericTile id="tileGoodsReceipt" header="{i18n>dashGoodsReceipt101}" subheader="{i18n>dashInboundDeliveries}" press=".onNavigateToGoodsReceipt" state="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="{i18n>dashDeliveries}">
-                                            <NumericContent value="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatMetricValue'}" icon="sap-icon://inbox" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
                                     <GenericTile id="tileHandlingUnits" header="{i18n>huTitle}" subheader="{i18n>huTileSub}" press=".onNavigateToHandlingUnits" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="{i18n>huTileUnit}">
                                             <NumericContent icon="sap-icon://pallet" valueColor="Neutral" />

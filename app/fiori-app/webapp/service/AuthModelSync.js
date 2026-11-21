@@ -16,7 +16,7 @@ sap.ui.define([], function () {
                 return sLastSyncedAuthHeader;
             }
             var mHeaders = { "Authorization": sAuthHeader };
-            var aModelNames = ["", "salesInquiry", "salesOrder", "goodsReceipt", "outboundDelivery", "customerInvoice", "customerReturn"];
+            var aModelNames = ["", "salesInquiry", "salesOrder", "outboundDelivery", "customerInvoice", "customerReturn"];
             aModelNames.forEach(function (sModelName) {
                 var oModel = sModelName ? oComponent.getModel(sModelName) : oComponent.getModel();
                 if (oModel && typeof oModel.changeHttpHeaders === "function") {

@@ -31,10 +31,6 @@
     "aria-input-field-name": 1,
     "label-content-name-mismatch": 1
   },
-  "wmGoodsReceipt": {
-    "aria-allowed-attr": 5,
-    "label-content-name-mismatch": 1
-  },
   "ordersDueForDelivery": {
     "aria-allowed-attr": 5,
     "aria-input-field-name": 1,

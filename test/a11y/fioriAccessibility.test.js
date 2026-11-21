@@ -141,16 +141,8 @@ describe('Release Automation: SAP Fiori Accessibility (a11y) Suite', () => {
 
   // 3. Form Input Accessibility: a name of its own, a labelFor, or a container that labels it
   describe('Input and SearchField naming', () => {
-    // Known defect, asserted separately below.
-    const RECEIPT_QTY = 'modules/wm/goods-receipt/view/GoodsReceipt.view.xml -> Input #inputReceiptQty';
-
-    it('names every Input and SearchField other than the known defect', () => {
-      expect(unnamedInputs().filter((v) => v !== RECEIPT_QTY)).toEqual([]);
-    });
-
-    // Known defect: app/fiori-app/webapp/modules/wm/goods-receipt/view/GoodsReceipt.view.xml inputReceiptQty sits in an HBox inside the SimpleForm, so the form Label is not its sibling and it has no name of its own
-    it.failing('names the goods receipt quantity input', () => {
-      expect(unnamedInputs()).not.toContain(RECEIPT_QTY);
+    it('names every Input and SearchField', () => {
+      expect(unnamedInputs()).toEqual([]);
     });
   });
 

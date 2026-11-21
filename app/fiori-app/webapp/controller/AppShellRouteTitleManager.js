@@ -109,11 +109,6 @@ sap.ui.define([], function () {
                         sTitle = oBundle ? oBundle.getText("createSalesOrderTitle") : "Create Sales Order (VA01)";
                         bShowNav = true;
                         break;
-                    case "wmGoodsReceipt":
-                    case "wmGoodsReceiptDetail":
-                        sTitle = oBundle ? oBundle.getText("grPageTitle") : "Goods Receipt against Storage Unit (101)";
-                        bShowNav = true;
-                        break;
 
                     case "wmHandlingUnits":
                         sTitle = oBundle ? oBundle.getText("huTitle") : "Handling Unit Cockpit";
@@ -201,13 +196,11 @@ sap.ui.define([], function () {
                     this.onNavBack("salesOrders");
                 } else if (sRoute === "createCustomerReturn") {
                     this.onNavBack("customerReturns");
-                } else if (sRoute === "wmGoodsReceiptDetail") {
-                    this.onNavBack("wmGoodsReceipt");
                 } else if (sRoute === "wmHandlingUnitDetail") {
                     this.onNavBack("wmHandlingUnits");
                 } else if (sRoute === "wmPackingInstructionDetail") {
                     this.onNavBack("wmPackingInstructions");
-                } else if (sRoute === "purchaseOrders" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
+                } else if (sRoute === "purchaseOrders" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "ordersDueForDelivery") {
                     this.onNavBack("dashboard");
                 } else {
                     this.onNavBack("dashboard");

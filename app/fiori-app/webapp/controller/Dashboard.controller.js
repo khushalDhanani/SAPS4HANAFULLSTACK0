@@ -67,7 +67,6 @@ sap.ui.define([
         "totalSalesOrderCount",
         "warehouseCount",
         "openReservationCount",
-        "inboundDeliveryCount",
         "ordersDueCount",
         "customerInvoiceCount",
         "customerReturnCount"
@@ -201,7 +200,6 @@ sap.ui.define([
         onNavigateToCreateSalesInquiry: function () { this.getOwnerComponent().getRouter().navTo("createSalesInquiry"); },
         onNavigateToSalesOrders: function () { this.getOwnerComponent().getRouter().navTo("salesOrders"); },
         onNavigateToCreateSalesOrder: function () { this.getOwnerComponent().getRouter().navTo("createSalesOrder"); },
-        onNavigateToGoodsReceipt: function () { this.getOwnerComponent().getRouter().navTo("wmGoodsReceipt"); },
         onNavigateToHandlingUnits: function () { this.getOwnerComponent().getRouter().navTo("wmHandlingUnits"); },
         onNavigateToPackingInstructions: function () { this.getOwnerComponent().getRouter().navTo("wmPackingInstructions"); },
         onNavigateToQuarantineLabels: function () { this.getOwnerComponent().getRouter().navTo("wmQuarantineLabels"); },

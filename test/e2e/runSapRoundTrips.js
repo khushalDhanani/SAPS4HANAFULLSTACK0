@@ -11,7 +11,6 @@ const path = require('path');
 const { roundTripPurchaseOrder } = require('./mm/roundTripPurchaseOrder.e2e');
 const { roundTripSalesInquiry } = require('./sd/roundTripSalesInquiry.e2e');
 const { roundTripSalesOrder } = require('./sd/roundTripSalesOrder.e2e');
-const { roundTripGoodsReceipt } = require('./wm/roundTripGoodsReceipt.e2e');
 const { roundTripCustomerReturn } = require('./sd/roundTripCustomerReturn.e2e');
 const { roundTripCustomerInvoice } = require('./sd/roundTripCustomerInvoice.e2e');
 const { roundTripSalesOrderDelivery } = require('./sd/roundTripSalesOrderDelivery.e2e');
@@ -23,7 +22,6 @@ const SUITES = [
     { flow: 'po', name: 'Purchase order create', fn: roundTripPurchaseOrder },
     { flow: 'salesInquiry', name: 'Sales inquiry create', fn: roundTripSalesInquiry },
     { flow: 'salesOrder', name: 'Sales order create', fn: roundTripSalesOrder },
-    { flow: 'goodsReceipt', name: 'Goods receipt post', fn: roundTripGoodsReceipt },
     { flow: 'customerReturn', name: 'Customer return create', fn: roundTripCustomerReturn },
     { flow: 'customerInvoice', name: 'Invoice release / cancel', fn: roundTripCustomerInvoice },
     { flow: 'salesOrderDelivery', name: 'Delivery from sales order list', fn: roundTripSalesOrderDelivery },

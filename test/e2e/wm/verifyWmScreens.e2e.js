@@ -1,12 +1,10 @@
 'use strict';
 
-/** Tier A read-only E2E: WM goods receipt, handling unit and packing screens. */
+/** Tier A read-only E2E: WM handling unit and packing screens. */
 
 const { runScreens } = require('../support/screenCheck');
 
 const STEPS = [
-    { name: 'Goods receipt list', hash: 'wm/goods-receipt', route: 'wmGoodsReceipt', needsList: true, expectRows: true },
-    { name: 'Goods receipt detail (first row)', route: 'wmGoodsReceiptDetail', fromFirstRow: true },
     { name: 'Handling unit list', hash: 'wm/handling-unit', route: 'wmHandlingUnits', needsList: true, expectRows: true },
     { name: 'Handling unit detail (first row)', route: 'wmHandlingUnitDetail', fromFirstRow: true },
     { name: 'Packing instruction list', hash: 'wm/packing-instruction', route: 'wmPackingInstructions', needsList: true, expectRows: true },

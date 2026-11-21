@@ -17,7 +17,6 @@ const { openSession, waitForRoute } = require('../support/screenCheck');
 const rt = require('../support/actionRoundTrip');
 const invoice = require('../sd/roundTripCustomerInvoice.e2e');
 const ordersDue = require('../le/roundTripOrdersDue.e2e');
-const goodsReceipt = require('../wm/roundTripGoodsReceipt.e2e');
 const packing = require('../wm/roundTripPackingInstruction.e2e');
 const huRt = require('../wm/roundTripHandlingUnit.e2e');
 const kit = require('../wm/wmRoundTripKit');
@@ -111,11 +110,6 @@ const split = (action) => ({ service: action.slice(0, action.lastIndexOf('/')), 
  * after a failed write into { type, text } the way rt.resultBox does for MessageBox-based screens.
  */
 const wmFlows = [
-    {
-        label: 'Goods receipt: post with storage unit', ...split(goodsReceipt.ACTION), respond: goodsReceipt.stubResult, hash: 'wm/goods-receipt',
-        run: (session) => goodsReceipt.driveUi(session, { waitMs: WAIT_MS }),
-        observe: async (session, ui) => ({ type: ui.success ? 'success' : 'error', text: ui.dialog })
-    },
     {
         label: 'Packing instruction: create', ...split(packing.ACTION), respond: packing.stubResult, hash: 'wm/packing-instruction',
         run: async (session, baseUrl) => packing.driveUi(session, await packing.pickDryRunData(baseUrl), WAIT_MS),
@@ -409,7 +403,7 @@ if (require.main === module) {
 
 // Kit flows share the kit's module-level failure mode, so they stay together and serial; the others run in their own shard
 const SHARDS = [
-    { name: 'Action failures: invoice, orders due, goods receipt, packing, quarantine (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Quarantine labels)' },
+    { name: 'Action failures: invoice, orders due, packing, quarantine (mocked)', only: '^(Customer invoice|Orders due|Packing instruction|Quarantine labels)' },
     { name: 'Action failures: handling unit (mocked)', only: '^Handling unit' }
 ];
 

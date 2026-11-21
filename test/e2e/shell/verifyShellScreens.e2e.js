@@ -150,8 +150,8 @@ async function verifySidebar(baseUrl) {
         await click('tileOverviewEWM');
         step(errors, details, 'An Overview tile opens its section and moves the highlight', await expectSection('dashboard/ewm', 'ewm'));
 
-        await click('tileGoodsReceipt');
-        step(errors, details, 'A section tile opens its screen and keeps the highlight', (await expectState('wm/goods-receipt', 'ewm')).problems);
+        await click('tileHandlingUnits');
+        step(errors, details, 'A section tile opens its screen and keeps the highlight', (await expectState('wm/handling-unit', 'ewm')).problems);
 
         const beforeReturn = metricsCalls;
         await click(ITEM.ewm);

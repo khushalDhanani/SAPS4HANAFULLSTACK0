@@ -14,7 +14,7 @@ const { openSession, inspectScreen } = require('../support/screenCheck');
 
 const ROOT = path.join(__dirname, '../../..');
 const ROUTES = ['purchaseOrders', 'salesInquiries', 'salesOrders', 'ordersDueForDelivery', 'customerInvoices', 'customerReturns',
-    'wmHandlingUnits', 'wmGoodsReceipt', 'wmQuarantineLabels', 'wmPackingInstructions'];
+    'wmHandlingUnits', 'wmQuarantineLabels', 'wmPackingInstructions'];
 const ROW = '.sapMLIB, .sapUiTableRow, tr.sapMListTblRow';
 
 function listRoutes() {

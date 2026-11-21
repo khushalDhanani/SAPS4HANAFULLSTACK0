@@ -144,7 +144,7 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
     });
 
     describe('AuthService.syncModelHeaders', () => {
-        it('should synchronize authorization header to active models (default, salesInquiry, goodsReceipt)', () => {
+        it('should synchronize authorization header to active models (default, salesInquiry, outboundDelivery)', () => {
             const defaultModel = {
                 changeHttpHeaders: jest.fn()
             };
@@ -157,7 +157,7 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             const mockComponent = {
                 getModel: jest.fn((name) => {
                     if (name === "salesInquiry") return sdModel;
-                    if (name === "goodsReceipt") return grModel;
+                    if (name === "outboundDelivery") return grModel;
                     return defaultModel;
                 }),
                 setModel: jest.fn()
