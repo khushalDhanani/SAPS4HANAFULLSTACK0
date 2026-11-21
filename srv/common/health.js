@@ -1,6 +1,7 @@
 'use strict';
 
 const cds = require('@sap/cds');
+const LOG = require('./logger')('health');
 
 /**
  * Health endpoints, registered before authentication (the platform probes them without credentials):
@@ -88,9 +89,16 @@ function registerHealth(app, {
   checks = defaultChecks,
   cacheMs = CACHE_MS,
   now = Date.now,
-  diagnosticsRunner = null
+  diagnosticsRunner = null,
+  startupLog = process.env.NODE_ENV === 'test' ? null : LOG
 } = {}) {
   let cached = null;
+
+  // Say it once at startup instead of on the first RFC call: mta.yaml alone does not install the SAP NW RFC SDK.
+  if (startupLog && typeof checks.rfcSdk === 'function' && checks.rfcSdk() !== 'UP') {
+    startupLog.warn('SAP NW RFC SDK / node-rfc is not loadable in this runtime: every RFC-based function will answer 503. '
+      + 'See docs/deployment/rfc-production-readiness.md and run `npm run check:rfc-runtime`.');
+  }
 
   async function dependencies() {
     if (cached && now() - cached.at < cacheMs) return cached.value;

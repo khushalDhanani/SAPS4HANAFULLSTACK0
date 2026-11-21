@@ -398,6 +398,19 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 12:55 IST — Highest-risk findings, step 5: RFC runtime gap made visible — PARTIAL
+
+- REQUEST: Approved plan, step 5 (finding P1 "the RFC runtime is not proven deployable"); user choice: loud check only, no deployment route chosen.
+- FINDING (CONFIRMED, still open): `mta.yaml` deploys the service with `nodejs_buildpack` only; the SAP NW RFC SDK supply buildpack is a comment. `cf deploy` alone does not install the SDK.
+- ALREADY PRESENT (inspected, unchanged): `/health/dependencies` reports `rfcSdk: DOWN` and `status: DEGRADED` without failing readiness (`test/integration/health.test.js`); `npm run check:rfc-runtime` certifies a runtime.
+- CHANGED: `srv/common/health.js`: one warning at startup when node-rfc / the SDK cannot be loaded, naming the readiness document and the certification script. Silent under `NODE_ENV=test`.
+- TEST DECISION: TEST ADDED — `test/unit/guard/rfcRuntimeDeployment.test.js` (7 tests): the service module either installs the SDK through a supply buildpack or both documented routes and the Dockerfile exist; SDK location variables are set; no SDK binary is tracked in Git; the certification script is wired; startup warning fires once when the SDK is missing and not when it loads; a missing SDK degrades the report but keeps readiness at 200.
+- TESTED (final run for steps 1–5): `npx jest` → 219 suites, 3,673 passed, 13 skipped (live-SAP suites), 0 failed. `npx eslint .` exit 0. UI5 lint 0 findings. `npx cds compile '*'` exit 0. `node test/e2e/runAllE2E.js --sap-free` → 6/6. `git diff --check` clean.
+- NOT VERIFIED: the RFC runtime on Cloud Foundry. This needs the licensed SDK, a supply buildpack or container image, and a deployment; none was made. The finding stays open.
+- ASSUMPTIONS: none.
+- STATUS: PARTIAL — the gap is visible at startup, in the health report and in a guard test; deployability is not proven.
+- NEXT: Choose the deployment route (supply buildpack or container) and run `npm run check:rfc-runtime` in the deployed runtime.
+
 ### 2026-11-21 12:53 IST — Highest-risk findings, step 4: the browser client sends no write without a CSRF token — PARTIAL
 
 - REQUEST: Approved plan, step 4 (finding P2 "the custom frontend OData client can still send a write without obtaining a CSRF token").
