@@ -17,9 +17,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`. Synchronized with `origin/feature01`.
-- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 660 first-party source files (up from 558 initially, due to 72 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
-  1. *Decomposition Milestones (Phases 1-5):* 22 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
-  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 115 files. Total first-party files scanned: 660 files.
+- **Phase 6: Documentation & Final Codebase Verification — PASS:** Executed full codebase scan using exact POSIX `wc -l` on all 666 first-party source files (up from 558 initially, due to 78 new focused sub-modules created). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
+  1. *Decomposition Milestones (Phases 1-5):* 23 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `HandlingUnitAdapter.js` [99], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214]); 4 key adapters heavily trimmed (`SalesInquiryAdapter.js` [-53%], `UserManagementAdapter.js` [-33%], `lockNotifier.js` [-22%], `PurchaseOrderValidator.js` [-18%]).
+  2. *Line Count Metrics:* Files exceeding 300 lines dropped from 137 to 114 files. Total first-party files scanned: 666 files.
   3. *Validation:* Zero linter findings (`ui5lint`: 0 findings; `eslint`: 0 errors). All unit tests pass across all modularized domains.
 - **Phase 5: UI5 Controllers Decomposition — PASS:** Successfully executed Phase 5 modularization targeting all fifteen monolithic UI5 controllers in the application (`PurchaseOrders.controller.js` [1,836 lines], `Dashboard.controller.js` [1,475 lines], `CreatePurchaseOrder.controller.js` [1,223 lines], `CreateSalesOrder.controller.js` [979 lines], `CreateSalesInquiry.controller.js` [911 lines], `OrdersDueForDelivery.controller.js` [760 lines], `HandlingUnits.controller.js` [643 lines], `CreateCustomerReturn.controller.js` [668 lines], `GoodsReceipt.controller.js` [613 lines], `MibLabel.controller.js` [588 lines], `QuarantineLabels.controller.js` [540 lines], `CustomerInvoices.controller.js` [540 lines], `SalesOrders.controller.js` [407 lines], `CustomerReturns.controller.js` [378 lines], and `App.controller.js` [366 lines]) without breaking changes or regression:
   1. *PurchaseOrders Controller Decomposition (slashed from 1,836 to 293 lines, -1,543 lines, -84.0%):*
@@ -397,6 +397,43 @@ All historical change logs and past milestone statuses are preserved verbatim in
 10. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-20 20:30 IST — Phase 2: S/4 Integration Adapters Modularization (HandlingUnitAdapter.js) — PASS
+
+- REQUEST: Modularize monolithic S/4HANA Handling Unit adapter `HandlingUnitAdapter.js` (765 lines) below 300 lines per `SCAN_REPORT.md` Phase 2 without breaking changes or integration contract deviations.
+- INSPECT:
+  - Audited `srv/integration/s4hana/wm/HandlingUnitAdapter.js` (765 lines).
+  - Traced consumers: `srv/wm/handling-unit/service.js`, `test/unit/wm/handlingUnitAdapter.test.js`, and `test/integration/unconfirmedSapResult.test.js` (`jest.spyOn(HandlingUnitAdapter.prototype, '_bapi')`).
+  - Identified 5 distinct functional responsibilities in `HandlingUnitAdapter.js`:
+    1. BAPI RFC transactional writes and VEKP/VEPO read-backs: `_bapi`, `_readBack`, `_assertPlantAllowed`, `_assertHuInScope`, `_itemFields`, `create`, `pack`, `unpack`, `remove`.
+    2. Batched serial number retrieval and label joins: `serials`, `labels`, `_bulkFirstSerial` via `SER06` -> `OBJK`.
+    3. Hierarchy tree nodes, filter bar value helps, and status KPI distribution: `hierarchy`, `valueHelp`, `_count`, `statusKpis`.
+    4. Object page detail querying and metadata resolution: `detail` (merging `API_HANDLING_UNIT`, monitor combined items, and header metadata).
+    5. List report querying and plant/sloc item enrichment: `list`, `_firstItemPlantSloc`.
+- PLAN:
+  - Extract common trust-boundary validation and parsing helpers into `handlingUnitUtils.js` (71 lines).
+  - Extract BAPI transactional LUW writing and VEKP/VEPO read-back into `HandlingUnitBapiWriter.js` (145 lines).
+  - Extract serial resolution and batched label joins into `HandlingUnitSerialReader.js` (118 lines).
+  - Extract hierarchy tree nodes, value helps, and status KPIs into `HandlingUnitHierarchyKpiReader.js` (127 lines).
+  - Extract Object page detail querying into `HandlingUnitDetailReader.js` (139 lines).
+  - Extract list querying and first-item plant/sloc enrichment into `HandlingUnitListReader.js` (174 lines).
+  - Retain unified facade coordinator in `HandlingUnitAdapter.js` (99 lines), preserving `HandlingUnitAdapter.prototype._bapi` and all existing method signatures.
+- CHANGE:
+  - Created `srv/integration/s4hana/wm/handlingUnitUtils.js` (71 lines).
+  - Created `srv/integration/s4hana/wm/HandlingUnitBapiWriter.js` (145 lines).
+  - Created `srv/integration/s4hana/wm/HandlingUnitDetailReader.js` (139 lines).
+  - Created `srv/integration/s4hana/wm/HandlingUnitHierarchyKpiReader.js` (127 lines).
+  - Created `srv/integration/s4hana/wm/HandlingUnitListReader.js` (174 lines).
+  - Created `srv/integration/s4hana/wm/HandlingUnitSerialReader.js` (118 lines).
+  - Refactored `srv/integration/s4hana/wm/HandlingUnitAdapter.js` (slashed from 765 to 99 lines, -666 lines, -87.1%).
+- VALIDATE:
+  - Exact line count: All 7 files strictly $\le 300$ lines (`wc -l`: 99, 145, 139, 127, 174, 118, 71).
+  - Total first-party files > 300 lines reduced from 115 to **114 files**.
+  - Total first-party JS application files > 300 lines reduced from 38 to **37 files**.
+  - ESLint (`npx eslint srv/integration/s4hana/wm/`): PASSED (0 errors, 0 warnings).
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): PASSED (0 findings).
+  - Unit test suites: `test/unit/wm/handlingUnitAdapter.test.js` (53/53 tests PASS); full `test/unit/wm/` (30/30 suites, 652/652 tests PASS).
+- TEST DECISION: `EXISTING TEST SUFFICIENT` — All 53 tests in `test/unit/wm/handlingUnitAdapter.test.js` and all 652 tests across WM pass cleanly with zero regression.
 
 ### 2026-11-20 20:00 IST — Phase 4: Frontend View Models & Defaults Modularization (PurchaseOrderDefaults.js) — PASS
 
