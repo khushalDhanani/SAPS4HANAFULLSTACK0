@@ -31,6 +31,8 @@ async function deliveryPlantFailure(req) {
 /**
  * Runs one SAP receipt posting under an atomic per-delivery-item claim. An unresolved attempt blocks the item;
  * a posted one does not, so a second partial receipt of the same quantity is still possible.
+ * A repeat of a request that already posted is told apart from a new partial receipt by the client's
+ * IdempotencyKey: the same key returns the earlier result and nothing is sent to SAP.
  * shortcut: ReservationNo holds the delivery, so a reservation with the same number and item is blocked too;
  * the number ranges differ on this system, give receipts their own columns if that changes.
  */
@@ -42,6 +44,33 @@ async function postWithAttempt(req, post) {
     const delivery = stripZeros(DeliveryDocument);
     const item = stripZeros(DeliveryDocumentItem || PurchaseOrderItem || '10');
     const requestHash = crypto.createHash('sha1').update(`101|${delivery}|${item}`).digest('hex');
+    const logUnavailable = () => Object.assign(new Error('The goods receipt posting-attempt log is unavailable; the goods receipt was NOT posted. Check the document list before retrying.'), { status: 503, statusCode: 503, $sanitize: false });
+
+    const idempotencyKey = String(req.data.IdempotencyKey || '').trim().slice(0, 36);
+    if (idempotencyKey) {
+        let replayed;
+        try {
+            replayed = await GoodsReceiptAttemptStore.findPostedByIdempotencyKey(requestHash, idempotencyKey);
+        } catch (lookupErr) {
+            LOG.error('Goods receipt attempt log failed:', lookupErr.message);
+            throw logUnavailable();
+        }
+        if (replayed) {
+            if (Number(replayed.IssueQty) !== Number(Quantity)) {
+                throw Object.assign(new Error(`This goods receipt was already posted for delivery ${delivery} item ${item} with quantity ${Number(replayed.IssueQty)} (Material Document ${replayed.MaterialDocument}). It was not posted again; reload the document before posting a further receipt.`), { status: 409, statusCode: 409 });
+            }
+            LOG.info(`Goods receipt replay for delivery ${delivery} item ${item}: returning Material Document ${replayed.MaterialDocument}, nothing sent to SAP.`);
+            return {
+                Success: true,
+                Message: `This goods receipt was already posted for delivery ${delivery} item ${item} (Material Document ${replayed.MaterialDocument}). It was not posted again.`,
+                DeliveryDocument: delivery,
+                MaterialDocument: replayed.MaterialDocument
+            };
+        }
+    } else {
+        LOG.warn(`Goods receipt for delivery ${delivery} item ${item} was sent without an IdempotencyKey; a repeat of this request cannot be told from a new partial receipt.`);
+    }
+
     let claim;
     try {
         claim = await GoodsReceiptAttemptStore.createOrGet({
@@ -56,11 +85,12 @@ async function postWithAttempt(req, post) {
             IssueQty: Quantity,
             Unit: Unit || '',
             User: req.user?.id || 'anonymous',
-            PostingDate: new Date().toISOString().slice(0, 10)
+            PostingDate: new Date().toISOString().slice(0, 10),
+            IdempotencyKey: idempotencyKey
         }, { reclaimableStatuses: ['posted', 'rejected', 'not_posted'] });
     } catch (claimErr) {
         LOG.error('Goods receipt attempt log failed:', claimErr.message);
-        throw Object.assign(new Error('The goods receipt posting-attempt log is unavailable; the goods receipt was NOT posted. Check the document list before retrying.'), { status: 503, statusCode: 503, $sanitize: false });
+        throw logUnavailable();
     }
     if (!claim.created) {
         throw Object.assign(new Error(`A goods receipt for delivery ${delivery} item ${item} is already in progress or its outcome is not confirmed yet. Refresh and check the document list before retrying.`), { status: 409, statusCode: 409 });
@@ -84,7 +114,7 @@ async function postWithAttempt(req, post) {
     } catch (storeErr) {
         LOG.error('Goods receipt attempt baseline could not be stored:', storeErr.message);
         await record('rejected', { LastError: 'Pre-post baseline could not be stored; not sent to SAP.' });
-        throw Object.assign(new Error('The goods receipt posting-attempt log is unavailable; the goods receipt was NOT posted. Check the document list before retrying.'), { status: 503, statusCode: 503, $sanitize: false });
+        throw logUnavailable();
     }
     try {
         const result = await post();

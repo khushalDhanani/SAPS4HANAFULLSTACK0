@@ -124,7 +124,8 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         PurchaseOrderItem    : String(5),
         Unit                 : String(3),
         GoodsMovementType    : String(3),
-        DocumentItemText     : String(50)
+        DocumentItemText     : String(50),
+        IdempotencyKey       : String(36)
     ) returns GRPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -141,7 +142,8 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         Quantity             : Decimal(13, 3),
         Unit                 : String(3),
         PackagingMaterial    : String(40),
-        ExpiryDate           : String(10)
+        ExpiryDate           : String(10),
+        IdempotencyKey       : String(36)
     ) returns GRStorageUnitPostResult;
 }
 

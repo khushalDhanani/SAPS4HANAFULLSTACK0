@@ -31,6 +31,7 @@ entity GoodsReceiptPostingAttempt : cuid, managed {
     LeaseOwner        : String(64);            // Unique token of the recheck run holding the lease; null when free
     LeaseExpiresAt    : Timestamp;             // Lease expiry; a lease past this time can be taken over
     BaselineDocs      : String(5000);          // JSON array of "MJAHR/MBLNR" 101 documents that existed before the post; null = unknown
+    IdempotencyKey    : String(36);            // Key the client sends with one posting intent; a repeat with the same key is a replay
 
     // -------------------------------------------------------------------------
     // Tier 2: S/4HANA Confirmed Document Attributes (Populated upon SAP persistence)

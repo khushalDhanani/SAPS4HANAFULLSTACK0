@@ -225,6 +225,7 @@ sap.ui.define([
 
         _resetState: function () {
             var oModel = this.getView().getModel("grView");
+            oModel.setProperty("/postIdempotencyKey", ""); // a reset form is a new posting intent
             oModel.setProperty("/storageUnitBarcode", "");
             oModel.setProperty("/selectedDelivery", "");
             oModel.setProperty("/hasActiveSU", false);

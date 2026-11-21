@@ -1,6 +1,15 @@
 (function () {
     "use strict";
 
+    /** One key per posting intent. The server returns the earlier result for a repeat with the same key. */
+    function newIdempotencyKey() {
+        var oCrypto = typeof window !== "undefined" ? window.crypto : null;
+        if (oCrypto && typeof oCrypto.randomUUID === "function") {
+            return oCrypto.randomUUID();
+        }
+        return "gr-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 14);
+    }
+
     function createGoodsReceiptPostingCoordinator(deps) {
         deps = deps || {};
         var MessageBox = deps.MessageBox;
@@ -68,6 +77,14 @@
                                     PackagingMaterial: oActive.PackagingMaterial || "",
                                     ExpiryDate: oActive.ExpiryDate
                                 };
+                                // Kept until the post succeeds or the form is reset, so a retry after a lost
+                                // answer repeats the same request instead of posting a second receipt.
+                                var sKey = oModel.getProperty("/postIdempotencyKey");
+                                if (!sKey) {
+                                    sKey = newIdempotencyKey();
+                                    oModel.setProperty("/postIdempotencyKey", sKey);
+                                }
+                                oPayload.IdempotencyKey = sKey;
 
                                 var fnPost = (oActive.StorageUnit && typeof GoodsReceiptService.postGoodsReceiptWithStorageUnit === "function")
                                     ? GoodsReceiptService.postGoodsReceiptWithStorageUnit.bind(GoodsReceiptService)
@@ -79,6 +96,7 @@
 
                                 pPost
                                     .then(function (oResult) {
+                                        oModel.setProperty("/postIdempotencyKey", "");
                                         that._playBeep(true);
                                         var sSuccessMsg = (oResult && oResult.Message) ? oResult.Message : that.getText("grPostSuccessDefault");
                                         MessageBox.success(sSuccessMsg, {

@@ -91,6 +91,7 @@ class GoodsReceiptAttemptStore {
       MaterialDocYear: data.MaterialDocYear || '',
       DeliveryNumber: data.DeliveryNumber || '',
       LastError: data.LastError || '',
+      IdempotencyKey: String(data.IdempotencyKey || '').trim().slice(0, 36) || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -218,6 +219,17 @@ class GoodsReceiptAttemptStore {
     );
 
     return this.getByReference(ref);
+  }
+
+  /** The posted attempt of this delivery item that carries the client's idempotency key, or null. */
+  async findPostedByIdempotencyKey(requestHash, idempotencyKey) {
+    this._assertDb();
+    const key = String(idempotencyKey || '').trim();
+    if (!key) return null;
+    const rows = await this._run(
+      SELECT.from(ATTEMPT_ENTITY).where({ RequestHash: String(requestHash || '').trim(), IdempotencyKey: key, Status: 'posted' })
+    );
+    return rows && rows[0] ? rows[0] : null;
   }
 
   /** Stores the 101 documents that exist before the post (null = could not be read) as recheck evidence. */

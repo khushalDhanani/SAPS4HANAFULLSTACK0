@@ -398,6 +398,29 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 12:50 IST — Highest-risk findings, step 2: idempotency key tells a replay from a new partial receipt — PARTIAL
+
+- REQUEST: Approved plan, step 2 (finding P1 "Goods Receipt idempotency does not distinguish a replay from a new partial receipt").
+- FINDING (CONFIRMED): the attempt key was `sha1("101|delivery|item")` only, and a posted attempt is reclaimable, so the same request sent again got a new generation and posted again. This is the path a user takes after a lost answer (for example a gateway timeout while the backend had already posted).
+- CHANGED:
+  - `srv/wm/goods-receipt/service.cds`: optional parameter `IdempotencyKey : String(36)` on `postGoodsReceipt` and `postGoodsReceiptWithStorageUnit`.
+  - `db/wm/goods-receipt-attempt.cds`: new column `IdempotencyKey String(36)`. **Schema change: needs a database deployment** (in addition to the three columns of Phase 1).
+  - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` (`postWithAttempt`): when a posted attempt of the same delivery item carries the same key, the earlier result is returned and nothing is sent to SAP; a different quantity with the same key is refused with 409; a failed lookup returns 503 without posting. A request without a key behaves as before and logs a warning.
+  - `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js`: stores the key; new `findPostedByIdempotencyKey`.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceiptPostingCoordinator.js`, `GoodsReceipt.controller.js`: the screen creates a key for a posting intent, repeats it on a retry, and drops it after a successful post or a form reset.
+- CAP guidance: cds-mcp `search_docs` (custom actions) consulted; `search_model` still fails to compile the model, `npx cds compile '*'` used instead (exit 0).
+- No S/4 contract change: the key is not sent to SAP.
+- LIMITS:
+  - The key lives in the screen's model. Leaving the screen, reloading the browser, or resetting the form starts a new intent, so a repeat after that is treated as a new receipt.
+  - Clients that send no key (anything other than this screen) are not protected.
+  - A replay answer carries `Success`, `Message`, `DeliveryDocument`, `MaterialDocument` only.
+- TEST DECISION: TEST ADDED. `test/unit/wm/goodsReceiptAttempt.test.js` (+16: same key returns the earlier document with one SAP call; new key posts; changed quantity 409; unconfirmed stays blocked; retry after a definite refusal posts; other item not a repeat; log failure → 503, no post; no key → old behaviour; each for both actions). `test/unit/wm/goodsReceiptController.test.js` (+3: key sent and repeated on retry, new key after success, dropped on reset). New `test/integration/goodsReceiptIdempotency.test.js` (4 tests over real CAP HTTP).
+- TESTED: `npx jest` → 218 suites, 3,656 passed, 13 skipped, 0 failed. `npx eslint .` exit 0. UI5 lint 0 findings. `npx cds compile '*'` exit 0. `node test/e2e/runAllE2E.js --sap-free` → 6/6. `git diff --check` clean.
+- NOT VERIFIED: the Goods Receipt screen in a browser; the new column on HANA; a real lost-answer replay against SAP. No SAP call made.
+- ASSUMPTIONS: none.
+- STATUS: PARTIAL — implemented and tested with mocks.
+- NEXT: Step 3 of the plan (read-only SAP discovery for document attribution).
+
 ### 2026-11-21 12:46 IST — Highest-risk findings, step 1: an RFC timeout during a write means "outcome unknown" — PARTIAL
 
 - REQUEST: Pasted "Highest-risk findings" (P1/P2 list); approved plan `zany-shimmying-shell.md`, step 1 (findings "RFC timeout and pool lifecycle" plus a defect found while checking it).

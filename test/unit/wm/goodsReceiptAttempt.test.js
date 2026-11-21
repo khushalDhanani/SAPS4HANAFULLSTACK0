@@ -97,6 +97,91 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
         expect(spy).toHaveBeenCalledTimes(2);
       });
 
+      describe('IdempotencyKey: a repeat of a posted request versus a new partial receipt', () => {
+        const KEYED = { ...DATA, IdempotencyKey: 'intent-0001' };
+
+        it('returns the earlier document for the same key and sends nothing to SAP', async () => {
+          const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
+
+          await post(KEYED, action);
+          const replay = await post(KEYED, action);
+
+          expect(spy).toHaveBeenCalledTimes(1);
+          expect(replay.req.reject).not.toHaveBeenCalled();
+          expect(replay.result).toMatchObject({ Success: true, MaterialDocument: '5000000001', Message: expect.stringContaining('not posted again') });
+          expect(await attempts()).toHaveLength(1);
+        });
+
+        it('posts a second partial receipt when the key is new', async () => {
+          const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
+
+          await post(KEYED, action);
+          await post({ ...DATA, IdempotencyKey: 'intent-0002' }, action);
+
+          expect(spy).toHaveBeenCalledTimes(2);
+          expect((await attempts()).map((a) => [a.Status, a.IdempotencyKey])).toEqual([['posted', 'intent-0001'], ['posted', 'intent-0002']]);
+        });
+
+        it('refuses a repeat of a posted request that carries a different quantity', async () => {
+          const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
+
+          await post(KEYED, action);
+          const changed = await post({ ...KEYED, Quantity: 3 }, action);
+
+          expect(spy).toHaveBeenCalledTimes(1);
+          expect(changed.req.reject).toHaveBeenCalledWith(409, expect.stringContaining('already posted'));
+        });
+
+        it('keeps a repeat blocked while the first attempt is unconfirmed', async () => {
+          const spy = jest.spyOn(singleton, action).mockRejectedValueOnce(unknownErr()).mockResolvedValue(DOC);
+
+          await expect(post(KEYED, action)).rejects.toMatchObject({ status: 504 });
+          const repeat = await post(KEYED, action);
+
+          expect(repeat.req.reject).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+          expect(spy).toHaveBeenCalledTimes(1);
+        });
+
+        it('lets a repeat with the same key post after a definite refusal', async () => {
+          const refused = Object.assign(new Error('Quantity deficit'), { statusCode: 422, status: 422 });
+          const spy = jest.spyOn(singleton, action).mockRejectedValueOnce(refused).mockResolvedValue(DOC);
+
+          await post(KEYED, action);
+          const retry = await post(KEYED, action);
+
+          expect(spy).toHaveBeenCalledTimes(2);
+          expect(retry.req.reject).not.toHaveBeenCalled();
+          expect((await attempts()).map((a) => a.Status)).toEqual(['rejected', 'posted']);
+        });
+
+        it('does not treat the same key on another delivery item as a repeat', async () => {
+          const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
+
+          await post(KEYED, action);
+          await post({ ...KEYED, DeliveryDocumentItem: '20' }, action);
+
+          expect(spy).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not post when the attempt log cannot be searched for the key', async () => {
+          const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
+          jest.spyOn(GoodsReceiptAttemptStore, 'findPostedByIdempotencyKey').mockRejectedValue(new Error('db down'));
+
+          await expect(post(KEYED, action)).rejects.toMatchObject({ status: 503, $sanitize: false, message: expect.stringContaining('NOT posted') });
+
+          expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('a request without a key keeps the earlier behaviour: every post is a new receipt', async () => {
+          const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
+
+          await post(DATA, action);
+          await post(DATA, action);
+
+          expect(spy).toHaveBeenCalledTimes(2);
+        });
+      });
+
       it('still allows a second partial receipt of the same quantity', async () => {
         const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
 

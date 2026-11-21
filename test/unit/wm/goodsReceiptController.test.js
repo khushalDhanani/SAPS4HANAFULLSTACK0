@@ -619,6 +619,58 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             );
         });
 
+        describe('idempotency key of a posting intent', () => {
+            const confirmYes = () => mockMessageBox.confirm.mockImplementationOnce((msg, opts) => { opts.onClose('YES'); });
+            const sentKey = (n) => mockGoodsReceiptService.postGoodsReceipt.mock.calls[n][0].IdempotencyKey;
+            // The posting flag is cleared after the post promise settles; let that happen before the next post.
+            const settled = () => new Promise((resolve) => setImmediate(resolve));
+
+            beforeEach(() => mockGoodsReceiptService.postGoodsReceipt.mockReset());
+
+            it('sends a key with the post and repeats the same key when the user retries after a failure', async () => {
+                mockGoodsReceiptService.postGoodsReceipt
+                    .mockRejectedValueOnce(new Error('Gateway Timeout'))
+                    .mockResolvedValueOnce({ Success: true, Message: 'posted' });
+
+                confirmYes();
+                await controller.onPostGoodsReceipt();
+                await settled();
+                confirmYes();
+                await controller.onPostGoodsReceipt();
+
+                expect(typeof sentKey(0)).toBe('string');
+                expect(sentKey(0).length).toBeGreaterThan(8);
+                expect(sentKey(0).length).toBeLessThanOrEqual(36);
+                expect(sentKey(1)).toBe(sentKey(0));
+            });
+
+            it('uses a new key for the next receipt after a successful post', async () => {
+                mockGoodsReceiptService.postGoodsReceipt.mockResolvedValue({ Success: true, Message: 'posted' });
+
+                confirmYes();
+                await controller.onPostGoodsReceipt();
+                await settled();
+                const oModel = controller.getView().getModel('grView');
+                expect(oModel.getProperty('/postIdempotencyKey')).toBe('');
+                confirmYes();
+                await controller.onPostGoodsReceipt();
+
+                expect(sentKey(1)).not.toBe(sentKey(0));
+            });
+
+            it('drops the key when the form is reset', async () => {
+                mockGoodsReceiptService.postGoodsReceipt.mockRejectedValueOnce(new Error('Gateway Timeout'));
+                confirmYes();
+                await controller.onPostGoodsReceipt();
+                const oModel = controller.getView().getModel('grView');
+                expect(oModel.getProperty('/postIdempotencyKey')).toBeTruthy();
+
+                controller._resetState();
+
+                expect(oModel.getProperty('/postIdempotencyKey')).toBe('');
+            });
+        });
+
         it('should show the SAP error text in the failure dialog when posting fails', async () => {
           // The default getText stub drops its arguments, which would hide a lost SAP message.
           controller.getText = (key, args) => (args ? key + ':' + args.join('|') : key);
