@@ -28,13 +28,13 @@ To guarantee total precision, files were evaluated under strict discovery rules 
 ### 1.2 Summary of Scan Results
 - **Total Tracked Files in Git:** 911 files.
 - **Total Non-Excluded Repository Artifacts (including docs/evidence):** 834 files.
-- **Total First-Party Source Files Scanned:** **657 files** (increased from initial 558 due to the 69 new focused sub-modules created).
-- **Total First-Party Source Files Exceeding 300 Lines:** **116 files** (down from 137 files).
-- **Application & Integration Source Files Exceeding 300 Lines:** **56 files** (24 Frontend, 20 Integrations, 6 Backend, 5 Utilities, 1 Schema Config).
+- **Total First-Party Source Files Scanned:** **660 files** (increased from initial 558 due to the 72 new focused sub-modules created).
+- **Total First-Party Source Files Exceeding 300 Lines:** **115 files** (down from 137 files).
+- **Application & Integration Source Files Exceeding 300 Lines:** **55 files** (23 Frontend, 20 Integrations, 6 Backend, 5 Utilities, 1 Schema Config).
 - **Automated Test Suites Exceeding 300 Lines:** **60 files** (51 Unit test suites, 4 Integration test suites, 5 Browser E2E/support suites).
 
 ### 1.3 Modularization Accomplishments (Phases 1 to 5 — 100% PASS)
-Through the systematic execution of Phases 1 through 5, **18 major monolithic modules were completely knocked below the 300-line threshold**, while retaining 100% backward compatibility and test coverage:
+Through the systematic execution of Phases 1 through 5, **22 major monolithic modules were completely knocked below the 300-line threshold**, while retaining 100% backward compatibility and test coverage:
 1. **`PurchaseOrders.controller.js`:** Slashed from **1,836 lines down to 293 lines** (-1,543 lines, **-84.0%**). Extracted 7 dedicated submodules (`PurchaseOrderAiChat.js` [212], `PurchaseOrderAiDataFetcher.js` [240], `PurchaseOrderAiIntent.js` [265], `PurchaseOrderAiPrompt.js` [290], `PurchaseOrderAiStream.js` [196], `PurchaseOrderAiWidget.js` [197], `PurchaseOrderTableFilter.js` [262]). All 28 test suites (545 tests) PASS.
 2. **`Dashboard.controller.js`:** Slashed from **1,475 lines down to 275 lines** (-1,200 lines, **-81.4%**). Extracted 8 dedicated submodules (`AdminLockMonitorSection.js` [115], `AdminLogsSection.js` [102], `AdminUserBulkSection.js` [258], `AdminUserDetailSection.js` [223], `AdminUserFilterSection.js` [129], `AdminUserFormatters.js` [138], `AdminUserListSection.js` [234], `DashboardMetricsSection.js` [77]). All 109 tests PASS.
 3. **`CreatePurchaseOrder.controller.js`:** Slashed from **1,223 lines down to 223 lines** (-1,000 lines, **-81.8%**). Extracted 5 dedicated submodules (`CreatePurchaseOrderContextFilter.js` [237], `CreatePurchaseOrderHeaderSync.js` [284], `CreatePurchaseOrderItemManager.js` [153], `CreatePurchaseOrderMessages.js` [223], `CreatePurchaseOrderValueHelp.js` [128]). All 28 test suites (545 tests) PASS.
@@ -56,7 +56,8 @@ Through the systematic execution of Phases 1 through 5, **18 major monolithic mo
 19. **`SalesOrderModel.js`:** Slashed from **668 lines down to 137 lines** (-531 lines, **-79.5%**). Extracted 2 dedicated submodules (`SalesOrderValidator.js` [268], `SalesOrderPayloadBuilder.js` [240]). All 7 sales-order test suites (123 tests) and all 33 SD suites (535 tests) PASS, UI5 linter 0 findings.
 20. **`SalesInquiryModel.js`:** Slashed from **669 lines down to 122 lines** (-547 lines, **-81.8%**). Extracted 2 dedicated submodules (`SalesInquiryValidator.js` [257], `SalesInquiryPayloadBuilder.js` [297]). All 15 sales-inquiry suites (198 tests) and all 33 SD suites (535 tests) PASS, UI5 linter 0 findings.
 21. **`PurchaseOrderModel.js`:** Slashed from **634 lines down to 233 lines** (-401 lines, **-63.2%**). Extracted 2 dedicated submodules (`PurchaseOrderInitialState.js` [161], `PurchaseOrderOperations.js` [148]). All 28 purchase-order test suites (545 tests) PASS, UI5 linter 0 findings.
-22. **Integration Adapters Heavily Trimmed:**
+22. **`PurchaseOrderDefaults.js`:** Slashed from **620 lines down to 199 lines** (-421 lines, **-67.9%**). Extracted 3 dedicated submodules (`PurchaseOrderSupplierDefaults.js` [164], `PurchaseOrderConfigDefaults.js` [169], `PurchaseOrderDocTypeDefaults.js` [275]). All 28 purchase-order test suites (545 tests) PASS, UI5 linter 0 findings.
+23. **Integration Adapters Heavily Trimmed:**
    - `SalesInquiryAdapter.js`: Reduced from **1,434 to 676 lines** (-758 lines, **-52.9%**). Knocked out of the Top 20 largest files.
    - `UserManagementAdapter.js`: Reduced from **797 to 530 lines** (-267 lines, **-33.5%**).
    - `lockNotifier.js`: Reduced from **650 to 509 lines** (-141 lines, **-21.7%**).
@@ -159,8 +160,7 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **28** | **641** | `test/unit/wm/goodsReceiptController.test.js` | Tests |
 | **29** | **635** | `test/unit/sd/customerReturnAdapter.test.js` | Tests |
 | **30** | **632** | `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDocumentCreator.js` | Integrations |
-| **31** | **620** | `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderDefaults.js` | Frontend |
-| **32** | **573** | `srv/integration/s4hana/wm/GoodsReceiptAdapter.js` | Integrations |
+| **31** | **573** | `srv/integration/s4hana/wm/GoodsReceiptAdapter.js` | Integrations |
 | **33** | **556** | `test/unit/sd/createCustomerReturnController.test.js` | Tests |
 | **34** | **551** | `test/unit/wm/handlingUnitAdapter.test.js` | Tests |
 | **35** | **549** | `app/fiori-app/webapp/service/AuthService.js` | Frontend |
