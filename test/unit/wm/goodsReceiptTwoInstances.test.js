@@ -148,7 +148,7 @@ describe('Finding MON-02: Goods Receipt Two-Instance Background Scheduling & Dis
         10000,
         now
       );
-      expect(claimedA).toBe(true);
+      expect(claimedA).toBeTruthy();
 
       // Immediate attempt by Worker 1 fails because Worker 0 holds the lease
       const claimedBImmediate = await storeB.claimAttemptForRecheck(
@@ -166,7 +166,7 @@ describe('Finding MON-02: Goods Receipt Two-Instance Background Scheduling & Dis
         10000,
         now + 15000
       );
-      expect(claimedBLater).toBe(true);
+      expect(claimedBLater).toBeTruthy();
     });
   });
 });

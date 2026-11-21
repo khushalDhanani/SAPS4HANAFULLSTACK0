@@ -151,9 +151,12 @@ sap.ui.define([
                     }
                     return sCsrfToken;
                 })
-                .catch(function () {
-                    // If HEAD fails (e.g. local dev without CSRF protection), resolve null
-                    return null;
+                .catch(function (err) {
+                    // Fail closed: a write is not sent when the token request itself failed.
+                    var oError = new Error("The security token could not be obtained, so the request was not sent. Check the connection and try again.");
+                    oError.code = "CSRF_TOKEN_UNAVAILABLE";
+                    oError.cause = err;
+                    throw oError;
                 });
         },
 
@@ -235,6 +238,9 @@ sap.ui.define([
                 maxRetries: bRequiresCsrf ? 0 : 1,
                 retryDelayMs: 300
             }, mOptions || {});
+            if (bRequiresCsrf) {
+                options.maxRetries = 0; // enforced: a caller cannot switch automatic retries on for a write
+            }
 
             function executeAttempt(iAttempt) {
                 var pCsrf = bRequiresCsrf ? that.fetchCsrfToken() : Promise.resolve(null);
@@ -271,7 +277,11 @@ sap.ui.define([
                         if (response.status === 403 && bRequiresCsrf && iAttempt === 0 &&
                             String(response.headers.get("x-csrf-token") || "").toLowerCase() === "required") {
                             that.clearCsrfToken();
-                            return that.fetchCsrfToken(true).then(function () {
+                            return that.fetchCsrfToken(true).then(function (sNewToken) {
+                                if (!sNewToken) {
+                                    // The server requires a token and issued none: do not send the write again.
+                                    return that.parseError(response).then(function (err) { throw err; });
+                                }
                                 return executeAttempt(iAttempt + 1);
                             });
                         }

@@ -6,6 +6,9 @@
  * error opts out, because the text is what stops a user creating a duplicate. SAP's answers here are hand-written.
  */
 
+// Production resolves S/4HANA only through a named BTP destination (no local fallback), so name one before the clients load.
+process.env.S4_DESTINATION_NAME = 'S4_TEST_DESTINATION';
+
 const cds = require('@sap/cds');
 const connectivity = require('@sap-cloud-sdk/connectivity');
 const httpClient = require('@sap-cloud-sdk/http-client');

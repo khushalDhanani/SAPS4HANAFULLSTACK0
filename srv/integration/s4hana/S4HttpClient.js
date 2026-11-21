@@ -7,6 +7,8 @@ const SessionContext = require('./SessionContext');
 
 const {
   DESTINATION_NOT_CONFIGURED,
+  DESTINATION_LOOKUP_FAILED,
+  CSRF_TOKEN_UNAVAILABLE,
   S4HttpError,
   responseOf,
   codeOf,
@@ -125,6 +127,8 @@ class S4HttpClient {
 
   /**
    * Fetches a CSRF token and the SAP session cookies with one GET on `csrfPath`.
+   * Fails closed: when the fetch fails and yields no token, it throws CSRF_TOKEN_UNAVAILABLE and the caller
+   * sends nothing to SAP. A successful answer that carries no token is passed on (the service issued none).
    *
    * @param {string} csrfPath
    * @param {Object} [destination] - Already resolved destination
@@ -155,7 +159,16 @@ class S4HttpClient {
       const response = responseOf(err);
       const session = response ? SessionContext.fromResponse(response) : new SessionContext();
       if (!session.token) {
-        LOG.warn(`CSRF token fetch on ${csrfPath} failed (${response?.status || codeOf(err) || err.message}); continuing without a token.`);
+        const status = response?.status;
+        LOG.warn(`CSRF token fetch on ${csrfPath} failed (${status || codeOf(err) || err.message}); the request is not sent.`);
+        // 4xx is SAP's own answer; anything else means SAP was not reached for this write (503 = never sent).
+        throw new S4HttpError(`No CSRF token could be obtained from SAP S/4HANA (${status ? `HTTP ${status}` : (codeOf(err) || 'no response')}); the request was NOT sent.`, {
+          status: status >= 400 && status < 500 ? status : 503,
+          code: CSRF_TOKEN_UNAVAILABLE,
+          method: 'GET',
+          path: csrfPath,
+          cause: err,
+        });
       }
       return session;
     }
@@ -222,4 +235,6 @@ module.exports = {
   serviceRootOf,
   joinQuery,
   DESTINATION_NOT_CONFIGURED,
+  DESTINATION_LOOKUP_FAILED,
+  CSRF_TOKEN_UNAVAILABLE,
 };

@@ -70,6 +70,22 @@ async function postWithAttempt(req, post) {
     const record = (status, fields) => GoodsReceiptAttemptStore.setStatus(ref, status, fields).catch((err) => {
         LOG.error(`Critical reconciliation error: failed to persist attempt status '${status}' for reference ${ref}:`, err.message || err, fields);
     });
+
+    // Evidence for a later recheck: the receipts that exist before this post. Read after the claim, so no
+    // other posting of this item can slip in between. A failed read is stored as "unknown", not as empty.
+    let baseline = null;
+    try {
+        baseline = (await GoodsReceiptAdapter._read101Docs(delivery, item)).map((r) => `${r.MJAHR}/${r.MBLNR}`);
+    } catch (baselineErr) {
+        LOG.warn(`Pre-post document baseline for delivery ${delivery} item ${item} could not be read: ${baselineErr.message}`);
+    }
+    try {
+        await GoodsReceiptAttemptStore.setBaseline(ref, baseline);
+    } catch (storeErr) {
+        LOG.error('Goods receipt attempt baseline could not be stored:', storeErr.message);
+        await record('rejected', { LastError: 'Pre-post baseline could not be stored; not sent to SAP.' });
+        throw Object.assign(new Error('The goods receipt posting-attempt log is unavailable; the goods receipt was NOT posted. Check the document list before retrying.'), { status: 503, statusCode: 503, $sanitize: false });
+    }
     try {
         const result = await post();
         await record('posted', { MaterialDocument: result?.MaterialDocument, MaterialDocYear: result?.MaterialDocumentYear, LastError: '' });

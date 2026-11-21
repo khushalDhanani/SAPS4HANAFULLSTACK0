@@ -182,7 +182,11 @@ class GoodsReceiptAttemptStore {
     return rows && rows[0] ? rows[0] : null;
   }
 
-  async setStatus(referenceDocument, status, fields = {}) {
+  /**
+   * Sets the status of an attempt. With `guard.leaseOwner` the write happens only while that recheck lease
+   * is still held and the attempt is still open, and it ends the lease; returns null when it did not apply.
+   */
+  async setStatus(referenceDocument, status, fields = {}, guard = null) {
     this._assertDb();
     const ref = String(referenceDocument || '').trim();
     const updateData = {
@@ -198,6 +202,15 @@ class GoodsReceiptAttemptStore {
     if (fields.DeliveryNumber !== undefined) updateData.DeliveryNumber = fields.DeliveryNumber;
     if (fields.LastError !== undefined) updateData.LastError = fields.LastError;
 
+    if (guard && guard.leaseOwner) {
+      const updated = await this._run(
+        UPDATE(ATTEMPT_ENTITY)
+          .set({ ...updateData, LeaseOwner: null, LeaseExpiresAt: null })
+          .where({ ReferenceDocument: ref, LeaseOwner: guard.leaseOwner, Status: { in: OPEN_STATUSES } })
+      );
+      return Number(updated) > 0 ? this.getByReference(ref) : null;
+    }
+
     await this._run(
       UPDATE(ATTEMPT_ENTITY)
         .set(updateData)
@@ -205,6 +218,17 @@ class GoodsReceiptAttemptStore {
     );
 
     return this.getByReference(ref);
+  }
+
+  /** Stores the 101 documents that exist before the post (null = could not be read) as recheck evidence. */
+  async setBaseline(referenceDocument, docKeys) {
+    this._assertDb();
+    const json = Array.isArray(docKeys) ? JSON.stringify(docKeys) : null;
+    await this._run(
+      UPDATE(ATTEMPT_ENTITY)
+        .set({ BaselineDocs: json && json.length <= 5000 ? json : null, updatedAt: new Date().toISOString() })
+        .where({ ReferenceDocument: String(referenceDocument || '').trim() })
+    );
   }
 
   async claimAttemptForRecheck(referenceDocument, workerId, leaseMs, now) {

@@ -6,20 +6,29 @@ const {
   originOf,
   extractUserJwt,
 } = require('./S4HttpUtils');
-const { S4HttpError, DESTINATION_NOT_CONFIGURED } = require('./S4HttpErrors');
+const { S4HttpError, DESTINATION_NOT_CONFIGURED, DESTINATION_LOOKUP_FAILED } = require('./S4HttpErrors');
+const LOG = require('../../common/logger')('s4-client');
 
 /**
  * Resolves the S/4HANA destination (see resolution order in S4HttpClient).
  * Passes userJwt to support Principal Propagation destinations.
  *
+ * In production only the BTP destination counts: a failed lookup is an error (DESTINATION_LOOKUP_FAILED,
+ * 503) and local Basic credentials are never substituted, so the caller's identity cannot be swapped for
+ * a shared technical user. Outside production a failed lookup is logged and local configuration is used.
+ *
  * @param {object} client - S4HttpClient instance
  * @param {object} [options]
  * @returns {Promise<object|null>} Cloud SDK destination, or null when nothing is configured
+ * @throws {S4HttpError} DESTINATION_LOOKUP_FAILED in production when the lookup itself fails
  */
 async function resolveDestination(client, options = {}) {
   if (options.destination) return options.destination;
 
   const userJwt = extractUserJwt(options);
+
+  const env = client._env;
+  const isProduction = String(env.NODE_ENV || '').trim().toLowerCase() === 'production';
 
   try {
     const dest = client.destinationName ? await client._getDestination({
@@ -27,11 +36,20 @@ async function resolveDestination(client, options = {}) {
       ...(userJwt ? { userJwt } : {}),
     }) : null;
     if (dest && dest.url) return dest;
-  } catch (_) {
-    // No Destination service binding and no registered destination: use local configuration.
+  } catch (err) {
+    if (isProduction) {
+      LOG.error(`Lookup of S/4HANA destination '${client.destinationName}' failed: ${err.message}`);
+      throw new S4HttpError(`S/4HANA destination '${client.destinationName}' could not be looked up; the request was not sent to SAP.`, {
+        status: 503,
+        code: DESTINATION_LOOKUP_FAILED,
+        cause: err,
+      });
+    }
+    // Local development without a Destination service binding: use local configuration.
+    LOG.warn(`Lookup of S/4HANA destination '${client.destinationName}' failed (${err.message}); using local configuration.`);
   }
+  if (isProduction) return null;
 
-  const env = client._env;
   if (env.S4_DESTINATION_URL) {
     return {
       url: stripTrailingSlashes(env.S4_DESTINATION_URL),

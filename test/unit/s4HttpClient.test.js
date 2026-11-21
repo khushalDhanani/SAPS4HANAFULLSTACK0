@@ -279,19 +279,56 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(executeHttpRequest.mock.calls[1][1].data).toEqual({ IssueQty: 1 });
         });
 
-        it('continues without a token when the CSRF probe fails, so SAP reports the real outcome of the POST', async () => {
+        it('fails closed when the CSRF probe fails: the POST is not sent and SAP\'s own 4xx status is kept', async () => {
             const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-            const executeHttpRequest = jest.fn()
-                .mockRejectedValueOnce(wrappedSdkError(403, 'Forbidden'))
-                .mockRejectedValueOnce(wrappedSdkError(403, { error: { code: 'CSRF', message: { value: 'CSRF token validation failed' } } }));
+            const executeHttpRequest = jest.fn().mockRejectedValueOnce(wrappedSdkError(403, 'Forbidden'));
             const { client } = makeClient({ executeHttpRequest });
 
             await expect(client.post('/sap/opu/odata/sap/API_X_SRV/Set', { data: { a: 1 } })).rejects.toMatchObject({
-                status: 403, code: 'CSRF', message: expect.stringContaining('CSRF token validation failed')
+                status: 403, code: 'S4_CSRF_TOKEN_UNAVAILABLE', message: expect.stringContaining('NOT sent')
             });
-            expect(executeHttpRequest.mock.calls[1][1].headers['x-csrf-token']).toBeUndefined();
+            expect(executeHttpRequest).toHaveBeenCalledTimes(1); // the probe only
             expect(warn).toHaveBeenCalledTimes(1);
             warn.mockRestore();
+        });
+
+        it.each([
+            ['a timeout', () => Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' })],
+            ['a gateway 502', () => wrappedSdkError(502, 'Bad Gateway')],
+            ['a refused connection', () => Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })]
+        ])('reports %s on the CSRF probe as 503 "not sent", never as an unconfirmed write', async (_label, makeErr) => {
+            const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            const executeHttpRequest = jest.fn().mockRejectedValueOnce(makeErr());
+            const { client } = makeClient({ executeHttpRequest });
+
+            const err = await client.post('/sap/opu/odata/sap/API_X_SRV/Set', { data: {} }).catch((e) => e);
+
+            expect(err).toMatchObject({ status: 503, code: 'S4_CSRF_TOKEN_UNAVAILABLE' });
+            expect(err.code).not.toBe('SAP_WRITE_NOT_CONFIRMED');
+            expect(executeHttpRequest).toHaveBeenCalledTimes(1);
+            warn.mockRestore();
+        });
+
+        it('uses a token that SAP returns on an error answer of the probe', async () => {
+            const probeError = wrappedSdkError(404, 'Not Found');
+            probeError.cause.response.headers = { 'x-csrf-token': 'TOKEN-ON-ERROR' };
+            const executeHttpRequest = jest.fn().mockRejectedValueOnce(probeError).mockResolvedValueOnce({ status: 201, data: {}, headers: {} });
+            const { client } = makeClient({ executeHttpRequest });
+
+            await client.post('/sap/opu/odata/sap/API_X_SRV/Set', { data: {} });
+
+            expect(executeHttpRequest.mock.calls[1][1].headers['x-csrf-token']).toBe('TOKEN-ON-ERROR');
+        });
+
+        it('never re-sends a write: one failed POST is one request to SAP', async () => {
+            const executeHttpRequest = jest.fn()
+                .mockResolvedValueOnce(csrfResponse)
+                .mockRejectedValueOnce(wrappedSdkError(503, 'Service Unavailable'));
+            const { client } = makeClient({ executeHttpRequest });
+
+            await expect(client.post('/sap/opu/odata/sap/API_X_SRV/Set', { data: {} })).rejects.toBeDefined();
+
+            expect(executeHttpRequest.mock.calls.filter(([, config]) => config.method === 'post')).toHaveLength(1);
         });
 
         it('never keeps a token or cookie on the client between calls', async () => {

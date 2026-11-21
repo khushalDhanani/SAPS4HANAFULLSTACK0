@@ -113,7 +113,10 @@ entity GoodsReceiptPostingAttempt : cuid, managed {
     ResolvedAt        : Timestamp;             // Timestamp when finalized
     PostingUser       : String(255);           // Authenticated user
     PostingDate       : Date;                  // Posting date
-    LastError         : String(500);           // Error message or lease tag
+    LastError         : String(500);           // Error message (never lease data)
+    LeaseOwner        : String(64);            // Unique token of the recheck run holding the lease
+    LeaseExpiresAt    : Timestamp;             // Lease expiry
+    BaselineDocs      : String(5000);          // JSON array of 101 documents existing before the post; null = unknown
 
     // Tier 2: S/4HANA Confirmed Document Attributes
     MaterialDocument  : String(10);            // Confirmed MBLNR
@@ -150,8 +153,9 @@ interface IPostingAttemptStore {
   setStatus(referenceDocument: string, status: string, extraFields?: ExtraStatusFields): Promise<void>;
 
   // Distributed multi-instance leasing (Compare-And-Swap)
-  claimAttemptForRecheck(referenceDocument: string, workerId?: string, leaseMs?: number, now?: number): Promise<boolean>;
-  releaseAttemptLease(referenceDocument: string, workerId?: string): Promise<void>;
+  claimAttemptForRecheck(referenceDocument: string, workerId?: string, leaseMs?: number, now?: number): Promise<string | false>; // lease token
+  releaseAttemptLease(referenceDocument: string, leaseToken: string): Promise<void>;
+  setBaseline(referenceDocument: string, docKeys: string[] | null): Promise<void>;
 }
 ```
 
@@ -163,9 +167,10 @@ Following the complete decommissioning of Goods Issue (Movement 261/201), the po
 
 ### Goods Receipt Reconciliation (Movement 101 against Inbound Delivery)
 - **SAP Reference Field**: Receipts against inbound deliveries do not populate the material document header reference with our application key. S/4HANA links the receipt via the delivery document number (`ReservationNo`) and item (`ReservationItem` / `POSNR`).
-- **Query Mechanism**: `adapter.findReceiptForAttempt(attempt)` searches `MATDOC` for Movement 101 matching the delivery item.
+- **Query Mechanism**: `adapter.findReceiptForAttempt(attempt)` searches `MATDOC` for Movement 101 matching the delivery item and compares the result with the attempt's pre-post baseline (`BaselineDocs`, read from `MATDOC` after the claim and before the post).
+- **Evidence Rule**: exactly one document outside the baseline → `posted`; no document at all, or none outside the baseline once the not-posted age has passed → `not_posted`; documents exist but no baseline was stored, or more than one new document → ambiguous: the attempt stays open and blocked (summary counter `Ambiguous`) until it is resolved manually. An earlier partial receipt is part of the baseline and is never taken as the attempt's document.
 - **Single-Worker Scheduling**: Background recheck timer is enabled exclusively on Cloud Foundry instance 0 (`(env.CF_INSTANCE_INDEX ?? '0') === '0'`).
-- **Distributed Worker Lease**: Before querying SAP, the worker executes `claimAttemptForRecheck()` with atomic CAS locking (`lease:${workerId}:${expiresAtIso}`). If another instance holds an unexpired lease, the attempt is skipped (`SkippedLocked`), preventing dual-instance SAP calls.
+- **Distributed Worker Lease**: Before querying SAP, the worker executes `claimAttemptForRecheck()`, one atomic `UPDATE` that sets `LeaseOwner` (a unique token per claim) and `LeaseExpiresAt` only when no unexpired lease exists. A result is written only while that token still holds the lease and the attempt is still open. Runs with the same worker id exclude each other; a restarted worker waits for the old lease to expire. `LastError` is never used for lease data.
 
 ---
 

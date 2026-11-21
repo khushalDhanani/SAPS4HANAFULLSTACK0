@@ -2,6 +2,10 @@
 
 /** Error code used when no destination could be resolved at all. */
 const DESTINATION_NOT_CONFIGURED = 'S4_DESTINATION_NOT_CONFIGURED';
+/** Error code used when a configured destination exists but its lookup failed (service outage, token exchange). */
+const DESTINATION_LOOKUP_FAILED = 'S4_DESTINATION_LOOKUP_FAILED';
+/** Error code used when a write was not sent because no CSRF token could be obtained. */
+const CSRF_TOKEN_UNAVAILABLE = 'S4_CSRF_TOKEN_UNAVAILABLE';
 
 /**
  * Failure of a call to S/4HANA. Carries the HTTP status (also as statusCode for handlers that use that
@@ -96,6 +100,8 @@ function toS4HttpError(err, method, path) {
 
 module.exports = {
   DESTINATION_NOT_CONFIGURED,
+  DESTINATION_LOOKUP_FAILED,
+  CSRF_TOKEN_UNAVAILABLE,
   S4HttpError,
   responseOf,
   codeOf,

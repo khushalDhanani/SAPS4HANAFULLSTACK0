@@ -398,6 +398,73 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 12:26 IST — Phase 2 — SAP integration security (CSRF fail-closed, no write retry, destination errors) — PARTIAL
+
+- REQUEST: Pasted remediation roadmap, Phase 2 "SAP integration security": fail closed on required CSRF token acquisition failure; enforce the no-automatic-write-retry policy; improve destination error classification; test destination authentication and Principal Propagation behaviour. Exit condition: transactional calls cannot silently bypass required protections.
+- INSPECT: `srv/integration/s4hana/S4HttpClient.js`, `S4DestinationResolver.js`, `S4HttpErrors.js`, `SessionContext.js`; `app/fiori-app/webapp/service/ODataClient.js`; `srv/common/productionGuard.js`; write callers and outcome classification (`GoodsReceiptODataPoster.js:190-195`, `GoodsReceiptBapiPoster.js:247`); retry loops in `srv/integration` (only read-back loops: `CustomerInvoiceAdapter.js:233,344`, `CustomerReturnWriter.js:155` re-read, they do not re-send a write). No S/4 entity, field or payload changed; no SAP call was made.
+- CHANGED:
+  - `S4HttpClient.fetchCsrfSession`: when the token fetch fails and yields no token it now throws `S4_CSRF_TOKEN_UNAVAILABLE` and the POST is not sent (before: logged "continuing without a token" and sent the POST). Status is SAP's own 4xx when SAP answered, otherwise 503, so callers classify it as "never sent", not as an unconfirmed write. A token that SAP returns on an error answer is still used. A successful answer without a token is passed on unchanged.
+  - `S4DestinationResolver.resolveDestination`: in production (`NODE_ENV=production`) local configuration is never used. A lookup that throws is `S4_DESTINATION_LOOKUP_FAILED` (503, cause kept, logged); a lookup that finds nothing stays `S4_DESTINATION_NOT_CONFIGURED` (502). Outside production the fallback to local configuration remains and the lookup error is now logged.
+  - `S4HttpErrors.js` / `S4HttpClient.js`: new codes `DESTINATION_LOOKUP_FAILED`, `CSRF_TOKEN_UNAVAILABLE`, exported.
+  - `ODataClient.js` (browser): a failed token request rejects with `CSRF_TOKEN_UNAVAILABLE` and the write is not sent; when the server requires a token and issues none on refresh, the write is not sent a second time; `maxRetries` is forced to 0 for POST/PUT/PATCH/DELETE whatever the caller passes.
+- BEHAVIOUR CHANGES TO KNOW:
+  - A write to SAP whose CSRF probe fails now fails before the POST. The former behaviour was deliberate (a test said "so SAP reports the real outcome of the POST"); the error now names the probe failure instead.
+  - Production no longer tolerates a missing `S4_DESTINATION_NAME` plus local credentials. The startup guard already forbids that combination, so a conforming deployment is unaffected.
+- TEST DECISION: TEST ADDED and TEST UPDATED.
+  - `test/unit/s4HttpClient.test.js`: probe failure does not send the POST (4xx kept; timeout / 502 / refused → 503, never `SAP_WRITE_NOT_CONFIRMED`); token on an error answer is used; a failed POST is sent once. The old "continues without a token" test was replaced.
+  - `test/unit/s4DestinationNoDowngrade.test.js` (18 tests): lookup failure vs not configured; nothing sent to SAP; production ignores local credentials even when present; Principal Propagation: caller JWT reaches lookup, CSRF probe and write; no Authorization header or Basic credentials added; failed token exchange does not fall back to the technical user.
+  - `test/unit/frontend/odataClientCsrf.test.js` (13 tests): fail closed; no second send without a token; POST/PUT/PATCH/DELETE never retried even with `maxRetries: 3`; network failure of a write not re-sent; reads still retried once.
+  - `test/integration/unansweredSapWrite.test.js`, `unconfirmedSapResult.test.js`: these switch to production mode at run time, so they now name a destination before the clients load. Their "posts once" cases cover seven SAP writes end to end.
+- TESTED: `npx jest` → 215 suites, 3,578 passed, 13 skipped (live-SAP suites), 0 failed. `npx eslint .` → exit 0. `npm --prefix app/fiori-app run lint` → 0 findings. `node test/e2e/runAllE2E.js --sap-free` → 6/6 suites PASS. `git diff --check` → clean.
+- NOT VERIFIED: behaviour against a real BTP Destination service, Cloud Connector, or Principal Propagation destination; that every S/4 service used for writes returns a token on its probe path on the real system; the approuter in front of the browser client. No deployment and no SAP call was made.
+- OPEN ITEMS (not changed):
+  - The production rules key on `NODE_ENV=production`; `mta.yaml` does not set it. **Not verified** that the deployed app runs with it.
+  - `RfcClient` has its own destination handling and was not part of this change.
+  - `/sap/bc/lrep/` is routed with `csrfProtection: false` and has no test.
+  - UI5 OData V4 model writes do not go through `ODataClient`; their CSRF and retry handling is the framework's and was not reviewed.
+- ASSUMPTIONS: an S/4 service that answers the token probe successfully without a token does not require one (INFERRED from the existing design; not verified on the SAP system). Such a write is still sent.
+- STATUS: PARTIAL — implemented and validated with mocks and SAP-free browser tests; no BTP or SAP verification. Uncommitted at the time of writing, together with the Phase 1 changes.
+- NEXT: Verify in a deployed non-production space: `NODE_ENV`, a destination lookup failure, and one Principal Propagation read.
+
+### 2026-11-21 12:20 IST — Phase 1 — Goods Receipt reliability (reconciliation evidence, baseline, lease) — PARTIAL
+
+- REQUEST: Pasted remediation roadmap, Phase 1 "Goods Receipt reliability": fix the false-positive document reconciliation, persist a pre-post document baseline, fix same-worker lease ownership, separate lease metadata from business error information, add same-worker concurrency and previous-partial-receipt regression tests. Exit condition: no ambiguous attempt becomes retryable without reliable evidence.
+- INSPECT: `GoodsReceiptDocFinder.js` (its own comment recorded the shortcut "a same-day partial receipt also matches"), `GoodsReceiptBapiPoster.js:182-190,263-275` (in-memory baseline already used for the immediate read-back), `handlers/goodsReceipt.handler.js` `postWithAttempt`, `GoodsReceiptRecheckService.js`, `GoodsReceiptAttemptStore.js`, `db/wm/goods-receipt-attempt.cds`, `docs/architecture/posting-attempt-lifecycle.md` (states that receipts against inbound deliveries carry no application key in the material document header, so the document cannot be matched by reference). CAP guidance checked with cds-mcp `search_docs` (UPDATE `.where` tagged template). cds-mcp `search_model` failed ("Failed to compile CDS model"); the model was checked with `npx cds compile` instead.
+- AFFECTED FLOW: UI post → CAP `postWithAttempt` → attempt row → S/4 post → status; background recheck → S/4 `MATDOC` read → attempt status. No S/4 payload, entity, or field was added: the only SAP access added is one more call of the existing read `_read101Docs` (`MATDOC` fields `MBLNR`, `MJAHR`, `ZEILE`, `BWART` via `RFC_READ_TABLE`, `GoodsReceiptDocFinder.js:8-16`).
+- CHANGED:
+  - `db/wm/goods-receipt-attempt.cds`: new columns `LeaseOwner String(64)`, `LeaseExpiresAt Timestamp`, `BaselineDocs String(5000)`. **Schema change: needs a database deployment in every environment before this code runs there.**
+  - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`: after the claim and before the post, reads the existing 101 documents and stores them on the attempt (`setBaseline`). A failed read is stored as unknown (`null`) and does not block the post; a failed store rejects the attempt and returns 503 without posting.
+  - `srv/integration/s4hana/wm/GoodsReceiptDocFinder.js`: `findReceiptForAttempt` now returns a document only when exactly one document outside the baseline exists; no document → `null`; documents without a baseline, or more than one new document → `{ ambiguous: true, reason }`.
+  - `srv/wm/goods-receipt/GoodsReceiptRecheckService.js`: lease moved to `LeaseOwner` / `LeaseExpiresAt`, claimed in one atomic `UPDATE` with a unique token per claim; `LastError` is no longer read or written for the lease. Results are written only while the token still holds the lease and the attempt is still open. Ambiguous attempts stay open (new summary counter `Ambiguous`), with a warning log.
+  - `srv/wm/goods-receipt/GoodsReceiptAttemptStore.js`: `setStatus` takes an optional lease guard; new `setBaseline`.
+  - `docs/architecture/posting-attempt-lifecycle.md`, `SCAN_REPORT.md` (Section 4 counts refreshed, Section 8.6).
+- BEHAVIOUR CHANGES TO KNOW:
+  - `claimAttemptForRecheck` returns the lease token (or `false`) instead of `true`/`false`; `releaseAttemptLease` takes that token.
+  - A restarted worker no longer resumes its own lease; it waits for expiry (60 s).
+  - Attempts created before this change have no baseline. If SAP holds any receipt for their delivery item they are now ambiguous and stay blocked until resolved by hand; before, they were marked `posted` with the newest document. There is no screen or action to resolve an attempt manually.
+  - Every posting makes one additional read-only RFC call for the baseline (the BAPI path then reads the same table again).
+  - Rows that still hold an old `lease:…` text in `LastError` keep it as plain text; it is no longer interpreted.
+- DEPENDENCIES: none added (`crypto` is a Node built-in already used in the handler).
+- TEST DECISION: TEST ADDED and TEST UPDATED.
+  - `test/unit/wm/goodsReceiptRecheckLease.test.js` (24 tests): simultaneous claims; expired-lease takeover; result of a worker whose lease was taken over is ignored; failed read-back; same-worker concurrency (raw claim and overlapping rechecks); token-scoped release; a final status written by the request is not replaced; `LastError` untouched by the lease (the two former `it.failing` defect tests are now normal passing tests); previous-partial-receipt regressions; ambiguous attempts stay open however old; oversized baseline stored as unknown.
+  - `test/unit/wm/goodsReceiptAttempt.test.js`: baseline matching cases for `findReceiptForAttempt`; handler stores the baseline; posting continues with an unknown baseline.
+  - `test/unit/wm/goodsReceiptTwoInstances.test.js`: claim result is now a token.
+- TESTED:
+  - `npx jest` → 215 suites, 3,563 passed, 13 skipped (live-SAP suites), 0 failed. After a final comment-only edit, `npx jest test/unit/wm` → 32 suites, 696 passed.
+  - `npx eslint .` → exit 0. `npm --prefix app/fiori-app run lint` → 0 findings.
+  - `npx cds compile '*'` → exit 0; `cds compile db --to sql` shows the three new columns.
+  - `node test/e2e/runAllE2E.js --sap-free` → 6/6 suites PASS.
+  - `git diff --check` → clean.
+- NOT VERIFIED: the lease `UPDATE` and timestamp comparison on SAP HANA (tests ran on the test-profile database); deployment of the schema change; behaviour with two real Cloud Foundry instances; the baseline read and the recheck against real `MATDOC` data; SAP-connected E2E (Tier C). No SAP call, read or write, was made in this work.
+- OPEN ITEMS (not changed):
+  - No way to resolve an ambiguous attempt from the application.
+  - `RECEIPT_RECHECK_LEASE_MS` / `distributedLeaseDurationMs()` still has no caller; the job uses 60 s.
+  - `reconfirmUnconfirmed` is still called only from a test and takes no lease.
+  - If the status write throws after a claim, the loop aborts and the lease stays until expiry.
+- ASSUMPTIONS: a 101 document for the delivery item that was not there before the post and appears alone belongs to the attempt. A receipt posted directly in SAP for the same item in the same window would look the same; two such documents are treated as ambiguous.
+- STATUS: PARTIAL — implemented and validated with mocks; no HANA, deployment or SAP verification. Uncommitted at the time of writing.
+- NEXT: Deploy the schema change to a non-production database and verify the lease on HANA; then a live recheck needs a written go.
+
 ### 2026-11-21 12:14 IST — Concurrency review of the Goods Receipt recheck lease; tests added — PARTIAL
 
 - REQUEST: Pasted review item "Goods Receipt distributed locking" (`srv/wm/goods-receipt/GoodsReceiptRecheckService.js`): review the lease stored in `LastError` and test five scenarios.

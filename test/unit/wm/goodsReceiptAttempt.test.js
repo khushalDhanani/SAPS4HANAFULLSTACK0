@@ -53,6 +53,26 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
         expect((await attempts())[0]).toMatchObject({ MovementType: '101', ReservationNo: '0180000003', ReservationItem: '10', Status: 'posted', MaterialDocument: '5000000001' });
       });
 
+      it('stores the receipts that existed before the post as the baseline of the attempt', async () => {
+        jest.spyOn(singleton, '_read101Docs').mockResolvedValue([{ MBLNR: '5000000009', MJAHR: '2026' }]);
+        jest.spyOn(singleton, action).mockRejectedValue(unknownErr());
+
+        await expect(post(DATA, action)).rejects.toMatchObject({ status: 504 });
+
+        expect(singleton._read101Docs).toHaveBeenCalledWith('180000003', '10');
+        expect((await attempts())[0]).toMatchObject({ Status: 'unconfirmed', BaselineDocs: '["2026/5000000009"]' });
+      });
+
+      it('still posts when the baseline cannot be read, and stores it as unknown rather than empty', async () => {
+        jest.spyOn(singleton, '_read101Docs').mockRejectedValue(new Error('RFC down'));
+        const spy = jest.spyOn(singleton, action).mockResolvedValue(DOC);
+
+        await post(DATA, action);
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect((await attempts())[0]).toMatchObject({ Status: 'posted', BaselineDocs: null });
+      });
+
       it('warns on an unknown outcome and blocks the retry, even with another quantity', async () => {
         const spy = jest.spyOn(singleton, action).mockRejectedValueOnce(unknownErr()).mockResolvedValue(DOC);
 
@@ -252,17 +272,39 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
       expect(err.outcomeUnknown).toBeFalsy();
     });
 
-    it('finds a posted receipt for an attempt, searching from the day before it started', async () => {
-      const { adapter } = make();
-      adapter.rfc.readTable.mockResolvedValue([doc('5000000009'), doc('5000000010')]);
+    describe('receipt of an attempt, matched against the pre-post baseline', () => {
+      const ATTEMPT = { ReservationNo: '0180000003', ReservationItem: '10', createdAt: '2026-11-02T00:30:00.000Z' };
+      const find = (rows, BaselineDocs) => {
+        const { adapter } = make();
+        adapter.rfc.readTable.mockResolvedValue(rows);
+        return { adapter, found: adapter.findReceiptForAttempt({ ...ATTEMPT, BaselineDocs }) };
+      };
 
-      const found = await adapter.findReceiptForAttempt({
-        ReservationNo: '0180000003', ReservationItem: '10', createdAt: '2026-11-02T00:30:00.000Z'
+      it('finds the one new document, searching from the day before the attempt started', async () => {
+        const { adapter, found } = find([doc('5000000009'), doc('5000000010')], '["2026/5000000009"]');
+
+        expect(await found).toEqual({ MaterialDocument: '5000000010', MaterialDocumentYear: '2026' });
+        expect(adapter.rfc.readTable).toHaveBeenCalledWith('MATDOC', expect.anything(),
+          ["VBELN_IM = '0180000003'", "AND VBELP_IM = '000010'", "AND BWART = '101'", "AND CPUDT >= '20261101'"]);
       });
 
-      expect(found).toEqual({ MaterialDocument: '5000000010', MaterialDocumentYear: '2026' });
-      expect(adapter.rfc.readTable).toHaveBeenCalledWith('MATDOC', expect.anything(),
-        ["VBELN_IM = '0180000003'", "AND VBELP_IM = '000010'", "AND BWART = '101'", "AND CPUDT >= '20261101'"]);
+      it('does not report an earlier partial receipt as the document of this attempt', async () => {
+        expect(await find([doc('5000000009')], '["2026/5000000009"]').found).toBeNull();
+      });
+
+      it('reports nothing when SAP has no receipt at all, with or without a baseline', async () => {
+        expect(await find([], '[]').found).toBeNull();
+        expect(await find([], undefined).found).toBeNull();
+      });
+
+      it.each([[undefined], [null], [''], ['not json'], ['{"a":1}']])(
+        'is ambiguous when receipts exist but the stored baseline is %j', async (baseline) => {
+          expect(await find([doc('5000000009')], baseline).found).toMatchObject({ ambiguous: true, reason: expect.stringContaining('no pre-post baseline') });
+        });
+
+      it('is ambiguous when more than one new document exists', async () => {
+        expect(await find([doc('5000000010'), doc('5000000011')], '[]').found).toMatchObject({ ambiguous: true, reason: expect.stringContaining('2 new') });
+      });
     });
   });
 

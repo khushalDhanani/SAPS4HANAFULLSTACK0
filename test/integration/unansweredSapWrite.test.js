@@ -5,6 +5,9 @@
  * Real CAP HTTP, handlers and adapters; only SAP is doubled. SAP may have saved such a write, so the user must be told to check.
  */
 
+// Production resolves S/4HANA only through a named BTP destination (no local fallback), so name one before the clients load.
+process.env.S4_DESTINATION_NAME = 'S4_TEST_DESTINATION';
+
 const cds = require('@sap/cds');
 const connectivity = require('@sap-cloud-sdk/connectivity');
 const httpClient = require('@sap-cloud-sdk/http-client');

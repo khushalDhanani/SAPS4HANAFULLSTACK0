@@ -23,7 +23,14 @@ entity GoodsReceiptPostingAttempt : cuid, managed {
     ResolvedAt        : Timestamp;             // Timestamp when finalized into terminal status
     PostingUser       : String(255);           // Authenticated user ID executing the attempt
     PostingDate       : Date;                  // Posting date passed to S/4HANA
-    LastError         : String(500);           // Rejection reason, diagnostic message, or distributed lease tag
+    LastError         : String(500);           // Rejection reason or diagnostic message (never lease data)
+
+    // -------------------------------------------------------------------------
+    // Tier 1b: Recheck lease and pre-post evidence
+    // -------------------------------------------------------------------------
+    LeaseOwner        : String(64);            // Unique token of the recheck run holding the lease; null when free
+    LeaseExpiresAt    : Timestamp;             // Lease expiry; a lease past this time can be taken over
+    BaselineDocs      : String(5000);          // JSON array of "MJAHR/MBLNR" 101 documents that existed before the post; null = unknown
 
     // -------------------------------------------------------------------------
     // Tier 2: S/4HANA Confirmed Document Attributes (Populated upon SAP persistence)

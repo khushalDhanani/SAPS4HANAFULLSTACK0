@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const cds = require('@sap/cds');
 const LOG = require('../../common/logger')('goods-receipt-attempts');
 const {
@@ -14,67 +15,46 @@ const {
 const { SELECT, UPDATE } = cds.ql;
 
 /**
- * Distributed worker leasing: acquires an atomic CAS lease for background recheck.
+ * Recheck lease. Held in the attempt's own LeaseOwner / LeaseExpiresAt columns, never in LastError.
+ * Every claim gets a unique token, so two runs with the same worker id (overlapping deployments, a restart,
+ * or an overlapping timer tick) exclude each other like any two workers do.
+ *
+ * @returns {Promise<string|false>} the lease token, or false when the attempt is not open or is leased
  */
 async function claimAttemptForRecheck(store, referenceDocument, workerId = (process.env.CF_INSTANCE_INDEX || '0'), leaseMs = 60000, now = Date.now()) {
   store._assertDb();
   const ref = String(referenceDocument).trim();
-  const expiresAtIso = new Date(now + leaseMs).toISOString();
-  const leaseTag = `lease:${workerId}:${expiresAtIso}`;
+  const nowIso = new Date(now).toISOString();
+  const token = `${workerId}:${crypto.randomUUID()}`;
 
-  const current = await store.getByReference(ref);
-  if (!current || !OPEN_STATUSES.includes(current.Status)) {
-    return false;
-  }
-  if (current.LastError && current.LastError.startsWith('lease:')) {
-    const match = current.LastError.match(/^lease:([^:]+):(.+)$/);
-    if (match) {
-      const [, owner, expiresIso] = match;
-      const expiresAtMs = new Date(expiresIso).getTime();
-      if (owner !== String(workerId) && Number.isFinite(expiresAtMs) && expiresAtMs > now) {
-        return false;
-      }
-    }
-  }
-
-  const currentLastError = current.LastError ?? '';
-  let query;
-  if (currentLastError === '') {
-    query = UPDATE(ATTEMPT_ENTITY)
-      .set({ LastError: leaseTag, updatedAt: new Date(now).toISOString() })
-      .where({ ReferenceDocument: ref, Status: current.Status })
-      .and(`(LastError is null or LastError = '')`);
-  } else {
-    query = UPDATE(ATTEMPT_ENTITY)
-      .set({ LastError: leaseTag, updatedAt: new Date(now).toISOString() })
-      .where({ ReferenceDocument: ref, Status: current.Status, LastError: currentLastError });
-  }
-
-  const updated = await store._run(query);
-  return Boolean(updated && (typeof updated === 'number' ? updated > 0 : true));
+  // One statement: the database decides which of several simultaneous claims wins.
+  const updated = await store._run(
+    UPDATE(ATTEMPT_ENTITY)
+      .set({ LeaseOwner: token, LeaseExpiresAt: new Date(now + leaseMs).toISOString(), updatedAt: nowIso })
+      .where`ReferenceDocument = ${ref} and Status in ${OPEN_STATUSES} and (LeaseExpiresAt is null or LeaseExpiresAt <= ${nowIso})`
+  );
+  return Number(updated) > 0 ? token : false;
 }
 
-async function releaseAttemptLease(store, referenceDocument, workerId) {
+/** Gives the lease back; a no-op unless `leaseToken` still holds it. */
+async function releaseAttemptLease(store, referenceDocument, leaseToken) {
   store._assertDb();
-  const ref = String(referenceDocument).trim();
-  const expectedOwner = String(workerId ?? process.env.CF_INSTANCE_INDEX ?? '0');
-  const current = await store.getByReference(ref);
-  if (current && current.LastError && current.LastError.startsWith(`lease:${expectedOwner}:`)) {
-    await store._run(
-      UPDATE(ATTEMPT_ENTITY)
-        .set({ LastError: '', updatedAt: new Date().toISOString() })
-        .where({ ReferenceDocument: ref, LastError: current.LastError })
-    );
-  }
+  if (!leaseToken) return;
+  await store._run(
+    UPDATE(ATTEMPT_ENTITY)
+      .set({ LeaseOwner: null, LeaseExpiresAt: null, updatedAt: new Date().toISOString() })
+      .where({ ReferenceDocument: String(referenceDocument).trim(), LeaseOwner: leaseToken })
+  );
 }
 
 /**
  * Background re-check for unresolved Goods Receipt attempts (Movement 101).
- * Protected by distributed worker leases so multiple instances cannot redundantly query SAP.
+ * An attempt is resolved only on reliable evidence from SAP: exactly one 101 document that did not exist
+ * before the post means posted; no document at all means not posted. Anything else stays open and blocked.
  */
 async function recheckReceipts(store, adapter, now = Date.now(), options = {}) {
   store._assertDb();
-  const summary = { Checked: 0, Posted: 0, NotPosted: 0, StillOpen: 0, Errors: 0, SkippedLocked: 0 };
+  const summary = { Checked: 0, Posted: 0, NotPosted: 0, StillOpen: 0, Errors: 0, SkippedLocked: 0, Ambiguous: 0 };
   if (!adapter || typeof adapter.findReceiptForAttempt !== 'function') return summary;
 
   const workerId = String(options.workerId ?? process.env.CF_INSTANCE_INDEX ?? '0');
@@ -89,9 +69,9 @@ async function recheckReceipts(store, adapter, now = Date.now(), options = {}) {
     summary.Checked++;
     const ref = attempt.ReferenceDocument;
 
-    const claimed = await claimAttemptForRecheck(store, ref, workerId, leaseMs, now);
-    if (!claimed) {
-      summary.SkippedLocked = (summary.SkippedLocked || 0) + 1;
+    const lease = await claimAttemptForRecheck(store, ref, workerId, leaseMs, now);
+    if (!lease) {
+      summary.SkippedLocked++;
       summary.StillOpen++;
       continue;
     }
@@ -101,24 +81,30 @@ async function recheckReceipts(store, adapter, now = Date.now(), options = {}) {
       doc = await adapter.findReceiptForAttempt(attempt);
     } catch (err) {
       LOG.warn(`Re-check of receipt attempt ${ref} failed, status ${attempt.Status} kept: ${err.message}`);
-      await releaseAttemptLease(store, ref, workerId);
+      await releaseAttemptLease(store, ref, lease);
       summary.Errors++;
       continue;
     }
 
+    // A result is written only while this run still holds the lease and the attempt is still open.
+    const resolve = async (status, fields, counter) => {
+      const row = await store.setStatus(ref, status, fields, { leaseOwner: lease });
+      if (row) summary[counter]++;
+      else { summary.SkippedLocked++; summary.StillOpen++; }
+    };
+
     if (doc && doc.MaterialDocument) {
-      await store.setStatus(ref, 'posted', {
-        MaterialDocument: doc.MaterialDocument,
-        MaterialDocYear: doc.MaterialDocumentYear || '',
-        LastError: '',
-      });
-      summary.Posted++;
+      await resolve('posted', { MaterialDocument: doc.MaterialDocument, MaterialDocYear: doc.MaterialDocumentYear || '', LastError: '' }, 'Posted');
+    } else if (doc && doc.ambiguous) {
+      LOG.warn(`Receipt attempt ${ref} (delivery ${attempt.ReservationNo} item ${attempt.ReservationItem}) stays blocked: ${doc.reason}`);
+      await releaseAttemptLease(store, ref, lease);
+      summary.Ambiguous++;
+      summary.StillOpen++;
     } else if (ageOf(attempt) >= notPostedAgeMs()) {
       const finding = `Recheck: no goods receipt for delivery ${attempt.ReservationNo} item ${attempt.ReservationItem} in S/4HANA; marked not_posted`;
-      await store.setStatus(ref, 'not_posted', { LastError: finding });
-      summary.NotPosted++;
+      await resolve('not_posted', { LastError: finding }, 'NotPosted');
     } else {
-      await releaseAttemptLease(store, ref, workerId);
+      await releaseAttemptLease(store, ref, lease);
       summary.StillOpen++;
     }
   }
