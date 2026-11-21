@@ -398,6 +398,29 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 12:14 IST — Concurrency review of the Goods Receipt recheck lease; tests added — PARTIAL
+
+- REQUEST: Pasted review item "Goods Receipt distributed locking" (`srv/wm/goods-receipt/GoodsReceiptRecheckService.js`): review the lease stored in `LastError` and test five scenarios.
+- INSPECT (no production code changed): read `GoodsReceiptRecheckService.js`, `GoodsReceiptAttemptConfig.js`, `GoodsReceiptAttemptStore.js` (`setStatus`, `_run`), the job wiring in `srv/wm/goods-receipt/service.js`, `handlers/goodsReceipt.handler.js:75-78`, `db/wm/goods-receipt-attempt.cds`, and the existing `goodsReceiptTwoInstances.test.js` / `goodsReceiptAttempt.test.js`. The recheck only reads SAP and updates the local attempt row; it never posts to SAP.
+- RESULT PER SCENARIO:
+  1. Two instances claiming simultaneously — HOLDS. The claim is a compare-and-swap on `Status` + `LastError`; of five simultaneous claims exactly one succeeds, and SAP is not read while a foreign lease is unexpired.
+  2. Expired lease recovery — HOLDS. Another instance takes over after expiry; a tag with an unreadable expiry is claimable, not a permanent block.
+  3. Worker failure during SAP read-back — HOLDS. A thrown read-back releases the lease and keeps the status; an attempt is never marked `not_posted` on a failed read; a dead worker blocks others only until expiry.
+  4. Worker restart during an unresolved posting — HOLDS. Attempts younger than the recheck age are not touched; a restarted worker with the same id resumes its own lease; an attempt that became final is not claimed.
+  5. Lease metadata overwriting error information — **DEFECT CONFIRMED.** `goodsReceipt.handler.js:78` stores the unknown-outcome reason in `LastError` of an `unconfirmed` attempt. Claiming the lease overwrites it and releasing the lease writes `''`, so after one recheck that leaves the attempt open (or whose read-back fails) the reason is gone. Observed: `LastError` `"RFC timeout: outcome unknown"` → `""`. Impact is diagnostic: no code in `srv/` or the web app reads `LastError` back for a decision or display (grep), so duplicate-posting protection is not affected.
+- OTHER FINDINGS (not changed):
+  - Workers are identified by `CF_INSTANCE_INDEX` only. Two processes with the same index (overlapping deployments, or no index set) both obtain the lease. Pinned as a known-limitation test.
+  - `RECEIPT_RECHECK_LEASE_MS` / `distributedLeaseDurationMs()` (30 s) has no caller; the job uses the hard-coded 60 s default in `recheckReceipts`.
+  - `reconfirmUnconfirmed` takes no lease and is called only from `test/unit/monitoring/monitoringAlerting.test.js`; no job in `srv/` schedules it. The `needs-attention` status it sets is not in `FINAL_STATUSES` or in the entity's status comment. Candidate dead code — reachability outside `srv/` not ruled out.
+  - `setStatus` is unconditional: a worker whose lease expired during a slow read-back still writes its result. Both writers read the same SAP state, so results agree in practice, but a `rejected` set by the handler in that window could be replaced by `not_posted`.
+  - If `setStatus` throws after a claim, the loop aborts and the lease stays until expiry.
+- TEST DECISION: TEST ADDED — `test/unit/wm/goodsReceiptRecheckLease.test.js` (15 tests). Two use `it.failing` to mark the confirmed defect: they pass while the defect exists and will fail once it is fixed. Verified with a temporary copy using plain `it` that both fail on exactly `LastError` (`"RFC timeout: outcome unknown"` expected, `""` received); the copy was deleted.
+- TESTED: `npx jest` → 215 suites, 3,542 passed, 13 skipped (live-SAP suites), 0 failed. `npx eslint .` → exit 0. `npm --prefix app/fiori-app run lint` → 0 findings.
+- NOT VERIFIED: behaviour on HANA (tests run on the test-profile database; the compare-and-swap relies on the affected-row count returned by `db.run`); two real Cloud Foundry instances; no SAP call was made.
+- ASSUMPTIONS: none.
+- STATUS: PARTIAL — review and tests done; the defect is not fixed, pending a decision on how to store the lease. Uncommitted at the time of writing.
+- NEXT: Decide the fix for item 5 (keep the reason alongside the lease in `LastError`, or move the lease to its own columns, which needs a schema change and HDI deployment).
+
 ### 2026-11-21 12:11 IST — Review of authentication and destination fallback; deployed-environment tests added — PARTIAL
 
 - REQUEST: Pasted review item "Authentication and destination fallback" (`S4DestinationResolver.js`, `AuthService.js`, `ODataClient.js`): verify that a failed BTP destination lookup cannot silently downgrade authentication; add explicit tests.
