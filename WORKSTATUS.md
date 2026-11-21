@@ -398,6 +398,20 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-21 12:53 IST — Highest-risk findings, step 4: the browser client sends no write without a CSRF token — PARTIAL
+
+- REQUEST: Approved plan, step 4 (finding P2 "the custom frontend OData client can still send a write without obtaining a CSRF token").
+- FINDING (CONFIRMED): after Phase 2 a failed token request stopped the write, but a token request that succeeded without a token header still resolved `null` and the write was sent.
+- CHANGED: `app/fiori-app/webapp/service/ODataClient.js` (382 → 394 lines): when the server answers the token request without a token, the write is rejected with `CSRF_TOKEN_UNAVAILABLE` and not sent. Exception: on the local development hosts `localhost`, `127.0.0.1` and `[::1]`, where the CAP server issues no token, the write is still sent.
+- BEHAVIOUR CHANGE TO KNOW: any non-local host that serves the application without the approuter (and therefore without CSRF tokens) can no longer write through this client.
+- TEST DECISION: TEST UPDATED and TEST ADDED in `test/unit/frontend/odataClientCsrf.test.js` (now 23 tests): no token → POST/PUT/PATCH/DELETE not sent; local hosts still send; a failed token request stops the write on a local host too; `localhost.example.com` is not treated as local.
+- TESTED: `npx jest` → 218 suites, 3,666 passed, 13 skipped, 0 failed. `npx eslint .` exit 0. UI5 lint 0 findings. `node test/e2e/runAllE2E.js --sap-free` → 6/6 (the isolated server runs on `127.0.0.1`, so the local exception is what those suites exercise). `git diff --check` clean.
+- NOT VERIFIED: that the approuter returns a token for the `HEAD` request this client sends to `/odata/v4/auth/`. If it does not, writes through this client now fail before they are sent, where before they failed at the approuter with 403. No deployment was made.
+- OUT OF SCOPE (unchanged): writes made through the UI5 OData V4 model do not use this client.
+- ASSUMPTIONS: none.
+- STATUS: PARTIAL — implemented and unit-tested; not verified behind a real approuter.
+- NEXT: Step 5 of the plan (loud RFC runtime check).
+
 ### 2026-11-21 12:51 IST — Highest-risk findings, step 3: read-only SAP discovery for document attribution — BLOCKED (awaiting decision)
 
 - REQUEST: Approved plan, step 3 (finding P1 "the pre-post baseline cannot identify who created a new SAP document"). Discovery only; no code changed.

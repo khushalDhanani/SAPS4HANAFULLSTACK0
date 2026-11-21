@@ -22,10 +22,11 @@ function response(status, headers = {}, body = {}) {
   };
 }
 
-function loadClient(fetchMock) {
+function loadClient(fetchMock, hostname = 'app.example.com') {
   let exported;
   vm.runInNewContext(fs.readFileSync(path.join(webapp, 'service/ODataClient.js'), 'utf8'), {
     sap: { ui: { define: (_names, factory) => { exported = factory({}, undefined); } } },
+    window: { location: { hostname } },
     fetch: fetchMock,
     Promise,
     setTimeout
@@ -71,17 +72,63 @@ describe('ODataClient CSRF handling', () => {
     expect(fetchMock.mock.calls.filter(isWrite)).toHaveLength(0);
   });
 
-  test('when the server requires a token and issues none, the write is sent once and not repeated', async () => {
-    const fetchMock = jest.fn((url, init) => Promise.resolve(
-      init.method === 'HEAD'
-        ? response(200)
-        : response(403, { 'x-csrf-token': 'Required' }, { error: { message: 'CSRF token validation failed' } })
-    ));
+  test('fails closed: when the server answers the token request without a token, the write is not sent', async () => {
+    const fetchMock = jest.fn((url, init) => Promise.resolve(init.method === 'HEAD' ? response(200) : response(200, {}, { ok: true })));
     const client = loadClient(fetchMock);
 
-    await expect(client.request('/odata/v4/purchase-order/create', { method: 'POST', body: { a: 1 } })).rejects.toBeDefined();
+    await expect(client.request('/odata/v4/purchase-order/create', { method: 'POST', body: { a: 1 } }))
+      .rejects.toMatchObject({ code: 'CSRF_TOKEN_UNAVAILABLE' });
 
-    expect(fetchMock.mock.calls.filter(isWrite)).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(isWrite)).toHaveLength(0);
+  });
+
+  test.each(['PUT', 'PATCH', 'DELETE'])('fails closed for %s as well', async (method) => {
+    const fetchMock = jest.fn(() => Promise.resolve(response(200)));
+    const client = loadClient(fetchMock);
+
+    await expect(client.request('/odata/v4/x/y', { method, body: {} })).rejects.toMatchObject({ code: 'CSRF_TOKEN_UNAVAILABLE' });
+
+    expect(fetchMock.mock.calls.filter(([, init]) => init.method === method)).toHaveLength(0);
+  });
+
+  describe.each(['localhost', '127.0.0.1'])('on the local development host %s (the CAP server issues no token)', (host) => {
+    test('a write is sent without a token', async () => {
+      const fetchMock = jest.fn((url, init) => Promise.resolve(init.method === 'HEAD' ? response(200) : response(200, {}, { ok: true })));
+      const client = loadClient(fetchMock, host);
+
+      await expect(client.request('/odata/v4/purchase-order/create', { method: 'POST', body: {} })).resolves.toEqual({ ok: true });
+
+      const write = fetchMock.mock.calls.find(isWrite);
+      expect(write[1].headers).not.toHaveProperty('X-CSRF-Token');
+    });
+
+    test('a write the server then refuses for a missing token is sent once and not repeated', async () => {
+      const fetchMock = jest.fn((url, init) => Promise.resolve(
+        init.method === 'HEAD'
+          ? response(200)
+          : response(403, { 'x-csrf-token': 'Required' }, { error: { message: 'CSRF token validation failed' } })
+      ));
+      const client = loadClient(fetchMock, host);
+
+      await expect(client.request('/odata/v4/purchase-order/create', { method: 'POST', body: { a: 1 } })).rejects.toBeDefined();
+
+      expect(fetchMock.mock.calls.filter(isWrite)).toHaveLength(1);
+    });
+
+    test('a failed token request still stops the write', async () => {
+      const fetchMock = jest.fn((url, init) => (init.method === 'HEAD' ? Promise.reject(new TypeError('network')) : Promise.resolve(response(200))));
+      const client = loadClient(fetchMock, host);
+
+      await expect(client.request('/odata/v4/x/y', { method: 'POST', body: {} })).rejects.toMatchObject({ code: 'CSRF_TOKEN_UNAVAILABLE' });
+      expect(fetchMock.mock.calls.filter(isWrite)).toHaveLength(0);
+    });
+  });
+
+  test('a host that only looks local is not treated as local', async () => {
+    const fetchMock = jest.fn(() => Promise.resolve(response(200)));
+    const client = loadClient(fetchMock, 'localhost.example.com');
+
+    await expect(client.request('/odata/v4/x/y', { method: 'POST', body: {} })).rejects.toMatchObject({ code: 'CSRF_TOKEN_UNAVAILABLE' });
   });
 
   test.each(['POST', 'PUT', 'PATCH', 'DELETE'])('a %s is never retried automatically, even when the caller asks for retries', async (method) => {

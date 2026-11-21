@@ -7,6 +7,19 @@ sap.ui.define([
     var sCsrfToken = null;
     var CSRF_TOKEN_URL = "/odata/v4/auth/";
 
+    /** The local CAP development server issues no CSRF token; every other host must. */
+    function _isLocalDevHost() {
+        var sHost = (typeof window !== "undefined" && window.location && window.location.hostname) || "";
+        return sHost === "localhost" || sHost === "127.0.0.1" || sHost === "[::1]";
+    }
+
+    function _csrfUnavailable(sMessage, oCause) {
+        var oError = new Error(sMessage);
+        oError.code = "CSRF_TOKEN_UNAVAILABLE";
+        if (oCause) { oError.cause = oCause; }
+        return oError;
+    }
+
     function _resolveStorage() {
         if (AuthStorage && typeof AuthStorage.getAuthHeader === "function") {
             return AuthStorage;
@@ -148,15 +161,14 @@ sap.ui.define([
                     var sToken = response.headers.get("X-CSRF-Token") || response.headers.get("x-csrf-token");
                     if (sToken) {
                         sCsrfToken = sToken;
+                    } else if (!_isLocalDevHost()) {
+                        // Fail closed: the server answered but issued no token, so a write must not be sent.
+                        throw _csrfUnavailable("The server issued no security token, so the request was not sent. Reload the page and try again.");
                     }
                     return sCsrfToken;
-                })
-                .catch(function (err) {
+                }, function (err) {
                     // Fail closed: a write is not sent when the token request itself failed.
-                    var oError = new Error("The security token could not be obtained, so the request was not sent. Check the connection and try again.");
-                    oError.code = "CSRF_TOKEN_UNAVAILABLE";
-                    oError.cause = err;
-                    throw oError;
+                    throw _csrfUnavailable("The security token could not be obtained, so the request was not sent. Check the connection and try again.", err);
                 });
         },
 

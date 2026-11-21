@@ -201,10 +201,10 @@ The table below lists every single first-party file exceeding 300 lines in desce
 | **52** | **405** | `test/integration/lockNotificationQueue.test.js` | Tests |
 | **53** | **399** | `test/unit/sales-inquiry/salesInquiryMapping.test.js` | Tests |
 | **54** | **397** | `test/unit/auth/frontendAuthStorage.test.js` | Tests |
-| **55** | **386** | `app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js` | Frontend |
-| **56** | **386** | `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js` | Integrations |
-| **57** | **383** | `test/unit/le/outboundDeliveryHandler.test.js` | Tests |
-| **58** | **382** | `app/fiori-app/webapp/service/ODataClient.js` | Frontend |
+| **55** | **394** | `app/fiori-app/webapp/service/ODataClient.js` | Frontend |
+| **56** | **386** | `app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js` | Frontend |
+| **57** | **386** | `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js` | Integrations |
+| **58** | **383** | `test/unit/le/outboundDeliveryHandler.test.js` | Tests |
 | **59** | **382** | `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js` | Integrations |
 | **60** | **381** | `test/unit/admin/SapLogsService.test.js` | Tests |
 | **61** | **380** | `test/unit/wm/mibLabelPdf.test.js` | Tests |
@@ -505,6 +505,8 @@ The `git status` snapshot originally printed here was stale: those files were co
 - Phase 3 (frontend reliability): `barcodeScanService.test.js` grew from 208 to 453 lines and is now in the inventory, which makes **95 files** (61 test files). `BarcodeScanService.js` 416 → 437, `goodsReceiptController.test.js` 641 → 675. Sections 1.2, 2 and 4 updated; the Top 20 is unchanged.
 
 - Highest-risk findings, steps 1–2 (2026-11-21): Section 4 line counts refreshed from the tree (`goodsReceipt.handler.js` 374, `goodsReceiptAttempt.test.js` and `goodsReceiptController.test.js` grown). The inventory stays at 95 files.
+
+- Highest-risk findings, step 4 (2026-11-21): `ODataClient.js` is now 394 lines; Section 4 counts refreshed.
 
 ---
 *Line counts verified with POSIX `wc -l`; validation status is as recorded in Section 8.3.*
