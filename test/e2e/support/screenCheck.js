@@ -7,6 +7,7 @@
  */
 
 const { chromium } = require('../playwrightLoader');
+const { basicAuth } = require('./basicAuth');
 const { installWriteGuard } = require('./writeGuard');
 const evidence = require('./evidence');
 const { parseMetadata, checkRequest } = require('./contract');
@@ -26,7 +27,7 @@ const metaCache = new Map(); // `${baseUrl}|${service}` -> Promise<{ meta } | { 
 function serviceMeta(baseUrl, service) {
     const key = `${baseUrl}|${service}`;
     if (!metaCache.has(key)) {
-        metaCache.set(key, fetch(`${baseUrl}/odata/v4/${service}/$metadata`, { headers: { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') } })
+        metaCache.set(key, fetch(`${baseUrl}/odata/v4/${service}/$metadata`, { headers: { Authorization: basicAuth('khushal') } })
             .then(async (r) => (r.ok ? { meta: parseMetadata(await r.text()) } : { error: `HTTP ${r.status}` }), (e) => ({ error: e.message })));
     }
     return metaCache.get(key);
@@ -82,7 +83,7 @@ async function closeBrowser() {
 async function openSession({ baseUrl, user = 'khushal', allowWrites = [], contextOptions = {} }) {
     const browser = await getBrowser();
     const context = await browser.newContext({
-        extraHTTPHeaders: user ? { Authorization: 'Basic ' + Buffer.from(`${user}:`).toString('base64') } : {},
+        extraHTTPHeaders: user ? { Authorization: basicAuth(user) } : {},
         viewport: { width: 1440, height: 900 },
         ...contextOptions
     });

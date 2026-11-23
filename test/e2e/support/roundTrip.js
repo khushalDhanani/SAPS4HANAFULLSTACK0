@@ -11,13 +11,14 @@
  */
 
 const { openSession, openHash, inspectScreen } = require('./screenCheck');
+const { basicAuth } = require('./basicAuth');
 const { resolveMode, assertTarget, singleWriteHandler } = require('./liveWriteGate');
 
 const DRY_RUN_DOC = 'DRYRUN-0001';
 
 /** GET-only CAP OData V4 reader: derives dry-run master data and reads documents back in live mode. */
 function capReader(baseUrl, user) {
-    const headers = { Authorization: 'Basic ' + Buffer.from(`${user}:`).toString('base64'), Accept: 'application/json' };
+    const headers = { Authorization: basicAuth(user), Accept: 'application/json' };
     return async function read(path, query = {}) {
         const qs = Object.entries(query).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
         const res = await fetch(`${baseUrl}/odata/v4/${path}${qs ? `?${qs}` : ''}`, { method: 'GET', headers });

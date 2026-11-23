@@ -31,6 +31,19 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
     cds.env.requires.auth.users[s4User.toUpperCase()] = { roles: devRoles };
 }
 
+// CAP accepts any password for a mocked user without one. Outside the test profile every mocked user, including the
+// S4_USERNAME entries above, gets LOCAL_DEV_PASSWORD, or a random password when that is not set.
+{
+    const mockUsers = require('./srv/auth/mockUserPasswords').protectMockUsers(process.env, cds.env.requires && cds.env.requires.auth);
+    if (mockUsers.applied && mockUsers.source === 'random') {
+        require('./srv/common/logger')('auth').warn(
+            // Worded without "Basic <word>": the log scrubber (srv/common/logger.js) treats that as a credential.
+            `Mocked users have no usable password (${mockUsers.reason}), so user-and-password ("Basic") requests are refused. ` +
+            'The login screen is not affected. Set LOCAL_DEV_PASSWORD to allow them.'
+        );
+    }
+}
+
 const { registerDestination } = require('@sap-cloud-sdk/connectivity');
 
 // In local development, configure credentials and register local destination if running outside BTP

@@ -4,7 +4,9 @@ import json, base64, csv, sys, time
 import urllib.request, urllib.error
 
 BASE = "http://localhost:4004"
-AUTH = "Basic " + base64.b64encode(b"khushal:x").decode()
+import os
+# A development server gives its mocked users LOCAL_DEV_PASSWORD (srv/auth/mockUserPasswords.js).
+AUTH = "Basic " + base64.b64encode(("khushal:" + os.environ.get("LOCAL_DEV_PASSWORD", "").strip()).encode()).decode()
 SERVICES = ["/odata/v4/purchase-order","/odata/v4/sales-inquiry"]
 FUNCS = {
  "/odata/v4/purchase-order": ["getDashboardMetrics()"],

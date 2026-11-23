@@ -10,6 +10,7 @@
  */
 
 const path = require('path');
+const { basicAuth } = require('../support/basicAuth');
 const cds = require('@sap/cds');
 const { startIsolatedServer, assertSapUnreachable } = require('../support/isolatedServer');
 
@@ -49,7 +50,7 @@ async function writeActions() {
 
 async function post(server, user, urlPath, body = {}) {
     const headers = { 'Content-Type': 'application/json' };
-    if (user) headers.Authorization = 'Basic ' + Buffer.from(`${user}:`).toString('base64');
+    if (user) headers.Authorization = basicAuth(user);
     const res = await fetch(`${server.baseUrl}${urlPath}`, { method: 'POST', headers, body: JSON.stringify(body) });
     const text = await res.text();
     return { status: res.status, message: (text.match(/"message":"([^"]*)"/) || [])[1] || '' };

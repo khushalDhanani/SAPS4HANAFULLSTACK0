@@ -11,6 +11,7 @@
  */
 
 const { spawn } = require('child_process');
+const { basicAuth } = require('./basicAuth');
 const net = require('net');
 const path = require('path');
 
@@ -90,7 +91,7 @@ async function assertSapUnreachable(server) {
         throw new Error('isolated server environment still carries SAP connectivity variables');
     }
     const res = await fetch(`${server.baseUrl}/odata/v4/purchase-order/PurchaseOrders?$top=1`, {
-        headers: { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') }
+        headers: { Authorization: basicAuth('khushal') }
     });
     const body = await res.text();
     if (res.ok && /"value"\s*:\s*\[\s*\{/.test(body)) {

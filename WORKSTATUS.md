@@ -16,9 +16,14 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+<<<<<<< HEAD
 - **Current checkout:** `main` (updated to `origin/main` commit `14edf119`).
 - **SAP S/4HANA CA Certificate Trust & Docker Compose Mount — PASS (2026-11-23 15:00 IST):** Resolved login rejection ("SAP S/4HANA's security certificate was rejected. S4_DESTINATION_URL must use the host name on the certificate, not an IP address, and the server must be started with that certificate trusted (npm start).") when connecting to target S/4HANA system. Identified that the SAP Gateway server presents a self-signed corporate CA certificate (`CN=*.sap.aether.co.in`, SHA-256 `3F:D7:A6:85:71:3C:FB:87:35:61:03:E6:54:1B:B6:42:BE:29:0F:0B:0B:65:FA:25:CD:DF:76:CE:F5:7B:DE:EE`) while the standalone container had no CA cert mounted or trusted via `NODE_EXTRA_CA_CERTS`. Mounted `./certs` to `/run/certs:ro` and configured `NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}` in `docker-compose.yml` and `docker-compose.dev.yml`; mounted `./db.sqlite` for local standalone state; updated `package.json` start/watch scripts to support `certs/ca-bundle.pem`; linked `/home/cis/certs/sap-chain.pem` to `~/.sap-certs/s4-dev.pem` and `certs/ca-bundle.pem`; deployed local `db.sqlite` schema. Verified live TLS handshake (READ-ONLY) against SAP Gateway catalog service succeeds (HTTP 401 unauthenticated response instead of certificate rejection). Unit test added in `test/unit/tools/dockerConfig.test.js` (6/6 PASS); all 184 unit test suites pass (3,140 passed); eslint and scan:secrets pass clean.
 - **CSRF Token Handling & Security Token Issuance — PASS (2026-11-23 14:40 IST):** Resolved UI5 write refusal ("The server issued no security token, so the request was not sent. Reload the page and try again.") when accessing the standalone container/CAP server. Added CSRF token issuance middleware in `server.js` on `X-CSRF-Token: Fetch` requests (verified via `curl -i -X HEAD -H "X-CSRF-Token: Fetch" http://localhost:4004/odata/v4/auth/` returning HTTP 200 with `X-CSRF-Token`). Expanded `_isLocalDevHost()` in `app/fiori-app/webapp/service/ODataClient.js` to recognize private IPs (`10.*`, `172.16-31.*`, `192.168.*`), `.local` domains, and single-label local hostnames like `sapfioriapp`. Rebuilt UI5 bundle (`app/fiori-app/dist`). Rebuilt and verified backend container. All 34 CSRF tests pass in `test/unit/frontend/odataClientCsrf.test.js`; 5/5 tests pass in `test/unit/tools/dockerConfig.test.js`.
+=======
+- **Current checkout:** `main` (updated to `origin/main` commit `4aeee341`).
+- **Mocked users (2026-11-23) — PARTIAL (local, uncommitted):** development users are no longer passwordless outside the test profile; see the Changes Log entry. Browser E2E and Docker not run.
+>>>>>>> b963587d (feat: secure mock development users with mandatory local password configuration)
 - **Docker Compose Standalone Container Crash Loop Fix — PASS (2026-11-23 14:30 IST):** Fixed container restart crash loop on `docker compose -f docker-compose.yml up` (`Error: Authentication kind "jwt" configured, but no XSUAA instance bound to application`). Defaulted `docker-compose.yml` and `Dockerfile` `NODE_ENV` to `development`, removed premature `srv/csn.json` compilation from `Dockerfile` preventing duplicate artifact definition collisions, moved `@cap-js/sqlite` to runtime `dependencies` for lean container execution, and verified live container health (`Up (healthy)`, HTTP 200 `{"status":"UP"}` on `http://localhost:4004/health`). Added test suite `test/unit/tools/dockerConfig.test.js` (4/4 PASS). All 25 tools test suites pass (264/264 tests); `eslint`, `scan:secrets`, and `mta validate` pass clean.
 - **Secret scanner Docker template allowance (`.env.docker.example`) — PASS (2026-11-23 13:12 IST):** Permitted `.env.docker.example` in `tools/scan-secrets.js` and `.gitignore` alongside `.env.example` and `.env.docker.local.example`. Scan passes for 1,035 tracked files (0 secrets detected); all 21 scanner unit tests pass. Root eslint exits 0; git diff check clean.
 - **Coverage gate and legacy inquiry path (2026-11-23) — PARTIAL (local, uncommitted):** Jest coverage covers `server.js` and `srv/**` (except generated `srv/external/**`) with enforced floors for `global`, `srv/integration/s4hana` and auth. The legacy OData Sales Inquiry creator is removed and the order path refuses type `ZIN`. Full suite: 210 suites, 3,444 passed, 13 skipped; 92.22% lines over 142 files. E2E not run. See the two 2026-11-23 Changes Log entries.
@@ -405,6 +410,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+<<<<<<< HEAD
 ### 2026-11-23 15:00 IST — SAP S/4HANA CA Certificate Trust & Docker Compose Mount — PASS
 
 - REQUEST: Address authentication login failure returning `@odata.context: "$metadata#AuthService.return_AuthService_login"`, `authenticated: false`, `message: "SAP S/4HANA's security certificate was rejected. S4_DESTINATION_URL must use the host name on the certificate, not an IP address, and the server must be started with that certificate trusted (npm start)."`
@@ -457,6 +463,40 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: None.
 - NEXT: Reload the page in browser and perform the desired action.
 - FINAL STATUS: PASS.
+=======
+### 2026-11-23 14:56 IST — Mocked development users are no longer passwordless outside the test profile — PARTIAL
+
+- REQUEST: Fix: the mock user `khushal` has every role, including Admin, and no password; CAP accepts any password for a mocked user without one.
+- INSPECT: `node_modules/@sap/cds/lib/srv/middlewares/auth/mocked-users.js` (`verify()` checks the password only when the user has one) and `basic-auth.js`; `package.json` `cds.requires.auth`; `server.js` (registers `S4_USERNAME` in three spellings with all roles and no password); `srv/auth-service.js`; `test/testUsers.js`; the E2E helpers that send `Basic user:` with an empty password; `docker-compose.yml` (development profile, port 4004 published).
+- CAUSE: under the development profile any HTTP client that reached the port could send `Authorization: Basic` with `khushal` (or the `S4_USERNAME` value) and any password, and act with every role against the configured S/4HANA connection.
+- CHANGED:
+  - `srv/auth/mockUserPasswords.js` (new): outside `NODE_ENV=test`, with mocked or basic authentication, every mocked user without a password gets `LOCAL_DEV_PASSWORD`; when that is unset, blank or contains a colon it gets a random 64-character value created at startup, so Basic authentication is refused. A `*` wildcard user is switched off. Existing passwords are kept.
+  - `server.js`: calls it after the `S4_USERNAME` registration and logs one warning when the random value is used.
+  - `test/e2e/support/basicAuth.js` (new) and six E2E files (`screenCheck.js`, `roundTrip.js`, `actionRoundTrip.js`, `isolatedServer.js`, `wm/wmRoundTripKit.js`, `negative/verifyWriteAuthorization.e2e.js`): the Basic header now carries `LOCAL_DEV_PASSWORD` (environment, else `.env.local`, else `.env`).
+  - `.env.example`, `.env.docker.example`, `docs/DOCKER.md`: document `LOCAL_DEV_PASSWORD`; the Docker template also gains `ENABLE_DEV_TOKEN_ISSUER` and `LOCAL_AUTH_SECRET`, which the login screen needs.
+- NOT CHANGED: the test profile (Jest in-process, isolated E2E server without SAP) keeps passwordless mocked users; the login action; production (mocked authentication is already refused by `productionGuard`).
+- TEST DECISION: ADDED — `test/unit/auth/mockUserPasswords.test.js`, 9 tests, run against CAP's own `mocked-users` verifier.
+- VALIDATION (Linux aarch64 VM, Node 22.23.5):
+  - `npx jest --runInBand --ci --coverage --silent`: exit 0; 212 suites passed; 3,457 tests passed, 13 skipped, 0 failed; no threshold message; 92.22% lines.
+  - `npx eslint .`: 0 findings. `npm run scan:secrets`: 0 findings.
+  - Live, development-profile server on loopback with dummy S/4 settings (`cds-serve`, `GET /odata/v4/purchase-order/$metadata`):
+    - no `LOCAL_DEV_PASSWORD`: anonymous 401; `khushal` with empty password 401; `khushal:khushal` 401; `S4_USERNAME` user with empty password 401; startup warning logged.
+    - `LOCAL_DEV_PASSWORD` set: empty and wrong passwords 401; correct password 200 for `khushal` and the `S4_USERNAME` user; login action with the correct password returns a token and the Bearer token gets 200; login with a wrong password is refused.
+  - The seven changed E2E modules load under Node.
+- SECOND REVIEW (15:03 IST) — two gaps in the first version, both fixed:
+  1. A test-profile server that can reach SAP stayed passwordless (Docker `cap-dev`, with or without `compose.sap-dev.yaml`). `mockUserPasswords.js` now exempts the test profile only when isolated: no `S4_DESTINATION_URL`, no `VCAP_SERVICES`, and `APP_ROLE` is not `cap-local`. Jest and the isolated E2E server meet that; 3 tests added (12 in the file).
+  2. `tools/smoke-test-deployment.js` defaulted to `khushal` with an empty password, which would have failed the hosted `browser-e2e` job's start-up step against its development server. The default now carries `LOCAL_DEV_PASSWORD`. `tools/probe-cap.py` reads it too.
+  - Re-validation: full Jest exit 0, 212 suites, 3,460 passed, 13 skipped, 0 failed; `npx eslint .` 0 findings; `npm run scan:secrets` 0 findings.
+  - Live matrix on loopback (`GET /odata/v4/purchase-order/$metadata`): development without password, `NODE_ENV` unset, and `node server.js` (the Docker start command) all answer 401 to every user/password tried; development with password and `CDS_CONFIG` test users: 401 for empty and wrong passwords, 200 for the correct one (`khushal`, `test-admin`); isolated test profile unchanged (200 without password); test profile with `S4_DESTINATION_URL`: 401; test profile with `APP_ROLE=cap-local` and a password: 401 without, 200 with; unknown user always 401.
+  - `tools/smoke-test-deployment.js` against the development server: 9 passed with the password, 6 passed / 3 failed without it.
+  - `node test/e2e/negative/verifyWriteAuthorization.e2e.js` (isolated server, no browser): all checks PASS, exit 0.
+- NOT VERIFIED: the browser E2E suites (no Chromium in this workspace); Docker images not built or started; hosted CI (not committed). The hosted `browser-e2e` job needs its `E2E_LOCAL_DEV_PASSWORD` secret to be set and free of colons.
+- REGRESSION: a development server now answers 401 to Basic requests without the password. A developer or script that used `khushal` with an empty password must set `LOCAL_DEV_PASSWORD`. The hosted `browser-e2e` job already passes `LOCAL_DEV_PASSWORD` from its secret.
+- STILL OPEN: `docker-compose.yml` publishes port 4004 on all interfaces under the development profile, and the Dockerfile header calls that image "Production"; two Docker setups exist (`compose.yaml` and `docker-compose.yml`).
+- ASSUMPTIONS: None.
+- NEXT: run the SAP-free browser E2E, then commit on a branch (the checkout is `main`).
+- FINAL STATUS: PARTIAL — unit, full Jest and live server checks passed; E2E and Docker not run; not committed.
+>>>>>>> b963587d (feat: secure mock development users with mandatory local password configuration)
 
 ### 2026-11-23 14:30 IST — Docker container XSUAA crash loop fix & standalone configuration — PASS
 

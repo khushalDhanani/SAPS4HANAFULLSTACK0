@@ -17,6 +17,7 @@
  */
 
 const { resolveMode } = require('./liveWriteGate');
+const { basicAuth } = require('./basicAuth');
 // Resolved at call time: screenCheck requires this module (batchParts), so a load-time import would be undefined.
 const openHash = (session, hash) => require('./screenCheck').openHash(session, hash);
 const BATCH_LINE = /^(GET|POST|PUT|PATCH|DELETE|MERGE)\s+(\S+)\s+HTTP\/1\.[01]\s*$/gm;
@@ -230,7 +231,7 @@ function checkCalls(calls, expectedBody, label) {
 
 /** GET-only CAP read used for live read-back (and dry-run data derivation). */
 function capGet(baseUrl, user = 'khushal') {
-    const headers = { Authorization: 'Basic ' + Buffer.from(`${user}:`).toString('base64'), Accept: 'application/json' };
+    const headers = { Authorization: basicAuth(user), Accept: 'application/json' };
     return async (path) => {
         const res = await fetch(`${baseUrl}/odata/v4/${path}`, { method: 'GET', headers });
         const body = await res.json().catch(() => null);

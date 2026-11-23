@@ -28,7 +28,8 @@ const urlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[1]
 
 const userArg = process.argv.find(a => a.startsWith('--user='))?.split('=')[1]
   || process.env.SMOKE_AUTH_USER
-  || (process.env.NODE_ENV === 'production' ? '' : 'khushal:');
+  // Mocked users carry LOCAL_DEV_PASSWORD outside the isolated test profile (srv/auth/mockUserPasswords.js).
+  || (process.env.NODE_ENV === 'production' ? '' : `khushal:${(process.env.LOCAL_DEV_PASSWORD || '').trim()}`);
 
 const waitArg = process.argv.find(a => a.startsWith('--wait=') || a === '--wait');
 const waitSecs = waitArg ? (waitArg.includes('=') ? parseInt(waitArg.split('=')[1], 10) : 30) : 0;

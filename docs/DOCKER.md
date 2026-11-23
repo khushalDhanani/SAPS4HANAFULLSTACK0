@@ -80,6 +80,9 @@ S4_DESTINATION_NAME=S4HANA_PO_API
 > [!NOTE]
 > For standalone containerized execution without BTP service bindings, `NODE_ENV=development` is used. This enables CAP's built-in authentication with mock users (`khushal` / `S4_USERNAME`) and direct S/4HANA Gateway connectivity without requiring bound Cloud Foundry XSUAA or Destination services. For BTP/Cloud Foundry deployments with bound XSUAA and Destination services (`VCAP_SERVICES`), use `NODE_ENV=production`.
 
+> [!IMPORTANT]
+> The development users hold every role, so they are never passwordless outside the test profile. At startup each one gets `LOCAL_DEV_PASSWORD`; when that is not set, Basic authentication is refused and the only way in is the login screen, which needs `ENABLE_DEV_TOKEN_ISSUER=true` and `LOCAL_AUTH_SECRET` and accepts `S4_PASSWORD` or a password SAP confirms. This stack is for development and evaluation only: it has no XSUAA, so do not expose port 4004 beyond the machine it runs on.
+
 > [!WARNING]
 > Never commit `.env` or files containing plain-text SAP credentials to source control. `.env` is ignored by `.gitignore` and `.dockerignore`.
 
