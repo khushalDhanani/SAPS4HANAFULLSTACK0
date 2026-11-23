@@ -7,6 +7,19 @@ modules:
     parameters:
       memory: 1024M
       instances: 2
+      # Multi-buildpack pipeline for native SAP NW RFC SDK in Cloud Foundry:
+      # buildpacks:
+      #   - ((sap-nwrfc-supply-buildpack-url))
+      #   - nodejs_buildpack
+    properties:
+      LOCK_NOTIFY_TO: khushal@aether.co.in
+      S4_RFC_DESTINATION_NAME: S4HANA_RFC
+      S4_RFC_TIMEOUT_MS: 30000
+      S4_RFC_MAX_CONCURRENT: 10
+      S4_RFC_POOL_ENABLED: "true"
+      # Dynamic library search path for SAP NW RFC SDK 7.50 in Cloud Foundry droplet / container
+      SAPNWRFC_HOME: /home/vcap/deps/0/nwrfcsdk
+      LD_LIBRARY_PATH: /home/vcap/deps/0/nwrfcsdk/lib:/usr/sap/nwrfcsdk/lib:/home/vcap/app/lib:$LD_LIBRARY_PATH
   - name: saps4hana-approuter
     parameters:
       memory: 512M

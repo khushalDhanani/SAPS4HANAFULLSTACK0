@@ -34,6 +34,32 @@ describe('Unit: Error Mapping', () => {
             expect(result).toBe('Address is incomplete. Please enter country/region.; Enter Plant');
         });
 
+        it('should isolate error severity messages and omit warnings when errors are present', () => {
+            const mixedError = {
+                response: {
+                    data: {
+                        error: {
+                            code: 'MEPO/002',
+                            message: { value: 'PO header data still faulty' },
+                            innererror: {
+                                errordetails: [
+                                    { code: 'MEPO/002', message: 'PO header data still faulty', severity: 'error' },
+                                    { code: '06/028', message: 'Payment term AT01 not defined', severity: 'error' },
+                                    { code: 'ME/040', message: 'Can delivery date be met?', severity: 'warning' },
+                                    { code: '06/207', message: 'Effective price is 160.00 INR, material price is 1,500.00 INR', severity: 'warning' },
+                                    { code: 'ME/083', message: 'Enter Requester, customer', severity: 'warning' },
+                                    { code: 'ME/083', message: 'Enter Reason for ordering, customer', severity: 'warning' }
+                                ]
+                            }
+                        }
+                    }
+                }
+            };
+
+            const result = extractS4ErrorMessage(mixedError);
+            expect(result).toBe('PO header data still faulty; Payment term AT01 not defined');
+        });
+
         it('should fall back to standard error.message when no OData format is present', () => {
             const standardError = new Error('Network timeout connecting to Gateway');
             expect(extractS4ErrorMessage(standardError)).toBe('Network timeout connecting to Gateway');
@@ -188,8 +214,86 @@ describe('Unit: Error Mapping', () => {
             };
             const mapped = mapS4Error(cudError);
             expect(mapped.code).toBe('CX_SADL_ENTITY_CUD_DISABLED');
-            expect(mapped.message).toContain('Creating operations are disabled');
+            expect(mapped.message).toBe('SAP S/4HANA Backend Operation Disabled: Creating operations are disabled for this entity in the backend software stack (CX_SADL_ENTITY_CUD_DISABLED).');
+        });
+
+        it('should map HTTP 412 Precondition Failed to HTTP 409 Conflict with STALE_DATA code', () => {
+            const preconditionError = {
+                response: {
+                    status: 412,
+                    data: {
+                        error: {
+                            message: { value: 'Precondition Failed' }
+                        }
+                    }
+                }
+            };
+            const mapped = mapS4Error(preconditionError);
+            expect(mapped.status).toBe(409);
+            expect(mapped.code).toBe('STALE_DATA');
+            expect(mapped.message).toContain('changed by another user');
+        });
+
+        it('should map SAP ETag check failure to HTTP 409 Conflict and preserve original SAP code if present', () => {
+            const etagError = {
+                response: {
+                    status: 412,
+                    data: {
+                        error: {
+                            code: 'CX_SADL_ETAG_CHECK_FAILED',
+                            message: { value: 'ETag condition check failed' }
+                        }
+                    }
+                }
+            };
+            const mapped = mapS4Error(etagError);
+            expect(mapped.status).toBe(409);
+            expect(mapped.code).toBe('CX_SADL_ETAG_CHECK_FAILED');
+            expect(mapped.message).toContain('changed by another user');
+        });
+
+        it('should map messages stating document was changed or modified by another user to HTTP 409 Conflict', () => {
+            const changedError = new Error('Document was modified by another user in transaction VF02');
+            const mapped = mapS4Error(changedError);
+            expect(mapped.status).toBe(409);
+            expect(mapped.code).toBe('STALE_DATA');
+            expect(mapped.message).toBe('Document was modified by another user in transaction VF02');
+        });
+
+        it('should map HTTP 428 Precondition Required to HTTP 428 with PRECONDITION_REQUIRED code', () => {
+            const requiredError = {
+                response: {
+                    status: 428,
+                    data: {
+                        error: {
+                            message: { value: 'Precondition Required' }
+                        }
+                    }
+                }
+            };
+            const mapped = mapS4Error(requiredError);
+            expect(mapped.status).toBe(428);
+            expect(mapped.code).toBe('PRECONDITION_REQUIRED');
+            expect(mapped.message).toContain('Precondition (If-Match) is required');
         });
     });
 
+    describe('mapS4Error with errors raised by an adapter (no S/4 response)', () => {
+        it('keeps an explicit 4xx status and message, e.g. a fail-closed check', () => {
+            const err = Object.assign(new Error('No plant resolved for orders due for delivery. Query failed closed.'), { status: 400 });
+            expect(mapS4Error(err)).toMatchObject({ status: 400, message: err.message });
+            const denied = Object.assign(new Error('Access denied.'), { status: 403, code: 'FORBIDDEN' });
+            expect(mapS4Error(denied)).toMatchObject({ status: 403, code: 'FORBIDDEN' });
+        });
+
+        it('classifies an adapter error without a 4xx status as 500', () => {
+            expect(mapS4Error(new Error('boom')).status).toBe(500);
+            expect(mapS4Error(Object.assign(new Error('upstream'), { status: 502 })).status).toBe(500);
+        });
+
+        it('still classifies S/4 responses by their HTTP status, not by an error.status', () => {
+            const err = Object.assign(new Error('Request failed'), { status: 400, response: { status: 503, data: {} } });
+            expect(mapS4Error(err).status).toBe(503);
+        });
+    });
 });

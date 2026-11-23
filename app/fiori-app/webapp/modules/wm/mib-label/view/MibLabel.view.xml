@@ -1,0 +1,139 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.mib-label.controller.MibLabel"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page id="mibPage" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto" busy="{mibView>/busy}" busyIndicatorDelay="0">
+
+                <form:SimpleForm id="mibForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="2" columnsXL="2">
+                    <form:content>
+                        <core:Title text="{i18n>mibFormTitle}" />
+
+                        <Label text="{i18n>mibWarehouseNumber}" labelFor="mibWarehouseInput" required="true" />
+                        <Input id="mibWarehouseInput" value="{mibView>/warehouseNumber}" maxLength="3" placeholder="W01"
+                            valueState="{mibView>/warehouseState}" valueStateText="{mibView>/warehouseStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+
+                        <Label text="{i18n>mibTransferOrderNumber}" labelFor="mibTransferOrderInput" required="true" />
+                        <Input id="mibTransferOrderInput" value="{mibView>/transferOrderNumber}" maxLength="10" placeholder="0001037246"
+                            valueState="{mibView>/toState}" valueStateText="{mibView>/toStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+
+                        <Label text="{i18n>mibWeightedBy}" labelFor="mibWeightedByInput" />
+                        <Input id="mibWeightedByInput" value="{mibView>/weightedBy}" maxLength="12" placeholder="{i18n>mibWeightedByPlaceholder}"
+                            valueState="{mibView>/weightedByState}" valueStateText="{mibView>/weightedByStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+
+                        <Label text="{i18n>mibCheckedBy}" labelFor="mibCheckedByInput" />
+                        <Input id="mibCheckedByInput" value="{mibView>/checkedBy}" maxLength="12" placeholder="{i18n>mibCheckedByPlaceholder}"
+                            valueState="{mibView>/checkedByState}" valueStateText="{mibView>/checkedByStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+
+                        <Label text="{i18n>mibStickerVariant}" labelFor="mibVariantSelect" />
+                        <SegmentedButton id="mibVariantSelect" selectedKey="{mibView>/variant}" selectionChange=".onVariantChange">
+                            <items>
+                                <SegmentedButtonItem id="mibVariantVertical" key="vertical" text="{i18n>mibVariantVertical}" icon="sap-icon://header" />
+                                <SegmentedButtonItem id="mibVariantStandard" key="standard" text="{i18n>mibVariantStandard}" icon="sap-icon://dimension" />
+                            </items>
+                        </SegmentedButton>
+
+                        <Label />
+                        <HBox id="mibButtons" wrap="Wrap">
+                            <Button id="mibPreviewBtn" text="{i18n>mibPreviewBtn}" type="Emphasized" icon="sap-icon://pdf-attachment"
+                                press=".onPreview" enabled="{= !${mibView>/busy} }" class="sapUiTinyMarginEnd" />
+                            <Button id="mib4x6Btn" text="{i18n>mib4x6Labels}" icon="sap-icon://bar-code"
+                                press=".on4x6Labels" enabled="{= !${mibView>/busy} }" />
+                        </HBox>
+                    </form:content>
+                </form:SimpleForm>
+
+                <MessageStrip id="mibMessageStrip" visible="{= !!${mibView>/message} }" text="{mibView>/message}"
+                    type="{mibView>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <!-- Transfer Orders of a warehouse: read only; stickers per row or for the ticked rows -->
+                <Panel id="mibListPanel" headerText="{i18n>mibListTitle}" class="sapUiSmallMarginTop">
+                    <form:SimpleForm id="mibListForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="3" columnsXL="3">
+                        <form:content>
+                            <Label text="{i18n>mibListWarehouse}" labelFor="mibListWarehouse" required="true" />
+                            <Input id="mibListWarehouse" value="{mibList>/warehouseNumber}" maxLength="3" width="8rem" submit=".onListGo" />
+                            <Label text="{i18n>mibListTransferDate}" labelFor="mibListDates" />
+                            <DateRangeSelection id="mibListDates" dateValue="{mibList>/dateFrom}" secondDateValue="{mibList>/dateTo}"
+                                displayFormat="dd-MM-yyyy" enabled="{= !${mibList>/transferOrderNumber} }" />
+                            <Label text="{i18n>mibListToSearch}" labelFor="mibListTo" />
+                            <HBox id="mibListToBox">
+                                <Input id="mibListTo" value="{mibList>/transferOrderNumber}" maxLength="10" width="11rem" submit=".onListGo"
+                                    class="sapUiTinyMarginEnd" />
+                            </HBox>
+                            <Label />
+                            <HBox id="mibListButtons">
+                                <Button id="mibListGo" text="{i18n>mibListGo}" type="Emphasized" icon="sap-icon://search" press=".onListGo"
+                                    enabled="{= !${mibView>/busy} }" />
+                            </HBox>
+                        </form:content>
+                    </form:SimpleForm>
+
+                    <Table id="mibToTable" items="{mibList>/transferOrders}" mode="MultiSelect" selectionChange=".onListSelectionChange"
+                        growing="true" growingThreshold="50"
+                        noDataText="{= ${mibList>/listed} ? ${i18n>mibListNoData} : ${i18n>mibListStart} }">
+                        <headerToolbar>
+                            <OverflowToolbar id="mibToToolbar">
+                                <Title id="mibToCount" text="{ parts: ['i18n>mibListCount', 'mibList>/transferOrders'], formatter: '.formatCount' }" level="H3" />
+                                <ToolbarSpacer />
+                                <Button id="mibDownloadSelected" icon="sap-icon://download"
+                                    text="{ parts: ['i18n>mibDownloadSelected', 'mibList>/selectedCount'], formatter: '.formatSelected' }"
+                                    press=".onDownloadSelected" enabled="{= ${mibList>/selectedCount} > 0 &amp;&amp; !${mibView>/busy} }" />
+                            </OverflowToolbar>
+                        </headerToolbar>
+                        <columns>
+                            <Column><Text id="mibColToLabel" text="{i18n>mibColTransferOrder}" /></Column>
+                            <Column width="7rem"><Text text="{i18n>mibColDate}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mibColMaterial}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mibColBatch}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mibColRequirement}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mibColQuantity}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mibColStorageUnit}" /></Column>
+                            <Column hAlign="End" width="9rem"><Text text="{i18n>mibColActions}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Text text="{mibList>TransferOrderNumber}" />
+                                    <Text text="{= ${mibList>TransferDate} || '-' }" />
+                                    <ObjectIdentifier title="{= ${mibList>MaterialDescription} || '-' }" text="{= ${mibList>Material} || '-' }" />
+                                    <Text text="{= ${mibList>Batch} || '-' }" />
+                                    <Text text="{= ${mibList>TransferRequirement} ? (${mibList>TransferRequirement} + (${mibList>RequirementNumber} ? ' / ' + ${mibList>RequirementNumber} : '')) : '-' }" />
+                                    <Text text="{= ${mibList>QuantityWithUom} || '-' }" />
+                                    <Text text="{= ${mibList>StorageUnit} || '-' }" />
+                                    <HBox justifyContent="End">
+                                        <Button icon="sap-icon://bar-code" tooltip="{i18n>mibRowLabels}" type="Transparent" press=".onRowLabels"
+                                            enabled="{= !${mibView>/busy} }" />
+                                        <Button icon="sap-icon://download" tooltip="{i18n>mibRowDownload}" type="Transparent" press=".onRowDownload"
+                                            enabled="{= !${mibView>/busy} }" />
+                                        <Button icon="sap-icon://print" tooltip="{i18n>mibRowPrint}" type="Transparent" press=".onRowPrint"
+                                            enabled="{= !${mibView>/busy} }" />
+                                    </HBox>
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+
+                <OverflowToolbar id="mibActions" visible="{= !!${mibView>/pdfSource} }" class="sapUiSmallMarginTop">
+                    <Title id="mibResultTitle" text="{i18n>mibResultTitle}" level="H3" />
+                    <ToolbarSpacer />
+                    <Button id="mibPrint" text="{i18n>mibPrint}" icon="sap-icon://print" press=".onPrint" />
+                    <Button id="mibDownload" text="{i18n>mibDownload}" icon="sap-icon://download" press=".onDownload" />
+                </OverflowToolbar>
+
+                <!-- isTrustedSource: the PDF is rendered by this app's own backend / client generator -->
+                <PDFViewer id="mibPdfViewer" source="{mibView>/pdfSource}" isTrustedSource="true" showDownloadButton="false"
+                    title="{mibView>/fileName}" height="70vh" visible="{= !!${mibView>/pdfSource} }" />
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

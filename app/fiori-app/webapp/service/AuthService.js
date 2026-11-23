@@ -2,12 +2,122 @@ sap.ui.define([
     "sap/ui/base/Object",
     "sap/ui/model/json/JSONModel",
     "sap/base/Log",
-    "saps4hana/fiori/service/ODataClient"
-], function (BaseObject, JSONModel, Log, ODataClient) {
+    "saps4hana/fiori/service/ODataClient",
+    "saps4hana/fiori/service/AuthStorage",
+    "saps4hana/fiori/service/AuthUserHelper",
+    "saps4hana/fiori/service/AuthModelSync"
+], function (BaseObject, JSONModel, Log, ODataClient, AuthStorage, AuthUserHelper, AuthModelSync) {
     "use strict";
 
-    var STORAGE_KEY = "saps4hana_fiori_auth_session";
-    var REMEMBER_KEY = "saps4hana_fiori_remember_user";
+    var STORAGE_KEY = "saps4hana_fiori_auth_session", REMEMBER_KEY = "saps4hana_fiori_remember_user";
+
+    function _resolveStorage() {
+        if (AuthStorage && typeof AuthStorage.loadSession === "function") return AuthStorage;
+        var oG = typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : null);
+        var s = oG && oG["s" + "ap"];
+        return (s && s.ui && typeof s.ui.require === "function") ? s.ui.require("saps4hana/fiori/service/AuthStorage") : null;
+    }
+
+    function _resolveHelper(oModule, sPath) {
+        if (oModule) return oModule;
+        var oG = typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : null);
+        var s = oG && oG["s" + "ap"];
+        return (s && s.ui && typeof s.ui.require === "function") ? s.ui.require(sPath) : null;
+    }
+
+    function _getStorage(t) {
+        try { var w = typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : null); return w ? w[t] : null; } catch (e) { return null; }
+    }
+
+    function _isJwtExpired(sToken) {
+        var oS = _resolveStorage();
+        if (oS && typeof oS.isTokenExpired === "function") return oS.isTokenExpired(sToken);
+        if (!sToken || typeof sToken !== "string") return false;
+        try {
+            var parts = sToken.split(".");
+            if (parts.length !== 3) return false;
+            var payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+            var dec = typeof atob === "function" ? atob(payload) : (typeof Buffer !== "undefined" ? Buffer.from(payload, "base64").toString("utf-8") : "");
+            var oP = JSON.parse(dec);
+            return (oP && typeof oP.exp === "number") ? Math.floor(Date.now() / 1000) >= oP.exp : false;
+        } catch (e) { return false; }
+    }
+
+    var _storage = {
+        save: function (user, bRem) {
+            var oS = _resolveStorage();
+            if (oS) { oS.saveSession(user); bRem ? oS.saveRememberUsername(user.username) : oS.clearRememberUsername(); return; }
+            var ses = _getStorage("sessionStorage"), loc = _getStorage("localStorage");
+            try { if (ses) ses.setItem(STORAGE_KEY, JSON.stringify({ user: user, token: user.token })); } catch (e) {
+                if (Log && typeof Log.warning === "function") Log.warning("AuthService: Unable to persist session: " + (e && e.message));
+            }
+            try { if (loc) loc.removeItem(STORAGE_KEY); } catch (e) {}
+            try { if (loc) bRem ? loc.setItem(REMEMBER_KEY, user.username) : loc.removeItem(REMEMBER_KEY); } catch (e) {
+                if (Log && typeof Log.warning === "function") Log.warning("AuthService: Unable to update rememberMe: " + (e && e.message));
+            }
+        },
+        clear: function () {
+            var oS = _resolveStorage();
+            if (oS) { oS.clearSession(); return oS.getRememberUsername(); }
+            var ses = _getStorage("sessionStorage"), loc = _getStorage("localStorage"), sSaved = "";
+            try { if (ses) ses.removeItem(STORAGE_KEY); } catch (e) {}
+            try { if (loc) { loc.removeItem(STORAGE_KEY); sSaved = loc.getItem(REMEMBER_KEY) || ""; } } catch (e) {}
+            return sSaved;
+        },
+        getRemembered: function () {
+            var oS = _resolveStorage();
+            if (oS) return oS.getRememberUsername();
+            try { var loc = _getStorage("localStorage"); return loc ? (loc.getItem(REMEMBER_KEY) || "") : ""; } catch (e) { return ""; }
+        },
+        load: function () {
+            var oS = _resolveStorage();
+            if (oS) return oS.loadSession();
+            var ses = _getStorage("sessionStorage"), loc = _getStorage("localStorage"), raw = null;
+            try { if (ses) raw = ses.getItem(STORAGE_KEY); } catch (e) {}
+            try {
+                if (loc && loc.getItem(STORAGE_KEY)) {
+                    var leg = loc.getItem(STORAGE_KEY);
+                    if (!raw) { raw = leg; try { if (ses) ses.setItem(STORAGE_KEY, leg); } catch (err) {} }
+                    loc.removeItem(STORAGE_KEY);
+                }
+            } catch (e) {}
+            if (!raw) return null;
+            try {
+                var s = JSON.parse(raw);
+                if (s && s.user && s.user.username) {
+                    if (!s.user.token && s.token) s.user.token = s.token;
+                    if (s.user.token && _isJwtExpired(s.user.token)) {
+                        try { if (ses) ses.removeItem(STORAGE_KEY); } catch (e) {}
+                        return null;
+                    }
+                    return s;
+                }
+            } catch (e) {
+                try { if (ses) ses.removeItem(STORAGE_KEY); } catch (err) {}
+            }
+            return null;
+        },
+        getToken: function () {
+            var oS = _resolveStorage();
+            if (oS) return oS.getToken();
+            var ses = _getStorage("sessionStorage"), loc = _getStorage("localStorage");
+            try {
+                var raw = ses ? ses.getItem(STORAGE_KEY) : null;
+                if (!raw && loc && loc.getItem(STORAGE_KEY)) {
+                    raw = loc.getItem(STORAGE_KEY);
+                    try { if (ses) ses.setItem(STORAGE_KEY, raw); } catch (e) {}
+                    try { loc.removeItem(STORAGE_KEY); } catch (e) {}
+                }
+                if (raw) {
+                    var p = JSON.parse(raw);
+                    return (p && p.user && p.user.token) || (p && p.token) || null;
+                }
+            } catch (e) {
+                if (Log && typeof Log.warning === "function") Log.warning("AuthService: stored auth session unreadable (" + (e && e.message));
+            }
+            return null;
+        }
+    };
 
     var AuthService = BaseObject.extend("saps4hana.fiori.service.AuthService", {
         constructor: function () {
@@ -24,68 +134,48 @@ sap.ui.define([
         init: function (oComponent) {
             this._oComponent = oComponent;
             this._oComponent.setModel(this._oModel, "auth");
-            this._restoreSession();
+            var bRestored = this._restoreSession();
             this.syncModelHeaders(oComponent);
+            if (bRestored) return Promise.resolve(true);
+            return this.fetchCurrentUserInfo().then(function (oUser) {
+                return Boolean(oUser && oUser.username);
+            });
         },
 
-        /**
-         * Synchronizes authentication Authorization header (Bearer token)
-         * to UI5 OData V4 framework models (default model and fiService).
-         *
-         * @param {sap.ui.core.UIComponent} [oComponent]
-         */
-        syncModelHeaders: function (oComponent) {
+        fetchCurrentUserInfo: function () {
+            var that = this;
+            if (!ODataClient || typeof ODataClient.get !== "function") return Promise.resolve(null);
+            return ODataClient.get("/odata/v4/auth/getUserInfo()").then(function (oData) {
+                var oResult = oData && (oData.value !== undefined ? oData.value : oData);
+                if (oResult && oResult.authenticated) {
+                    var oUserSession = {
+                        username: oResult.username,
+                        avatarInitials: oResult.avatarInitials || (oResult.username ? oResult.username.substring(0, 2).toUpperCase() : "US"),
+                        system: oResult.system || "S/4HANA (XSUAA SSO)",
+                        loginTimestamp: oResult.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        token: oResult.token || null,
+                        scopes: oResult.scopes || []
+                    };
+                    that._oModel.setProperty("/isAuthenticated", true);
+                    that._oModel.setProperty("/user", oUserSession);
+                    that.syncModelHeaders();
+                    return oUserSession;
+                }
+                return null;
+            }).catch(function (err) {
+                if (Log && typeof Log.info === "function") Log.info("AuthService: No active XSUAA/SSO session found (" + (err && err.message) + ")");
+                return null;
+            });
+        },
+
+        syncModelHeaders: function (oComponent, bForce) {
             var oComp = oComponent || this._oComponent;
-            if (!oComp) {
-                return;
+            var oSync = _resolveHelper(AuthModelSync, "saps4hana/fiori/service/AuthModelSync");
+            if (oSync) {
+                this._sLastSyncedAuthHeader = oSync.sync(oComp, this.getToken(), bForce, this._sLastSyncedAuthHeader, Log);
+            } else if (Log && typeof Log.warning === "function") {
+                Log.warning("AuthService: AuthModelSync could not be resolved; model authorization headers were not updated.");
             }
-            var sToken = this.getToken();
-            var sAuthHeader = sToken ? ("Bearer " + sToken) : undefined;
-
-            // Avoid redundant and disruptive changeHttpHeaders calls if header did not change
-            if (this._sLastSyncedAuthHeader === sAuthHeader) {
-                return;
-            }
-
-            var mHeaders = {
-                "Authorization": sAuthHeader
-            };
-
-            var oDefaultModel = oComp.getModel();
-            if (oDefaultModel && typeof oDefaultModel.changeHttpHeaders === "function") {
-                try {
-                    oDefaultModel.changeHttpHeaders(mHeaders);
-                } catch (err) {
-                    // Prevent unhandled "Unexpected open requests" rejection if requests are in flight
-                    if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthService: Unable to update default model headers: " + (err && err.message));
-                    }
-                }
-            }
-
-            var oFiModel = oComp.getModel("fiService");
-            if (oFiModel && typeof oFiModel.changeHttpHeaders === "function") {
-                try {
-                    oFiModel.changeHttpHeaders(mHeaders);
-                } catch (err) {
-                    if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthService: Unable to update fiService headers: " + (err && err.message));
-                    }
-                }
-            }
-
-            var oSdModel = oComp.getModel("salesInquiry");
-            if (oSdModel && typeof oSdModel.changeHttpHeaders === "function") {
-                try {
-                    oSdModel.changeHttpHeaders(mHeaders);
-                } catch (err) {
-                    if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthService: Unable to update salesInquiry headers: " + (err && err.message));
-                    }
-                }
-            }
-
-            this._sLastSyncedAuthHeader = sAuthHeader;
         },
 
         getModel: function () {
@@ -93,143 +183,62 @@ sap.ui.define([
         },
 
         _isTokenExpired: function (sToken) {
-            if (!sToken || typeof sToken !== "string") {
-                return false;
-            }
-            try {
-                var aParts = sToken.split(".");
-                if (aParts.length !== 3) {
-                    return false;
-                }
-                var sPayload = aParts[1].replace(/-/g, "+").replace(/_/g, "/");
-                var sDecoded = atob(sPayload);
-                var oPayload = JSON.parse(sDecoded);
-                if (oPayload && typeof oPayload.exp === "number") {
-                    var iNow = Math.floor(Date.now() / 1000);
-                    return iNow >= oPayload.exp;
-                }
-            } catch (e) {
-                // Ignore decoding errors
-            }
-            return false;
+            return _isJwtExpired(sToken);
         },
 
         _restoreSession: function () {
-            // Restore saved username for remember me
-            var sSavedUser = localStorage.getItem(REMEMBER_KEY);
-            if (sSavedUser) {
-                this._oModel.setProperty("/savedUsername", sSavedUser);
-                this._oModel.setProperty("/rememberMe", true);
-            }
-
-            // Check active session in sessionStorage or localStorage
-            var sRawSession = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
-            if (sRawSession) {
-                try {
-                    var oSession = JSON.parse(sRawSession);
-                    if (oSession && oSession.user && oSession.user.username) {
-                        if (!oSession.user.token && oSession.token) {
-                            oSession.user.token = oSession.token;
-                        }
-
-                        // Validate token expiration before restoring session
-                        if (oSession.user.token && this._isTokenExpired(oSession.user.token)) {
-                            sessionStorage.removeItem(STORAGE_KEY);
-                            localStorage.removeItem(STORAGE_KEY);
-                            return false;
-                        }
-
-                        this._oModel.setProperty("/isAuthenticated", true);
-                        this._oModel.setProperty("/user", oSession.user);
-                        return true;
-                    }
-                } catch (e) {
-                    sessionStorage.removeItem(STORAGE_KEY);
-                    localStorage.removeItem(STORAGE_KEY);
-                }
+            var sSavedUser = _storage.getRemembered();
+            this._oModel.setProperty("/savedUsername", sSavedUser || "");
+            this._oModel.setProperty("/rememberMe", Boolean(sSavedUser));
+            var oSession = _storage.load();
+            if (oSession && oSession.user && oSession.user.username) {
+                this._oModel.setProperty("/isAuthenticated", true);
+                this._oModel.setProperty("/user", oSession.user);
+                return true;
             }
             return false;
         },
 
-        /**
-         * Authenticate against the actual S/4HANA system via CAP AuthService backend.
-         * Uses centralized ODataClient for CSRF, retries, and error handling.
-         */
+        _fallbackLoadSession: function () {
+            return _storage.load();
+        },
+
         login: function (sUsername, sPassword, bRememberMe) {
             var that = this;
             return new Promise(function (resolve, reject) {
-                var sTrimmedUser = (sUsername || "").trim();
-                var sTrimmedPass = (sPassword || "").trim();
-
-                if (!sTrimmedUser || !sTrimmedPass) {
-                    reject({
-                        code: "REQUIRED_FIELDS",
-                        message: "Username and password are required."
-                    });
+                var sUser = (sUsername || "").trim(), sPass = (sPassword || "").trim();
+                if (!sUser || !sPass) {
+                    reject({ code: "REQUIRED_FIELDS", message: "Username and password are required." });
                     return;
                 }
-
-                // Call CAP AuthService login action via centralized ODataClient
-                ODataClient.post("/odata/v4/auth/login", {
-                    username: sTrimmedUser,
-                    password: sTrimmedPass
-                })
-                    .then(function (oServerUser) {
-                        // If server returned authenticated: false, reject cleanly with message
-                        if (!oServerUser || oServerUser.authenticated === false) {
-                            reject({
-                                code: "AUTH_FAILED",
-                                message: (oServerUser && oServerUser.message) || "Invalid username or password. Please verify your S/4HANA credentials."
-                            });
-                            return;
-                        }
-
-                        var oUserSession = {
-                            username: oServerUser.username || sTrimmedUser,
-                            avatarInitials: oServerUser.avatarInitials || sTrimmedUser.substring(0, 2).toUpperCase(),
-                            system: oServerUser.system || "PRD",
-                            loginTimestamp: oServerUser.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                            token: oServerUser.token || null,
-                            scopes: oServerUser.scopes || []
-                        };
-
-                        var oStorageData = {
-                            user: oUserSession,
-                            token: oUserSession.token
-                        };
-
-                        if (bRememberMe) {
-                            localStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
-                            localStorage.setItem(REMEMBER_KEY, oUserSession.username);
-                        } else {
-                            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
-                            localStorage.removeItem(REMEMBER_KEY);
-                        }
-
-                        that._oModel.setProperty("/isAuthenticated", true);
-                        that._oModel.setProperty("/user", oUserSession);
-                        that._oModel.setProperty("/rememberMe", bRememberMe);
-                        that.syncModelHeaders();
-
-                        resolve(oUserSession);
-                    })
-                    .catch(function (err) {
-                        reject({
-                            code: "AUTH_FAILED",
-                            message: (err && err.message)
-                                ? err.message
-                                : "Cannot connect to the authentication service. Please check your network connection and try again."
-                        });
-                    });
+                ODataClient.post("/odata/v4/auth/login", { username: sUser, password: sPass }).then(function (oServerUser) {
+                    if (!oServerUser || oServerUser.authenticated === false) {
+                        reject({ code: "AUTH_FAILED", message: (oServerUser && oServerUser.message) || "Invalid username or password. Please verify your S/4HANA credentials." });
+                        return;
+                    }
+                    var oUserSession = {
+                        username: oServerUser.username || sUser,
+                        avatarInitials: oServerUser.avatarInitials || sUser.substring(0, 2).toUpperCase(),
+                        system: oServerUser.system || "PRD",
+                        loginTimestamp: oServerUser.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        token: oServerUser.token || null,
+                        scopes: oServerUser.scopes || []
+                    };
+                    _storage.save(oUserSession, bRememberMe);
+                    that._oModel.setProperty("/isAuthenticated", true);
+                    that._oModel.setProperty("/user", oUserSession);
+                    that._oModel.setProperty("/rememberMe", Boolean(bRememberMe));
+                    if (bRememberMe) that._oModel.setProperty("/savedUsername", oUserSession.username);
+                    that.syncModelHeaders();
+                    resolve(oUserSession);
+                }).catch(function (err) {
+                    reject({ code: "AUTH_FAILED", message: (err && err.message) ? err.message : "Cannot connect to the authentication service. Please check your network connection and try again." });
+                });
             });
         },
 
         logout: function () {
-            sessionStorage.removeItem(STORAGE_KEY);
-            localStorage.removeItem(STORAGE_KEY);
-
-            var sSaved = localStorage.getItem(REMEMBER_KEY) || "";
-
+            var sSaved = _storage.clear();
             this._oModel.setProperty("/isAuthenticated", false);
             this._oModel.setProperty("/user", null);
             this._oModel.setProperty("/savedUsername", sSaved);
@@ -241,6 +250,15 @@ sap.ui.define([
             return this._oModel.getProperty("/isAuthenticated") === true;
         },
 
+        getCurrentUserName: function (oComponent) {
+            var oHelper = _resolveHelper(AuthUserHelper, "saps4hana/fiori/service/AuthUserHelper");
+            if (oHelper && typeof oHelper.getCurrentUserName === "function") {
+                return oHelper.getCurrentUserName(oComponent, this.getCurrentUser());
+            }
+            var oAuthUser = this.getCurrentUser();
+            return (oAuthUser && oAuthUser.username) ? oAuthUser.username.trim() : "";
+        },
+
         getCurrentUser: function () {
             return this._oModel.getProperty("/user");
         },
@@ -250,14 +268,25 @@ sap.ui.define([
             if (oUser && oUser.token) {
                 return oUser.token;
             }
-            try {
-                var sRaw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
-                if (sRaw) {
-                    var parsed = JSON.parse(sRaw);
-                    return (parsed && parsed.user && parsed.user.token) || (parsed && parsed.token) || null;
-                }
-            } catch (e) {}
-            return null;
+            return _storage.getToken();
+        },
+
+        hasAnyRole: function (aRoles) {
+            var oHelper = _resolveHelper(AuthUserHelper, "saps4hana/fiori/service/AuthUserHelper");
+            if (oHelper && typeof oHelper.hasAnyRole === "function") {
+                return oHelper.hasAnyRole(this.getCurrentUser(), aRoles);
+            }
+            // Fail closed: without the role helper nothing can be checked, so nothing is granted.
+            if (Log && typeof Log.warning === "function") Log.warning("AuthService: AuthUserHelper could not be resolved; role check denied.");
+            return false;
+        },
+
+        canCreateDelivery: function () {
+            var oHelper = _resolveHelper(AuthUserHelper, "saps4hana/fiori/service/AuthUserHelper");
+            if (oHelper && typeof oHelper.canCreateDelivery === "function") {
+                return oHelper.canCreateDelivery(this.getCurrentUser());
+            }
+            return this.hasAnyRole(["SalesRepresentative", "WarehouseClerk", "WarehouseManager", "SalesManager", "Admin"]);
         }
     });
 

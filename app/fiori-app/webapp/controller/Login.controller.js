@@ -12,15 +12,17 @@ sap.ui.define([
     return Controller.extend("saps4hana.fiori.controller.Login", {
         onInit: function () {
             var sSavedUser = "";
+            var bRememberMe = false;
             var oAuthModel = AuthService.getModel();
             if (oAuthModel) {
                 sSavedUser = oAuthModel.getProperty("/savedUsername") || "";
+                bRememberMe = Boolean(oAuthModel.getProperty("/rememberMe"));
             }
 
             var oViewModel = new JSONModel({
                 username: sSavedUser,
                 password: "",
-                rememberMe: true,
+                rememberMe: bRememberMe,
                 isBusy: false,
                 hasError: false,
                 errorMessage: "",
@@ -43,14 +45,25 @@ sap.ui.define([
          * so the user always sees a clean login form after logout.
          */
         _onLoginRouteMatched: function () {
+            if (AuthService.isAuthenticated()) {
+                var oRouter = this.getOwnerComponent().getRouter();
+                if (oRouter) {
+                    oRouter.navTo("dashboard", {}, true);
+                    return;
+                }
+            }
+
             var oViewModel = this.getView().getModel("loginView");
             if (oViewModel) {
                 var sSavedUser = "";
+                var bRememberMe = false;
                 var oAuthModel = AuthService.getModel();
                 if (oAuthModel) {
                     sSavedUser = oAuthModel.getProperty("/savedUsername") || "";
+                    bRememberMe = Boolean(oAuthModel.getProperty("/rememberMe"));
                 }
                 oViewModel.setProperty("/username", sSavedUser);
+                oViewModel.setProperty("/rememberMe", bRememberMe);
                 oViewModel.setProperty("/password", "");
                 oViewModel.setProperty("/isBusy", false);
                 oViewModel.setProperty("/hasError", false);
@@ -64,6 +77,16 @@ sap.ui.define([
 
         onInputChange: function () {
             var oViewModel = this.getView().getModel("loginView");
+            var oUserInput = this.byId("inputUsername");
+            var oPassInput = this.byId("inputPassword");
+
+            if (oUserInput && typeof oUserInput.getValue === "function") {
+                oViewModel.setProperty("/username", oUserInput.getValue());
+            }
+            if (oPassInput && typeof oPassInput.getValue === "function") {
+                oViewModel.setProperty("/password", oPassInput.getValue());
+            }
+
             oViewModel.setProperty("/usernameState", ValueState.None);
             oViewModel.setProperty("/usernameStateText", "");
             oViewModel.setProperty("/passwordState", ValueState.None);
@@ -79,8 +102,21 @@ sap.ui.define([
 
         onLogin: function () {
             var oViewModel = this.getView().getModel("loginView");
-            var sUsername = oViewModel.getProperty("/username");
-            var sPassword = oViewModel.getProperty("/password");
+            var oUserInput = this.byId("inputUsername");
+            var oPassInput = this.byId("inputPassword");
+
+            // Prioritize live control values to support Enter-submit and browser autofill
+            var sUsername = (oUserInput && typeof oUserInput.getValue === "function" && oUserInput.getValue())
+                ? oUserInput.getValue()
+                : (oViewModel.getProperty("/username") || "");
+            var sPassword = (oPassInput && typeof oPassInput.getValue === "function" && oPassInput.getValue())
+                ? oPassInput.getValue()
+                : (oViewModel.getProperty("/password") || "");
+
+            // Synchronize control values back to view model
+            oViewModel.setProperty("/username", sUsername);
+            oViewModel.setProperty("/password", sPassword);
+
             var bRememberMe = oViewModel.getProperty("/rememberMe");
             var oResourceBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
 
@@ -118,8 +154,20 @@ sap.ui.define([
                 .then(function (oUser) {
                     oViewModel.setProperty("/isBusy", false);
                     oViewModel.setProperty("/password", "");
+                    if (oPassInput && typeof oPassInput.setValue === "function") {
+                        oPassInput.setValue("");
+                    }
                     MessageToast.show(oResourceBundle.getText("loginSuccessMsg", [oUser.username]));
 
+                    // Full reload instead of navTo: an OData V4 model that already requested $metadata while
+                    // unauthenticated (deep link before login) caches the 401 for its lifetime, so every list on
+                    // that service stays empty after login even though the auth header is now set. A reload
+                    // re-creates all models with the stored session.
+                    if (typeof window !== "undefined" && window.location && typeof window.location.reload === "function") {
+                        window.location.hash = "dashboard";
+                        window.location.reload();
+                        return;
+                    }
                     var oRouter = that.getOwnerComponent().getRouter();
                     oRouter.navTo("dashboard", {}, true);
                 })

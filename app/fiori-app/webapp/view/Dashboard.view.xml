@@ -3,7 +3,13 @@
     xmlns:mvc="sap.ui.core.mvc"
     xmlns="sap.m"
     xmlns:core="sap.ui.core"
+    xmlns:f="sap.f"
     displayBlock="true">
+    <!--
+        Every figure on this page is a count read live from SAP S/4HANA by getDashboardMetrics.
+        A tile shows "Loading" until the count arrives and "Failed" when SAP did not return it;
+        nothing is defaulted, sampled or simulated. Tiles either open a working app or show a count.
+    -->
     <Page
         id="dashboardPage"
         showHeader="false"
@@ -11,183 +17,38 @@
         class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
-                <!-- Compact Hero Header & Global Actions -->
-                <HBox class="sapUiSmallMarginBottom" justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap">
-                    <VBox class="sapUiTinyMarginBottom">
-                        <HBox alignItems="Center">
-                            <Title text="Welcome back, {auth>/user/username}!" level="H2" titleStyle="H3" class="sapUiTinyMarginEnd" />
-                            <ObjectStatus text="Client 220 • S/4HANA Active" state="Success" inverted="false" />
-                        </HBox>
-                        <Text text="{i18n>dashboardSubtitle}" class="sapUiTinyMarginTop textMuted" />
-                    </VBox>
-                    <HBox alignItems="Center" class="sapUiTinyMarginBottom">
-                        <Button
-                            id="btnQuickCreatePO"
-                            text="{i18n>dashboardModuleMMCreate}"
-                            icon="sap-icon://add"
-                            type="Emphasized"
-                            press=".onNavigateToCreatePO"
-                            class="sapUiTinyMarginEnd" />
-                        <Button
-                            id="btnQuickManagePOs"
-                            text="{i18n>dashboardModuleMMAction}"
-                            icon="sap-icon://open-folder"
-                            type="Default"
-                            press=".onNavigateToPurchaseOrders"
-                            class="sapUiTinyMarginEnd" />
-                        <Button
-                            id="btnRefreshDashboard"
-                            icon="sap-icon://refresh"
-                            text="{i18n>btnRefresh}"
-                            type="Transparent"
-                            tooltip="{i18n>btnRefresh}"
-                            press=".onRefresh" />
-                    </HBox>
-                </HBox>
+                <MessageStrip
+                    id="dashboardMetricsError"
+                    text="{dashboardView>/metricsError}"
+                    type="Error"
+                    showIcon="true"
+                    visible="{= !!${dashboardView>/metricsError} }"
+                    class="sapUiSmallMarginBottom" />
 
-                <!-- Compact 15 Enterprise Domain Tabs -->
-                <IconTabBar
-                    id="dashboardTabBar"
-                    selectedKey="{dashboardView>/selectedTab}"
-                    select=".onTabSelect"
-                    headerMode="Inline"
-                    tabDensityMode="Compact"
-                    expandable="false"
-                    applyContentPadding="false"
-                    headerBackgroundDesign="Transparent"
-                    class="sapUiNoContentPadding">
+                <VBox id="dashboardSections">
                     <items>
-                        <!-- TAB 1: OVERVIEW -->
-                        <IconTabFilter
-                            id="tabOverview"
-                            key="overview"
-                            icon="sap-icon://home"
-                            text="{i18n>tabOverviewTitle}"
-                            tooltip="{i18n>tabOverviewTooltip}">
+                        <!-- OVERVIEW -->
+                        <VBox id="sectionOverview" visible="{= ${dashboardView>/selectedTab} === 'overview' }">
                             <VBox class="sapUiSmallMarginTop">
-                                <!-- Category 1: Platform & Gateway Status -->
-                                <Panel
-                                    id="panelPlatformHealth"
-                                    headerText="{i18n>overviewCategoryHealth}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox id="dashboardHealthContainer" wrap="Wrap" alignItems="Center">
-                                        <GenericTile
-                                            id="kpiSystemTile"
-                                            header="{i18n>dashboardKpiSystem}"
-                                            subheader="{i18n>dashboardKpiSystemDesc}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent>
-                                                <NumericContent value="100" scale="%" icon="sap-icon://database" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
+                                <Title text="{i18n>tabOverviewTitle}" level="H3" titleStyle="H4" class="sapUiSmallMarginBottom" />
 
-                                        <GenericTile
-                                            id="kpiSpendTile"
-                                            header="{i18n>dashboardKpiSpend}"
-                                            subheader="{i18n>dashboardKpiSpendDesc}"
-                                            press=".onNavigateToPurchaseOrders"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent>
-                                                <NumericContent value="{dashboardView>/totalSpend}" scale="M $" icon="sap-icon://money-bills" valueColor="Critical" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="kpiCompleteTile"
-                                            header="{i18n>dashboardKpiRate}"
-                                            subheader="{i18n>dashboardKpiRateDesc}"
-                                            press=".onNavigateToPurchaseOrders"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent>
-                                                <NumericContent value="{dashboardView>/completeRate}" scale="%" icon="sap-icon://accept" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="kpiOverviewFIDocs"
-                                            header="{i18n>dashboardKpiFIDocs}"
-                                            subheader="General Ledger Line Items"
-                                            press=".onNavigateToJournalEntries"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent>
-                                                <NumericContent value="{dashboardView>/fiDocCount}" icon="sap-icon://accounting-document-verification" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Category 2: Finance & Controlling (FI / CO) -->
-                                <Panel
-                                    id="panelCategoryFinance"
-                                    headerText="{i18n>overviewCategoryFinance}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" alignItems="Center">
-                                        <GenericTile
-                                            id="tileModuleFI"
-                                            header="{i18n>dashboardModuleFI}"
-                                            subheader="{i18n>dashboardModuleFISub}"
-                                            press=".onNavigateToJournalEntries"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>dashboardKpiFIDocs}">
-                                                <NumericContent id="kpiFIDocsVal" value="{dashboardView>/fiDocCount}" icon="sap-icon://lead" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewCO"
-                                            header="{i18n>tabCOTitle}"
-                                            subheader="Manage Cost Rates &amp; Allocations"
-                                            press=".onSelectTabCO"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Cost Centers">
-                                                <NumericContent value="24" icon="sap-icon://money-bills" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewCustomerBalances"
-                                            header="Customer Balances"
-                                            subheader="Accounts Receivable (FAR)"
-                                            press=".onSelectTabFI"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Active Debtors">
-                                                <NumericContent value="142" icon="sap-icon://customer" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewSettlement"
-                                            header="Cost Settlement"
-                                            subheader="Actual Settlement Runs (FCO)"
-                                            press=".onSelectTabCO"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Period Rate">
-                                                <NumericContent value="100" scale="%" icon="sap-icon://process" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Category 3: Supply Chain, Sourcing & Commercial (MM / SD / EWM / TM) -->
+                                <!-- Supply Chain & Sales -->
                                 <Panel
                                     id="panelCategorySupplyChain"
                                     headerText="{i18n>overviewCategorySupplyChain}"
                                     class="sapUiSmallMarginBottom"
                                     expandable="true"
                                     expanded="true">
-                                    <HBox wrap="Wrap" alignItems="Center">
+                                    <HBox wrap="Wrap" alignItems="Center" class="dashboardTileContainer">
                                         <GenericTile
                                             id="tileModuleMM"
                                             header="{i18n>dashboardModuleMM}"
                                             subheader="{i18n>dashboardModuleMMSub}"
                                             press=".onNavigateToPurchaseOrders"
+                                            state="{path: 'dashboardView>/totalCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                             <TileContent unit="{i18n>dashboardKpiActivePOs}">
-                                                <NumericContent id="kpiTotalPOsVal" value="{dashboardView>/totalCount}" icon="sap-icon://sales-order" valueColor="Neutral" />
+                                                <NumericContent id="kpiTotalPOsVal" value="{path: 'dashboardView>/totalCount', formatter: '.formatMetricValue'}" icon="sap-icon://sales-order" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
@@ -196,950 +57,668 @@
                                             header="{i18n>dashboardKpiSuppliers}"
                                             subheader="{i18n>dashboardKpiSuppliersDesc}"
                                             press=".onNavigateToPurchaseOrders"
+                                            state="{path: 'dashboardView>/supplierCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Vendors">
-                                                <NumericContent id="kpiSuppliersVal" value="{dashboardView>/supplierCount}" icon="sap-icon://supplier" valueColor="Good" />
+                                            <TileContent unit="{i18n>dashSuppliers}">
+                                                <NumericContent id="kpiSuppliersVal" value="{path: 'dashboardView>/supplierCount', formatter: '.formatMetricValue'}" icon="sap-icon://supplier" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
                                             id="tileOverviewSD"
                                             header="{i18n>tabSDTitle}"
-                                            subheader="Orders, Quotes &amp; Accounts"
+                                            subheader="{i18n>dashOpenSalesOrders}"
                                             press=".onSelectTabSD"
+                                            state="{path: 'dashboardView>/openSalesOrderCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Open Orders">
-                                                <NumericContent value="86" icon="sap-icon://sales-order" valueColor="Good" />
+                                            <TileContent unit="{i18n>dashOpenOrders}">
+                                                <NumericContent value="{path: 'dashboardView>/openSalesOrderCount', formatter: '.formatMetricValue'}" icon="sap-icon://sales-order" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewCreateSalesOrder"
+                                            header="{i18n>dashCreateSalesOrder}"
+                                            subheader="{i18n>dashNewOrderVA01}"
+                                            press=".onNavigateToCreateSalesOrder"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashAction}">
+                                                <NumericContent icon="sap-icon://add" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
                                             id="tileOverviewEWM"
                                             header="{i18n>tabEWMTitle}"
-                                            subheader="Deliveries &amp; Pick Carts"
+                                            subheader="{i18n>dashWarehouses}"
                                             press=".onSelectTabEWM"
+                                            state="{path: 'dashboardView>/warehouseCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Shipments">
-                                                <NumericContent value="45" icon="sap-icon://inventory" valueColor="Good" />
+                                            <TileContent unit="{i18n>dashWarehouses}">
+                                                <NumericContent value="{path: 'dashboardView>/warehouseCount', formatter: '.formatMetricValue'}" icon="sap-icon://inventory" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
-                                            id="tileOverviewGoodsIssue"
-                                            header="Goods Issue (261)"
-                                            subheader="Order / Reservation Pick"
-                                            press=".onNavigateToGoodsIssue"
+                                            id="tileOverviewOrdersDueForDelivery"
+                                            header="{i18n>tileOrdersDueForDeliveryTitle}"
+                                            subheader="{i18n>tileOrdersDueForDeliverySub}"
+                                            press=".onNavigateToOrdersDueForDelivery"
+                                            state="{path: 'dashboardView>/ordersDueCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Movement 261">
-                                                <NumericContent value="261" icon="sap-icon://shipping-status" valueColor="Good" />
+                                            <TileContent unit="{i18n>tileOrdersDueForDeliveryUnit}">
+                                                <NumericContent value="{path: 'dashboardView>/ordersDueCount', formatter: '.formatMetricValue'}" icon="sap-icon://shipping-status" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
-                                            id="tileOverviewGoodsReceipt"
-                                            header="Goods Receipt (101)"
-                                            subheader="Storage Unit / Inbound Ingestion"
-                                            press=".onNavigateToGoodsReceipt"
+                                            id="tileOverviewCustomerInvoices"
+                                            header="{i18n>tileCustomerInvoicesTitle}"
+                                            subheader="{i18n>tileCustomerInvoicesSub}"
+                                            press=".onNavigateToCustomerInvoices"
+                                            state="{path: 'dashboardView>/customerInvoiceCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Movement 101">
-                                                <NumericContent value="101" icon="sap-icon://inbox" valueColor="Good" />
+                                            <TileContent unit="{i18n>tileCustomerInvoicesUnit}">
+                                                <NumericContent value="{path: 'dashboardView>/customerInvoiceCount', formatter: '.formatMetricValue'}" icon="sap-icon://customer-financial-fact-sheet" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
-                                            id="tileOverviewTM"
-                                            header="{i18n>tabTMTitle}"
-                                            subheader="Vehicle Scheduling &amp; Freight"
-                                            press=".onSelectTabTM"
+                                            id="tileOverviewCustomerReturns"
+                                            header="{i18n>tileCustomerReturnsTitle}"
+                                            subheader="{i18n>tileCustomerReturnsSub}"
+                                            press=".onNavigateToCustomerReturns"
+                                            state="{path: 'dashboardView>/customerReturnCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Routes">
-                                                <NumericContent value="16" icon="sap-icon://shipping-status" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Category 4: Manufacturing, Quality & Assets (PP / QM / EAM / PS) -->
-                                <Panel
-                                    id="panelCategoryManufacturing"
-                                    headerText="{i18n>overviewCategoryManufacturing}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" alignItems="Center">
-                                        <GenericTile
-                                            id="tileOverviewPP"
-                                            header="{i18n>tabPPTitle}"
-                                            subheader="Capacity Evaluation &amp; Orders"
-                                            press=".onSelectTabPP"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Plant Load">
-                                                <NumericContent value="92" scale="%" icon="sap-icon://factory" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewQM"
-                                            header="{i18n>tabQMTitle}"
-                                            subheader="Inspection Lots &amp; FMEA"
-                                            press=".onSelectTabQM"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Lots Pending">
-                                                <NumericContent value="14" icon="sap-icon://quality-issue" valueColor="Critical" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewEAM"
-                                            header="{i18n>tabEAMTitle}"
-                                            subheader="Plant Maintenance &amp; Equipment"
-                                            press=".onSelectTabEAM"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Work Orders">
-                                                <NumericContent value="27" icon="sap-icon://machine" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewPS"
-                                            header="{i18n>tabPSTitle}"
-                                            subheader="Capital Projects &amp; WIP"
-                                            press=".onSelectTabPS"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Programs">
-                                                <NumericContent value="11" icon="sap-icon://project-definition-triangle-2" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Category 5: Services, Workforce & Financing (Service / Car Loan / HCM) -->
-                                <Panel
-                                    id="panelCategoryServicesPeople"
-                                    headerText="{i18n>overviewCategoryServicesPeople}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" alignItems="Center">
-                                        <GenericTile
-                                            id="tileOverviewService"
-                                            header="{i18n>tabServiceTitle}"
-                                            subheader="Field Service Requests"
-                                            press=".onSelectTabService"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Work Requests">
-                                                <NumericContent value="18" icon="sap-icon://customer" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <!-- Car Loan & Financing Service -->
-                                        <GenericTile
-                                            id="tileOverviewCarLoans"
-                                            header="{i18n>carLoanCardTitle}"
-                                            subheader="{i18n>carLoanSectionDesc}"
-                                            press=".onSimulateCarLoan"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>carLoanKpiApplications}">
-                                                <NumericContent value="{dashboardView>/carLoanActiveCount}" icon="sap-icon://loan" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewHCM"
-                                            header="{i18n>tabHCMTitle}"
-                                            subheader="Active Workforce &amp; Structure"
-                                            press=".onSelectTabHCM"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Headcount">
-                                                <NumericContent value="480" icon="sap-icon://group" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewHCMLoans"
-                                            header="Company Loans"
-                                            subheader="Employee Loans (IT 0045)"
-                                            press=".onSelectTabHCM"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Active Loans">
-                                                <NumericContent value="15" icon="sap-icon://loan" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Category 6: Executive Analytics & Platform Governance (Analytics / Admin) -->
-                                <Panel
-                                    id="panelCategoryAnalyticsGovernance"
-                                    headerText="{i18n>overviewCategoryAnalyticsGovernance}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" alignItems="Center">
-                                        <GenericTile
-                                            id="tileOverviewAnalyticsCash"
-                                            header="{i18n>tabAnalyticsTitle}"
-                                            subheader="90-Day Cash Flow Projection"
-                                            press=".onSelectTabAnalytics"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Forecast">
-                                                <NumericContent value="4.8" scale="M $" icon="sap-icon://line-chart-time-axis" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewAnalyticsDSO"
-                                            header="Days Sales Out."
-                                            subheader="DSO Receivable Metric"
-                                            press=".onSelectTabAnalytics"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Days">
-                                                <NumericContent value="34" icon="sap-icon://kpi-corporate-performance" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewAdminJobs"
-                                            header="{i18n>tabAdminTitle}"
-                                            subheader="Background Processing Jobs"
-                                            press=".onSelectTabAdmin"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Active Tasks">
-                                                <NumericContent value="12" icon="sap-icon://business-objects-mobile" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewAdminGateway"
-                                            header="Gateway Services"
-                                            subheader="Active Backend Catalog"
-                                            press=".onSelectTabAdmin"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Catalog Srvs">
-                                                <NumericContent value="1345" icon="sap-icon://sys-monitor" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Category 7: Master Data Governance & Operations (MDG / MDC) -->
-                                <Panel
-                                    id="panelCategoryMasterData"
-                                    headerText="{i18n>overviewCategoryMasterData}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" alignItems="Center">
-                                        <GenericTile
-                                            id="tileOverviewBupaMD"
-                                            header="{i18n>mdAreaBusinessPartner}"
-                                            subheader="F3163 • Manage Business Partners"
-                                            press=".onSelectTabMasterData"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Partners">
-                                                <NumericContent value="{dashboardView>/bpCount}" icon="sap-icon://customer-and-supplier" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewProdMD"
-                                            header="{i18n>mdAreaProduct}"
-                                            subheader="F1602 • Manage Products"
-                                            press=".onSelectTabMasterData"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Products">
-                                                <NumericContent value="{dashboardView>/productCount}" icon="sap-icon://product" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewFinMD"
-                                            header="{i18n>mdAreaFinancial}"
-                                            subheader="F0731A • G/L &amp; Cost Centers"
-                                            press=".onSelectTabMasterData"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Accounts">
-                                                <NumericContent value="{dashboardView>/glAccountCount}" icon="sap-icon://ledger" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewGovMD"
-                                            header="{i18n>mdAreaGovernance}"
-                                            subheader="F3052 • Change Requests &amp; Import"
-                                            press=".onSelectTabMasterData"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Open CRs">
-                                                <NumericContent value="{dashboardView>/mdgOpenCRCount}" icon="sap-icon://decision" valueColor="Critical" />
+                                            <TileContent unit="{i18n>tileCustomerReturnsUnit}">
+                                                <NumericContent value="{path: 'dashboardView>/customerReturnCount', formatter: '.formatMetricValue'}" icon="sap-icon://undo" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
                                     </HBox>
                                 </Panel>
                             </VBox>
-                        </IconTabFilter>
-                        <IconTabSeparator />
+                        </VBox>
 
-                        <!-- TAB: MASTER DATA GOVERNANCE & OPERATIONS -->
-                        <IconTabFilter
-                            id="tabMasterData"
-                            key="masterData"
-                            icon="sap-icon://dimension"
-                            text="{i18n>tabMasterDataTitle}"
-                            tooltip="{i18n>tabMasterDataTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabMasterDataHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabMasterDataSubheading}" class="textMuted" />
-                                </VBox>
 
-                                <!-- Area 1: Business Partner Master Data (MDG-BP) -->
-                                <Panel
-                                    id="panelMdBusinessPartner"
-                                    headerText="{i18n>mdAreaBusinessPartner}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                        <GenericTile header="Business Partners" subheader="F3163 • Central BP Records" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Records">
-                                                <NumericContent value="{dashboardView>/bpCount}" icon="sap-icon://customer-and-supplier" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Suppliers (Vendors)" subheader="F1053A • Purchasing &amp; Payables" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Suppliers">
-                                                <NumericContent value="{dashboardView>/supplierCount}" icon="sap-icon://supplier" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Customers" subheader="F0850A • Sales Areas &amp; Billing" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Customers">
-                                                <NumericContent value="190" icon="sap-icon://customer" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="BP Line Items" subheader="F2515 • Contract Items" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Items">
-                                                <NumericContent value="412" icon="sap-icon://table-view" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Area 2: Product Master Data (MDG-M) -->
-                                <Panel
-                                    id="panelMdProduct"
-                                    headerText="{i18n>mdAreaProduct}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                        <GenericTile header="Manage Products" subheader="F1602 • Master Records" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Products">
-                                                <NumericContent value="{dashboardView>/productCount}" icon="sap-icon://product" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Quick Create" subheader="F2548 • Rapid Creation" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Templates">
-                                                <NumericContent value="14" icon="sap-icon://add-coursebook" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Product Hierarchies" subheader="F2852 • Category Trees" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Hierarchies">
-                                                <NumericContent value="8" icon="sap-icon://tree" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Substitutions &amp; Exclusions" subheader="F3821 • Catalog Rules" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Rules">
-                                                <NumericContent value="26" icon="sap-icon://switch-views" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Area 3: Financial Master Data (MDG-F) -->
-                                <Panel
-                                    id="panelMdFinancial"
-                                    headerText="{i18n>mdAreaFinancial}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                        <GenericTile header="G/L Accounts" subheader="F0731A • Chart of Accounts" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="G/L Accounts">
-                                                <NumericContent value="{dashboardView>/glAccountCount}" icon="sap-icon://lead" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Profit Centers" subheader="F3516 • Organizational Nodes" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Centers">
-                                                <NumericContent value="18" icon="sap-icon://money-bills" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Cost Centers" subheader="F1443A • Cost Management" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Centers">
-                                                <NumericContent value="24" icon="sap-icon://pie-chart" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Bank Accounts" subheader="F1366A • Cash Management" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Bank Accounts">
-                                                <NumericContent value="12" icon="sap-icon://official-service" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Area 4: Manufacturing & Asset Master Data -->
-                                <Panel
-                                    id="panelMdMfgAsset"
-                                    headerText="{i18n>mdAreaMfgAsset}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                        <GenericTile header="Work Centers" subheader="F2489 • Capacity &amp; Costing" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Work Centers">
-                                                <NumericContent value="36" icon="sap-icon://factory" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Work Center Capacity" subheader="F3136 • Shift Intervals" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Shifts">
-                                                <NumericContent value="94" scale="%" icon="sap-icon://speedometer" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Fixed Assets" subheader="F1684 • Capitalized Assets" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Assets">
-                                                <NumericContent value="128" icon="sap-icon://machine" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Technical Objects" subheader="F2072 • Functional Locations" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Objects">
-                                                <NumericContent value="240" icon="sap-icon://functional-location" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-
-                                <!-- Area 5: Master Data Governance & Consolidation (MDG / MDC) -->
-                                <Panel
-                                    id="panelMdGovernance"
-                                    headerText="{i18n>mdAreaGovernance}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                        <GenericTile header="BP Process Overview" subheader="F3052 • Change Workflows" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Processes">
-                                                <NumericContent value="8" icon="sap-icon://workflow-tasks" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Product Process Overview" subheader="F3051 • Governance SLAs" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Processes">
-                                                <NumericContent value="5" icon="sap-icon://decision" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Master Data Imports" subheader="F2229 • Source Staging" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Batches">
-                                                <NumericContent value="19" icon="sap-icon://upload-to-cloud" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="Master Data Exports" subheader="F2230 • Target Replication" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Exports">
-                                                <NumericContent value="7" icon="sap-icon://download-from-cloud" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
-                            </VBox>
-                        </IconTabFilter>
-                        <IconTabSeparator />
-
-                        <!-- TAB 2: FINANCE (FI) -->
-                        <IconTabFilter
-                            id="tabFI"
-                            key="fi"
-                            icon="sap-icon://lead"
-                            text="{i18n>tabFITitle}"
-                            tooltip="{i18n>tabFITooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
-                                    <VBox class="sapUiTinyMarginBottom">
-                                        <Title text="{i18n>tabFIHeading}" level="H3" titleStyle="H4" />
-                                        <Text text="{i18n>tabFISubheading}" class="textMuted" />
-                                    </VBox>
-                                    <Button id="btnQuickManageFI" text="{i18n>dashboardModuleFIAction}" icon="sap-icon://accounting-document-verification" type="Emphasized" press=".onNavigateToJournalEntries" class="sapUiTinyMarginBottom" />
-                                </HBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="{i18n>dashboardModuleFI}" subheader="G/L Journal Entry Line Items" press=".onNavigateToJournalEntries" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="{i18n>dashboardKpiFIDocs}">
-                                            <NumericContent value="{dashboardView>/fiDocCount}" icon="sap-icon://accounting-document-verification" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Customer Balances" subheader="Accounts Receivable (ZFAR)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Active Accounts">
-                                            <NumericContent value="142" icon="sap-icon://customer" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Bank Accounts" subheader="Cash Management (ZFCLM)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="House Banks">
-                                            <NumericContent value="18" icon="sap-icon://official-service" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-                            </VBox>
-                        </IconTabFilter>
-
-                        <!-- TAB 3: CONTROLLING (CO) -->
-                        <IconTabFilter
-                            id="tabCO"
-                            key="co"
-                            icon="sap-icon://money-bills"
-                            text="{i18n>tabCOTitle}"
-                            tooltip="{i18n>tabCOTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabCOHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabCOSubheading}" class="textMuted" />
-                                </VBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Actual Cost Rate" subheader="Manage Rates (FCO)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Cost Centers">
-                                            <NumericContent value="24" icon="sap-icon://measurement-document" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Settlement Runs" subheader="Actual Settlement (FCO)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Run Period">
-                                            <NumericContent value="100" scale="%" icon="sap-icon://process" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Cost Allocations" subheader="Universal Allocation" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Cycles Active">
-                                            <NumericContent value="12" icon="sap-icon://business-objects-mobile" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-                            </VBox>
-                        </IconTabFilter>
-                        <IconTabSeparator />
-
-                        <!-- TAB 4: PROCUREMENT (MM) -->
-                        <IconTabFilter
-                            id="tabMM"
-                            key="mm"
-                            icon="sap-icon://supplier"
-                            text="{i18n>tabMMTitle}"
-                            tooltip="{i18n>tabMMTooltip}">
+                        <!-- PROCUREMENT (MM) -->
+                        <VBox id="sectionMM" visible="{= ${dashboardView>/selectedTab} === 'mm' }">
                             <VBox class="sapUiSmallMarginTop">
                                 <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
                                     <VBox class="sapUiTinyMarginBottom">
                                         <Title text="{i18n>tabMMHeading}" level="H3" titleStyle="H4" />
                                         <Text text="{i18n>tabMMSubheading}" class="textMuted" />
                                     </VBox>
-                                    <HBox class="sapUiTinyMarginBottom">
-                                        <Button id="btnMMCreatePO" text="{i18n>dashboardModuleMMCreate}" icon="sap-icon://add" type="Emphasized" press=".onNavigateToCreatePO" class="sapUiTinyMarginEnd" />
-                                        <Button id="btnMMManagePOs" text="{i18n>dashboardModuleMMAction}" icon="sap-icon://open-folder" type="Default" press=".onNavigateToPurchaseOrders" />
+                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom dashboardTabActions">
+                                        <Button id="btnMMCreatePO" text="{i18n>dashboardModuleMMCreate}" icon="sap-icon://add" type="Emphasized" press=".onNavigateToCreatePO" class="sapUiTinyMarginEnd sapUiTinyMarginBottom" />
+                                        <Button id="btnMMManagePOs" text="{i18n>dashboardModuleMMAction}" icon="sap-icon://open-folder" type="Default" press=".onNavigateToPurchaseOrders" class="sapUiTinyMarginBottom" />
                                     </HBox>
                                 </HBox>
 
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile id="tileMMActivePOs" header="{i18n>dashboardModuleMM}" subheader="{i18n>dashboardModuleMMSub}" press=".onNavigateToPurchaseOrders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
+                                    <GenericTile id="tileMMActivePOs" header="{i18n>dashboardModuleMM}" subheader="{i18n>dashboardModuleMMSub}" press=".onNavigateToPurchaseOrders" state="{path: 'dashboardView>/totalCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="{i18n>dashboardKpiActivePOs}">
-                                            <NumericContent value="{dashboardView>/totalCount}" icon="sap-icon://sales-order" valueColor="Neutral" />
+                                            <NumericContent value="{path: 'dashboardView>/totalCount', formatter: '.formatMetricValue'}" icon="sap-icon://sales-order" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileMMSuppliers" header="{i18n>dashboardKpiSuppliers}" subheader="{i18n>dashboardKpiSuppliersDesc}" press=".onNavigateToPurchaseOrders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Vendors">
-                                            <NumericContent value="{dashboardView>/supplierCount}" icon="sap-icon://supplier" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="{i18n>dashboardKpiSpend}" subheader="Active Purchase Spend" press=".onNavigateToPurchaseOrders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent>
-                                            <NumericContent value="{dashboardView>/totalSpend}" scale="M $" icon="sap-icon://money-bills" valueColor="Critical" />
+                                    <GenericTile id="tileMMSuppliers" header="{i18n>dashboardKpiSuppliers}" subheader="{i18n>dashboardKpiSuppliersDesc}" press=".onNavigateToPurchaseOrders" state="{path: 'dashboardView>/supplierCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashSuppliers}">
+                                            <NumericContent value="{path: 'dashboardView>/supplierCount', formatter: '.formatMetricValue'}" icon="sap-icon://supplier" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
                             </VBox>
-                        </IconTabFilter>
+                        </VBox>
 
-                        <!-- TAB 5: SALES (SD) -->
-                        <IconTabFilter
-                            id="tabSD"
-                            key="sd"
-                            icon="sap-icon://sales-order"
-                            text="{i18n>tabSDTitle}"
-                            tooltip="{i18n>tabSDTooltip}">
+                        <!-- SALES (SD) -->
+                        <VBox id="sectionSD" visible="{= ${dashboardView>/selectedTab} === 'sd' }">
                             <VBox class="sapUiSmallMarginTop">
                                 <VBox class="sapUiTinyMarginBottom">
                                     <Title text="{i18n>tabSDHeading}" level="H3" titleStyle="H4" />
                                     <Text text="{i18n>tabSDSubheading}" class="textMuted" />
                                 </VBox>
 
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Open Sales Orders" subheader="Active Fulfillment" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Orders">
-                                            <NumericContent value="86" icon="sap-icon://sales-order" valueColor="Good" />
+                                <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
+                                    <GenericTile id="tileSDOpenOrders" header="{i18n>dashOpenSalesOrders}" subheader="{i18n>dashNotFullyProcessed}" press=".onNavigateToSalesOrders" state="{path: 'dashboardView>/openSalesOrderCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashOrders}">
+                                            <NumericContent value="{path: 'dashboardView>/openSalesOrderCount', formatter: '.formatMetricValue'}" icon="sap-icon://sales-order" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileSDInquiries" header="Customer Inquiries" subheader="F2370 • Manage Inquiries" press=".onNavigateToSalesInquiries" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Inquiries">
-                                            <NumericContent value="41" icon="sap-icon://customer-and-supplier" valueColor="Neutral" />
+                                    <GenericTile id="tileSDTotalOrders" header="{i18n>dashAllSalesOrders}" subheader="{i18n>dashSalesOrderWorklist}" press=".onNavigateToSalesOrders" state="{path: 'dashboardView>/totalSalesOrderCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashOrders}">
+                                            <NumericContent value="{path: 'dashboardView>/totalSalesOrderCount', formatter: '.formatMetricValue'}" icon="sap-icon://sales-document" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileSDCreateInquiry" header="Create Inquiry" subheader="VA11 • Sales Inquiries" press=".onNavigateToCreateSalesInquiry" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Action">
-                                            <NumericContent icon="sap-icon://add" valueColor="Good" />
+                                    <GenericTile id="tileSDCreateOrder" header="{i18n>dashCreateSalesOrder}" subheader="{i18n>dashNewSalesOrderVA01}" press=".onNavigateToCreateSalesOrder" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashAction}">
+                                            <NumericContent icon="sap-icon://add" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile header="Customer 360" subheader="Active Accounts" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Accounts">
-                                            <NumericContent value="54" icon="sap-icon://customer" valueColor="Neutral" />
+                                    <GenericTile id="tileSDInquiries" header="{i18n>dashSalesInquiries}" subheader="{i18n>dashManageSalesInquiries}" press=".onNavigateToSalesInquiries" state="{path: 'dashboardView>/salesInquiryCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashInquiries}">
+                                            <NumericContent value="{path: 'dashboardView>/salesInquiryCount', formatter: '.formatMetricValue'}" icon="sap-icon://customer-and-supplier" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                </HBox>
-                            </VBox>
-                        </IconTabFilter>
-                        <IconTabSeparator />
-
-                        <!-- TAB 6: PRODUCTION (PP) -->
-                        <IconTabFilter
-                            id="tabPP"
-                            key="pp"
-                            icon="sap-icon://factory"
-                            text="{i18n>tabPPTitle}"
-                            tooltip="{i18n>tabPPTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabPPHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabPPSubheading}" class="textMuted" />
-                                </VBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Capacity Utilization" subheader="Plant Work Centers" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Capacity Load">
-                                            <NumericContent value="92" scale="%" icon="sap-icon://factory" valueColor="Good" />
+                                    <GenericTile id="tileSDCreateInquiry" header="{i18n>dashCreateInquiry}" subheader="{i18n>dashNewSalesInquiry}" press=".onNavigateToCreateSalesInquiry" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashAction}">
+                                            <NumericContent icon="sap-icon://add" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile header="Production Orders" subheader="Active Shopfloor Runs" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Batches">
-                                            <NumericContent value="38" icon="sap-icon://product" valueColor="Neutral" />
+                                    <GenericTile id="tileSDCustomers" header="{i18n>dashCustomers}" subheader="{i18n>dashSalesCustomers}" state="{path: 'dashboardView>/customerCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashCustomers}">
+                                            <NumericContent value="{path: 'dashboardView>/customerCount', formatter: '.formatMetricValue'}" icon="sap-icon://customer" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile id="tileSDOrdersDueForDelivery" header="{i18n>tileOrdersDueForDeliveryTitle}" subheader="{i18n>tileOrdersDueForDeliverySub}" press=".onNavigateToOrdersDueForDelivery" state="{path: 'dashboardView>/ordersDueCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>tileOrdersDueForDeliveryUnit}">
+                                            <NumericContent value="{path: 'dashboardView>/ordersDueCount', formatter: '.formatMetricValue'}" icon="sap-icon://shipping-status" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile id="tileSDCustomerInvoices" header="{i18n>tileCustomerInvoicesTitle}" subheader="{i18n>tileCustomerInvoicesSub}" press=".onNavigateToCustomerInvoices" state="{path: 'dashboardView>/customerInvoiceCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>tileCustomerInvoicesUnit}">
+                                            <NumericContent value="{path: 'dashboardView>/customerInvoiceCount', formatter: '.formatMetricValue'}" icon="sap-icon://money-bills" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile id="tileSDCustomerReturns" header="{i18n>tileCustomerReturnsTitle}" subheader="{i18n>tileCustomerReturnsSub}" press=".onNavigateToCustomerReturns" state="{path: 'dashboardView>/customerReturnCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>tileCustomerReturnsUnit}">
+                                            <NumericContent value="{path: 'dashboardView>/customerReturnCount', formatter: '.formatMetricValue'}" icon="sap-icon://undo" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
                             </VBox>
-                        </IconTabFilter>
+                        </VBox>
 
-                        <!-- TAB 7: QUALITY (QM) -->
-                        <IconTabFilter
-                            id="tabQM"
-                            key="qm"
-                            icon="sap-icon://quality-issue"
-                            text="{i18n>tabQMTitle}"
-                            tooltip="{i18n>tabQMTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabQMHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabQMSubheading}" class="textMuted" />
-                                </VBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Inspection Lots" subheader="Pending Results" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Lots">
-                                            <NumericContent value="14" icon="sap-icon://inspection" valueColor="Critical" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="FMEA Cases" subheader="Failure Mode Assessments" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Cases">
-                                            <NumericContent value="6" icon="sap-icon://measure" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-                            </VBox>
-                        </IconTabFilter>
-
-                        <!-- TAB 8: ASSET MANAGEMENT (EAM) -->
-                        <IconTabFilter
-                            id="tabEAM"
-                            key="eam"
-                            icon="sap-icon://machine"
-                            text="{i18n>tabEAMTitle}"
-                            tooltip="{i18n>tabEAMTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabEAMHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabEAMSubheading}" class="textMuted" />
-                                </VBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Maintenance Orders" subheader="F2175: Find Orders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Orders">
-                                            <NumericContent value="27" icon="sap-icon://wrench" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Actual Cost Monitor" subheader="F3567: Cost Variance" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Variance Rate">
-                                            <NumericContent value="98" scale="%" icon="sap-icon://compare" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-                            </VBox>
-                        </IconTabFilter>
-
-                        <!-- TAB 9: PROJECTS (PS) -->
-                        <IconTabFilter
-                            id="tabPS"
-                            key="ps"
-                            icon="sap-icon://project-definition-triangle-2"
-                            text="{i18n>tabPSTitle}"
-                            tooltip="{i18n>tabPSTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabPSHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabPSSubheading}" class="textMuted" />
-                                </VBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Active WBS Projects" subheader="Capital Delivery" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Programs">
-                                            <NumericContent value="11" icon="sap-icon://project-definition-triangle-2" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Project WIP" subheader="Work In Progress List" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Capital WIP">
-                                            <NumericContent value="1.24" scale="M $" icon="sap-icon://money-bills" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-                            </VBox>
-                        </IconTabFilter>
-
-                        <!-- TAB 10: WAREHOUSE (EWM) -->
-                        <IconTabFilter
-                            id="tabEWM"
-                            key="ewm"
-                            icon="sap-icon://inventory"
-                            text="{i18n>tabEWMTitle}"
-                            tooltip="{i18n>tabEWMTooltip}">
+                        <!-- WAREHOUSE (EWM / WM) -->
+                        <VBox id="sectionEWM" visible="{= ${dashboardView>/selectedTab} === 'ewm' }">
                             <VBox class="sapUiSmallMarginTop">
                                 <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
                                     <VBox>
                                         <Title text="{i18n>tabEWMHeading}" level="H3" titleStyle="H4" />
                                         <Text text="{i18n>tabEWMSubheading}" class="textMuted" />
                                     </VBox>
-                                    <Button
-                                        id="btnOpenEwmCockpit"
-                                        text="{i18n>ewmLaunchCockpitBtn}"
-                                        icon="sap-icon://inventory"
-                                        type="Emphasized"
-                                        press=".onNavigateToEwmCockpit" />
                                 </HBox>
 
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Warehouse Cockpit" subheader="Central Whse 0001" press=".onNavigateToEwmCockpit" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Operations">
-                                            <NumericContent value="100" scale="%" icon="sap-icon://database" valueColor="Good" />
+
+
+                                <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
+                                    <GenericTile id="tileHandlingUnits" header="{i18n>huTitle}" subheader="{i18n>huTileSub}" press=".onNavigateToHandlingUnits" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>huTileUnit}">
+                                            <NumericContent icon="sap-icon://pallet" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile header="Outbound Deliveries" subheader="ODO Orders" press=".onNavigateToEwmCockpit" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Shipments">
-                                            <NumericContent value="45" icon="sap-icon://shipping-status" valueColor="Good" />
+                                    <GenericTile id="tilePackingInstructions" header="{i18n>piTitle}" subheader="{i18n>piTileSub}" press=".onNavigateToPackingInstructions" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>huTileUnit}">
+                                            <NumericContent icon="sap-icon://product" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile header="Storage Infrastructure" subheader="34 Storage Types" press=".onNavigateToEwmCockpit" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Types">
-                                            <NumericContent value="34" icon="sap-icon://dimension" valueColor="Neutral" />
+                                    <GenericTile id="tileQuarantineLabels" header="{i18n>qlTitle}" subheader="{i18n>qlTileSub}" press=".onNavigateToQuarantineLabels" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>qlTileUnit}">
+                                            <NumericContent icon="sap-icon://print" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile header="Warehouse Tasks" subheader="Putaway &amp; Picking" press=".onNavigateToEwmCockpit" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Tasks">
-                                            <NumericContent value="12" icon="sap-icon://task" valueColor="Critical" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile id="tileGoodsIssue" header="Goods Issue (261)" subheader="Order / Reservation" press=".onNavigateToGoodsIssue" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Movement 261">
-                                            <NumericContent value="261" icon="sap-icon://shipping-status" valueColor="Good" />
+                                    <GenericTile id="tileMibLabel" header="{i18n>mibTileTitle}" subheader="{i18n>mibTileSub}" press=".onNavigateToMibLabel" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>mibTileUnit}">
+                                            <NumericContent icon="sap-icon://bar-code" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
-
                             </VBox>
-                        </IconTabFilter>
+                        </VBox>
 
-                        <!-- TAB 11: TRANSPORTATION (TM) -->
-                        <IconTabFilter
-                            id="tabTM"
-                            key="tm"
-                            icon="sap-icon://shipping-status"
-                            text="{i18n>tabTMTitle}"
-                            tooltip="{i18n>tabTMTooltip}">
+                        <!-- ADMINISTRATOR -->
+                        <VBox id="sectionAdmin" visible="{= ${dashboardView>/selectedTab} === 'user-master' }">
                             <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabTMHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabTMSubheading}" class="textMuted" />
-                                </VBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Vehicle Schedules" subheader="Fleet Planning" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Routes Active">
-                                            <NumericContent value="16" icon="sap-icon://car-rental" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Carrier Logistics" subheader="Assigned Shipments" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Dispatched">
-                                            <NumericContent value="31" icon="sap-icon://flight" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-
-                            </VBox>
-                        </IconTabFilter>
-                        <IconTabSeparator />
-
-                        <!-- TAB 12: SERVICE (With Car Loan Service) -->
-                        <IconTabFilter
-                            id="tabService"
-                            key="service"
-                            icon="sap-icon://customer"
-                            text="{i18n>tabServiceTitle}"
-                            tooltip="{i18n>tabServiceTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
-                                    <VBox class="sapUiTinyMarginBottom">
-                                        <Title text="{i18n>tabServiceHeading}" level="H3" titleStyle="H4" />
-                                        <Text text="{i18n>tabServiceSubheading}" class="textMuted" />
+                                <HBox justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" class="sapUiSmallMarginBottom">
+                                    <VBox>
+                                        <Title text="{i18n>adminUserManagementTitle}" level="H3" titleStyle="H4" />
+                                        <Text text="{i18n>adminUserManagementDesc}" class="textMuted" />
                                     </VBox>
-                                    <HBox class="sapUiTinyMarginBottom">
-                                        <Button id="btnSimulateCarLoan" text="{i18n>carLoanBtnSimulate}" icon="sap-icon://simulate" type="Emphasized" press=".onSimulateCarLoan" class="sapUiTinyMarginEnd" />
-                                        <Button id="btnNewCarLoanApp" text="{i18n>carLoanBtnNewApp}" icon="sap-icon://add-document" type="Default" press=".onNewCarLoanApp" />
+                                    <HBox alignItems="Center" wrap="Wrap">
+                                        <ObjectStatus
+                                            id="adminLockMonitor"
+                                            icon="sap-icon://circle-task-2"
+                                            text="{adminView>/lockMonitor/text}"
+                                            state="{adminView>/lockMonitor/state}"
+                                            class="sapUiTinyMarginEnd" />
+                                        <Button
+                                            id="btnNotifySettings"
+                                            text="{i18n>adminNotifySettings}"
+                                            type="Transparent"
+                                            press=".onOpenNotifySettings" />
                                     </HBox>
                                 </HBox>
 
-                                <!-- Car Loan Service Feature Cards -->
-                                <Panel headerText="{i18n>carLoanSectionTitle}" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <HBox wrap="Wrap">
-                                        <GenericTile id="tileServiceCarLoans" header="{i18n>carLoanCardTitle}" subheader="Financed Portfolio" press=".onSimulateCarLoan" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>carLoanKpiApplications}">
-                                                <NumericContent value="{dashboardView>/carLoanActiveCount}" icon="sap-icon://loan" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="{i18n>carLoanKpiVolume}" subheader="Total Outstanding" press=".onSimulateCarLoan" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Portfolio">
-                                                <NumericContent value="2.14" scale="M $" icon="sap-icon://money-bills" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                        <GenericTile header="{i18n>carLoanKpiApprovalRate}" subheader="Underwriting Metrics" press=".onSimulateCarLoan" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Approval Rate">
-                                                <NumericContent value="96" scale="%" icon="sap-icon://accept" valueColor="Good" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
+                                <VBox height="calc(100vh - 11.5rem)" renderType="Bare">
+                                    <f:FlexibleColumnLayout
+                                        id="adminUserLayout"
+                                        layout="{= ${adminView>/selectedUser} ? 'TwoColumnsBeginExpanded' : 'OneColumn' }">
+                                        <f:beginColumnPages>
+                                            <Page id="adminUserListPage" showHeader="false" backgroundDesign="Transparent">
+                                                <content>
+                                                <HBox id="adminKpiTiles" wrap="Wrap" class="adminKpiTiles sapUiTinyMarginBottom">
+                                                    <GenericTile
+                                                        id="adminKpiTotal"
+                                                        header="{i18n>adminKpiTotal}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/total', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/total', formatter: '.formatMetricValue'}" valueColor="Neutral" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="total" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/total}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiActive"
+                                                        header="{i18n>adminKpiActive}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/active', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/active', formatter: '.formatMetricValue'}" valueColor="Good" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="active" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/active}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiLocked"
+                                                        header="{i18n>adminKpiLocked}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/locked', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/locked', formatter: '.formatMetricValue'}" valueColor="Error" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="locked" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/locked}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiExpiringSoon"
+                                                        header="{i18n>adminKpiExpiringSoon}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/expiringSoon', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/expiringSoon', formatter: '.formatMetricValue'}" valueColor="Critical" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="expiringSoon" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/expiringSoon}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiExpired"
+                                                        header="{i18n>adminKpiExpired}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/expired', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/expired', formatter: '.formatMetricValue'}" valueColor="Error" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="expired" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/expired}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiChangedToday"
+                                                        header="{i18n>adminKpiChangedToday}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/changedToday', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/changedToday', formatter: '.formatMetricValue'}" valueColor="Neutral" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="changedToday" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/changedToday}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                    <GenericTile
+                                                        id="adminKpiChangedLast7"
+                                                        header="{i18n>adminKpiChangedLast7}"
+                                                        frameType="OneByHalf"
+                                                        state="{path: 'adminView>/kpis/changedLast7', formatter: '.formatTileState'}"
+                                                        press=".onKpiPress"
+                                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <TileContent>
+                                                            <NumericContent value="{path: 'adminView>/kpis/changedLast7', formatter: '.formatMetricValue'}" valueColor="Neutral" withMargin="false" />
+                                                        </TileContent>
+                                                        <customData>
+                                                            <core:CustomData key="kpi" value="changedLast7" />
+                                                            <core:CustomData key="selected" value="{adminView>/kpiSelected/changedLast7}" writeToDom="true" />
+                                                        </customData>
+                                                    </GenericTile>
+                                                </HBox>
 
-                            </VBox>
-                        </IconTabFilter>
+                                                <MessageStrip
+                                                    id="adminListLimitStrip"
+                                                    text="{adminView>/listLimitText}"
+                                                    type="Warning"
+                                                    showIcon="true"
+                                                    visible="{= !!${adminView>/listLimitText} }"
+                                                    class="sapUiTinyMarginBottom" />
+                                                <MessageStrip
+                                                    id="adminUndoStrip"
+                                                    text="{adminView>/undo/text}"
+                                                    type="Success"
+                                                    showIcon="true"
+                                                    visible="{= !!${adminView>/undo/text} }"
+                                                    class="sapUiTinyMarginBottom">
+                                                    <link>
+                                                        <Link id="adminUndoLink" text="{i18n>adminBulkUndo}" press=".onUndoBulk" />
+                                                    </link>
+                                                </MessageStrip>
 
-                        <!-- TAB 13: HUMAN RESOURCES (HCM) -->
-                        <IconTabFilter
-                            id="tabHCM"
-                            key="hcm"
-                            icon="sap-icon://group"
-                            text="{i18n>tabHCMTitle}"
-                            tooltip="{i18n>tabHCMTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabHCMHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabHCMSubheading}" class="textMuted" />
+                                                <HBox id="adminFilterBar" wrap="Wrap" alignItems="End" class="sapUiTinyMarginBottom">
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminColLockStatus}" labelFor="adminLockStatusFilter" />
+                                                        <Select
+                                                            id="adminLockStatusFilter"
+                                                            selectedKey="{adminView>/filters/lockStatus}"
+                                                            change=".onLockStatusFilterChange">
+                                                            <items>
+                                                                <core:Item key="" text="{i18n>adminFilterAll}" />
+                                                                <core:Item key="active" text="{i18n>adminStatusUnlocked}" />
+                                                                <core:Item key="locked" text="{i18n>adminStatusLocked}" />
+                                                                <core:Item key="unavailable" text="{i18n>adminDetailsUnavailable}" />
+                                                            </items>
+                                                        </Select>
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminColPwdStatus}" labelFor="adminPwdStatusFilter" />
+                                                        <Select
+                                                            id="adminPwdStatusFilter"
+                                                            selectedKey="{adminView>/filters/pwdStatus}"
+                                                            change=".onPwdStatusFilterChange">
+                                                            <items>
+                                                                <core:Item key="" text="{i18n>adminFilterAll}" />
+                                                                <core:Item key="expiring_soon" text="{i18n>adminPwdStatusExpiringSoon}" />
+                                                                <core:Item key="expired" text="{i18n>adminPwdStatusExpired}" />
+                                                                <core:Item key="initial" text="{i18n>adminPwdStatusInitial}" />
+                                                                <core:Item key="valid" text="{i18n>adminPwdStatusValid}" />
+                                                                <core:Item key="exempt" text="{i18n>adminPwdStatusExempt}" />
+                                                            </items>
+                                                        </Select>
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminColUserType}" labelFor="adminUserTypeFilter" />
+                                                        <MultiComboBox
+                                                            id="adminUserTypeFilter"
+                                                            width="12rem"
+                                                            selectedKeys="{adminView>/filters/userTypes}"
+                                                            selectionFinish=".onUserTypeFilterChange">
+                                                            <items>
+                                                                <core:Item key="A" text="{i18n>adminUserTypeA}" />
+                                                                <core:Item key="B" text="{i18n>adminUserTypeB}" />
+                                                                <core:Item key="C" text="{i18n>adminUserTypeC}" />
+                                                                <core:Item key="L" text="{i18n>adminUserTypeL}" />
+                                                                <core:Item key="S" text="{i18n>adminUserTypeS}" />
+                                                            </items>
+                                                        </MultiComboBox>
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminDetailLastChangedBy}" labelFor="adminChangedByFilter" />
+                                                        <MultiComboBox
+                                                            id="adminChangedByFilter"
+                                                            width="12rem"
+                                                            selectedKeys="{adminView>/filters/changedBy}"
+                                                            items="{adminView>/changedByOptions}"
+                                                            selectionFinish=".onChangedByFilterChange">
+                                                            <core:Item key="{adminView>key}" text="{adminView>key}" />
+                                                        </MultiComboBox>
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminColLastChanged}" labelFor="adminChangedRangeFilter" />
+                                                        <DateRangeSelection
+                                                            id="adminChangedRangeFilter"
+                                                            width="14rem"
+                                                            displayFormat="dd-MM-yyyy"
+                                                            change=".onChangedRangeFilterChange" />
+                                                    </VBox>
+                                                    <VBox class="sapUiTinyMarginBottom">
+                                                        <Label text="{i18n>adminSearchLabel}" labelFor="adminUserSearchField" />
+                                                        <SearchField
+                                                            id="adminUserSearchField"
+                                                            width="18rem"
+                                                            value="{adminView>/searchInput}"
+                                                            placeholder="{i18n>adminSearchPlaceholder}"
+                                                            liveChange=".onSearchUsersLive"
+                                                            search=".onSearchUsers" />
+                                                    </VBox>
+                                                </HBox>
+
+                                                <HBox id="adminChipBar" wrap="Wrap" alignItems="Center" visible="{= ${adminView>/chips}.length > 0 }" class="sapUiTinyMarginBottom">
+                                                    <Tokenizer id="adminFilterChips" tokens="{adminView>/chips}" tokenDelete=".onRemoveFilterChip">
+                                                        <Token key="{adminView>key}" text="{adminView>text}" />
+                                                    </Tokenizer>
+                                                    <Button id="btnClearAdminFilters" text="{i18n>adminFilterClearAll}" type="Transparent" press=".onClearAdminFilters" />
+                                                </HBox>
+
+                                                <Table
+                                                    id="adminUsersTable"
+                                                    noDataText="{adminView>/noDataText}"
+                                                    busy="{adminView>/busy}"
+                                                    sticky="ColumnHeaders,HeaderToolbar,InfoToolbar"
+                                                    items="{
+                                                        path: 'adminView>/users'
+                                                    }"
+                                                    contextualWidth="Auto"
+                                                    growing="true"
+                                                    growingThreshold="20">
+                                                    <noData>
+                                                        <VBox alignItems="Center" class="sapUiSmallMargin">
+                                                            <Text id="adminNoDataText" text="{adminView>/noDataText}" />
+                                                            <Button
+                                                                text="{i18n>adminFilterClear}"
+                                                                type="Transparent"
+                                                                visible="{= ${adminView>/chips}.length > 0 }"
+                                                                press=".onClearAdminFilters" />
+                                                        </VBox>
+                                                    </noData>
+                                                    <headerToolbar>
+                                                        <OverflowToolbar>
+                                                            <Title text="{i18n>adminUsersTableTitle} ({adminView>/userCount})" level="H4" />
+                                                            <Text id="adminShowingText" text="{adminView>/showingText}" class="textMuted" />
+                                                            <ToolbarSpacer />
+                                                            <Button
+                                                                id="btnExportUsers"
+                                                                icon="sap-icon://excel-attachment"
+                                                                text="{i18n>adminExportCsv}"
+                                                                type="Transparent"
+                                                                enabled="{= ${adminView>/userCount} > 0 }"
+                                                                press=".onExportUsers" />
+                                                            <Button
+                                                                id="btnRefreshUsers"
+                                                                icon="sap-icon://refresh"
+                                                                text="{i18n>commonRefresh}"
+                                                                type="Transparent"
+                                                                press=".onRefreshUsers" />
+                                                        </OverflowToolbar>
+                                                    </headerToolbar>
+                                                    <infoToolbar>
+                                                        <OverflowToolbar id="adminSelectionToolbar" visible="{= ${adminView>/selection/count} > 0 }">
+                                                            <Title id="adminSelectionCount" text="{adminView>/selection/text}" level="H5" />
+                                                            <Text text="{adminView>/selection/hint}" visible="{= !!${adminView>/selection/hint} }" class="textMuted" />
+                                                            <ToolbarSpacer />
+                                                            <Button
+                                                                id="btnBulkLock"
+                                                                text="{i18n>adminBulkLockSelected}"
+                                                                icon="sap-icon://locked"
+                                                                type="Negative"
+                                                                enabled="{adminView>/selection/canLock}"
+                                                                press=".onBulkLock" />
+                                                            <Button
+                                                                id="btnBulkUnlock"
+                                                                text="{i18n>adminBulkUnlockSelected}"
+                                                                icon="sap-icon://unlocked"
+                                                                type="Emphasized"
+                                                                enabled="{adminView>/selection/canUnlock}"
+                                                                press=".onBulkUnlock" />
+                                                            <Button
+                                                                id="btnClearSelection"
+                                                                text="{i18n>adminBulkClearSelection}"
+                                                                type="Transparent"
+                                                                press=".onClearUserSelection" />
+                                                        </OverflowToolbar>
+                                                    </infoToolbar>
+                                                    <columns>
+                                                        <Column width="2.75rem">
+                                                            <header>
+                                                                <CheckBox
+                                                                    id="adminSelectAll"
+                                                                    selected="{adminView>/selection/all}"
+                                                                    partiallySelected="{adminView>/selection/partial}"
+                                                                    tooltip="{i18n>adminBulkSelectAllFiltered}"
+                                                                    select=".onSelectAllUsers" />
+                                                            </header>
+                                                        </Column>
+                                                        <Column width="10rem">
+                                                            <header>
+                                                                <Link text="{i18n>adminColUsername}" press=".onSortUsers">
+                                                                    <customData>
+                                                                        <core:CustomData key="sortProperty" value="username" />
+                                                                    </customData>
+                                                                </Link>
+                                                            </header>
+                                                        </Column>
+                                                        <Column minScreenWidth="Tablet" demandPopin="true">
+                                                            <header>
+                                                                <Link text="{i18n>adminColFullName}" press=".onSortUsers">
+                                                                    <customData>
+                                                                        <core:CustomData key="sortProperty" value="fullName" />
+                                                                    </customData>
+                                                                </Link>
+                                                            </header>
+                                                        </Column>
+                                                        <Column minScreenWidth="Tablet" demandPopin="true" width="8rem">
+                                                            <header>
+                                                                <Link text="{i18n>adminColLockStatus}" press=".onSortUsers">
+                                                                    <customData>
+                                                                        <core:CustomData key="sortProperty" value="isLocked" />
+                                                                    </customData>
+                                                                </Link>
+                                                            </header>
+                                                        </Column>
+                                                        <Column minScreenWidth="Tablet" demandPopin="true" width="9rem">
+                                                            <header>
+                                                                <Link text="{i18n>adminColPwdStatus}" press=".onSortUsers">
+                                                                    <customData>
+                                                                        <core:CustomData key="sortProperty" value="pwdStatus" />
+                                                                    </customData>
+                                                                </Link>
+                                                            </header>
+                                                        </Column>
+                                                        <Column minScreenWidth="Desktop" width="7rem">
+                                                            <header>
+                                                                <Link text="{i18n>adminColUserType}" press=".onSortUsers">
+                                                                    <customData>
+                                                                        <core:CustomData key="sortProperty" value="userType" />
+                                                                    </customData>
+                                                                </Link>
+                                                            </header>
+                                                        </Column>
+                                                        <Column minScreenWidth="Desktop" width="9rem">
+                                                            <header>
+                                                                <Link text="{i18n>adminColLastChanged}" press=".onSortUsers">
+                                                                    <customData>
+                                                                        <core:CustomData key="sortProperty" value="lastChanged" />
+                                                                    </customData>
+                                                                </Link>
+                                                            </header>
+                                                        </Column>
+                                                        <Column minScreenWidth="Desktop" width="9rem">
+                                                            <header>
+                                                                <Link text="{i18n>adminDetailLastChangedBy}" press=".onSortUsers">
+                                                                    <customData>
+                                                                        <core:CustomData key="sortProperty" value="lastChangedBy" />
+                                                                    </customData>
+                                                                </Link>
+                                                            </header>
+                                                        </Column>
+                                                        <Column hAlign="End" width="16rem" minScreenWidth="Tablet" demandPopin="true">
+                                                            <Text text="{i18n>adminColActions}" />
+                                                        </Column>
+                                                    </columns>
+                                                    <items>
+                                                        <ColumnListItem
+                                                            type="Navigation"
+                                                            navigated="{= ${adminView>username} === ${adminView>/selectedUser/username} }"
+                                                            press=".onSelectUser">
+                                                            <cells>
+                                                                <CheckBox
+                                                                    selected="{adminView>selected}"
+                                                                    enabled="{= ${adminView>detailsAvailable} &amp;&amp; !${adminView>protectedReason} }"
+                                                                    tooltip="{parts: ['adminView>username', 'adminView>protectedReason', 'adminView>detailsAvailable'], formatter: '.formatAdminSelectTooltip'}"
+                                                                    select=".onUserSelectionChange" />
+                                                                <FormattedText htmlText="{parts: ['adminView>username', 'adminView>/filters/search'], formatter: '.formatAdminUsername'}" />
+                                                                <FormattedText htmlText="{parts: ['adminView>fullName', 'adminView>/filters/search'], formatter: '.formatAdminHighlight'}" />
+                                                                <ObjectStatus
+                                                                    text="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? ${i18n>adminStatusLocked} : ${i18n>adminStatusUnlocked}) : ${i18n>adminDetailsUnavailable} }"
+                                                                    state="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? 'Error' : 'Success') : 'Warning' }"
+                                                                    icon="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? 'sap-icon://locked' : 'sap-icon://unlocked') : 'sap-icon://alert' }" />
+                                                                <ObjectStatus
+                                                                    text="{parts: ['adminView>pwdStatus', 'adminView>pwdDaysRemaining'], formatter: '.formatAdminPwdStatusText'}"
+                                                                    state="{path: 'adminView>pwdStatus', formatter: '.formatAdminPwdStatusState'}"
+                                                                    icon="{path: 'adminView>pwdStatus', formatter: '.formatAdminPwdStatusIcon'}" />
+                                                                <Text text="{= ${adminView>userType} || '-' }" />
+                                                                <Text text="{path: 'adminView>lastChanged', formatter: '.formatAdminDate'}" />
+                                                                <Text text="{= ${adminView>lastChangedBy} || '-' }" />
+                                                                <HBox wrap="Wrap" justifyContent="End">
+                                                                    <Button
+                                                                        text="{i18n>adminBtnViewDetail}"
+                                                                        type="Transparent"
+                                                                        press=".onSelectUser" />
+                                                                    <Button
+                                                                        text="{i18n>adminBtnLockUser}"
+                                                                        type="Negative"
+                                                                        icon="sap-icon://locked"
+                                                                        visible="{= ${adminView>detailsAvailable} &amp;&amp; !${adminView>isLocked} &amp;&amp; !${adminView>protectedReason} }"
+                                                                        press=".onLockUser" />
+                                                                    <Button
+                                                                        text="{i18n>adminBtnUnlockUser}"
+                                                                        type="Emphasized"
+                                                                        icon="sap-icon://unlocked"
+                                                                        visible="{= ${adminView>detailsAvailable} &amp;&amp; ${adminView>isLocked} === true }"
+                                                                        press=".onUnlockUser" />
+                                                                </HBox>
+                                                            </cells>
+                                                        </ColumnListItem>
+                                                    </items>
+                                                </Table>
+                                                </content>
+                                            </Page>
+                                        </f:beginColumnPages>
+                                        <f:midColumnPages>
+                                            <core:Fragment fragmentName="saps4hana.fiori.fragment.UserDetailPane" type="XML" />
+                                        </f:midColumnPages>
+                                    </f:FlexibleColumnLayout>
                                 </VBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Organization Units" subheader="Org Hierarchy" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Departments">
-                                            <NumericContent value="22" icon="sap-icon://org-chart" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Active Headcount" subheader="Full-Time Workforce" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Staff">
-                                            <NumericContent value="480" icon="sap-icon://group" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Company Loans" subheader="Employee Loans (IT 0045)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Beneficiaries">
-                                            <NumericContent value="15" icon="sap-icon://loan" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-
                             </VBox>
-                        </IconTabFilter>
-                        <IconTabSeparator />
+                        </VBox>
 
-                        <!-- TAB 14: ANALYTICS -->
-                        <IconTabFilter
-                            id="tabAnalytics"
-                            key="analytics"
-                            icon="sap-icon://business-objects-experience"
-                            text="{i18n>tabAnalyticsTitle}"
-                            tooltip="{i18n>tabAnalyticsTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabAnalyticsHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabAnalyticsSubheading}" class="textMuted" />
-                                </VBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Actual Cash Flow" subheader="90-Day Forecast" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Projection">
-                                            <NumericContent value="4.8" scale="M $" icon="sap-icon://line-chart-time-axis" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Days Sales Out." subheader="DSO Metric" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Days">
-                                            <NumericContent value="34" icon="sap-icon://kpi-corporate-performance" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Supplier Scorecards" subheader="Performance Average" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Avg Score">
-                                            <NumericContent value="89" scale="%" icon="sap-icon://bar-chart" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-
-                            </VBox>
-                        </IconTabFilter>
-
-                        <!-- TAB 15: ADMINISTRATION -->
-                        <IconTabFilter
-                            id="tabAdmin"
-                            key="admin"
-                            icon="sap-icon://action-settings"
-                            text="{i18n>tabAdminTitle}"
-                            tooltip="{i18n>tabAdminTooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabAdminHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabAdminSubheading}" class="textMuted" />
-                                </VBox>
-
-                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Application Jobs" subheader="Background Processing" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Active Tasks">
-                                            <NumericContent value="12" icon="sap-icon://business-objects-mobile" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Gateway Services" subheader="OData Connectivity" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Catalog Srvs">
-                                            <NumericContent value="1345" icon="sap-icon://sys-monitor" valueColor="Good" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile header="Workflows Active" subheader="Flexible Definitions" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Definitions">
-                                            <NumericContent value="7" icon="sap-icon://workflow-tasks" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-
-                            </VBox>
-                        </IconTabFilter>
+                        <!-- SAP SYSTEM & SECURITY LOGS (ADMIN) -->
+                        <VBox id="sectionSapLogs" visible="{= ${dashboardView>/selectedTab} === 'sap-logs' }">
+                            <core:Fragment fragmentName="saps4hana.fiori.modules.admin.sap-logs.view.SapLogs" type="XML" />
+                        </VBox>
                     </items>
-                </IconTabBar>
+                </VBox>
             </VBox>
         </content>
+        <dependents>
+            <core:Fragment fragmentName="saps4hana.fiori.fragment.UserBulkDialogs" type="XML" />
+            <core:Fragment fragmentName="saps4hana.fiori.modules.admin.sap-logs.view.SapLogsDetailDialog" type="XML" />
+        </dependents>
     </Page>
 </mvc:View>

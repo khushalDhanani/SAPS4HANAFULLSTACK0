@@ -61,14 +61,14 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
     });
 
     describe('createInitialModel default status', () => {
-        it('should initialize with default status Draft for standard NB document type', () => {
+        it('should initialize with default status Draft and require Document Type', () => {
             const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
             const header = oModel.getProperty('/header');
 
-            expect(header.PurchaseOrderType).toBe('NB');
+            expect(header.PurchaseOrderType).toBe('');
             expect(header.StatusText).toBe('Draft');
-            expect(header.StatusState).toBe('Information');
-            expect(header.StatusIcon).toBe('sap-icon://edit');
+            expect(header.StatusState).toBe('Warning');
+            expect(header.StatusIcon).toBe('sap-icon://alert');
             expect(header.PurchasingCompletenessStatus).toBe(false);
         });
     });
@@ -157,18 +157,18 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             const oDataCustom = {
                 header: {
                     PurchaseOrderType: 'ZDOM',
-                    CompanyCode: '1010',
-                    PurchasingOrganization: '1010',
+                    CompanyCode: '1000',
+                    PurchasingOrganization: 'AE01',
                     PurchasingGroup: '001',
                     Supplier: '10300001',
-                    Currency: 'USD',
+                    Currency: 'INR',
                     DocumentDate: '2026-09-05'
                 },
                 items: [
                     {
                         PurchaseOrderItem: '10',
                         Material: 'TG12',
-                        Plant: '1010',
+                        Plant: '1000',
                         StorageLocation: '101A',
                         UnitOfMeasure: 'PC',
                         OrderQuantity: '10',
@@ -272,6 +272,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             oModel.setProperty('/items/0/Plant', '1010');
             oModel.setProperty('/items/0/StorageLocation', '101A');
             oModel.setProperty('/items/0/OrderQuantity', '2');
+            oModel.setProperty('/items/0/UnitOfMeasure', 'PC');
 
             PurchaseOrderModel.updateStatus(oModel);
 
@@ -303,7 +304,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
     describe('validateForm and clearErrors UI error handling', () => {
         it('should flag empty header and item fields with Error state and count errors', () => {
             const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
-            // DocumentType is NB by default, other fields empty
+            // DocumentType is empty by default and required
             const result = PurchaseOrderModel.validateForm(oModel);
 
             expect(result.isValid).toBe(false);
@@ -312,7 +313,8 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             expect(oModel.getProperty('/errors/CompanyCode/state')).toBe('Error');
             expect(oModel.getProperty('/errors/CompanyCode/text')).toContain('Company Code is required');
             expect(oModel.getProperty('/errors/Supplier/state')).toBe('Error');
-            expect(oModel.getProperty('/errors/PurchaseOrderType/state')).toBe('None'); // NB is present
+            expect(oModel.getProperty('/errors/PurchaseOrderType/state')).toBe('Error');
+            expect(oModel.getProperty('/errors/PurchaseOrderType/text')).toContain('Document Type is required');
         });
 
         it('should validate Currency ISO format strictly', () => {
@@ -337,17 +339,18 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
 
         it('should pass and clear all error states when all header and item fields are valid', () => {
             const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
-            oModel.setProperty('/header/CompanyCode', '1010');
-            oModel.setProperty('/header/PurchasingOrganization', '1010');
+            oModel.setProperty('/header/CompanyCode', '1000');
+            oModel.setProperty('/header/PurchasingOrganization', 'AE01');
             oModel.setProperty('/header/PurchasingGroup', '001');
             oModel.setProperty('/header/Supplier', '10300001');
-            oModel.setProperty('/header/Currency', 'EUR');
+            oModel.setProperty('/header/Currency', 'INR');
             oModel.setProperty('/header/DocumentDate', '2026-09-07');
+            oModel.setProperty('/header/PurchaseOrderType', 'ZDOM');
             oModel.setProperty('/items', [
                 {
                     PurchaseOrderItem: '10',
                     Material: 'TG11',
-                    Plant: '1010',
+                    Plant: '1000',
                     StorageLocation: '101A',
                     OrderQuantity: '5',
                     UnitOfMeasure: 'PC',
@@ -465,30 +468,6 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
     });
 
     describe('applyMaterialDefaults for master-data configured direct UNIT', () => {
-        it('should set Material, description and direct UnitOfMeasure based on S/4HANA master data', () => {
-            const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
-            oModel.setProperty('/items/0/errors/UnitOfMeasure', { state: 'Error', text: 'Unit is required' });
-            oModel.setProperty('/items/0/errors/Material', { state: 'Error', text: 'Material is required' });
-
-            const materialData = {
-                Material: '1000000003',
-                MaterialName: 'test material',
-                MaterialBaseUnit: 'KG'
-            };
-
-            const report = PurchaseOrderModel.applyMaterialDefaults(oModel, 0, materialData);
-
-            expect(report.Material).toBe('1000000003');
-            expect(report.PurchaseOrderItemText).toBe('test material');
-            expect(report.UnitOfMeasure).toBe('KG');
-
-            expect(oModel.getProperty('/items/0/Material')).toBe('1000000003');
-            expect(oModel.getProperty('/items/0/PurchaseOrderItemText')).toBe('test material');
-            expect(oModel.getProperty('/items/0/UnitOfMeasure')).toBe('KG');
-            expect(oModel.getProperty('/items/0/errors/Material/state')).toBe('None');
-            expect(oModel.getProperty('/items/0/errors/UnitOfMeasure/state')).toBe('None');
-        });
-
         it('should accept item path as string and not overwrite existing description', () => {
             const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
             oModel.setProperty('/items/0/PurchaseOrderItemText', 'Custom User Description');

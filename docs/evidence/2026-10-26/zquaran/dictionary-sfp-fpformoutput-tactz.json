@@ -1,0 +1,481 @@
+{
+  "capturedAt": "2026-10-26T12:50:16.174Z",
+  "mode": "READ-ONLY",
+  "dd03l": {
+    "SFPOUTPUTPARAMS": [
+      {
+        "FIELDNAME": "PRINTTICKET",
+        "POSITION": "0044",
+        "ROLLNAME": "POSS_PRINTTICKETNAME",
+        "DATATYPE": "CHAR",
+        "LENG": "000030"
+      },
+      {
+        "FIELDNAME": "TITLE",
+        "POSITION": "0049",
+        "ROLLNAME": "FPTITLE",
+        "DATATYPE": "CHAR",
+        "LENG": "000050"
+      },
+      {
+        "FIELDNAME": "DIVISION",
+        "POSITION": "0035",
+        "ROLLNAME": "SYPRABT",
+        "DATATYPE": "CHAR",
+        "LENG": "000012"
+      },
+      {
+        "FIELDNAME": "RECEIVER",
+        "POSITION": "0034",
+        "ROLLNAME": "SYPRREC",
+        "DATATYPE": "CHAR",
+        "LENG": "000012"
+      },
+      {
+        "FIELDNAME": "AUTHORITY",
+        "POSITION": "0037",
+        "ROLLNAME": "SYPRBER",
+        "DATATYPE": "CHAR",
+        "LENG": "000012"
+      },
+      {
+        "FIELDNAME": "DEVICE",
+        "POSITION": "0001",
+        "ROLLNAME": "FPMEDIUM",
+        "DATATYPE": "CHAR",
+        "LENG": "000008"
+      },
+      {
+        "FIELDNAME": "DATASET",
+        "POSITION": "0029",
+        "ROLLNAME": "RSPO0NAME",
+        "DATATYPE": "CHAR",
+        "LENG": "000006"
+      },
+      {
+        "FIELDNAME": "GETPDL",
+        "POSITION": "0005",
+        "ROLLNAME": "FPGETPDL",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "GETXML",
+        "POSITION": "0006",
+        "ROLLNAME": "FPGETXML",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "GETPDF",
+        "POSITION": "0004",
+        "ROLLNAME": "FPGETPDF",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "PREVIEW",
+        "POSITION": "0003",
+        "ROLLNAME": "FPPREVIEW",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "BUMODE",
+        "POSITION": "0011",
+        "ROLLNAME": "FPBUMODE",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "ASSEMBLE",
+        "POSITION": "0012",
+        "ROLLNAME": "FPASSEMBLE",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "NODIALOG",
+        "POSITION": "0002",
+        "ROLLNAME": "FPNODIALOG",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "PARALLEL",
+        "POSITION": "0013",
+        "ROLLNAME": "FPBOOLEAN",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "PDFTAGGED",
+        "POSITION": "0015",
+        "ROLLNAME": "BOOLEAN",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "PDFCHANGESRESTRICTED",
+        "POSITION": "0016",
+        "ROLLNAME": "FPCHANGESRESTRICTED",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "REQNEW",
+        "POSITION": "0020",
+        "ROLLNAME": "SYPRNEW",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "REQIMM",
+        "POSITION": "0021",
+        "ROLLNAME": "SYPRIMM",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "REQDEL",
+        "POSITION": "0022",
+        "ROLLNAME": "SYPRREL",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "REQFINAL",
+        "POSITION": "0023",
+        "ROLLNAME": "RSPOFINAL",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "COVER",
+        "POSITION": "0033",
+        "ROLLNAME": "SYPRSAP",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "NOPDF",
+        "POSITION": "0042",
+        "ROLLNAME": "FPNOPDF",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "XDCOWNER",
+        "POSITION": "0041",
+        "ROLLNAME": "FPOWNER",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "NOARMCH",
+        "POSITION": "0047",
+        "ROLLNAME": "FPNOARMCH",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "ARCMODE",
+        "POSITION": "0046",
+        "ROLLNAME": "SYARMOD",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "NOARCHIVE",
+        "POSITION": "0052",
+        "ROLLNAME": "FPNOARCHIVE",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "NOPRINT",
+        "POSITION": "0051",
+        "ROLLNAME": "FPNOPRINT",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "NOPREVIEW",
+        "POSITION": "0050",
+        "ROLLNAME": "FPNOPREVIEW",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "IMMEXIT",
+        "POSITION": "0053",
+        "ROLLNAME": "FPIMMEXIT",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "NOPRIBUTT",
+        "POSITION": "0054",
+        "ROLLNAME": "FPNOPRIB",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "XFPTYPE",
+        "POSITION": "0057",
+        "ROLLNAME": "FPXFPTYPE",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "XFP",
+        "POSITION": "0056",
+        "ROLLNAME": "FPXFPACTIVE",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "LIFETIME",
+        "POSITION": "0036",
+        "ROLLNAME": "SYPEXPI",
+        "DATATYPE": "NUMC",
+        "LENG": "000001"
+      },
+      {
+        "FIELDNAME": "SENDDATE",
+        "POSITION": "0025",
+        "ROLLNAME": "SKDATE",
+        "DATATYPE": "DATS",
+        "LENG": "000008"
+      },
+      {
+        "FIELDNAME": "SUFFIX1",
+        "POSITION": "0030",
+        "ROLLNAME": "RSPO1NAME",
+        "DATATYPE": "CHAR",
+        "LENG": "000004"
+      },
+      {
+        "FIELDNAME": "JOB_PROFILE",
+        "POSITION": "0010",
+        "ROLLNAME": "FPJOBPROFILE",
+        "DATATYPE": "STRG",
+        "LENG": "000000"
+      },
+      {
+        "FIELDNAME": "PDFVERSION",
+        "POSITION": "0014",
+        "ROLLNAME": "FPPDFVERSION",
+        "DATATYPE": "STRG",
+        "LENG": "000000"
+      },
+      {
+        "FIELDNAME": "SPONUMIV",
+        "POSITION": "0043",
+        "ROLLNAME": "NRNR",
+        "DATATYPE": "CHAR",
+        "LENG": "000002"
+      },
+      {
+        "FIELDNAME": "SPOOLID",
+        "POSITION": "0024",
+        "ROLLNAME": "RSPOID",
+        "DATATYPE": "INT4",
+        "LENG": "000010"
+      },
+      {
+        "FIELDNAME": "ADSTRLEVEL",
+        "POSITION": "0009",
+        "ROLLNAME": "FPADSTRL",
+        "DATATYPE": "NUMC",
+        "LENG": "000002"
+      },
+      {
+        "FIELDNAME": "PDFNORM",
+        "POSITION": "0017",
+        "ROLLNAME": "FPPDFNORM",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "FIELDNAME": "SCHEDULE",
+        "POSITION": "0027",
+        "ROLLNAME": "SKSCHEDULE",
+        "DATATYPE": "CHAR",
+        "LENG": "000003"
+      },
+      {
+        "FIELDNAME": "COPIES",
+        "POSITION": "0028",
+        "ROLLNAME": "FPCOPIES",
+        "DATATYPE": "NUMC",
+        "LENG": "000003"
+      },
+      {
+        "FIELDNAME": "PDLTYPE",
+        "POSITION": "0039",
+        "ROLLNAME": "FPPDLTYPE",
+        "DATATYPE": "CHAR",
+        "LENG": "000030"
+      },
+      {
+        "FIELDNAME": "SENDTIME",
+        "POSITION": "0026",
+        "ROLLNAME": "SKTIME",
+        "DATATYPE": "TIMS",
+        "LENG": "000006"
+      },
+      {
+        "FIELDNAME": "SUFFIX2",
+        "POSITION": "0031",
+        "ROLLNAME": "RSPO2NAME",
+        "DATATYPE": "CHAR",
+        "LENG": "000012"
+      },
+      {
+        "FIELDNAME": "LPORT",
+        "POSITION": "0008",
+        "ROLLNAME": "PRX_LOGICAL_PORT_NAME",
+        "DATATYPE": "CHAR",
+        "LENG": "000060"
+      },
+      {
+        "FIELDNAME": "CONNECTION",
+        "POSITION": "0007",
+        "ROLLNAME": "RFCDEST",
+        "DATATYPE": "CHAR",
+        "LENG": "000032"
+      },
+      {
+        "FIELDNAME": "RQPOSNAME",
+        "POSITION": "0038",
+        "ROLLNAME": "RSPOPRNAME",
+        "DATATYPE": "CHAR",
+        "LENG": "000050"
+      },
+      {
+        "FIELDNAME": "COVTITLE",
+        "POSITION": "0032",
+        "ROLLNAME": "SYPRTXT",
+        "DATATYPE": "CHAR",
+        "LENG": "000068"
+      },
+      {
+        "FIELDNAME": "XDCNAME",
+        "POSITION": "0040",
+        "ROLLNAME": "FPXDCNAME",
+        "DATATYPE": "CHAR",
+        "LENG": "000051"
+      },
+      {
+        "FIELDNAME": "DEST",
+        "POSITION": "0019",
+        "ROLLNAME": "RSPOPNAME",
+        "DATATYPE": "CHAR",
+        "LENG": "000004"
+      },
+      {
+        "FIELDNAME": "XFPOUTDEV",
+        "POSITION": "0058",
+        "ROLLNAME": "RSPOPNAME",
+        "DATATYPE": "CHAR",
+        "LENG": "000004"
+      },
+      {
+        "FIELDNAME": ".INCLUDE",
+        "POSITION": "0018",
+        "ROLLNAME": "",
+        "DATATYPE": "",
+        "LENG": "000000"
+      },
+      {
+        "FIELDNAME": ".INCLUDE",
+        "POSITION": "0045",
+        "ROLLNAME": "",
+        "DATATYPE": "",
+        "LENG": "000000"
+      },
+      {
+        "FIELDNAME": ".INCLUDE",
+        "POSITION": "0048",
+        "ROLLNAME": "",
+        "DATATYPE": "",
+        "LENG": "000000"
+      },
+      {
+        "FIELDNAME": ".INCLUDE",
+        "POSITION": "0055",
+        "ROLLNAME": "",
+        "DATATYPE": "",
+        "LENG": "000000"
+      }
+    ],
+    "FPFORMOUTPUT": [
+      {
+        "FIELDNAME": "PDL",
+        "POSITION": "0002",
+        "ROLLNAME": "FPCONTENT",
+        "DATATYPE": "RSTR",
+        "LENG": "000000"
+      },
+      {
+        "FIELDNAME": "XML",
+        "POSITION": "0003",
+        "ROLLNAME": "FPCONTENT",
+        "DATATYPE": "RSTR",
+        "LENG": "000000"
+      },
+      {
+        "FIELDNAME": "PDF",
+        "POSITION": "0001",
+        "ROLLNAME": "FPCONTENT",
+        "DATATYPE": "RSTR",
+        "LENG": "000000"
+      },
+      {
+        "FIELDNAME": "PAGES",
+        "POSITION": "0004",
+        "ROLLNAME": "FPPAGECOUNT",
+        "DATATYPE": "INT4",
+        "LENG": "000010"
+      },
+      {
+        "FIELDNAME": "LANGU",
+        "POSITION": "0005",
+        "ROLLNAME": "LANGU",
+        "DATATYPE": "LANG",
+        "LENG": "000001"
+      }
+    ]
+  },
+  "tactz": [
+    {
+      "BROBJ": "M_MSEG_WMB",
+      "ACTVT": "01"
+    },
+    {
+      "BROBJ": "M_MSEG_WMB",
+      "ACTVT": "02"
+    },
+    {
+      "BROBJ": "M_MSEG_WMB",
+      "ACTVT": "03"
+    },
+    {
+      "BROBJ": "M_MSEG_WMB",
+      "ACTVT": "04"
+    },
+    {
+      "BROBJ": "M_MSEG_WMB",
+      "ACTVT": "06"
+    },
+    {
+      "BROBJ": "M_MSEG_WMB",
+      "ACTVT": "69"
+    },
+    {
+      "BROBJ": "M_MSEG_WMB",
+      "ACTVT": "F4"
+    }
+  ]
+}

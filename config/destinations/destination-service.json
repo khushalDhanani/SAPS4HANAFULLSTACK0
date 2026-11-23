@@ -15,7 +15,7 @@
           "HTML5.DynamicDestination": "true",
           "WebIDEUsage": "true",
           "WebIDESystem": "S4HANA",
-          "sap-client": "220"
+          "sap-client": "${S4HANA_CLIENT}"
         }
       ]
     }

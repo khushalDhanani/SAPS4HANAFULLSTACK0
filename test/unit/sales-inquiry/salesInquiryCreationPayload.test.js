@@ -48,7 +48,7 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
                 StatusText: 'Ready to Create',   // Invalid backend field
                 StatusState: 'Success',          // Invalid backend field
                 StatusIcon: 'sap-icon://accept', // Invalid backend field
-                CreatedByUser: 'alice'           // Invalid backend field
+                CreatedByUser: 'khushal'           // Invalid backend field
             },
             items: [
                 {
@@ -96,8 +96,8 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
         expect(sanitized.items[0].OrderQuantityUnit).toBe('PC');
     });
 
-    test('Sanitized payload should pass server-side business validation cleanly', () => {
-        const payload = {
+    test('_sanitizePayload output passes server-side validation and maps to the S/4 payload', () => {
+        const payload = SalesInquiryService._sanitizePayload({
             header: {
                 SalesInquiryType: 'ZIN',
                 SalesOrganization: '1000',
@@ -105,6 +105,7 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
                 OrganizationDivision: '52',
                 SoldToParty: '10135',
                 CustomerName: "Divi's Laboratories Limited",
+                CustomerCity: 'Hyderabad',
                 ShipToParty: '10135',
                 PurchaseOrderByCustomer: 'PO-999',
                 CustomerPurchaseOrderDate: '2026-09-07',
@@ -121,24 +122,61 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
                     SalesInquiryItemText: 'BPAO88063',
                     OrderQuantity: 1,
                     OrderQuantityUnit: 'PC',
+                    Plant: '1120',
                     NetPriceAmount: 600,
                     NetAmount: 600,
-                    TransactionCurrency: 'INR'
+                    TransactionCurrency: 'INR',
+                    errors: {}
                 }
             ]
-        };
+        });
 
         const validation = validateCreateSalesInquiryPayload(payload);
         expect(validation.isValid).toBe(true);
         expect(validation.errors).toHaveLength(0);
 
-        const normalized = normalizeSalesInquiryData(payload, { user: 'alice' });
+        const normalized = normalizeSalesInquiryData(payload, { user: 'khushal' });
         expect(normalized.header.SoldToParty).toBe('10135');
         expect(normalized.items[0].Material).toBe('4000000091');
 
-        const s4Payload = mapToS4InquiryPayload(normalized.header, normalized.items, { user: 'alice' });
+        const s4Payload = mapToS4InquiryPayload(normalized.header, normalized.items, { user: 'khushal' });
         expect(s4Payload.header.SoldToParty).toBe('10135');
         expect(s4Payload.header.CustomerCity).toBeUndefined();
         expect(s4Payload.items[0].OrderQuantity).toBe('1.000');
+    });
+
+    test('SalesInquiryService.getCustomerDefaults returns blanks for empty input and rejects (never silent blanks) when the lookup fails', async () => {
+        const emptyRes = await SalesInquiryService.getCustomerDefaults('');
+        expect(emptyRes.Currency).toBe('');
+        expect(emptyRes.ShipToParty).toBe('');
+        expect(emptyRes.derived).toBe(false);
+
+        mockODataClient.get.mockRejectedValueOnce(new Error('Network error'));
+        await expect(SalesInquiryService.getCustomerDefaults('10135')).rejects.toThrow('Network error');
+    });
+
+    test('SalesInquiryService.getSalesInquiryDefaults rejects on failure instead of inventing blanks or dates', async () => {
+        mockODataClient.get.mockRejectedValueOnce(new Error('Backend error'));
+        await expect(SalesInquiryService.getSalesInquiryDefaults()).rejects.toThrow('Backend error');
+    });
+
+    test('SalesInquiryService._sanitizePayload keeps the item Plant SAP requires', () => {
+        const sanitized = SalesInquiryService._sanitizePayload({
+            header: { SalesInquiryType: 'ZIN' },
+            items: [{ Material: 'TG11', OrderQuantity: 1, OrderQuantityUnit: 'EA', Plant: '1110', errors: {} }]
+        });
+        expect(sanitized.items[0]).toEqual({ Material: 'TG11', OrderQuantity: 1, OrderQuantityUnit: 'EA', Plant: '1110' });
+    });
+
+    test('createSalesInquiry posts the incompletion fields the CAP InquiryHeader declares', async () => {
+        mockODataClient.post.mockResolvedValueOnce({ value: '1000529' });
+
+        await SalesInquiryService.createSalesInquiry({
+            header: { SalesInquiryType: 'ZIN', CustomerGroup2: 'SEA', PortOfLoading: 'INMAA', PortOfDischarge: 'ESBCN', ContactPerson: '25116' },
+            items: []
+        });
+
+        const [, body] = mockODataClient.post.mock.calls[mockODataClient.post.mock.calls.length - 1];
+        expect(body.header).toMatchObject({ CustomerGroup2: 'SEA', PortOfLoading: 'INMAA', PortOfDischarge: 'ESBCN', ContactPerson: '25116' });
     });
 });

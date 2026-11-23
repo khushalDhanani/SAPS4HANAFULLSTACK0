@@ -4,6 +4,13 @@ const connectivity = require('@sap-cloud-sdk/connectivity');
 describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
     const originalEnvUrl = process.env.S4_DESTINATION_URL;
     const originalEnvClient = process.env.S4_CLIENT;
+    const originalEnvSystem = process.env.S4_SYSTEM_NAME;
+
+    beforeEach(() => {
+        delete process.env.S4_SYSTEM_NAME;
+        process.env.S4_CLIENT = '220';
+        authAdapter.client.destinationName = '';
+    });
 
     afterEach(() => {
         if (originalEnvUrl !== undefined) {
@@ -15,6 +22,11 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             process.env.S4_CLIENT = originalEnvClient;
         } else {
             delete process.env.S4_CLIENT;
+        }
+        if (originalEnvSystem !== undefined) {
+            process.env.S4_SYSTEM_NAME = originalEnvSystem;
+        } else {
+            delete process.env.S4_SYSTEM_NAME;
         }
         jest.restoreAllMocks();
     });
@@ -52,28 +64,21 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             expect(res.message).toContain('S/4HANA system is not configured');
         });
 
-        it('should return authenticated: true when S/4 Gateway returns 200 OK', async () => {
-            const mockFetch = jest.fn().mockResolvedValueOnce({
-                ok: true,
-                status: 200
-            });
+        it('should return authenticated: true when the read-only catalog GET with the caller credentials answers 200', async () => {
+            const execute = jest.fn().mockResolvedValueOnce({ status: 200, data: {} });
 
             const res = await authAdapter.validateCredentials('cb9980000001', 'Welcome123!', {
                 baseUrl: 'http://s4hana.example.corp:8000',
                 client: '220',
-                fetchFn: mockFetch
+                executeHttpRequest: execute
             });
 
-            expect(res.authenticated).toBe(true);
-            expect(res.statusCode).toBe(200);
-            expect(res.system).toBe('PRD - Client 220');
-            expect(res.client).toBe('220');
-            expect(mockFetch).toHaveBeenCalledTimes(1);
-
-            const [calledUrl, calledOptions] = mockFetch.mock.calls[0];
-            expect(calledUrl).toBe('http://s4hana.example.corp:8000/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection?$top=1&sap-client=220');
-            expect(calledOptions.method).toBe('GET');
-            expect(calledOptions.headers.Authorization).toBe('Basic ' + Buffer.from('cb9980000001:Welcome123!').toString('base64'));
+            expect(res).toMatchObject({ authenticated: true, statusCode: 200, system: 'DEV - Client 220', client: '220' });
+            expect(execute).toHaveBeenCalledTimes(1);
+            const [destination, config] = execute.mock.calls[0];
+            expect(destination).toMatchObject({ url: 'http://s4hana.example.corp:8000', username: 'cb9980000001', password: 'Welcome123!', authentication: 'BasicAuthentication' });
+            expect(config.method).toBe('get');
+            expect(config.url).toBe('/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection?$top=1&sap-client=220');
         });
 
         it('should return 401 when S/4 Gateway rejects credentials', async () => {
@@ -121,6 +126,25 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             expect(res.message).toContain('Cannot connect to S/4HANA system');
         });
 
+        it.each([
+            ['the address is not on the certificate', "Hostname/IP does not match certificate's altnames: IP: 10.0.0.1 is not in the cert's list: "],
+            ['the certificate is not trusted', 'self-signed certificate; if the root CA is installed locally, try running Node.js with --use-system-ca'],
+            ['the certificate chain cannot be verified', 'unable to verify the first certificate']
+        ])('names the certificate, not the network, when %s, and never shows the address', async (_name, message) => {
+            const mockFetch = jest.fn().mockRejectedValueOnce(new Error(message));
+
+            const res = await authAdapter.validateCredentials('cb9980000001', 'pass', {
+                baseUrl: 'https://s4hana.example.corp:44300',
+                fetchFn: mockFetch
+            });
+
+            expect(res).toMatchObject({ authenticated: false, statusCode: 503 });
+            expect(res.message).toContain('certificate');
+            expect(res.message).toContain('S4_DESTINATION_URL');
+            expect(res.message).not.toContain('network connectivity');
+            expect(res.message).not.toContain('10.0.0.1');
+        });
+
         it('should handle unexpected HTTP error status from Gateway', async () => {
             const mockFetch = jest.fn().mockResolvedValueOnce({
                 ok: false,
@@ -151,7 +175,7 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
             expect(res.authenticated).toBe(true);
             expect(res.statusCode).toBe(200);
-            expect(res.system).toBe('PRD - Client 100');
+            expect(res.system).toBe('DEV - Client 100');
             expect(mockExecuteHttp).toHaveBeenCalledTimes(1);
 
             const [calledDest, calledConfig] = mockExecuteHttp.mock.calls[0];
@@ -162,17 +186,53 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             expect(calledConfig.method).toBe('get');
             expect(calledConfig.url).toContain('sap-client=100');
         });
+
+        it('should build system label dynamically from S4_SYSTEM_NAME and S4_CLIENT environment variables', async () => {
+            process.env.S4_SYSTEM_NAME = 'S4HANA_DEV';
+            process.env.S4_CLIENT = '300';
+            const mockFetch = jest.fn().mockResolvedValueOnce({
+                ok: true,
+                status: 200
+            });
+
+            const res = await authAdapter.validateCredentials('cb9980000001', 'Welcome123!', {
+                baseUrl: 'http://s4hana.example.corp:8000',
+                fetchFn: mockFetch
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.system).toBe('S4HANA_DEV - Client 300');
+            expect(res.client).toBe('300');
+        });
+
+        it('should support options.systemName override', async () => {
+            const mockFetch = jest.fn().mockResolvedValueOnce({
+                ok: true,
+                status: 200
+            });
+
+            const res = await authAdapter.validateCredentials('cb9980000001', 'Welcome123!', {
+                baseUrl: 'http://s4hana.example.corp:8000',
+                client: '100',
+                systemName: 'PRD',
+                fetchFn: mockFetch
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.system).toBe('PRD - Client 100');
+        });
     });
 
     describe('resolveBaseUrl & Destination Resolution', () => {
         it('should resolve base URL from process.env.S4_DESTINATION_URL and trim trailing slashes', async () => {
-            process.env.S4_DESTINATION_URL = 'http://172.27.100.32:8000///';
+            process.env.S4_DESTINATION_URL = 'http://s4.example.test:8000///';
             const url = await authAdapter.resolveBaseUrl();
-            expect(url).toBe('http://172.27.100.32:8000');
+            expect(url).toBe('http://s4.example.test:8000');
         });
 
         it('should resolve base URL from BTP Destination Service when env is unset', async () => {
             delete process.env.S4_DESTINATION_URL;
+            authAdapter.client.destinationName = 'S4HANA_DEST';
             jest.spyOn(connectivity, 'getDestination').mockResolvedValueOnce({
                 url: 'https://my-btp-destination.corp:443/'
             });
@@ -183,6 +243,7 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
         it('should prioritize BTP Destination Service over local environment variables', async () => {
             process.env.S4_DESTINATION_URL = 'http://local-env:8000';
+            authAdapter.client.destinationName = 'S4HANA_DEST';
             jest.spyOn(connectivity, 'getDestination').mockResolvedValueOnce({
                 url: 'https://btp-managed-destination.corp:443/'
             });

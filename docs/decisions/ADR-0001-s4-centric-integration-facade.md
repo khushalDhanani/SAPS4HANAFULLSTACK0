@@ -35,3 +35,32 @@ The application will maintain zero local database persistence. S/4HANA Gateway s
 ## Compliance
 - `db/schema.cds` is annotated to clearly reflect this architectural decision.
 - `mta.yaml` defines modules for `approuter`, `srv` (CAP), and `fiori-app`, with backing services for `XSUAA`, `Destination`, `Connectivity`, and `HTML5 Application Repository`.
+
+## Addendum (2026-09-14, Updated 2026-11-20): HDI container for Posting Attempts & Admin State
+
+### Context
+Goods Issue and its legacy dispatch queue have been completely decommissioned. The SAP HANA Cloud HDI container (`saps4hana-db`) is maintained exclusively for durable application-level transactional integrity: Movement 101 Goods Receipt posting attempts (`db/wm/goods-receipt-attempt.cds`), user lock notifications (`db/admin/user-lock.cds`), and password expiry monitoring (`db/admin/password-expiry.cds`).
+
+### Decision
+Option A stays in force for all business documents: S/4HANA remains the single source of truth for purchase orders, sales documents, deliveries, journal entries, stock, batches and warehouse objects, and nothing is cached or shadowed locally.
+
+For double-posting protection and administrative notifications only, the application provisions an SAP HANA Cloud HDI container (`saps4hana-db`, plan `hdi-shared`) deployed by `saps4hana-db-deployer` from `gen/db`. Local development and automated tests use the in-memory SQLite database of `@cap-js/sqlite` and need no HANA.
+
+### Consequences
+- The "no HDI container" cost argument of Option A no longer applies; the marginal cost is nil where the subaccount already runs a HANA Cloud instance and is the price of one instance otherwise.
+- Queue records are durable across restarts and visible to every application instance.
+- Without a bound database (for example a deployment that omits the container), the queue is unavailable: `getQueueSummary` reports `StoreAvailable: false`, reads are empty, and a failed SAP posting is returned to the user as an error instead of a queued success. Nothing is ever recorded locally in that case.
+- Queued items are always marked `QUEUED` / `FAILED` until S/4HANA confirms a material document; the queue never claims SAP persistence (AGENTS.md).
+
+## Addendum (2026-11-21): Goods Receipt removed; the HDI container holds monitoring state only
+
+The Goods Receipt feature (movement 101) was removed from the application: frontend module, `/odata/v4/goods-receipt` service, posting adapters, recheck timer and the `GoodsReceiptPostingAttempt` entity (`db/wm/goods-receipt-attempt.cds`). The application now makes no stock-relevant goods-movement posting of its own, and it no longer persists posting attempts.
+
+- The HDI container `saps4hana-db` is kept. Its remaining purpose is administrator monitoring state: user lock notifications (`db/admin/user-lock.cds`) and password expiry monitoring (`db/admin/password-expiry.cds`).
+- The CAP model no longer contains the attempt table. **No physical table was dropped.** A table created by an earlier deployment (`SAPS4HANA_WM_GOODSRECEIPTPOSTINGATTEMPT`) stays in the container until an explicitly approved cleanup; before that, existing rows and unresolved attempts must be reviewed and exported.
+- The 2026-09-14 addendum above is historical where it speaks of posting attempts and a queue.
+- SAP material documents posted earlier are untouched.
+
+## Addendum (2026-11-05): lock notification tables
+
+The user chose to keep lock notification state in the existing HDI container for now. The lock monitor's four tables (`db/admin/user-lock.cds`) are operational markers for detecting locks and deduplicating alerts, not business documents; SAP stays the system of record for users and locks. They must move with the rest when the application database is removed (`docs/decisions/sap-only-persistence-migration.md`).

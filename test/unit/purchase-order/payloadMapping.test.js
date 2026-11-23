@@ -6,7 +6,7 @@ describe('Unit: Payload Mapping', () => {
     it('should map valid CAP header and item to S/4HANA OData structure', () => {
         const s4Payload = mapToS4Payload(validPayload.header, validPayload.items);
 
-        expect(s4Payload.PurchaseOrderType).toBe('NB');
+        expect(s4Payload.PurchaseOrderType).toBe('ZTST');
         expect(s4Payload.CompanyCode).toBe('1010');
         expect(s4Payload.PurchasingOrganization).toBe('1010');
         expect(s4Payload.PurchasingGroup).toBe('001');
@@ -123,7 +123,7 @@ describe('Unit: Payload Mapping', () => {
         const payloadWithoutUser = mapToS4Payload(validPayload.header, itemWithoutReq);
         expect(payloadWithoutUser.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('SYSTEM');
 
-        // 3. Explicit item RequisitionerName overrides options.user
+        // 3. Authenticated options.user strictly takes precedence over client-supplied RequisitionerName
         const itemWithExplicitReq = [
             {
                 Material: 'TG11',
@@ -134,7 +134,30 @@ describe('Unit: Payload Mapping', () => {
             }
         ];
         const payloadWithExplicit = mapToS4Payload(validPayload.header, itemWithExplicitReq, { user: 'AUTH_TESTER' });
-        expect(payloadWithExplicit.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('CUSTOM_REQ');
+        expect(payloadWithExplicit.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('AUTH_TESTER');
+    });
+
+    // Mapper comment at PurchaseOrderMapper.js:109-111 states these rules; whether SAP needs them is not proven here.
+    const itemWithCategory = (category, extra = {}) => [{ Material: 'TG11', Plant: '1000', OrderQuantity: 1, UnitOfMeasure: 'PC', PurchaseOrderItemCategory: category, ...extra }];
+
+    it('should send item category 7 (ZSTO stock transfer) to SAP as 0', () => {
+        const payload = mapToS4Payload(validPayload.header, itemWithCategory('7'));
+        expect(payload.to_PurchaseOrderItemTP[0].PurchaseOrderItemCategory).toBe('0');
+    });
+
+    it('should send item category 9 (ZSER service) without service lines to SAP as 0', () => {
+        const payload = mapToS4Payload(validPayload.header, itemWithCategory('9'));
+        expect(payload.to_PurchaseOrderItemTP[0].PurchaseOrderItemCategory).toBe('0');
+    });
+
+    it('should keep item category 9 when the item carries service lines', () => {
+        const payload = mapToS4Payload(validPayload.header, itemWithCategory('9', { to_PurOrdServiceLineTP: [{}] }));
+        expect(payload.to_PurchaseOrderItemTP[0].PurchaseOrderItemCategory).toBe('9');
+    });
+
+    it('should keep item category 3 (ZSUB subcontracting) unchanged', () => {
+        const payload = mapToS4Payload(validPayload.header, itemWithCategory('3'));
+        expect(payload.to_PurchaseOrderItemTP[0].PurchaseOrderItemCategory).toBe('3');
     });
 
 });

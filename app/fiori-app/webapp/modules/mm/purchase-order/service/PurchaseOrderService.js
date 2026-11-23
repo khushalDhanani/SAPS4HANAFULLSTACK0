@@ -1,15 +1,152 @@
 sap.ui.define([
-    "saps4hana/fiori/service/ODataClient"
-], function (ODataClient) {
+    "saps4hana/fiori/service/ODataClient",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator"
+], function (ODataClient, Filter, FilterOperator) {
     "use strict";
 
     var SERVICE_BASE = "/odata/v4/purchase-order";
+
+    var _FilterOperator = FilterOperator || {
+        EQ: "EQ",
+        NE: "NE",
+        GT: "GT",
+        GE: "GE",
+        LT: "LT",
+        LE: "LE",
+        BT: "BT",
+        Contains: "Contains"
+    };
+
+    var _Filter = Filter || function (sPath, sOperator, oValue1, oValue2) {
+        if (typeof sPath === "object") {
+            this.aFilters = sPath.filters;
+            this.bAnd = sPath.and;
+        } else {
+            this.sPath = sPath;
+            this.sOperator = sOperator;
+            this.oValue1 = oValue1;
+            this.oValue2 = oValue2;
+        }
+    };
+
+    var _oModel = null;
+
+    function _isModel(o) {
+        return !!(o && typeof o.bindList === "function");
+    }
+
+    /**
+     * Read an entity set via the OData V4 model's list binding.
+     * Falls back to ODataClient.get() if no model is provided.
+     *
+     * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
+     * @param {string} sEntitySet
+     * @param {sap.ui.model.Filter[]} [aFilters]
+     * @param {Object} [mParameters]
+     * @returns {Promise<Array>}
+     */
+    function _readEntitySet(oModel, sEntitySet, aFilters, mParameters) {
+        return ODataClient.readEntitySet(SERVICE_BASE, oModel, sEntitySet, aFilters, mParameters,
+            { useContextLength: true });
+    }
 
     /**
      * PurchaseOrderService
      * Encapsulates Purchase Order business API communication with the CAP backend.
      */
     return {
+        /**
+         * Set the OData V4 model for entity set reads
+         * @param {sap.ui.model.odata.v4.ODataModel} oModel
+         */
+        setModel: function (oModel) {
+            _oModel = oModel;
+        },
+
+        /**
+         * Get the current OData V4 model
+         * @returns {sap.ui.model.odata.v4.ODataModel|null}
+         */
+        getModel: function () {
+            return _oModel;
+        },
+
+        /**
+         * Sanitizes the purchase order creation payload by stripping UI-only state properties,
+         * errors objects, and non-schema attributes before dispatching to CAP OData.
+         *
+         * @param {Object} oPayload Raw UI payload
+         * @returns {Object} Clean payload conforming to CAP action schema
+         */
+        _sanitizePayload: function (oPayload) {
+            if (!oPayload) {
+                return { header: {}, items: [] };
+            }
+
+            var rawHeader = oPayload.header || {};
+            var rawItems = Array.isArray(oPayload.items) ? oPayload.items : [];
+
+            var ALLOWED_HEADER_FIELDS = [
+                "PurchaseOrderType",
+                "CompanyCode",
+                "PurchasingOrganization",
+                "PurchasingGroup",
+                "Supplier",
+                "DocumentDate",
+                "Currency",
+                "IncotermsClassification",
+                "IncotermsLocation1",
+                "PaymentTerms"
+            ];
+
+            var ALLOWED_ITEM_FIELDS = [
+                "PurchaseOrderItem",
+                "Material",
+                "PurchaseOrderItemText",
+                "Plant",
+                "StorageLocation",
+                "MaterialGroup",
+                "PurchaseOrderItemCategory",
+                "AccountAssignmentCategory",
+                "OrderQuantity",
+                "UnitOfMeasure",
+                "NetPriceAmount",
+                "TaxCode",
+                "NetAmount",
+                "RequisitionerName"
+            ];
+
+            var cleanHeader = {};
+            ALLOWED_HEADER_FIELDS.forEach(function (field) {
+                if (rawHeader[field] !== undefined && rawHeader[field] !== null) {
+                    cleanHeader[field] = rawHeader[field];
+                }
+            });
+
+            // Decimal fields of the CAP action: an empty string is not a valid Decimal (HTTP 400 ASSERT_DATA_TYPE), so a blank optional
+            // value (e.g. no net price entered) is left out instead of being sent as "".
+            var DECIMAL_ITEM_FIELDS = ["OrderQuantity", "NetPriceAmount", "NetAmount"];
+
+            var cleanItems = rawItems.map(function (item) {
+                var cleanItem = {};
+                ALLOWED_ITEM_FIELDS.forEach(function (field) {
+                    if (item[field] !== undefined && item[field] !== null) {
+                        if (DECIMAL_ITEM_FIELDS.indexOf(field) !== -1 && String(item[field]).trim() === "") {
+                            return;
+                        }
+                        cleanItem[field] = item[field];
+                    }
+                });
+                return cleanItem;
+            });
+
+            return {
+                header: cleanHeader,
+                items: cleanItems
+            };
+        },
+
         /**
          * Dispatches createPurchaseOrder action to the CAP OData service.
          *
@@ -20,49 +157,57 @@ sap.ui.define([
          */
         createPurchaseOrder: function (oPayload) {
             var sUrl = SERVICE_BASE + "/createPurchaseOrder";
-            return ODataClient.post(sUrl, oPayload).then(function (result) {
-                if (!result) return "";
-                return result.value || result.PurchaseOrder || result;
+            var oCleanPayload = this._sanitizePayload(oPayload);
+            return ODataClient.post(sUrl, oCleanPayload).then(function (result) {
+                // Action returns String: never report success without an SAP-generated PO number
+                var sPO = result && (result.value || result.PurchaseOrder);
+                if (typeof sPO !== "string" || !sPO.trim()) {
+                    var oErr = new Error("Purchase Order creation returned no Purchase Order number from SAP.");
+                    oErr.status = 502;
+                    throw oErr;
+                }
+                return sPO.trim();
             });
-        },
-
-        /**
-         * Queries Purchase Orders list from CAP OData service.
-         *
-         * @param {string} [sQuery] Optional OData query string (e.g. "?$top=10")
-         * @returns {Promise<Array<Object>>}
-         */
-        getPurchaseOrders: function (sQuery) {
-            var sUrl = SERVICE_BASE + "/PurchaseOrders" + (sQuery || "");
-            return ODataClient.get(sUrl).then(function (result) {
-                if (!result) return [];
-                return result.value || (result.d && result.d.results) || [];
-            });
-        },
-
-        /**
-         * Queries a single Purchase Order by key.
-         *
-         * @param {string} sPoNumber
-         * @returns {Promise<Object>}
-         */
-        getPurchaseOrder: function (sPoNumber) {
-            var sUrl = SERVICE_BASE + "/PurchaseOrders('" + encodeURIComponent(sPoNumber) + "')";
-            return ODataClient.get(sUrl);
         },
 
         /**
          * Loads actual configuration and master data from CAP OData service concurrently:
          * Document Types, Company Codes, Purchasing Organizations, and Purchasing Groups.
          *
+         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
          * @returns {Promise<{ documentTypes: Array<Object>, companyCodes: Array<Object>, purchasingOrgs: Array<Object>, purchasingGroups: Array<Object> }>}
          */
-        loadConfiguration: function () {
+        loadConfiguration: function (oModel) {
+            var m = _isModel(oModel) ? oModel : _oModel;
+            if (m) {
+                return Promise.all([
+                    _readEntitySet(m, "/DocumentTypeVH", undefined, { $top: 100 }),
+                    _readEntitySet(m, "/CompanyCodeVH", undefined, { $top: 100 }),
+                    _readEntitySet(m, "/PurchasingOrgVH", undefined, { $top: 100 }),
+                    _readEntitySet(m, "/PurchasingGroupVH", undefined, { $top: 100 })
+                ]).then(function (aResults) {
+                    return {
+                        documentTypes: aResults[0] || [],
+                        companyCodes: aResults[1] || [],
+                        purchasingOrgs: aResults[2] || [],
+                        purchasingGroups: aResults[3] || []
+                    };
+                }).catch(function (err) {
+                    console.warn("[PurchaseOrderService] Error loading configuration data:", err);
+                    return {
+                        documentTypes: [],
+                        companyCodes: [],
+                        purchasingOrgs: [],
+                        purchasingGroups: []
+                    };
+                });
+            }
+
             return Promise.all([
-                ODataClient.get(SERVICE_BASE + "/DocumentTypeVH").then(function (res) { return (res && res.value) || []; }),
-                ODataClient.get(SERVICE_BASE + "/CompanyCodeVH").then(function (res) { return (res && res.value) || []; }),
-                ODataClient.get(SERVICE_BASE + "/PurchasingOrgVH").then(function (res) { return (res && res.value) || []; }),
-                ODataClient.get(SERVICE_BASE + "/PurchasingGroupVH").then(function (res) { return (res && res.value) || []; })
+                ODataClient.get(SERVICE_BASE + "/DocumentTypeVH?$top=100").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/CompanyCodeVH?$top=100").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/PurchasingOrgVH?$top=100").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/PurchasingGroupVH?$top=100").then(function (res) { return (res && res.value) || []; })
             ]).then(function (aResults) {
                 return {
                     documentTypes: aResults[0] || [],
@@ -119,7 +264,9 @@ sap.ui.define([
                         PaymentTerms: result.PaymentTerms || "",
                         IncotermsClassification: result.IncotermsClassification || "",
                         IncotermsLocation1: result.IncotermsLocation1 || "",
-                        derived: true
+                        derived: true,
+                        source: result.source || "from last PO",
+                        lastPurchaseOrder: result.lastPurchaseOrder || ""
                     };
                 }
                 // If function returned no data, try fallback
@@ -130,24 +277,27 @@ sap.ui.define([
             }).then(function (oResult) {
                 if (oResult) return oResult;
 
-                // Resilient Fallback: Query historical PurchaseOrders for this supplier
+                // Resilient Fallback: Query historical PurchaseOrders for this supplier (sorted by most recent PO)
                 var sFilter = "Supplier eq '" + encodeURIComponent(sCleanSupplier) + "'";
                 if (sCleanPurchOrg) {
                     sFilter += " and PurchasingOrganization eq '" + encodeURIComponent(sCleanPurchOrg) + "'";
                 }
-                var sPoUrl = SERVICE_BASE + "/PurchaseOrders?$filter=" + sFilter + "&$top=1&$select=DocumentCurrency,PaymentTerms,IncotermsClassification,IncotermsTransferLocation";
+                var sPoUrl = SERVICE_BASE + "/PurchaseOrders?$filter=" + sFilter + "&$top=1&$orderby=PurchaseOrder desc&$select=PurchaseOrder,DocumentCurrency,PaymentTerms,IncotermsClassification,IncotermsTransferLocation";
 
                 return ODataClient.get(sPoUrl).then(function (res) {
                     var aItems = (res && res.value) || [];
                     if (aItems.length > 0) {
                         var po = aItems[0];
+                        var bHasData = !!(po.DocumentCurrency || po.PaymentTerms || po.IncotermsClassification);
                         return {
                             Supplier: sCleanSupplier,
                             Currency: po.DocumentCurrency || "",
                             PaymentTerms: po.PaymentTerms || "",
                             IncotermsClassification: po.IncotermsClassification || "",
                             IncotermsLocation1: po.IncotermsTransferLocation || "",
-                            derived: !!(po.DocumentCurrency || po.PaymentTerms || po.IncotermsClassification)
+                            derived: bHasData,
+                            source: bHasData ? "from last PO" : "",
+                            lastPurchaseOrder: po.PurchaseOrder || ""
                         };
                     }
                     return {
@@ -156,16 +306,21 @@ sap.ui.define([
                         PaymentTerms: "",
                         IncotermsClassification: "",
                         IncotermsLocation1: "",
-                        derived: false
+                        derived: false,
+                        source: "",
+                        lastPurchaseOrder: ""
                     };
                 }).catch(function () {
+                    // Not "no history": the history could not be read. The controller tells the user.
                     return {
                         Supplier: sCleanSupplier,
                         Currency: "",
                         PaymentTerms: "",
                         IncotermsClassification: "",
                         IncotermsLocation1: "",
-                        derived: false
+                        derived: false,
+                        source: "lookup failed",
+                        lastPurchaseOrder: ""
                     };
                 });
             });
@@ -175,18 +330,45 @@ sap.ui.define([
          * Looks up Material master data details including MaterialBaseUnit from S/4HANA.
          * Optionally filters by Plant to retrieve the plant-specific master record.
          *
-         * @param {string} sMaterial
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrMaterial]
+         * @param {string} [sMaterialOrPlant]
          * @param {string} [sPlant]
          * @returns {Promise<Object|null>}
          */
-        getMaterialDetails: function (sMaterial, sPlant) {
+        getMaterialDetails: function (oModelOrMaterial, sMaterialOrPlant, sPlant) {
+            var oModel = _isModel(oModelOrMaterial) ? oModelOrMaterial : _oModel;
+            var sMaterial = _isModel(oModelOrMaterial) ? sMaterialOrPlant : oModelOrMaterial;
+            var sPlantVal = _isModel(oModelOrMaterial) ? sPlant : sMaterialOrPlant;
+
             if (!sMaterial || String(sMaterial).trim() === "") {
                 return Promise.resolve(null);
             }
-            var sMatClean = encodeURIComponent(String(sMaterial).trim());
-            var sFilter = "?$filter=Material eq '" + sMatClean + "'";
-            if (sPlant && String(sPlant).trim() !== "") {
-                var sPlantFilter = sFilter + " and Plant eq '" + encodeURIComponent(String(sPlant).trim()) + "'&$top=1";
+            var sMatClean = String(sMaterial).trim();
+
+            if (oModel) {
+                var aFilters = [new _Filter("Material", _FilterOperator.EQ, sMatClean)];
+                if (sPlantVal && String(sPlantVal).trim() !== "") {
+                    aFilters.push(new _Filter("Plant", _FilterOperator.EQ, String(sPlantVal).trim()));
+                }
+                return _readEntitySet(oModel, "/MaterialVH", aFilters, { $top: 1 }).then(function (aItems) {
+                    if (aItems.length > 0) {
+                        return aItems[0];
+                    }
+                    if (sPlantVal && String(sPlantVal).trim() !== "") {
+                        return _readEntitySet(oModel, "/MaterialVH", [new _Filter("Material", _FilterOperator.EQ, sMatClean)], { $top: 1 }).then(function (aFallback) {
+                            return aFallback.length > 0 ? aFallback[0] : null;
+                        });
+                    }
+                    return null;
+                }).catch(function (err) {
+                    console.warn("[PurchaseOrderService] Error fetching material details for " + sMaterial + ":", err);
+                    return null;
+                });
+            }
+
+            var sFilter = "?$filter=Material eq '" + encodeURIComponent(sMatClean) + "'";
+            if (sPlantVal && String(sPlantVal).trim() !== "") {
+                var sPlantFilter = sFilter + " and Plant eq '" + encodeURIComponent(String(sPlantVal).trim()) + "'&$top=1";
                 return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sPlantFilter).then(function (res) {
                     var aItems = (res && (res.value || (res.d && res.d.results))) || [];
                     if (aItems.length > 0) {
@@ -215,12 +397,13 @@ sap.ui.define([
         /**
          * Directly retrieves the configured Base Unit of Measure for a Material.
          *
-         * @param {string} sMaterial
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrMaterial]
+         * @param {string} [sMaterialOrPlant]
          * @param {string} [sPlant]
          * @returns {Promise<string|null>}
          */
-        getMaterialUnit: function (sMaterial, sPlant) {
-            return this.getMaterialDetails(sMaterial, sPlant).then(function (oMaterial) {
+        getMaterialUnit: function (oModelOrMaterial, sMaterialOrPlant, sPlant) {
+            return this.getMaterialDetails(oModelOrMaterial, sMaterialOrPlant, sPlant).then(function (oMaterial) {
                 return (oMaterial && (oMaterial.MaterialBaseUnit || oMaterial.BaseUnit || oMaterial.UnitOfMeasure)) || null;
             });
         }

@@ -1,3 +1,21 @@
+/* Shared text utilities (used across the module views) */
+.fontBold,
+.fontBold.sapMText,
+.fontBold .sapMObjStatusText {
+    font-weight: bold;
+}
+
+.textMuted,
+.textMuted.sapMText,
+.textMuted.sapMLabel {
+    color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+/* Login card never wider than the screen */
+.loginPanel {
+    max-width: calc(100% - 2rem);
+}
+
 /* Root Application Shell Layout */
 .appRootContainer {
     height: 100vh;
@@ -17,7 +35,7 @@
     width: auto !important;
     max-width: 6.5rem !important;
     object-fit: contain !important;
-    background-color: #ffffff !important;
+    background-color: var(--sapBaseColor, #ffffff) !important;
     padding: 3px 8px !important;
     border-radius: 4px !important;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18) !important;
@@ -38,4 +56,735 @@
         padding: 2px 5px !important;
         margin-right: 0.5rem !important;
     }
+}
+
+/* ==========================================================================
+   Dashboard Responsive Grid & Layout System
+   ========================================================================== */
+
+.dashboardTabActions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    row-gap: 0.375rem !important;
+}
+
+/* Base Responsive Grid for Dashboard Tiles across Desktop */
+.dashboardTileContainer {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 0.875rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    align-items: stretch !important;
+}
+
+/* Override UI5 Flex item wrapper behavior inside grid */
+.dashboardTileContainer > .sapMFlexItem {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+}
+
+/* Tile styling within responsive grid */
+.dashboardTileContainer .sapMGT {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    height: 11.25rem !important;
+    min-height: 11.25rem !important;
+    box-sizing: border-box !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    position: relative !important;
+}
+
+.dashboardTileContainer .sapMGT:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Ensure tile headers and subheaders utilize full card width without premature ellipsis */
+.dashboardTileContainer .sapMGTHdrTxt {
+    max-width: 100% !important;
+    width: 100% !important;
+}
+
+.dashboardTileContainer .sapMGTTitle {
+    white-space: normal !important;
+    word-break: break-word !important;
+}
+
+.dashboardTileContainer .sapMGTContent {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+.dashboardTileContainer .sapMTileCnt {
+    width: 100% !important;
+    height: 5.75rem !important;
+    min-height: 5.5rem !important;
+    position: relative !important;
+}
+
+/* Card Bottom Label (Unit / Footer) visibility & breathing space */
+.dashboardTileContainer .sapMTileCntFtrTxt {
+    position: absolute !important;
+    bottom: 0.5rem !important;
+    left: 0 !important;
+    margin: 0 0.75rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1.1rem !important;
+    max-width: calc(100% - 1.5rem) !important;
+    display: block !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    color: var(--sapContent_LabelColor, #555555) !important;
+    font-weight: 500 !important;
+}
+
+.dashboardTileContainer .sapMTCContent {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.dashboardTileContainer .sapMNC {
+    max-width: 100% !important;
+}
+
+/* Breakpoint: Standard Desktop / Small Laptop (960px - 1199px) */
+@media (min-width: 960px) and (max-width: 1199px) {
+    .dashboardTileContainer {
+        grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)) !important;
+        gap: 0.75rem !important;
+    }
+}
+
+/* Breakpoint: Tablets (600px - 959px) */
+@media (min-width: 600px) and (max-width: 959px) {
+    .dashboardTileContainer {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.75rem !important;
+    }
+    .dashboardTileContainer .sapMGT {
+        height: 11.25rem !important;
+        min-height: 11.25rem !important;
+    }
+}
+
+/* Breakpoint: Mobile Phones (360px - 599px) */
+@media (max-width: 599px) {
+    .appPagesContainer .sapUiResponsiveMargin,
+    .sapUiResponsiveMargin {
+        margin: 0.5rem 0.5rem 1rem 0.5rem !important;
+    }
+    .sapMPanelContent {
+        padding: 0.5rem 0.625rem !important;
+    }
+    .dashboardTileContainer {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.5rem !important;
+    }
+    .dashboardTileContainer .sapMGT {
+        height: 11.25rem !important;
+        min-height: 11.25rem !important;
+    }
+    .dashboardTileContainer .sapMGT .sapMGTTitle {
+        font-size: 0.82rem !important;
+        line-height: 1.1rem !important;
+    }
+    .dashboardTileContainer .sapMGT .sapMGTSubHdrTxt {
+        font-size: 0.70rem !important;
+    }
+    .dashboardTileContainer .sapMTileCntFtrTxt {
+        bottom: 0.45rem !important;
+        margin: 0 0.5rem !important;
+        font-size: 0.72rem !important;
+        max-width: calc(100% - 1rem) !important;
+    }
+    .dashboardTabActions .sapMBtn {
+        margin-right: 0.25rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+}
+
+/* Breakpoint: Ultra-Compact Mobile (< 360px, e.g. 320px iPhone SE) */
+@media (max-width: 359px) {
+    .dashboardTileContainer {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem !important;
+    }
+    .dashboardTileContainer .sapMGT {
+        height: 10.75rem !important;
+        min-height: 10.75rem !important;
+    }
+    .dashboardTileContainer .sapMTileCntFtrTxt {
+        bottom: 0.45rem !important;
+        margin: 0 0.5rem !important;
+        font-size: 0.75rem !important;
+    }
+}
+/* Sub-User Master: the selected KPI card, and search matches in the table */
+.adminKpiTiles .sapMGT[data-selected="true"] {
+    outline: 0.125rem solid var(--sapSelectedColor, #0064d9);
+    outline-offset: -0.125rem;
+}
+
+.adminSearchMatch {
+    background: var(--sapHighlightColor, #0064d9);
+    color: var(--sapContent_ContrastTextColor, #ffffff);
+    border-radius: 0.125rem;
+}
+
+/* ---------- Ask AI assistant widget (bottom-right) ---------- */
+.aiFab {
+    position: fixed !important;
+    right: 1.5rem;
+    bottom: 1.5rem;
+    z-index: 50;
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+    min-width: 3.5rem !important;
+    border-radius: 50% !important;
+    box-shadow: var(--sapContent_Shadow2, 0 0.625rem 1.875rem rgba(0,0,0,0.3)) !important;
+}
+.aiFab .sapMBtnInner { width: 100%; height: 100%; border-radius: 50%; }
+.aiFab .sapMBtnIcon { font-size: 1.5rem; line-height: 3.5rem; }
+.aiWidget {
+    position: fixed;
+    right: 1.5rem;
+    bottom: 1.5rem;
+    z-index: 50;
+    width: 32rem;
+    height: min(40rem, calc(100vh - 3rem));
+    display: flex;
+    flex-direction: column;
+    background: var(--sapGroup_ContentBackground, #ffffff);
+    border: 1px solid var(--sapGroup_ContentBorderColor, #d4d4d8);
+    border-top: 3px solid var(--sapAccentColor6, #0070f2);
+    border-radius: 0.75rem;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    font-size: 0.875rem;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+@media (max-width: 600px) {
+    .aiWidget { right: 0; bottom: 0; width: 100vw; height: 100vh; border-radius: 0; border-top: none; }
+}
+.aiWidgetHeader.sapMTB {
+    flex: 0 0 auto;
+    height: auto !important;
+    min-height: 2.75rem !important;
+    background: var(--sapGroup_TitleBackground, #ffffff) !important;
+    color: var(--sapTextColor, #1d2d3e) !important;
+    border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #e2e8f0) !important;
+    padding: 0.25rem 0.75rem !important;
+    display: flex !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+}
+.aiWidgetHeader .aiHeaderTitle,
+.aiWidgetHeader .sapMTitle {
+    color: var(--sapTextColor, #1d2d3e) !important;
+    font-size: 0.9375rem !important;
+    font-weight: 600 !important;
+}
+.aiWidgetHeader .aiHeaderIcon,
+.aiWidgetHeader .sapUiIcon {
+    color: var(--sapContent_IconColor, #0070f2) !important;
+}
+.aiWidgetHeader .sapMBtnIcon {
+    color: var(--sapContent_IconColor, #556b82) !important;
+}
+.aiWidgetHeader .sapMBtn:hover .sapMBtnIcon {
+    color: var(--sapContent_IconColor, #0070f2) !important;
+}
+.aiWidgetHint {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.72rem;
+    color: var(--sapContent_LabelColor, #475569);
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+.aiChatScroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100% !important;
+    background: #f8fafc;
+}
+.aiChatBody {
+    min-height: 100%;
+    box-sizing: border-box;
+}
+.aiChatEmpty { display: flex; flex-direction: column; }
+.aiWelcomeText {
+    font-size: 0.875rem;
+    color: #334155;
+    line-height: 1.45;
+}
+.aiSuggestionsGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.aiSuggestionsGrid .aiSuggestion.sapMBtn {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 2.35rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    border: none !important;
+    background: transparent !important;
+}
+.aiSuggestionsGrid .aiSuggestion .sapMBtnInner {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 2.35rem !important;
+    padding: 0.5rem 0.85rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #ffffff !important;
+    color: #1e293b !important;
+    font-size: 0.8125rem !important;
+    font-weight: 500 !important;
+    line-height: 1.35 !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+    transition: all 0.15s ease !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+}
+.aiSuggestionsGrid .aiSuggestion:hover .sapMBtnInner {
+    background: #f0f7ff !important;
+    border-color: #93c5fd !important;
+    color: #0070f2 !important;
+    box-shadow: 0 2px 6px rgba(0, 112, 242, 0.08) !important;
+}
+.aiSuggestionsGrid .aiSuggestion .sapMBtnContent {
+    line-height: 1.35 !important;
+    height: auto !important;
+    white-space: normal !important;
+    text-align: left !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: inline-block !important;
+    vertical-align: middle !important;
+    flex: 1 1 auto !important;
+    overflow: visible !important;
+}
+.aiSuggestionsGrid .aiSuggestion .sapMBtnContent > bdi {
+    line-height: 1.35 !important;
+    display: inline-block !important;
+    vertical-align: middle !important;
+}
+.aiSuggestionsGrid .aiSuggestion .sapMBtnIcon {
+    color: #0070f2 !important;
+    font-size: 1.05rem !important;
+    line-height: 1 !important;
+    margin: 0 0.65rem 0 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 0 0 auto !important;
+}
+.aiMsg { margin-bottom: 0.75rem; }
+.aiBubble {
+    max-width: 100%;
+    padding: 0.65rem 0.875rem;
+    border-radius: 0.625rem;
+    border-top-left-radius: 0.125rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    word-break: break-word;
+    line-height: 1.45;
+}
+.aiMsg[data-role="user"] .aiBubble {
+    max-width: 85%;
+    background: var(--sapButton_Emphasized_Background, #0070f2);
+    color: #ffffff;
+    border: 1px solid #0062d4;
+    border-radius: 0.625rem;
+    border-top-right-radius: 0.125rem;
+    box-shadow: 0 2px 4px rgba(0, 112, 242, 0.2);
+}
+.aiMsg[data-role="error"] .aiBubble {
+    background: #fff5f5;
+    border-color: #fca5a5;
+    color: #991b1b;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.08);
+}
+.aiErrorCard { padding: 0.2rem; }
+.aiErrorIcon { color: #dc2626 !important; font-size: 1.15rem; }
+.aiErrorTitle { color: #991b1b !important; font-weight: 600; font-size: 0.875rem !important; margin: 0; }
+.aiErrorText { color: #7f1d1d; font-size: 0.8125rem; line-height: 1.4; word-break: break-word; }
+.aiRetryBtn .sapMBtnInner {
+    background: #fee2e2 !important;
+    border: 1px solid #f87171 !important;
+    color: #991b1b !important;
+    font-weight: 600;
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.75rem;
+    height: 1.85rem;
+    transition: all 0.15s ease;
+}
+.aiRetryBtn:hover .sapMBtnInner {
+    background: #fecaca !important;
+    border-color: #ef4444 !important;
+    color: #7f1d1d !important;
+}
+.aiMsgMeta {
+    margin-top: 0.25rem;
+    padding: 0 0.25rem;
+    font-size: 0.6875rem;
+    color: var(--sapContent_LabelColor, #64748b);
+}
+.aiTyping {
+    padding: 0.5rem 0.85rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+}
+.aiTypingRow { display: flex; align-items: center; }
+.aiTypingIcon {
+    margin-right: 0.4rem;
+    color: var(--sapContent_IconColor, #0070f2);
+    animation: aiPulse 1.2s ease-in-out infinite;
+}
+.aiTypingText {
+    font-size: 0.8125rem;
+    color: #475569;
+    font-style: italic;
+}
+.aiStopInlineBtn .sapMBtnInner {
+    height: 1.6rem !important;
+    padding: 0 0.5rem !important;
+    font-size: 0.75rem !important;
+    border-radius: 0.25rem;
+}
+@keyframes aiPulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+/* Contextual follow-up chips */
+.aiFollowUpsBox {
+    flex: 0 0 auto;
+    padding: 0.45rem 0.85rem;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+}
+.aiFollowUpsHeader {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.3rem;
+}
+.aiFollowUpIcon {
+    color: #f59e0b !important;
+    font-size: 0.85rem;
+}
+.aiFollowUpsTitle {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.aiFollowUpsList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+.aiFollowUpChip .sapMBtnInner {
+    height: 1.75rem !important;
+    padding: 0 0.65rem !important;
+    font-size: 0.75rem !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 1rem !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-weight: 500;
+    transition: all 0.15s ease !important;
+}
+.aiFollowUpChip:hover .sapMBtnInner {
+    background: #e0f2fe !important;
+    border-color: #38bdf8 !important;
+    color: #0284c7 !important;
+}
+
+/* Rendered markdown */
+.aiMd { font-size: 0.875rem; line-height: 1.45; }
+.aiMd p { margin: 0 0 0.5rem 0; }
+.aiMd p:last-child, .aiMd ul:last-child, .aiMd ol:last-child, .aiMd table:last-child { margin-bottom: 0; }
+.aiMd h3, .aiMd h4, .aiMd h5, .aiMd h6 { margin: 0.5rem 0 0.25rem 0; font-weight: 600; line-height: 1.3; }
+.aiMd h3 { font-size: 1rem; } .aiMd h4 { font-size: 0.9375rem; } .aiMd h5, .aiMd h6 { font-size: 0.875rem; }
+.aiMd ul, .aiMd ol { margin: 0.25rem 0 0.5rem 0; padding-left: 1.25rem; }
+.aiMd li { margin: 0.125rem 0; }
+.aiMd code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.8125rem; background: rgba(0,0,0,0.06); padding: 0 0.25rem; border-radius: 0.25rem; }
+.aiMsg[data-role="user"] .aiMd code { background: rgba(255,255,255,0.2); }
+.aiMd pre { margin: 0.25rem 0 0.5rem 0; padding: 0.5rem 0.625rem; background: rgba(0,0,0,0.06); border-radius: 0.375rem; overflow-x: auto; }
+.aiMd pre code { background: none; padding: 0; }
+
+/* Responsive tables with sticky header & hover */
+.aiMd table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    margin: 0.5rem 0;
+    font-size: 0.8125rem;
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--sapList_BorderColor, #e2e8f0);
+    border-radius: 0.375rem;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.aiMd thead th {
+    background: var(--sapList_HeaderBackground, #f8fafc);
+    color: var(--sapList_HeaderTextColor, #475569);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.45rem 0.65rem;
+    border-bottom: 1px solid var(--sapList_BorderColor, #e2e8f0);
+    border-right: 1px solid var(--sapList_BorderColor, #edf2f7);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.aiMd thead th:last-child {
+    border-right: none;
+}
+.aiMd tbody td {
+    padding: 0.45rem 0.65rem;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--sapList_BorderColor, #f1f5f9);
+    border-right: 1px solid var(--sapList_BorderColor, #f1f5f9);
+    color: var(--sapTextColor, #1e293b);
+}
+.aiMd tbody td:last-child {
+    border-right: none;
+}
+.aiMd tbody tr:last-child td {
+    border-bottom: none;
+}
+.aiMd tbody tr:nth-child(even) {
+    background-color: #fafbfc;
+}
+.aiMd tbody tr:hover {
+    background-color: var(--sapList_Hover_Background, #f0f7ff);
+}
+.aiMd td.num {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+}
+.aiMd blockquote {
+    margin: 0.35rem 0 0.5rem 0;
+    padding: 0.35rem 0.65rem;
+    border-left: 3px solid var(--sapAccentColor6, #0070f2);
+    background: #f8fafc;
+    border-radius: 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--sapTextColor, #32363a);
+}
+.aiBadge {
+    display: inline-block;
+    padding: 0.125rem 0.375rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    border-radius: 0.25rem;
+    margin: 0 0.15rem;
+    vertical-align: baseline;
+    letter-spacing: 0.02em;
+}
+.aiBadgeVerified {
+    background: #e7f6ed;
+    color: #0e623b;
+    border: 1px solid #a3e2bb;
+}
+.aiBadgeInterpretation {
+    background: #f3f0ff;
+    color: #5925dc;
+    border: 1px solid #d9d6fe;
+}
+.aiBadgeRetrieval {
+    background: #e8f4fd;
+    color: #0c60a2;
+    border: 1px solid #b6defb;
+}
+.aiBadgeScope {
+    background: #fdf3e7;
+    color: #93370d;
+    border: 1px solid #fedf89;
+}
+.aiBadgePartial {
+    background: #fff8e6;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+.aiBadgeFailed {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+.aiBadgeEmpty {
+    background: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #e5e7eb;
+}
+.aiMd hr { border: 0; border-top: 1px solid var(--sapList_BorderColor, #e5e5e5); margin: 0.5rem 0; }
+.aiMd a { color: var(--sapLinkColor, #0a6ed1); }
+.aiMsg[data-role="user"] .aiMd a { color: inherit; text-decoration: underline; }
+.aiPoLink {
+    color: var(--sapLinkColor, #0a6ed1);
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--sapLinkColor, #0a6ed1);
+    cursor: pointer;
+    transition: color 0.15s ease, border-bottom-color 0.15s ease;
+}
+.aiPoLink:hover {
+    color: var(--sapLink_Hover_Color, #0854a0);
+    border-bottom: 1px solid var(--sapLink_Hover_Color, #0854a0);
+    text-decoration: none;
+}
+.aiMsg[data-role="user"] .aiPoLink {
+    color: #fff;
+    border-bottom: 1px dotted rgba(255, 255, 255, 0.7);
+}
+.aiMsg[data-role="user"] .aiPoLink:hover {
+    color: #fff;
+    border-bottom: 1px solid #fff;
+}
+.aiChatFooter.sapMTB {
+    flex: 0 0 auto;
+    height: auto !important;
+    min-height: 3.5rem !important;
+    background: #ffffff !important;
+    border-top: 1px solid var(--sapGroup_ContentBorderColor, #e2e8f0) !important;
+    padding: 0.6rem 0.85rem !important;
+    display: flex !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+    gap: 0.5rem;
+}
+.aiChatFooter .sapMInputBase {
+    flex: 1 1 auto;
+}
+.aiChatFooter .sapMInputBaseInner {
+    height: 2.25rem !important;
+    line-height: 2.25rem !important;
+    border-radius: 0.375rem !important;
+    font-size: 0.8125rem !important;
+}
+.aiChatFooter .sapMBtn {
+    flex: 0 0 auto;
+    height: 2.25rem !important;
+}
+.aiChatFooter .sapMBtnInner {
+    height: 2.25rem !important;
+    line-height: 2.25rem !important;
+    min-width: 2.25rem !important;
+    border-radius: 0.375rem !important;
+}
+.aiStopBtn .sapMBtnInner {
+    background: #dc2626 !important;
+    border-color: #b91c1c !important;
+    color: #ffffff !important;
+}
+.aiStopBtn:hover .sapMBtnInner {
+    background: #b91c1c !important;
+    border-color: #991b1b !important;
+}
+
+/* Responsive Table Polish: Ensure clean full-width stretch and comfortable pop-in padding */
+.sapMListTbl {
+    width: 100% !important;
+}
+
+.sapMListTblSubRow {
+    padding: 0.375rem 0.75rem !important;
+}
+
+.sapMListTblSubRowCell {
+    padding: 0.25rem 0.5rem !important;
+}
+
+/* Value Help Icon vertical centering inside Input controls */
+.sapMInputBaseContentWrapper {
+    align-items: center !important;
+}
+
+.sapMInputBaseIconContainer,
+.sapMInputValHelp {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 100% !important;
+    vertical-align: middle !important;
+}
+
+.sapMInputBaseIcon {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    height: auto !important;
+}
+
+/* Label-size picker: proportional stock-size preview rectangle */
+.huSizePreview {
+    border: 1px solid var(--sapContent_ForegroundBorderColor, #878787);
+    background: var(--sapContent_ForegroundColor, #eeeeee);
+    flex-shrink: 0;
+}
+
+/* Handling Units compact count/KPI strip */
+.huKpiStrip {
+    min-height: 1.5rem;
+}
+
+.huKpiStrip,
+.huKpiStrip .sapMHBox {
+    align-items: baseline !important;
+}
+
+.huKpiStrip .sapMFlexItem {
+    display: inline-flex !important;
+    align-items: baseline !important;
+}
+
+.huKpiStrip .huKpiGroup {
+    display: contents !important;
+}
+
+.huKpiStrip .huKpiItem {
+    display: inline-flex !important;
+    align-items: baseline !important;
+    padding-right: 0.625rem !important;
+    margin-right: 0.625rem !important;
+    border-right: 1px solid var(--sapContent_SeparatorColor, #d9d9d9) !important;
+}
+
+.huKpiStrip .huKpiItem:last-child {
+    border-right: none !important;
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+}
+
+.sapUiTinyText {
+    font-size: 0.75rem;
 }

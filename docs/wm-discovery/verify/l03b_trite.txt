@@ -1,0 +1,9 @@
+@EndUserText.label : 'Transfer Table for Item Data L_TO_CREATE_TR'
+@AbapCatalog.enhancement.category : #EXTENSIBLE_CHARACTER_NUMERIC
+define structure l03b_trite {
+
+  include l03b_trallg;
+  include l03b_inbit;
+  include l03b_outit;
+
+}

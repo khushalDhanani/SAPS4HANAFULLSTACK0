@@ -3,85 +3,130 @@
   "version": "1.0.0",
   "description": "SAP S/4HANA Enterprise Full-Stack Platform",
   "main": "server.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
-    "start": "cds watch --exclude data",
-    "watch": "cds watch --exclude data",
+    "start": "sh -c '[ -f \"$HOME/.sap-certs/s4-dev.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$HOME/.sap-certs/s4-dev.pem\"; cds-serve'",
+    "watch": "sh -c '[ -f \"$HOME/.sap-certs/s4-dev.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$HOME/.sap-certs/s4-dev.pem\"; cds watch --exclude data'",
     "test": "jest --runInBand",
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",
-    "test:e2e": "jest test/e2e --runInBand",
-    "validate:mta": "mbt validate",
-    "build:mta": "mbt build",
-    "docker:build": "docker build -t saps4hana-fullstack:latest .",
-    "docker:build:dev": "docker build -f Dockerfile.dev -t saps4hana-fullstack:dev .",
-    "docker:run": "docker run -d --name saps4hana-app -p 4004:4004 --env-file .env saps4hana-fullstack:latest",
-    "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down",
-    "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up"
+    "test:e2e": "node test/e2e/runAllE2E.js",
+    "test:e2e:sap-free": "node test/e2e/runAllE2E.js --sap-free",
+    "test:e2e:sap": "node test/e2e/runSapRoundTrips.js",
+    "test:coverage": "jest --coverage --runInBand",
+    "test:performance": "jest test/performance --runInBand",
+    "test:a11y": "jest test/a11y --runInBand",
+    "test:smoke": "node tools/smoke-test-deployment.js",
+    "test:monitoring": "jest test/unit/monitoring --runInBand",
+    "check:connectivity": "node tools/check-service-connectivity.js",
+    "check:rfc-runtime": "node tools/verify-cf-rfc-runtime.js",
+    "check:sap-diagnostic": "node tools/check-sap-integration-diagnostic.js",
+    "preflight:rfc": "node tools/rfc-preflight.js",
+    "scan:secrets": "node tools/scan-secrets.js",
+    "scan:dependencies": "node tools/scan-dependencies.js",
+    "validate:sap:sandbox": "node tools/validate-sap-sandbox.js",
+    "lint": "eslint .",
+    "generate:rules": "node tools/generate-po-rules.js",
+    "check:mbt": "mbt --version | grep -q . || { echo 'mbt binary is missing: its install script did not run or its download failed. Nothing was validated or built.' >&2; exit 1; }",
+    "validate:mta": "npm run -s check:mbt && mbt validate -x paths",
+    "build:mta": "npm run -s check:mbt && mbt build"
   },
   "license": "ISC",
   "dependencies": {
+    "@cap-js/hana": "^3",
+    "@sap-ai-sdk/orchestration": "^2.16.0",
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
     "@sap/cds": "^10.0.6",
-    "@sap-cloud-sdk/resilience": "^4"
+    "@sap/xssec": "^4.15.0",
+    "dotenv": "^17.4.2",
+    "nodemailer": "^10.3.1",
+    "openai": "^7.21.0"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.2",
     "@cap-js/sqlite": "^3.0.2",
     "@sap/cds-dk": "^10.0.7",
+    "@ui5/cli": "^4.0.71",
+    "axe-core": "4.14.0",
     "cds-plugin-ui5": "^0.17.4",
-    "jest": "^30.5.1"
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "jest": "^30.5.1",
+    "mbt": "^1.2.49",
+    "playwright": "^1.57.0"
+  },
+  "overrides": {
+    "@sigstore/core": "^4.0.1"
   },
   "cds": {
     "requires": {
+      "db": {
+        "[development]": {
+          "kind": "sqlite",
+          "credentials": {
+            "url": "db.sqlite"
+          }
+        },
+        "[test]": {
+          "credentials": {
+            "url": ":memory:"
+          }
+        }
+      },
       "auth": {
         "[development]": {
           "kind": "mocked",
           "users": {
-            "alice": {
+            "khushal": {
               "roles": [
-                "User",
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer",
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
-                "WarehouseManager"
+                "WarehouseManager",
+                "SapLogsReader"
               ]
             },
-            "bob": {
-              "roles": [
-                "User",
-                "Viewer"
-              ]
-            }
+            "alice": false,
+            "bob": false,
+            "carol": false,
+            "dave": false,
+            "erin": false,
+            "fred": false,
+            "me": false,
+            "yves": false,
+            "*": false
           }
         },
         "[test]": {
           "kind": "mocked",
           "users": {
-            "alice": {
+            "khushal": {
               "roles": [
-                "User",
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer",
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
-                "WarehouseManager"
+                "WarehouseManager",
+                "SapLogsReader"
               ]
             },
-            "bob": {
-              "roles": [
-                "User",
-                "Viewer"
-              ]
-            }
+            "alice": false,
+            "bob": false,
+            "carol": false,
+            "dave": false,
+            "erin": false,
+            "fred": false,
+            "me": false,
+            "yves": false,
+            "*": false
           }
         },
         "[production]": {
@@ -94,6 +139,14 @@
       "C_PURCHASEORDER_FS_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/C_PURCHASEORDER_FS_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
@@ -104,6 +157,14 @@
       "MM_PUR_PO_MAINT_V2_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/MM_PUR_PO_MAINT_V2_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
@@ -111,31 +172,82 @@
           }
         }
       },
-      "FAC_GL_JOURNALENTRY_VER_SRV": {
+      "SD_F2370_INQY_WL_SRV": {
         "kind": "odata-v2",
-        "model": "srv/external/FAC_GL_JOURNALENTRY_VER_SRV",
-        "credentials": {
-          "url": "http://localhost:5000"
+        "model": "srv/external/SD_F2370_INQY_WL_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
         },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
-            "path": "/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV"
+            "path": "/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV"
           }
         }
       },
-      "SD_F2370_INQY_WL_SRV": {
-        "kind": "odata-v2",
-        "model": "srv/external/SD_F2370_INQY_WL_SRV"
-      },
       "SD_F2369_INQY_FS_SRV": {
         "kind": "odata-v2",
-        "model": "srv/external/SD_F2369_INQY_FS_SRV"
+        "model": "srv/external/SD_F2369_INQY_FS_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/SD_F2369_INQY_FS_SRV"
+          }
+        }
       },
-      "LORD_ODATA_ORDER_SRV": {
+      "SD_F1873_SO_WL_SRV": {
         "kind": "odata-v2",
-        "model": "srv/external/LORD_ODATA_ORDER_SRV"
+        "model": "srv/external/SD_F1873_SO_WL_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/SD_F1873_SO_WL_SRV"
+          }
+        }
+      }
+    },
+    "s4": {},
+    "log": {
+      "format": "plain",
+      "levels": {
+        "auth": "info",
+        "s4-client": "info",
+        "purchase-order": "info",
+        "purchase-order-adapter": "info",
+        "sales-inquiry": "info",
+        "sales-inquiry-adapter": "info"
+      }
+    },
+    "cds-plugin-ui5": {
+      "modules": {
+        "fiori-app": {
+          "configFile": "ui5-cap.yaml"
+        }
       }
     }
+  },
+  "optionalDependencies": {
+    "node-rfc": "^3.3.1"
   }
 }

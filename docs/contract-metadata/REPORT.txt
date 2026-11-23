@@ -1,0 +1,116 @@
+pattern: sales.?contract|slscontr|sls_contr|salescntrct|customer.?contract|SDDocumentCategory.{0,40}\bG\b
+V4 catalog config/default/iwfnd/catalog/0002: HTTP 404  V4 catalog config/default/iwfnd/catalog/0001: HTTP 404  V4 catalog catalog/default/iwfnd/catalog/0002: HTTP 404  
+metadata fetched: 1242  | HTTP!=200: 4 | metadata naming a matching object: 9
+
+== C_SALESCONTRACTITMFLFMTQ_CDS
+   /sap/opu/odata/sap/C_SALESCONTRACTITMFLFMTQ_CDS
+   - EntitySet SalesEmployee  type=C_SALESCONTRACTITMFLFMTQ_CDS.SalesEmployee  sap:creatable=false
+   - EntitySet SalesEmployeeResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.SalesEmployeeResult  sap:creatable=false
+   - EntitySet Product  type=C_SALESCONTRACTITMFLFMTQ_CDS.Product  sap:creatable=false
+   - EntitySet ProductResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.ProductResult  sap:creatable=false
+   - EntitySet SDDocumentRejectionStatus  type=C_SALESCONTRACTITMFLFMTQ_CDS.SDDocumentRejectionStatus  sap:creatable=false
+   - EntitySet SDDocumentRejectionStatusResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.SDDocumentRejectionStatusResult  sap:creatable=false
+   - EntitySet SalesContract  type=C_SALESCONTRACTITMFLFMTQ_CDS.SalesContract  sap:creatable=false
+   - EntitySet SalesContractResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.SalesContractResult  sap:creatable=false
+   - EntitySet SalesOrganization  type=C_SALESCONTRACTITMFLFMTQ_CDS.SalesOrganization  sap:creatable=false
+   - EntitySet SalesOrganizationResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.SalesOrganizationResult  sap:creatable=false
+   - EntitySet SoldToParty  type=C_SALESCONTRACTITMFLFMTQ_CDS.SoldToParty  sap:creatable=false
+   - EntitySet SoldToPartyResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.SoldToPartyResult  sap:creatable=false
+   - EntitySet PartnerCompany  type=C_SALESCONTRACTITMFLFMTQ_CDS.PartnerCompany  sap:creatable=false
+   - EntitySet PartnerCompanyResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.PartnerCompanyResult  sap:creatable=false
+   - EntitySet ResponsibleEmployee  type=C_SALESCONTRACTITMFLFMTQ_CDS.ResponsibleEmployee  sap:creatable=false
+   - EntitySet ResponsibleEmployeeResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.ResponsibleEmployeeResult  sap:creatable=false
+   - EntitySet DisplayCurrency  type=C_SALESCONTRACTITMFLFMTQ_CDS.DisplayCurrency  sap:creatable=false
+   - EntitySet DisplayCurrencyResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.DisplayCurrencyResult  sap:creatable=false
+   - EntitySet AdditionalMetadata  type=C_SALESCONTRACTITMFLFMTQ_CDS.ODataQueryAdditionalMetadata  sap:creatable=false
+   - EntitySet C_SALESCONTRACTITMFLFMTQResults  type=C_SALESCONTRACTITMFLFMTQ_CDS.C_SALESCONTRACTITMFLFMTQResult  sap:creatable=false
+   - EntitySet C_SALESCONTRACTITMFLFMTQ  type=C_SALESCONTRACTITMFLFMTQ_CDS.C_SALESCONTRACTITMFLFMTQParameters  sap:creatable=false
+   - EntitySet P_DisplayCurrency  type=C_SALESCONTRACTITMFLFMTQ_CDS.P_DisplayCurrency  sap:creatable=false
+   - EntitySet SAP__FormatSet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__Format  sap:creatable=false
+   - EntitySet SAP__PDFStandardSet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__PDFStandard  sap:creatable=false
+   - EntitySet SAP__TableColumnsSet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__TableColumns  sap:creatable=false
+   - EntitySet SAP__CoverPageSet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__CoverPage  sap:creatable=false
+   - EntitySet SAP__SignatureSet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__Signature  sap:creatable=false
+   - EntitySet SAP__HierarchySet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__Hierarchy  sap:creatable=false
+   - EntitySet SAP__PDFHeaderSet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__PDFHeader  sap:creatable=false
+   - EntitySet SAP__PDFFooterSet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__PDFFooter  sap:creatable=false
+   - EntitySet SAP__ValueHelpSet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__ValueHelp  sap:creatable=(not stated => default true)
+   - EntitySet SAP__Currencies  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__Currency  sap:creatable=(not stated => default true)
+   - EntitySet SAP__UnitsOfMeasure  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__UnitOfMeasure  sap:creatable=(not stated => default true)
+   - EntitySet SAP__MyDocumentDescriptions  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__DocumentDescription  sap:creatable=(not stated => default true)
+   - EntitySet SAP__FileShareSet  type=C_SALESCONTRACTITMFLFMTQ_CDS.SAP__FileShare  sap:creatable=false
+
+== C_SALESDOCUMENTWORKFLOWVH_CDS
+   /sap/opu/odata/sap/C_SALESDOCUMENTWORKFLOWVH_CDS
+   - EntitySet C_SalesContractTypeValueHelp  type=C_SALESDOCUMENTWORKFLOWVH_CDS.C_SalesContractTypeValueHelpType  sap:creatable=false
+   - EntitySet I_SalesContractApprovalReason  type=C_SALESDOCUMENTWORKFLOWVH_CDS.I_SalesContractApprovalReasonType  sap:creatable=false
+
+== SD_CUSTOMER360_OVP
+   /sap/opu/odata/sap/SD_CUSTOMER360_OVP
+   - EntitySet C_SalesContractFulfillmentSet  type=SD_CUSTOMER360_OVP.C_SalesContractFulfillmentType  sap:creatable=false
+   - EntitySet C_SalesContractFulfillment  type=SD_CUSTOMER360_OVP.C_SalesContractFulfillmentParameters  sap:creatable=false
+   - EntitySet C_SlsContractByFulfillmentPctSet  type=SD_CUSTOMER360_OVP.C_SlsContractByFulfillmentPctType  sap:creatable=false
+   - EntitySet C_SlsContractByFulfillmentPct  type=SD_CUSTOMER360_OVP.C_SlsContractByFulfillmentPctParameters  sap:creatable=false
+
+== SD_SALESCONTRACT_WORKFLOW
+   /sap/opu/odata/sap/SD_SALESCONTRACT_WORKFLOW
+   - EntitySet C_SalesContractItemWrkflwInbox  type=SD_SALESCONTRACT_WORKFLOW.C_SalesContractItemWrkflwInboxType  sap:creatable=false
+   - EntitySet C_SalesContractWrkflwInbox  type=SD_SALESCONTRACT_WORKFLOW.C_SalesContractWrkflwInboxType  sap:creatable=false
+   - EntitySet I_Customer_VH  type=SD_SALESCONTRACT_WORKFLOW.I_Customer_VHType  sap:creatable=false
+   - EntitySet I_SalesContractApprovalReason  type=SD_SALESCONTRACT_WORKFLOW.I_SalesContractApprovalReasonType  sap:creatable=false
+   - EntitySet SAP__FormatSet  type=SD_SALESCONTRACT_WORKFLOW.SAP__Format  sap:creatable=false
+   - EntitySet SAP__PDFStandardSet  type=SD_SALESCONTRACT_WORKFLOW.SAP__PDFStandard  sap:creatable=false
+   - EntitySet SAP__TableColumnsSet  type=SD_SALESCONTRACT_WORKFLOW.SAP__TableColumns  sap:creatable=false
+   - EntitySet SAP__CoverPageSet  type=SD_SALESCONTRACT_WORKFLOW.SAP__CoverPage  sap:creatable=false
+   - EntitySet SAP__SignatureSet  type=SD_SALESCONTRACT_WORKFLOW.SAP__Signature  sap:creatable=false
+   - EntitySet SAP__HierarchySet  type=SD_SALESCONTRACT_WORKFLOW.SAP__Hierarchy  sap:creatable=false
+   - EntitySet SAP__PDFHeaderSet  type=SD_SALESCONTRACT_WORKFLOW.SAP__PDFHeader  sap:creatable=false
+   - EntitySet SAP__PDFFooterSet  type=SD_SALESCONTRACT_WORKFLOW.SAP__PDFFooter  sap:creatable=false
+   - EntitySet SAP__ValueHelpSet  type=SD_SALESCONTRACT_WORKFLOW.SAP__ValueHelp  sap:creatable=(not stated => default true)
+   - EntitySet SAP__Currencies  type=SD_SALESCONTRACT_WORKFLOW.SAP__Currency  sap:creatable=(not stated => default true)
+   - EntitySet SAP__UnitsOfMeasure  type=SD_SALESCONTRACT_WORKFLOW.SAP__UnitOfMeasure  sap:creatable=(not stated => default true)
+   - EntitySet SAP__MyDocumentDescriptions  type=SD_SALESCONTRACT_WORKFLOW.SAP__DocumentDescription  sap:creatable=(not stated => default true)
+   - EntitySet SAP__FileShareSet  type=SD_SALESCONTRACT_WORKFLOW.SAP__FileShare  sap:creatable=false
+   - V4 InsertRestrictions on SD_SALESCONTRACT_WORKFLOW.SAP__DocumentDescription Insertable=false
+
+== ZSD_F1851_CONTR_WL_SRV
+   /sap/opu/odata/sap/SD_F1851_CONTR_WL_SRV
+   - EntitySet C_SalesContractTypeValueHelp  type=SD_F1851_CONTR_WL_SRV.C_SalesContractTypeValueHelpType  sap:creatable=false
+   - EntitySet C_SalesContractWl_F1851  type=SD_F1851_CONTR_WL_SRV.C_SalesContractWl_F1851Type  sap:creatable=false
+
+== ZSD_F2026_CONTR_FS_SRV
+   /sap/opu/odata/sap/SD_F2026_CONTR_FS_SRV
+   - EntitySet C_Salescontractfs  type=SD_F2026_CONTR_FS_SRV.C_SalescontractfsType  sap:creatable=false
+   - EntitySet C_Salescontractitemfs  type=SD_F2026_CONTR_FS_SRV.C_SalescontractitemfsType  sap:creatable=false
+   - EntitySet C_SalesContractPartnerCard  type=SD_F2026_CONTR_FS_SRV.C_SalesContractPartnerCardType  sap:creatable=false
+   - EntitySet C_SalesContractProcessFlow  type=SD_F2026_CONTR_FS_SRV.C_SalesContractProcessFlowType  sap:creatable=false
+   - EntitySet I_SalesContract  type=SD_F2026_CONTR_FS_SRV.I_SalesContractType  sap:creatable=false
+   - EntitySet I_SalesContractApprovalReason  type=SD_F2026_CONTR_FS_SRV.I_SalesContractApprovalReasonType  sap:creatable=false
+   - EntitySet I_SalesContractStdVH  type=SD_F2026_CONTR_FS_SRV.I_SalesContractStdVHType  sap:creatable=false
+
+== ZSD_F2187_CUST360_SRV
+   /sap/opu/odata/sap/SD_F2187_CUST360_SRV
+   - EntitySet C_SalesContractTypeValueHelp  type=SD_F2187_CUST360_SRV.C_SalesContractTypeValueHelpType  sap:creatable=false
+   - EntitySet C_SalesContractWl_F1851  type=SD_F2187_CUST360_SRV.C_SalesContractWl_F1851Type  sap:creatable=false
+
+== ZSD_MCC_CCO_MASS_UPDATE_SRV
+   /sap/opu/odata/sap/SD_MCC_CCO_MASS_UPDATE_SRV
+   - EntitySet SlsContr  type=SD_MCC_CCO_MASS_UPDATE_SRV.SlsContrType  sap:creatable=false
+   - EntitySet SlsContrItem  type=SD_MCC_CCO_MASS_UPDATE_SRV.SlsContrItemType  sap:creatable=false
+   - EntitySet I_SalesContractStdVH  type=SD_MCC_CCO_MASS_UPDATE_SRV.I_SalesContractStdVHType  sap:creatable=false
+   - EntitySet I_SalesContractType  type=SD_MCC_CCO_MASS_UPDATE_SRV.I_SalesContractTypeType  sap:creatable=false
+
+== ZSD_MCC_CR_MASS_UPDATE_SRV
+   /sap/opu/odata/sap/SD_MCC_CR_MASS_UPDATE_SRV
+   - EntitySet I_SalesContractFollowUpAction  type=SD_MCC_CR_MASS_UPDATE_SRV.I_SalesContractFollowUpActionType  sap:creatable=false
+
+
+== NON-200 for pattern-named or direct-probed services
+   HTTP 403 API_SALES_CONTRACT_SRV(direct) /sap/opu/odata/sap/API_SALES_CONTRACT_SRV
+      <?xml version="1.0" encoding="utf-8"?><error xmlns="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata"><code>/IWFND/MED/170</code><message xml:lang="en">No service found for namespace '', name 'API_SALES_CONTRACT_SRV', version '0001'</me
+   HTTP 404 V4:api_salescontract(direct) /sap/opu/odata4/sap/api_salescontract/srvd_a2x/sap/salescontract/0001
+      {"error":{"code":"/IWBEP/CM_V4_COS/014","message":"Service group 'API_SALESCONTRACT' not published","@SAP__common.longtextUrl":"../../../../default/iwbep/common/0001/T100Longtexts(MessageClass='%2FIWBEP%2FCM_V4_COS',MessageNumber='014',Variable1='API
+   HTTP 404 V4:ui_salescontractmanage(direct) /sap/opu/odata4/sap/ui_salescontractmanage/srvd/sap/ui_salescontractmanage/0001
+      {"error":{"code":"/IWBEP/CM_V4_COS/014","message":"Service group 'UI_SALESCONTRACTMANAGE' not published","@SAP__common.longtextUrl":"../../../../default/iwbep/common/0001/T100Longtexts(MessageClass='%2FIWBEP%2FCM_V4_COS',MessageNumber='014',Variable1
+   HTTP 404 V4:ui_salescontract(direct) /sap/opu/odata4/sap/ui_salescontract/srvd/sap/ui_salescontract/0001
+      {"error":{"code":"/IWBEP/CM_V4_COS/014","message":"Service group 'UI_SALESCONTRACT' not published","@SAP__common.longtextUrl":"../../../../default/iwbep/common/0001/T100Longtexts(MessageClass='%2FIWBEP%2FCM_V4_COS',MessageNumber='014',Variable1='UI_S

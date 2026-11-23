@@ -1,0 +1,17 @@
+{
+  "time": "2026-10-26T12:25:10.356Z",
+  "transaction": [
+    {
+      "TCODE": "ZQUARAN",
+      "PGMNA": "ZMM_R_062",
+      "DYPNO": "1000"
+    }
+  ],
+  "text": [
+    {
+      "SPRSL": "E",
+      "TCODE": "ZQUARAN",
+      "TTEXT": "Quarantine"
+    }
+  ]
+}

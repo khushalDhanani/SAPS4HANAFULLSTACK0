@@ -10,11 +10,16 @@
  *   - C_PURCHASEORDER_FS_SRV (OData V2 read & value helps)
  *   - MM_PUR_PO_MAINT_V2_SRV (OData V2 draft & activation)
  *
- * Consequently, no local database tables or SAP HANA HDI container artifacts are provisioned.
- * If local domain persistence or audit trails are required in future phases, entities can be
- * modeled here and bound to an HDI container.
+ * Consequently, no business documents are stored locally.
+ *
+ * NOTE: All warehouse transactions post directly to SAP S/4HANA via standard OData/RFC APIs.
+ * No local queue is persisted; S/4HANA remains the authoritative system of record.
  */
 
 namespace saps4hana.fullstack;
 
-// Intentionally empty — persistence delegated completely to SAP S/4HANA.
+// Lock notifications (dedupe and last seen lock state), until an SAP table replaces them
+using from './admin/user-lock';
+
+// Password expiry monitoring (snapshots, milestone tracking, health monitor)
+using from './admin/password-expiry';

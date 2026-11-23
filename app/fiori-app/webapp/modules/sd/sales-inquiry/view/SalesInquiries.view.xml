@@ -2,25 +2,25 @@
     controllerName="saps4hana.fiori.modules.sd.sales-inquiry.controller.SalesInquiries"
     xmlns:mvc="sap.ui.core.mvc"
     xmlns="sap.m"
-    xmlns:f="sap.f"
     xmlns:core="sap.ui.core">
 
     <Page
         id="salesInquiriesPage"
         showHeader="false"
-        backgroundDesign="Solid">
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <!-- Header Toolbar & Title -->
                 <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom" wrap="Wrap">
                     <VBox class="sapUiTinyMarginBottom">
-                        <Title text="Manage Sales Inquiries" level="H2" titleStyle="H3" />
-                        <Text text="SAP S/4HANA Sales &amp; Distribution • Inquiry Catalog (VA11 / F2370)" class="textMuted" />
+                        <Title text="{i18n>salesInquiriesTitle}" level="H2" titleStyle="H3" />
+                        <Text text="{i18n>salesInquiriesSubtitle}" class="textMuted" />
                     </VBox>
                     <HBox alignItems="Center">
                         <Button
                             id="btnCreateInquiry"
-                            text="Create Inquiry (VA11)"
+                            text="{i18n>salesInquiryBtnCreate}"
                             icon="sap-icon://add"
                             type="Emphasized"
                             press=".onNavigateToCreateInquiry"
@@ -28,7 +28,7 @@
                         <Button
                             id="btnRefreshInquiries"
                             icon="sap-icon://refresh"
-                            text="Refresh"
+                            text="{i18n>btnRefresh}"
                             type="Transparent"
                             press=".onRefresh" />
                     </HBox>
@@ -39,8 +39,8 @@
                     <GenericTile
                         id="kpiTotalInquiries"
                         class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
-                        header="Total Inquiries"
-                        subheader="Inquiry Documents">
+                        header="{i18n>salesInquiriesKpiTotal}"
+                        subheader="{i18n>salesInquiriesKpiTotalSub}">
                         <TileContent>
                             <NumericContent
                                 id="kpiTotalInquiriesVal"
@@ -53,8 +53,8 @@
                     <GenericTile
                         id="kpiOpenInquiries"
                         class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
-                        header="Open Inquiries"
-                        subheader="Awaiting Quotation">
+                        header="{i18n>salesInquiriesKpiOpen}"
+                        subheader="{i18n>salesInquiriesKpiOpenSub}">
                         <TileContent>
                             <NumericContent
                                 id="kpiOpenInquiriesVal"
@@ -67,8 +67,8 @@
                     <GenericTile
                         id="kpiActiveCustomers"
                         class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
-                        header="Active Customers"
-                        subheader="Distinct Sold-to Parties">
+                        header="{i18n>salesInquiriesKpiActiveCustomers}"
+                        subheader="{i18n>salesInquiriesKpiActiveCustomersSub}">
                         <TileContent>
                             <NumericContent
                                 id="kpiActiveCustomersVal"
@@ -95,7 +95,7 @@
                     growing="true"
                     growingThreshold="25"
                     growingScrollToLoad="true"
-                    noDataText="No sales inquiries found."
+                    noDataText="{i18n>salesInquiriesNoDataText}"
                     updateFinished=".onUpdateFinished"
                     itemPress=".onInquiryPress"
                     sticky="ColumnHeaders,HeaderToolbar">
@@ -111,33 +111,38 @@
                                 width="18rem"
                                 search=".onSearch"
                                 liveChange=".onSearch"
-                                placeholder="Search inquiries..." />
+                                placeholder="{i18n>salesInquiriesSearchPlaceholder}">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="High" shrinkable="true" minWidth="8rem" />
+                                </layoutData>
+                            </SearchField>
                             <Button
                                 id="btnRefreshInquiriesTable"
                                 icon="sap-icon://refresh"
-                                tooltip="Refresh"
+                                tooltip="{i18n>btnRefresh}"
                                 press=".onRefresh" />
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
-                        <Column width="8rem"><Text text="Inquiry Number" /></Column>
-                        <Column width="5rem"><Text text="Type" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Description" /></Column>
-                        <Column width="7rem"><Text text="Customer" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Customer Name" /></Column>
-                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="Sales Area (Org/Chnl/Div)" /></Column>
-                        <Column width="8rem" minScreenWidth="Desktop" demandPopin="true"><Text text="Doc Date" /></Column>
-                        <Column width="8rem" hAlign="End"><Text text="Net Amount" /></Column>
-                        <Column width="6rem" hAlign="Center"><Text text="Status" /></Column>
+                        <Column width="8rem"><Text text="{i18n>salesInquiriesColInquiryNumber}" /></Column>
+                        <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColType}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColDescription}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColCustomer}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColSalesArea}" /></Column>
+                        <Column width="8rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColDocDate}" /></Column>
+                        <Column width="8rem" hAlign="End"><Text text="{i18n>salesInquiriesColNetAmount}" /></Column>
+                        <Column width="6rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColStatus}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem type="Navigation">
                             <cells>
-                                <ObjectIdentifier title="{salesInquiry>SalesInquiry}" />
+                                <ObjectIdentifier
+                                    title="{salesInquiry>SalesInquiry}" />
                                 <Text text="{salesInquiry>SalesInquiryType}" />
                                 <Text text="{salesInquiry>PurchaseOrderByCustomer}" />
-                                <Text text="{salesInquiry>SoldToParty}" />
-                                <Text text="{= ${salesInquiry>OrganizationBPName1} || ${salesInquiry>CustomerName} || '' }" />
+                                <ObjectIdentifier
+                                    title="{= ${salesInquiry>OrganizationBPName1} || ${salesInquiry>SoldToParty} || '' }"
+                                    text="{= ${salesInquiry>OrganizationBPName1} ? ${salesInquiry>SoldToParty} : '' }" />
                                 <Text text="{= (${salesInquiry>SalesOrganization} || '') + ' / ' + (${salesInquiry>DistributionChannel} || '') + ' / ' + (${salesInquiry>OrganizationDivision} || '') }" />
                                 <Text text="{salesInquiry>SalesInquiryDate}" />
                                 <ObjectNumber number="{salesInquiry>TotalNetAmount}" unit="{salesInquiry>TransactionCurrency}" state="Success" />

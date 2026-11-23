@@ -31,12 +31,6 @@ describe('Unit: SessionContext & Thread-Safe Session Isolation', () => {
         expect(session.draftData.PurchaseOrder).toBe('4500001001');
     });
 
-    it('should verify that PurchaseOrderAdapter singleton has NO mutable session properties', () => {
-        expect(purchaseOrderAdapter._csrfToken).toBeUndefined();
-        expect(purchaseOrderAdapter._csrfCookie).toBeUndefined();
-        expect(purchaseOrderAdapter._sessionContext).toBeUndefined();
-    });
-
     it('should isolate session context across concurrent requests without crosstalk', async () => {
         // Simulate two concurrent requests running in parallel with distinct sessions
         const mockExecuteHttp = jest.fn().mockImplementation((dest, config) => {

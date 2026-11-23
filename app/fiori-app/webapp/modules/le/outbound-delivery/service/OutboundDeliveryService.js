@@ -1,0 +1,254 @@
+sap.ui.define([
+    "saps4hana/fiori/service/ODataClient"
+], function (ODataClient) {
+    "use strict";
+
+    var SERVICE_BASE = "/odata/v4/outbound-delivery";
+
+    var _oModel = null;
+
+    /**
+     * Read an entity set via the OData V4 model's list binding.
+     * Falls back to ODataClient.get() if no model is provided.
+     *
+     * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
+     * @param {string} sEntitySet
+     * @param {sap.ui.model.Filter[]} [aFilters]
+     * @param {Object} [mParameters]
+     * @returns {Promise<Array>}
+     */
+    function _readEntitySet(oModel, sEntitySet, aFilters, mParameters) {
+        return ODataClient.readEntitySet(SERVICE_BASE, oModel || _oModel, sEntitySet, aFilters, mParameters,
+            { useFilterGetters: true });
+    }
+
+    /**
+     * OutboundDeliveryService
+     * Encapsulates Outbound Delivery API communication with the CAP backend.
+     */
+    return {
+        /**
+         * Set the OData V4 model for entity set reads
+         * @param {sap.ui.model.odata.v4.ODataModel} oModel
+         */
+        setModel: function (oModel) {
+            _oModel = oModel;
+        },
+
+        /**
+         * Get the current OData V4 model
+         * @returns {sap.ui.model.odata.v4.ODataModel|null}
+         */
+        getModel: function () {
+            return _oModel;
+        },
+
+        /**
+         * Fetch orders due for delivery.
+         *
+         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
+         * @param {sap.ui.model.Filter[]} [aFilters]
+         * @param {Object} [mParameters]
+         * @returns {Promise<Array>}
+         */
+        getOrdersDueForDelivery: function (oModel, aFilters, mParameters) {
+            if (oModel && typeof oModel.bindList !== "function") {
+                mParameters = aFilters;
+                aFilters = oModel;
+                oModel = _oModel;
+            }
+            return _readEntitySet(oModel || _oModel, "/OrdersDueForDelivery", aFilters, mParameters);
+        },
+
+        /**
+         * Fetch shipping point value help list.
+         *
+         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
+         * @param {sap.ui.model.Filter[]} [aFilters]
+         * @param {Object} [mParameters]
+         * @returns {Promise<Array>}
+         */
+        getShippingPoints: function (oModel, aFilters, mParameters) {
+            if (oModel && typeof oModel.bindList !== "function") {
+                mParameters = aFilters;
+                aFilters = oModel;
+                oModel = _oModel;
+            }
+            return _readEntitySet(oModel || _oModel, "/ShippingPointVH", aFilters, mParameters);
+        },
+
+        /**
+         * KPI figures computed by the server over the full due-for-delivery set (not the loaded page).
+         * Rejects on failure so the caller can show "-" instead of a number.
+         *
+         * @param {string} sPlant plant whose shipping points select the due orders (the server fails closed without one)
+         * @returns {Promise<{scheduleLineCount: number, shippingPointCount: number}>}
+         */
+        getOrdersDueMetrics: function (sPlant) {
+            var sUrl = SERVICE_BASE + "/getOrdersDueMetrics(Plant='" + encodeURIComponent(String(sPlant || "").replace(/'/g, "''")) + "')";
+            return ODataClient.get(sUrl).then(function (result) {
+                var oData = (result && result.value) || result;
+                if (!oData || typeof oData.scheduleLineCount !== "number" || typeof oData.shippingPointCount !== "number") {
+                    throw new Error("getOrdersDueMetrics returned no figures");
+                }
+                return {
+                    scheduleLineCount: oData.scheduleLineCount,
+                    readyToDeliverCount: typeof oData.readyToDeliverCount === "number" ? oData.readyToDeliverCount : 0,
+                    inApprovalCount: typeof oData.inApprovalCount === "number" ? oData.inApprovalCount : 0,
+                    shippingPointCount: oData.shippingPointCount,
+                    distinctOrdersCount: typeof oData.distinctOrdersCount === "number" ? oData.distinctOrdersCount : 0,
+                    readyOrdersCount: typeof oData.readyOrdersCount === "number" ? oData.readyOrdersCount : 0,
+                    inApprovalOrdersCount: typeof oData.inApprovalOrdersCount === "number" ? oData.inApprovalOrdersCount : 0
+                };
+            });
+        },
+
+        /**
+         * The current user's plants for the worklist plant selector (server-side scope).
+         *
+         * @returns {Promise<{plants: string[], unrestricted: boolean}>}
+         */
+        getPlantContext: function () {
+            return ODataClient.get(SERVICE_BASE + "/getPlantContext()").then(function (result) {
+                var oData = (result && result.value) || result || {};
+                return {
+                    plants: Array.isArray(oData.plants) ? oData.plants : [],
+                    unrestricted: oData.unrestricted === true
+                };
+            });
+        },
+
+        /**
+         * Fetch default configured shipping point information.
+         *
+         * @returns {Promise<{ShippingPoint: string, ShippingPoints: string[]}>}
+         */
+        getDefaultShippingPoint: function () {
+            return ODataClient.get(SERVICE_BASE + "/getDefaultShippingPoint()").then(function (result) {
+                var oData = (result && result.value) || result;
+                if (!oData || typeof oData !== "object") {
+                    return { ShippingPoint: "", ShippingPoints: [] };
+                }
+                return {
+                    ShippingPoint: oData.ShippingPoint || "",
+                    ShippingPoints: Array.isArray(oData.ShippingPoints) ? oData.ShippingPoints : []
+                };
+            }).catch(function () {
+                return { ShippingPoint: "", ShippingPoints: [] };
+            });
+        },
+
+        /**
+         * Create an Outbound Delivery from a Sales Order.
+         *
+         * @param {Object} mParams
+         * @param {string} mParams.salesOrder Reference sales order document number
+         * @param {string} [mParams.shippingPoint] Shipping point
+         * @param {string} [mParams.deliveryDate] Delivery date (YYYY-MM-DD)
+         * @returns {Promise<string>} Created Outbound Delivery document number
+         */
+        createOutboundDelivery: function (mParams) {
+            var sSalesOrder = (mParams && (mParams.salesOrder || mParams.SalesOrder)) || "";
+            var sShippingPoint = (mParams && (mParams.shippingPoint || mParams.ShippingPoint)) || "";
+            var sDeliveryDate = (mParams && (mParams.deliveryDate || mParams.DeliveryDate)) || null;
+
+            if (!sSalesOrder) {
+                return Promise.reject(new Error("Sales Order is required to create an outbound delivery."));
+            }
+
+            var oPayload = {
+                SalesOrder: String(sSalesOrder).trim(),
+                ShippingPoint: sShippingPoint ? String(sShippingPoint).trim() : null,
+                DeliveryDate: sDeliveryDate ? String(sDeliveryDate).trim() : null
+            };
+
+            return ODataClient.post(SERVICE_BASE + "/createOutboundDelivery", oPayload).then(function (result) {
+                var sDeliveryNo = (result && result.value !== undefined) ? result.value : result;
+                return String(sDeliveryNo || "");
+            });
+        },
+
+        /** Delivery header statuses from SAP (picking / goods movement / billing). Rejects when SAP has no such delivery. */
+        getDeliveryStatus: function (sDelivery) {
+            if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }
+            return ODataClient.get(SERVICE_BASE + "/getDeliveryStatus(DeliveryDocument='" + encodeURIComponent(String(sDelivery).trim()) + "')").then(function (result) {
+                var o = (result && result.value !== undefined && typeof result.value === "object") ? result.value : result;
+                if (!o || !o.DeliveryDocument) { throw new Error("getDeliveryStatus returned no data"); }
+                return o;
+            });
+        },
+
+        /** Billing document types SAP allows for this delivery (never a hardcoded list). */
+        getBillingDocumentTypes: function (sDelivery) {
+            if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }
+            return ODataClient.get(SERVICE_BASE + "/getBillingDocumentTypes(DeliveryDocument='" + encodeURIComponent(String(sDelivery).trim()) + "')").then(function (result) {
+                var aRows = (result && Array.isArray(result.value)) ? result.value : (Array.isArray(result) ? result : []);
+                return aRows;
+            });
+        },
+
+        /** Create a billing document for a delivery; the number comes only from SAP. */
+        createBillingDocument: function (mParams, mOptions) {
+            if (!mParams || !mParams.delivery) { return Promise.reject(new Error("Delivery number is required.")); }
+            var oPayload = {
+                DeliveryDocument: String(mParams.delivery).trim(),
+                BillingDocumentType: mParams.billingType ? String(mParams.billingType).trim() : null,
+                BillingDocumentDate: mParams.billingDate ? String(mParams.billingDate).trim() : null
+            };
+            var sETag = (mOptions && (mOptions.etag || mOptions.ifMatch)) || (mParams && (mParams.etag || mParams.ifMatch)) || "";
+            if (sETag) {
+                return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload, { "If-Match": sETag });
+            }
+            return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload);
+        },
+
+        /**
+         * Create an Outbound Delivery without reference in S/4HANA (LE_SHP_QC_DLVNOREF_SRV).
+         *
+         * @param {Object} mParams
+         * @returns {Promise<Object>} Created Outbound Delivery details from S/4HANA
+         */
+        createDeliveryWithoutRef: function (mParams) {
+            if (!mParams || !mParams.shippingPoint || !mParams.shipToParty || !mParams.plant || !mParams.storageLocation) {
+                return Promise.reject(new Error("ShippingPoint, ShipToParty, Plant, and StorageLocation are required."));
+            }
+            var aItems = (mParams.items || []).map(function (item) {
+                return {
+                    Material: String(item.material || item.Material || "").trim(),
+                    ActualDeliveryQuantity: String(item.quantity || item.ActualDeliveryQuantity || "1"),
+                    DeliveryQuantityUnit: String(item.uom || item.DeliveryQuantityUnit || "KG").trim()
+                };
+            });
+
+            var oPayload = {
+                ShippingPoint: String(mParams.shippingPoint).trim(),
+                DeliveryDocumentType: mParams.deliveryType ? String(mParams.deliveryType).trim() : "LO2",
+                SalesOrganization: String(mParams.salesOrg || "").trim(),
+                DistributionChannel: String(mParams.distChannel || "").trim(),
+                Division: String(mParams.division || "").trim(),
+                ShipToParty: String(mParams.shipToParty).trim(),
+                Plant: String(mParams.plant).trim(),
+                StorageLocation: String(mParams.storageLocation).trim(),
+                PlannedGoodsIssueDate: mParams.plannedGoodsIssueDate ? String(mParams.plannedGoodsIssueDate).trim() : null,
+                Items: aItems
+            };
+
+            return ODataClient.post(SERVICE_BASE + "/createDeliveryWithoutRef", oPayload).then(function (result) {
+                return (result && result.value !== undefined) ? result.value : result;
+            });
+        },
+
+        /**
+         * Reads an Outbound Delivery created without reference directly back from S/4HANA.
+         *
+         * @param {string} sDeliveryId
+         * @returns {Promise<Object>}
+         */
+        getDeliveryWithoutRef: function (sDeliveryId) {
+            if (!sDeliveryId) { return Promise.reject(new Error("Delivery ID is required.")); }
+            return ODataClient.get(SERVICE_BASE + "/getDeliveryWithoutRef(OutboundDelivery='" + encodeURIComponent(String(sDeliveryId).trim()) + "')").then(function (result) {
+                return (result && result.value !== undefined) ? result.value : result;
+            });
+        }
+    };
+});

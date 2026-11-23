@@ -10,7 +10,16 @@ const FS_VALUE_HELP_ENTITIES = [
     'CurrencyVH',
     'UnitOfMeasureVH',
     'DocumentTypeVH',
-    'TaxCodeVH'
+    'TaxCodeVH',
+    'GLAccountVH',
+    'CostCenterVH',
+    'ProfitCenterVH',
+    'FixedAssetVH',
+    'WBSElementVH',
+    'InternalOrderVH',
+    'PurchaseContractVH',
+    'ItemCategoryVH',
+    'AcctAssignmentCategoryVH'
 ];
 
 const MAINT_VALUE_HELP_ENTITIES = [
@@ -49,7 +58,5 @@ const poValueHelpConfig = [
 ];
 
 module.exports = {
-    poValueHelpConfig,
-    FS_VALUE_HELP_ENTITIES,
-    MAINT_VALUE_HELP_ENTITIES
+    poValueHelpConfig
 };

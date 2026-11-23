@@ -1,0 +1,90 @@
+{
+  "ET_DATA": [],
+  "DELIMITER": "|",
+  "GET_SORTED": "",
+  "NO_DATA": "",
+  "QUERY_TABLE": "LQUA",
+  "ROWCOUNT": 0,
+  "ROWSKIPS": 0,
+  "USE_ET_DATA_4_RETURN": "",
+  "DATA": [
+    {
+      "WA": "0001045087|000000008000006485                      |1120|CS02|921|TRANSFER  |         1.000 |NOS"
+    },
+    {
+      "WA": "0001045088|000000008000006485                      |1120|CS02|921|TRANSFER  |         1.000 |NOS"
+    },
+    {
+      "WA": "0001045089|000000008000006485                      |1120|HS01|921|TRANSFER  |         5.000 |NOS"
+    }
+  ],
+  "FIELDS": [
+    {
+      "FIELDNAME": "LQNUM",
+      "OFFSET": "000000",
+      "LENGTH": "000010",
+      "TYPE": "N",
+      "FIELDTEXT": "Quant"
+    },
+    {
+      "FIELDNAME": "MATNR",
+      "OFFSET": "000011",
+      "LENGTH": "000040",
+      "TYPE": "C",
+      "FIELDTEXT": "Material Number"
+    },
+    {
+      "FIELDNAME": "WERKS",
+      "OFFSET": "000052",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Plant"
+    },
+    {
+      "FIELDNAME": "LGORT",
+      "OFFSET": "000057",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Storage Location"
+    },
+    {
+      "FIELDNAME": "LGTYP",
+      "OFFSET": "000062",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Storage Type"
+    },
+    {
+      "FIELDNAME": "LGPLA",
+      "OFFSET": "000066",
+      "LENGTH": "000010",
+      "TYPE": "C",
+      "FIELDTEXT": "Storage Bin"
+    },
+    {
+      "FIELDNAME": "VERME",
+      "OFFSET": "000077",
+      "LENGTH": "000015",
+      "TYPE": "P",
+      "FIELDTEXT": "Available stock"
+    },
+    {
+      "FIELDNAME": "MEINS",
+      "OFFSET": "000093",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Base Unit of Measure"
+    }
+  ],
+  "OPTIONS": [
+    {
+      "TEXT": "LGNUM = 'W01'"
+    },
+    {
+      "TEXT": "AND MATNR = '000000008000006485'"
+    },
+    {
+      "TEXT": "AND ( LGTYP = '921' OR LGTYP = '920' )"
+    }
+  ]
+}

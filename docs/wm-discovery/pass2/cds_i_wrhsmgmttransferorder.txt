@@ -1,0 +1,32 @@
+@AbapCatalog.sqlViewName: 'IWMTO'
+@AbapCatalog.compiler.compareFilter: true
+@ClientHandling.algorithm: #SESSION_VARIABLE
+@AccessControl.authorizationCheck: #CHECK
+@EndUserText.label: 'Warehouse Management Transfer Order'
+@VDM.viewType: #BASIC
+@ObjectModel.usageType.sizeCategory: #XL
+@ObjectModel.usageType.serviceQuality: #C
+@ObjectModel.usageType.dataClass: #TRANSACTIONAL
+
+define view I_WrhsMgmtTransferOrder as select from ltak 
+
+association [0..*] to I_WrhsMgmtTransferOrderItem as _Item 
+  on   $projection.WarehouseNumber       = _Item.WarehouseNumber
+   and $projection.WrhsMgmtTransferOrder = _Item.WrhsMgmtTransferOrder
+  
+association [0..1] to I_WrhsMgmtTransfOrdCanclnSts as _WrhsMgmtTransfOrdCanclnSts
+  on   $projection.WarehouseNumber       = _WrhsMgmtTransfOrdCanclnSts.WarehouseNumber
+   and $projection.WrhsMgmtTransferOrder = _WrhsMgmtTransfOrdCanclnSts.WrhsMgmtTransferOrder
+   
+{
+  key ltak.lgnum as WarehouseNumber,
+  key cast(ltak.tanum as wm_transfer_order) as WrhsMgmtTransferOrder,
+ 
+  kquit as TransferOrderInWrhsMgmtIsConfd,
+  cast(qdatu as wm_confirmation_date) as WrhsMgmtTransfOrdConfDate,
+  
+  cast(vbeln as vbeln_vl) as DeliveryDocument,
+  
+  _Item,
+  _WrhsMgmtTransfOrdCanclnSts
+}

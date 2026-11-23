@@ -1,0 +1,410 @@
+'use strict';
+/* global window, document */
+
+/**
+ * Submit-failure E2E (P1 item 13) for write screens whose write is a CAP action called from a list or dialog
+ * (not a create form): SAP business error (400), stale data (409), backend unavailable (503), network timeout and
+ * expired session (401), each answered by a MOCKED response (UI handling only, never SAP behaviour; the write guard
+ * stays on). Every case expects: exactly one action call, a visible error MessageBox naming the problem, no success
+ * result, and the user still on the same screen. A flow is { service, action, hash, run, observe? }: run() drives the
+ * screen like the flow's round-trip suite up to and including the click that triggers the single write.
+ * Reload while pending: for the flows whose write goes through interceptAction the answer is held back, the page is
+ * reloaded, and the suite expects no second write, no success and no stuck busy indicator.
+ * Open (docs/e2e-coverage-matrix.md): double click while pending.
+ */
+
+const { openSession, waitForRoute } = require('../support/screenCheck');
+const rt = require('../support/actionRoundTrip');
+const invoice = require('../sd/roundTripCustomerInvoice.e2e');
+const ordersDue = require('../le/roundTripOrdersDue.e2e');
+const packing = require('../wm/roundTripPackingInstruction.e2e');
+const huRt = require('../wm/roundTripHandlingUnit.e2e');
+const kit = require('../wm/wmRoundTripKit');
+
+const JSON_TYPE = 'application/json;odata.metadata=minimal';
+const SAP_MESSAGE = 'E2E simulated SAP error: document is blocked';
+const STALE_MESSAGE = 'E2E simulated: document was changed by another user, reload and retry';
+
+const FAILURES = [
+    { name: 'SAP business error (400)', fail: { status: 400, code: 'VF/001', message: SAP_MESSAGE }, expect: /document is blocked/i },
+    { name: 'Stale data (409, changed by another user)', fail: { status: 409, code: '409', message: STALE_MESSAGE }, expect: /changed by another user|stale data|modified by another user/i },
+    { name: 'Backend unavailable (503)', fail: { status: 503, code: '503', message: 'E2E simulated: S/4HANA is unavailable' }, expect: /unavailable|S\/4|503/i },
+    { name: 'Network timeout', fail: 'timeout', expect: /./ },
+    { name: 'Expired session (401)', fail: { status: 401, code: '401', message: 'E2E simulated: session expired' }, expect: /session|sign|log ?in|authori|401/i }
+];
+
+/** Create dialogs that must refuse a second submit after a create SAP did not confirm, by their submit button. */
+const SUBMIT_BUTTON = {
+    'Packing instruction: create': 'piCreateSubmit',
+    'Handling unit: create': 'huCreateSubmit',
+    'Orders due: createDelivery': 'btnConfirmDelivery',
+    'Orders due: deliveryWithoutRef': 'btnConfirmDeliveryNoRef'
+};
+const NOT_CONFIRMED = {
+    name: 'Not confirmed (504): pressing submit again sends nothing',
+    fail: { status: 504, code: 'SAP_WRITE_NOT_CONFIRMED', message: 'SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.' },
+    expect: /NOT confirmed/,
+    pressAgain: true
+};
+
+/**
+ * A flow is { label, service, action, respond, hash, run(session) }: run() opens the screen and performs every step up to
+ * and including the click that triggers the single write (the same steps as the flow's round-trip suite).
+ */
+const invoiceFlows = Object.values(invoice.CASES).map((c) => ({
+    label: `Customer invoice: ${c.name}`,
+    service: invoice.SERVICE,
+    action: c.action,
+    respond: c.respond,
+    hash: 'sd/invoices',
+    async run(session) {
+        await rt.openHash(session, invoice.HASH);
+        const pick = (await rt.listButtons(session.page, c.button, 'customerInvoice'))[0];
+        if (!pick) throw new Error(`no invoice row enables ${c.button}`);
+        await session.page.click(`[id="${pick.id}"]`);
+        await session.settle();
+        await c.confirm(session);
+    }
+}));
+
+/**
+ * Orders Due: the round-trip sub-cases run unchanged. PGI and billing are enabled by the UI only for a delivery whose
+ * SAP status says so, and no CAP read lists such deliveries, so their status and billing-type READS are mocked here
+ * for a synthetic delivery number (the suite is about the failure handling of the write, which is mocked as well).
+ */
+const MOCK_DELIVERY = 'DRYRUNFAIL01';
+const MOCK_READS = [
+    [/getDeliveryStatus\(DeliveryDocument='DRYRUNFAIL01'\)$/, {
+        DeliveryDocument: MOCK_DELIVERY, DeliveryDocumentType: 'LF', ShippingPoint: '', SoldToParty: '', SalesOrganization: '', ActualGoodsMovementDate: '',
+        OverallPickingStatus: 'C', OverallGoodsMovementStatus: 'A', OverallDelivReltdBillgStatus: 'A', OverallSDProcessStatus: 'A'
+    }],
+    [/getBillingDocumentTypes\(DeliveryDocument='DRYRUNFAIL01'\)$/, { value: [{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }] }]
+];
+/** Billing needs goods movement complete: one status per sub-case. */
+const statusFor = (name) => (name === 'createBilling' ? { OverallGoodsMovementStatus: 'C' } : {});
+const mockDeliveryReads = (page, name) => page.route((url) => MOCK_READS.some(([re]) => re.test(decodeURIComponent(url.pathname))), (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const [, body] = MOCK_READS.find(([re]) => re.test(decodeURIComponent(new URL(route.request().url()).pathname)));
+    return route.fulfill({ status: 200, contentType: JSON_TYPE, headers: { 'OData-Version': '4.0' }, body: JSON.stringify({ ...body, ...(body.DeliveryDocument ? statusFor(name) : {}) }) });
+});
+
+const ordersDueFlows = Object.keys(ordersDue.SUBCASES).map((name) => {
+    const a = ordersDue.ACTIONS[name];
+    const followUp = name === 'createBilling';
+    return {
+        label: `Orders due: ${name}`,
+        service: ordersDue.SERVICE,
+        action: a.action,
+        respond: a.respond,
+        hash: 'le/orders-due',
+        before: followUp ? (session) => mockDeliveryReads(session.page, name) : null,
+        run: (session, baseUrl) => ordersDue.SUBCASES[name](session, { live: false, data: {}, get: rt.capGet(baseUrl), delivery: followUp ? MOCK_DELIVERY : undefined })
+    };
+});
+
+const WAIT_MS = 8000; // the mocked failure answers at once; do not wait the round-trip suites' 2-3 minutes for a success toast
+const split = (action) => ({ service: action.slice(0, action.lastIndexOf('/')), action: action.slice(action.lastIndexOf('/') + 1) });
+
+/**
+ * WM screens: the round-trip suites' own UI drivers, called with a short wait. observe() turns what each screen shows
+ * after a failed write into { type, text } the way rt.resultBox does for MessageBox-based screens.
+ */
+const wmFlows = [
+    {
+        label: 'Packing instruction: create', ...split(packing.ACTION), respond: packing.stubResult, hash: 'wm/packing-instruction',
+        run: async (session, baseUrl) => packing.driveUi(session, await packing.pickDryRunData(baseUrl), WAIT_MS),
+        observe: async (session, ui) => (ui.toast ? { type: 'success', text: ui.toast } : { type: ui.error ? 'error' : 'none', text: ui.error || '' })
+    },
+    {
+        label: 'Quarantine labels: generateLabels', ...split('/odata/v4/quarantine-label/generateLabels'),
+        respond: () => ({
+            MaterialDocument: '4900050304', MaterialDocumentYear: '2026', LabelCount: 2,
+            FileName: 'QuarantineLabels_4900050304_2026.pdf', PdfBase64: 'JVBERi0xLjQK'
+        }),
+        hash: 'wm/quarantine-labels',
+        run: async (session) => {
+            await rt.openHash(session, 'wm/quarantine-labels');
+            await session.page.fill('[id$="--qlDoc-inner"]', '4900050304');
+            await session.page.fill('[id$="--qlYear-inner"]', '2026');
+            await session.page.click('[id$="--qlPreview"]');
+        },
+        observe: async (session) => {
+            // Preview answers asynchronously: wait for the message strip instead of reading it right after the click
+            await session.page.waitForFunction(() => {
+                const E = window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Element');
+                const strip = E && E.registry.filter((c) => c.getId().endsWith('--qlMessage'))[0];
+                return !!(strip && strip.getVisible() && strip.getText());
+            }, null, { timeout: 30000 }).catch(() => {});
+            const st = await session.page.evaluate(() => {
+                const E = window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Element');
+                const strip = E && E.registry.filter((c) => c.getId().endsWith('--qlMessage'))[0];
+                const vis = strip && strip.getVisible && strip.getVisible();
+                return {
+                    text: vis ? strip.getText() : '',
+                    type: vis ? strip.getType() : ''
+                };
+            });
+            return { type: (st.type === 'Error' || st.type === 'Warning') ? 'error' : (st.text ? 'success' : 'none'), text: st.text };
+        }
+    }
+];
+
+/**
+ * Round-trip suites that stub their own actions through wmRoundTripKit.stubAction (handling unit):
+ * with kit.setFailure() their stubs answer the failure, and their SUBCASES drive the UI unchanged. Candidates come from
+ * READ-ONLY reads, read once per run. A sub-case without a candidate in the current SAP data is SKIPPED, not failed.
+ */
+const once = (fn) => { let p; return (...a) => { p = p || fn(...a); return p; }; };
+const skip = (why) => Object.assign(new Error(why), { skip: true });
+const huData = once(async (baseUrl) => huRt.dryInputs(await huRt.pickDryRunData(baseUrl)));
+
+const kitFlows = [
+    ...Object.keys(huRt.SUBCASES).map((name) => ({
+        label: `Handling unit: ${name}`, ...split(huRt.PATH[name]), hash: 'wm/handling-unit',
+        run: async (session, baseUrl) => {
+            const d = (await huData(baseUrl))[name];
+            if (typeof d === 'string') throw skip(d);
+            await kit.stubAction(session, huRt.PATH[name], () => ({})); // the round-trip dryRun() installs this stub; with kit.setFailure it answers the failure
+            return huRt.SUBCASES[name](session, d);
+        }
+    }))
+].map((f) => ({ ...f, kit: true, observe: async (session) => visibleMessage(session.page) }));
+
+/** Text of every visible message the screen shows (MessageBox, error strip, toast); success when it carries a DRYRUN stub value. */
+async function visibleMessage(page) {
+    const text = (await page.evaluate(() => [...document.querySelectorAll('.sapMMessageBox, .sapMMsgStripError, .sapMMessageToast')]
+        .filter((e) => e.getClientRects().length > 0).map((e) => e.textContent.trim()).join(' | '))).slice(0, 400);
+    return { type: /DRYRUN/.test(text) ? 'success' : (text ? 'error' : 'none'), text };
+}
+
+const FLOWS = [...invoiceFlows, ...ordersDueFlows, ...wmFlows, ...kitFlows];
+
+async function failureCase(baseUrl, flow, f) {
+    const errors = [];
+    const session = await openSession({ baseUrl, user: 'khushal' });
+    let calls = []; // interceptAction returns a live list: keep the reference, never copy it
+    try {
+        if (flow.kit) {
+            // these suites stub their own action: count its POSTs, and let the kit answer the failure
+            session.page.on('request', (req) => { if (req.method() === 'POST' && new URL(req.url()).pathname === `${flow.service}/${flow.action}`) calls.push({}); });
+            kit.setFailure(f.fail);
+            kit.capWaits(WAIT_MS);
+        } else {
+            calls = await rt.interceptAction(session.page, { flow: 'none', service: flow.service, action: flow.action, respond: flow.respond, fail: f.fail });
+        }
+        if (flow.before) await flow.before(session);
+        const result = await flow.run(session, baseUrl);
+        const box = flow.observe ? await flow.observe(session, result) : await rt.resultBox(session.page, 30000);
+        const real = calls.filter((c) => !c.mixed);
+        if (calls.some((c) => c.mixed)) errors.push('action sent in a $batch with other requests');
+        if (real.length !== 1) errors.push(`action called ${real.length} times, expected 1`);
+        if (box.type === 'success') errors.push(`success shown despite failure: ${box.text}`);
+        else if (box.type !== 'error') errors.push(`expected an error box, got ${box.type || 'none'}: ${box.text}`);
+        const expect = f.expect;
+        if (!expect.test(box.text)) errors.push(`error box does not match ${expect}: ${box.text.slice(0, 200)}`);
+        if (f.pressAgain) {
+            await session.page.locator('.sapMMessageBox button').first().click({ timeout: 2000 }).catch(() => {});
+            await session.settle();
+            await session.page.locator(`[id$="${SUBMIT_BUTTON[flow.label]}"]`).first().click({ force: true, timeout: 2000 }).catch(() => {});
+            await session.settle();
+            const sent = calls.filter((c) => !c.mixed).length;
+            if (sent !== 1) errors.push(`create sent ${sent} times after pressing submit again, expected 1`);
+        }
+        const screen = await session.page.evaluate(() => window.location.hash);
+        if (!screen.includes(flow.hash)) errors.push(`navigated away to ${screen}`);
+        const expected = f.fail && f.fail.status ? [{ status: f.fail.status, url: new RegExp(`${flow.service}/(\\$batch|${flow.action})`) }] : [];
+        errors.push(...rt.sessionErrors(session, undefined, expected).filter((e) => !/Failed to load resource|ERR_|net::|^console: (Failed to invoke \/|\$batch failed)/.test(e))); // UI5 logs the mocked failure itself
+    } catch (err) {
+        if (err.skip) return { skipped: err.message };
+        errors.push(`${err.name}: ${err.message.split('\n')[0]}`);
+    } finally {
+        if (flow.kit) { // kit state is process-wide: a non-kit case in a parallel shard must not reset a kit case's failure mode
+            kit.setFailure(null);
+            kit.capWaits(Infinity);
+        }
+        await session.close();
+    }
+    return errors;
+}
+
+/** Double click while the write is pending: duplicate clicks must send exactly one write request. */
+async function doubleClickWhilePending(baseUrl, flow) {
+    const errors = [];
+    const session = await openSession({ baseUrl, user: 'khushal' });
+    let calls = [];
+    let releaseGate;
+    const gate = new Promise((r) => { releaseGate = r; });
+    try {
+        if (flow.kit) {
+            session.page.on('request', (req) => {
+                if (req.method() === 'POST' && new URL(req.url()).pathname === `${flow.service}/${flow.action}`) {
+                    calls.push({ via: 'direct' });
+                }
+            });
+            kit.setGate(gate);
+            kit.capWaits(WAIT_MS);
+        } else {
+            calls = await rt.interceptAction(session.page, {
+                flow: 'none',
+                service: flow.service,
+                action: flow.action,
+                respond: flow.respond,
+                gate
+            });
+        }
+        if (flow.before) await flow.before(session);
+        let runError = null;
+        const running = Promise.resolve(flow.run(session, baseUrl)).catch((e) => { runError = e; });
+        const end = Date.now() + 60000;
+        while (calls.length < 1 && Date.now() < end) await session.page.waitForTimeout(100);
+        if (calls.length < 1) throw new Error(`expected the write to be sent at least once, got ${calls.length}${runError ? ` (driver: ${runError.message.split('\n')[0]})` : ''}`);
+
+        // Simulate rapid second click on visible action controls while first write is pending
+        await session.page.evaluate(() => {
+            const vis = (e) => e.getClientRects().length > 0;
+            const btns = [...document.querySelectorAll('button, .sapMBtn')].filter(vis);
+            for (const b of btns) {
+                b.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+            }
+        });
+        await session.page.waitForTimeout(300);
+
+        if (releaseGate) releaseGate();
+        await running;
+        await session.settle();
+
+        const real = calls.filter((c) => !c.mixed);
+        if (real.length !== 1) {
+            errors.push(`double click while pending sent ${real.length} action calls, expected 1`);
+        }
+    } catch (err) {
+        if (err.skip) return { skipped: err.message };
+        errors.push(`${err.name}: ${err.message.split('\n')[0]}`);
+    } finally {
+        if (releaseGate) releaseGate();
+        if (flow.kit) {
+            kit.setGate(null);
+            kit.capWaits(Infinity);
+        }
+        await session.close();
+    }
+    return errors;
+}
+
+/** Reload while the write is pending: the held-back answer never reaches the page; no second write and no false success. */
+async function reloadWhilePending(baseUrl, flow) {
+    const errors = [];
+    const session = await openSession({ baseUrl, user: 'khushal' });
+    let releaseGate;
+    const gate = new Promise((r) => { releaseGate = r; });
+    try {
+        let calls = [];
+        if (flow.kit) {
+            session.page.on('request', (req) => {
+                if (req.method() === 'POST' && new URL(req.url()).pathname === `${flow.service}/${flow.action}`) {
+                    calls.push({ via: 'direct' });
+                }
+            });
+            kit.setGate(gate);
+            kit.capWaits(WAIT_MS);
+        } else {
+            calls = await rt.interceptAction(session.page, { flow: 'none', service: flow.service, action: flow.action, respond: flow.respond, gate, delayMs: 6000 });
+        }
+        if (flow.before) await flow.before(session);
+        let runError = null;
+        const running = Promise.resolve(flow.run(session, baseUrl)).catch((e) => { runError = e; }); // outcome is irrelevant once the page is reloaded; kept for the message below
+        const end = Date.now() + 90000; // some screens read for a long time before the write click
+        while (calls.length < 1 && Date.now() < end) await session.page.waitForTimeout(200);
+        if (calls.length !== 1) throw new Error(`expected the write to be sent once before the reload, got ${calls.length}${runError ? ` (driver: ${runError.message.split('\n')[0]})` : ''}`);
+        await session.page.reload({ waitUntil: 'domcontentloaded' });
+        if (releaseGate) releaseGate();
+        await running;
+        await waitForRoute(session.page);
+        await session.settle();
+        await session.page.waitForTimeout(1500);
+        if (calls.filter((c) => !c.mixed).length !== 1) errors.push(`reload re-sent the write (${calls.length} calls)`);
+        const shown = await session.page.evaluate(() => {
+            const vis = (e) => e.getClientRects().length > 0;
+            return {
+                success: [...document.querySelectorAll('.sapMMessageBoxSuccess, .sapMMessageToast')].filter(vis).map((e) => e.textContent.trim()),
+                busy: [...document.querySelectorAll('.sapUiBusyIndicator, .sapUiLocalBusyIndicator')].some(vis)
+            };
+        });
+        if (shown.success.length) errors.push(`success shown although nothing completed: ${shown.success.join(' | ')}`);
+        if (shown.busy) errors.push('busy indicator still shown after the reload');
+    } catch (err) {
+        if (err.skip) return { skipped: err.message };
+        errors.push(`${err.name}: ${err.message.split('\n')[0]}`);
+    } finally {
+        if (releaseGate) releaseGate();
+        if (flow.kit) {
+            kit.setGate(null);
+            kit.capWaits(Infinity);
+        }
+        await session.close();
+    }
+    return errors;
+}
+
+async function verifyActionFailures(options = {}) {
+    const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
+    const errors = [];
+    const details = [];
+    const filter = options.only || process.env.E2E_FAILURE_FLOWS; // a shard (see SHARDS) or e.g. 'handling|invoice' for a subset
+    const only = filter ? new RegExp(filter, 'i') : null;
+    for (const flow of FLOWS.filter((f) => !only || only.test(f.label))) {
+        if (flow.skipped) {
+            console.log(`\n=== Submit failures: ${flow.label} === SKIPPED: ${flow.skipped}`);
+            details.push({ flow: flow.label, status: 'SKIPPED', reason: flow.skipped });
+            continue;
+        }
+        console.log(`\n=== Submit failures: ${flow.label} (write guard on; action MOCKED per case, not SAP) ===`);
+        for (const f of SUBMIT_BUTTON[flow.label] ? [...FAILURES, NOT_CONFIRMED] : FAILURES) {
+            const errs = await failureCase(baseUrl, flow, f);
+            if (errs.skipped) {
+                console.log(`  [SKIPPED] ${f.name} — ${errs.skipped}`);
+                details.push({ flow: flow.label, case: f.name, status: 'SKIPPED', reason: errs.skipped });
+                continue;
+            }
+            console.log(`  [${errs.length ? 'FAIL' : 'PASS'}] ${f.name}`);
+            errs.forEach((e) => console.log(`      - ${e}`));
+            details.push({ flow: flow.label, case: f.name, status: errs.length ? 'FAIL' : 'PASS', errors: errs });
+            errs.forEach((e) => errors.push(`${flow.label}: ${f.name}: ${e}`));
+        }
+
+        const dErr = await doubleClickWhilePending(baseUrl, flow);
+        if (dErr.skipped) {
+            console.log(`  [SKIPPED] Double click while pending — ${dErr.skipped}`);
+            details.push({ flow: flow.label, case: 'double click while pending', status: 'SKIPPED', reason: dErr.skipped });
+        } else {
+            console.log(`  [${dErr.length ? 'FAIL' : 'PASS'}] Double click while the write is pending sends exactly 1 action call`);
+            dErr.forEach((e) => console.log(`      - ${e}`));
+            details.push({ flow: flow.label, case: 'double click while pending', status: dErr.length ? 'FAIL' : 'PASS', errors: dErr });
+            dErr.forEach((e) => errors.push(`${flow.label}: double click while pending: ${e}`));
+        }
+
+        const rErr = await reloadWhilePending(baseUrl, flow);
+        if (rErr.skipped) {
+            console.log(`  [SKIPPED] Reload while pending — ${rErr.skipped}`);
+            details.push({ flow: flow.label, case: 'reload while pending', status: 'SKIPPED', reason: rErr.skipped });
+        } else {
+            console.log(`  [${rErr.length ? 'FAIL' : 'PASS'}] Reload while the write is pending sends no second write and shows no success`);
+            rErr.forEach((e) => console.log(`      - ${e}`));
+            details.push({ flow: flow.label, case: 'reload while pending', status: rErr.length ? 'FAIL' : 'PASS', errors: rErr });
+            rErr.forEach((e) => errors.push(`${flow.label}: reload while pending: ${e}`));
+        }
+    }
+    return { status: errors.length ? 'FAIL' : 'PASS', errors, details };
+}
+
+if (require.main === module) {
+    verifyActionFailures().then((r) => process.exit(r.status === 'PASS' ? 0 : 1));
+}
+
+// Kit flows share the kit's module-level failure mode, so they stay together and serial; the others run in their own shard
+const SHARDS = [
+    { name: 'Action failures: invoice, orders due, packing, quarantine (mocked)', only: '^(Customer invoice|Orders due|Packing instruction|Quarantine labels)' },
+    { name: 'Action failures: handling unit (mocked)', only: '^Handling unit' }
+];
+
+module.exports = { verifyActionFailures, FLOWS, SHARDS };

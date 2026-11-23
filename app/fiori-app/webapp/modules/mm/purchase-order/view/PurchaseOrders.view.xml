@@ -7,7 +7,8 @@
     <Page
         id="purchaseOrdersPage"
         showHeader="false"
-        backgroundDesign="Solid">
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <!-- KPI Tiles Section -->
@@ -37,21 +38,6 @@
                                     id="kpiSuppliersVal"
                                     value="{viewModel>/supplierCount}"
                                     icon="sap-icon://supplier"
-                                    valueColor="Good" />
-                            </TileContent>
-                        </GenericTile>
-
-                        <GenericTile
-                            id="kpiComplete"
-                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
-                            header="{i18n>kpiComplete}"
-                            subheader="{i18n>kpiCompleteDesc}">
-                            <TileContent>
-                                <NumericContent
-                                    id="kpiCompleteVal"
-                                    value="{viewModel>/completeRate}"
-                                    scale="%"
-                                    icon="sap-icon://accept"
                                     valueColor="Good" />
                             </TileContent>
                         </GenericTile>
@@ -151,7 +137,7 @@
                                         showSuggestion="true"
                                         filterSuggests="false"
                                         suggest=".onSuggest"
-                                        suggestionItems="{path: '/DocumentTypeVH', templateShareable: false}">
+                                        suggestionItems="{path: '/DocumentTypeVH', filters: [{path: 'PurchasingDocumentType', operator: 'StartsWith', value1: 'Z'}], templateShareable: false}">
                                         <suggestionItems>
                                             <core:ListItem key="{PurchasingDocumentType}" text="{PurchasingDocumentType}" additionalText="{PurchasingDocumentType_Text}" />
                                         </suggestionItems>
@@ -181,10 +167,14 @@
                                     <Select id="fbStatus" selectedKey="" width="100%">
                                         <items>
                                             <core:Item key="" text="{i18n>filterAll}" />
-                                            <core:Item key="Approved" text="{i18n>statusApproved}" />
-                                            <core:Item key="Draft" text="{i18n>statusDraft}" />
-                                            <core:Item key="In Approval" text="{i18n>statusInApproval}" />
-                                            <core:Item key="Rejected" text="{i18n>statusRejected}" />
+                                            <core:Item key="01" text="{i18n>statusDraft}" />
+                                            <core:Item key="02" text="{i18n>statusInApproval}" />
+                                            <core:Item key="03" text="{i18n>statusNotYetSent}" />
+                                            <core:Item key="04" text="{i18n>statusSent}" />
+                                            <core:Item key="05" text="{i18n>statusFollowOnDocuments}" />
+                                            <core:Item key="08" text="{i18n>statusReleased}" />
+                                            <core:Item key="38" text="{i18n>statusRejected}" />
+                                            <core:Item key="Deleted" text="{i18n>statusDeleted}" />
                                         </items>
                                     </Select>
                                 </fb:control>
@@ -196,6 +186,7 @@
                 <!-- Responsive Table -->
                 <Table
                     id="purchaseOrdersTable"
+                    noDataText="{i18n>poNoDataText}"
                     items="{
                         path: '/PurchaseOrders',
                         parameters: {
@@ -208,7 +199,7 @@
                     }"
                     growing="true"
                     growingThreshold="20"
-                    mode="SingleSelectMaster"
+                    mode="None"
                     itemPress=".onItemPress"
                     sticky="ColumnHeaders,HeaderToolbar"
                     class="sapUiResponsiveContentPadding">
@@ -222,7 +213,7 @@
                             <SearchField
                                 id="searchField"
                                 placeholder="{i18n>searchPlaceholder}"
-                                width="300px"
+                                width="18rem"
                                 search=".onSearch"
                                 liveChange=".onSearch" />
                             <Button
@@ -231,6 +222,12 @@
                                 tooltip="{i18n>btnRefresh}"
                                 press=".onRefresh" />
                             <Button
+                                id="btnAskAI"
+                                text="{i18n>btnAskAI}"
+                                icon="sap-icon://ai"
+                                tooltip="{i18n>aiDialogTitle}"
+                                press=".onAskAI" />
+                            <Button
                                 id="btnCreatePO"
                                 text="{i18n>btnCreatePO}"
                                 type="Emphasized"
@@ -238,7 +235,7 @@
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
-                        <Column id="colPO" width="11rem" sortIndicator="None">
+                        <Column id="colPO" width="9rem" sortIndicator="None">
                             <header>
                                 <Link id="linkColPO" text="{i18n>colPurchaseOrder}" press=".onSortColumn">
                                     <customData>
@@ -247,7 +244,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colSup" width="15rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                        <Column id="colSup" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
                             <header>
                                 <Link id="linkColSup" text="{i18n>colSupplier}" press=".onSortColumn">
                                     <customData>
@@ -256,7 +253,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colCo" width="12rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                        <Column id="colCo" width="10rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
                             <header>
                                 <Link id="linkColCo" text="{i18n>colCompany}" press=".onSortColumn">
                                     <customData>
@@ -265,7 +262,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colOrg" width="12rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                        <Column id="colOrg" width="10rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
                             <header>
                                 <Link id="linkColOrg" text="{i18n>colPurchasingOrg}" press=".onSortColumn">
                                     <customData>
@@ -274,7 +271,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colDate" width="10rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="Descending">
+                        <Column id="colDate" width="8rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="Descending">
                             <header>
                                 <Link id="linkColDate" text="{i18n>colCreationDate}" press=".onSortColumn">
                                     <customData>
@@ -283,7 +280,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colCreatedBy" width="12rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                        <Column id="colCreatedBy" width="10rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
                             <header>
                                 <Link id="linkColCreatedBy" text="{i18n>colCreatedBy}" press=".onSortColumn">
                                     <customData>
@@ -292,7 +289,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colStat" width="10rem" hAlign="Center" sortIndicator="None">
+                        <Column id="colStat" width="8rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="Center" sortIndicator="None">
                             <header>
                                 <Link id="linkColStat" text="{i18n>colStatus}" press=".onSortColumn">
                                     <customData>

@@ -1,0 +1,721 @@
+V4 catalog config/default/iwfnd/catalog/0002: HTTP 404  V4 catalog config/default/iwfnd/catalog/0001: HTTP 404  V4 catalog catalog/default/iwfnd/catalog/0002: HTTP 404  
+metadata fetched: 1240  | HTTP!=200: 3 | metadata naming a quotation object: 40
+
+== C_SALESQUOTATIONWORKFLOWVH_CDS
+   /sap/opu/odata/sap/C_SALESQUOTATIONWORKFLOWVH_CDS
+   - EntitySet C_CurrencyValueHelp  type=C_SALESQUOTATIONWORKFLOWVH_CDS.C_CurrencyValueHelpType  sap:creatable=false
+   - EntitySet C_SalesQuotationTypeValueHelp  type=C_SALESQUOTATIONWORKFLOWVH_CDS.C_SalesQuotationTypeValueHelpType  sap:creatable=false
+   - EntitySet C_SalesQuotationWorkFlowVH  type=C_SALESQUOTATIONWORKFLOWVH_CDS.C_SalesQuotationWorkFlowVHType  sap:creatable=(not stated => default true)
+   - EntitySet C_SlsDocWrkFlwRecipientVH  type=C_SALESQUOTATIONWORKFLOWVH_CDS.C_SlsDocWrkFlwRecipientVHType  sap:creatable=false
+   - EntitySet C_SoldToValueHelp  type=C_SALESQUOTATIONWORKFLOWVH_CDS.C_SoldToValueHelpType  sap:creatable=false
+   - EntitySet I_Address  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_AddressType  sap:creatable=false
+   - EntitySet I_CompanyCodeStdVH  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_CompanyCodeStdVHType  sap:creatable=false
+   - EntitySet I_CustomerGroup  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_CustomerGroupType  sap:creatable=false
+   - EntitySet I_Customer_VH  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_Customer_VHType  sap:creatable=false
+   - EntitySet I_DistributionChannel  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_DistributionChannelType  sap:creatable=false
+   - EntitySet I_Division  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_DivisionType  sap:creatable=false
+   - EntitySet I_SalesGroup  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_SalesGroupType  sap:creatable=false
+   - EntitySet I_SalesOffice  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_SalesOfficeType  sap:creatable=false
+   - EntitySet I_SalesOrganization  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_SalesOrganizationType  sap:creatable=false
+   - EntitySet I_SDDocumentReason  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_SDDocumentReasonType  sap:creatable=false
+   - EntitySet I_SlsQtanApprovalReason  type=C_SALESQUOTATIONWORKFLOWVH_CDS.I_SlsQtanApprovalReasonType  sap:creatable=false
+   - EntitySet SAP__FormatSet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__Format  sap:creatable=false
+   - EntitySet SAP__PDFStandardSet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__PDFStandard  sap:creatable=false
+   - EntitySet SAP__TableColumnsSet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__TableColumns  sap:creatable=false
+   - EntitySet SAP__CoverPageSet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__CoverPage  sap:creatable=false
+   - EntitySet SAP__SignatureSet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__Signature  sap:creatable=false
+   - EntitySet SAP__HierarchySet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__Hierarchy  sap:creatable=false
+   - EntitySet SAP__PDFHeaderSet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__PDFHeader  sap:creatable=false
+   - EntitySet SAP__PDFFooterSet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__PDFFooter  sap:creatable=false
+   - EntitySet SAP__ValueHelpSet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__ValueHelp  sap:creatable=(not stated => default true)
+   - EntitySet SAP__Currencies  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__Currency  sap:creatable=(not stated => default true)
+   - EntitySet SAP__UnitsOfMeasure  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__UnitOfMeasure  sap:creatable=(not stated => default true)
+   - EntitySet SAP__MyDocumentDescriptions  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__DocumentDescription  sap:creatable=(not stated => default true)
+   - EntitySet SAP__FileShareSet  type=C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__FileShare  sap:creatable=false
+   - V4 InsertRestrictions on C_SALESQUOTATIONWORKFLOWVH_CDS.SAP__DocumentDescription Insertable=false
+
+== C_SLSQTANCONVERSIONRATEQ_CDS
+   /sap/opu/odata/sap/C_SLSQTANCONVERSIONRATEQ_CDS
+   - EntitySet SalesEmployee  type=C_SLSQTANCONVERSIONRATEQ_CDS.SalesEmployee  sap:creatable=false
+   - EntitySet SalesEmployeeResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.SalesEmployeeResult  sap:creatable=false
+   - EntitySet Product  type=C_SLSQTANCONVERSIONRATEQ_CDS.Product  sap:creatable=false
+   - EntitySet ProductResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.ProductResult  sap:creatable=false
+   - EntitySet DistributionChannel  type=C_SLSQTANCONVERSIONRATEQ_CDS.DistributionChannel  sap:creatable=false
+   - EntitySet DistributionChannelResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.DistributionChannelResult  sap:creatable=false
+   - EntitySet OrganizationDivision  type=C_SLSQTANCONVERSIONRATEQ_CDS.OrganizationDivision  sap:creatable=false
+   - EntitySet OrganizationDivisionResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.OrganizationDivisionResult  sap:creatable=false
+   - EntitySet SalesGroup  type=C_SLSQTANCONVERSIONRATEQ_CDS.SalesGroup  sap:creatable=false
+   - EntitySet SalesGroupResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.SalesGroupResult  sap:creatable=false
+   - EntitySet SalesOffice  type=C_SLSQTANCONVERSIONRATEQ_CDS.SalesOffice  sap:creatable=false
+   - EntitySet SalesOfficeResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.SalesOfficeResult  sap:creatable=false
+   - EntitySet SalesOrganization  type=C_SLSQTANCONVERSIONRATEQ_CDS.SalesOrganization  sap:creatable=false
+   - EntitySet SalesOrganizationResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.SalesOrganizationResult  sap:creatable=false
+   - EntitySet DisplayCurrency  type=C_SLSQTANCONVERSIONRATEQ_CDS.DisplayCurrency  sap:creatable=false
+   - EntitySet DisplayCurrencyResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.DisplayCurrencyResult  sap:creatable=false
+   - EntitySet SoldToParty  type=C_SLSQTANCONVERSIONRATEQ_CDS.SoldToParty  sap:creatable=false
+   - EntitySet SoldToPartyResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.SoldToPartyResult  sap:creatable=false
+   - EntitySet ResponsibleEmployee  type=C_SLSQTANCONVERSIONRATEQ_CDS.ResponsibleEmployee  sap:creatable=false
+   - EntitySet ResponsibleEmployeeResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.ResponsibleEmployeeResult  sap:creatable=false
+   - EntitySet PartnerCompany  type=C_SLSQTANCONVERSIONRATEQ_CDS.PartnerCompany  sap:creatable=false
+   - EntitySet PartnerCompanyResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.PartnerCompanyResult  sap:creatable=false
+   - EntitySet AdditionalMetadata  type=C_SLSQTANCONVERSIONRATEQ_CDS.ODataQueryAdditionalMetadata  sap:creatable=false
+   - EntitySet C_SLSQTANCONVERSIONRATEQResults  type=C_SLSQTANCONVERSIONRATEQ_CDS.C_SLSQTANCONVERSIONRATEQResult  sap:creatable=false
+   - EntitySet C_SLSQTANCONVERSIONRATEQ  type=C_SLSQTANCONVERSIONRATEQ_CDS.C_SLSQTANCONVERSIONRATEQParameters  sap:creatable=false
+   - EntitySet P_DisplayCurrency  type=C_SLSQTANCONVERSIONRATEQ_CDS.P_DisplayCurrency  sap:creatable=false
+   - EntitySet SAP__FormatSet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__Format  sap:creatable=false
+   - EntitySet SAP__PDFStandardSet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__PDFStandard  sap:creatable=false
+   - EntitySet SAP__TableColumnsSet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__TableColumns  sap:creatable=false
+   - EntitySet SAP__CoverPageSet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__CoverPage  sap:creatable=false
+   - EntitySet SAP__SignatureSet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__Signature  sap:creatable=false
+   - EntitySet SAP__HierarchySet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__Hierarchy  sap:creatable=false
+   - EntitySet SAP__PDFHeaderSet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__PDFHeader  sap:creatable=false
+   - EntitySet SAP__PDFFooterSet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__PDFFooter  sap:creatable=false
+   - EntitySet SAP__ValueHelpSet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__ValueHelp  sap:creatable=(not stated => default true)
+   - EntitySet SAP__Currencies  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__Currency  sap:creatable=(not stated => default true)
+   - EntitySet SAP__UnitsOfMeasure  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__UnitOfMeasure  sap:creatable=(not stated => default true)
+   - EntitySet SAP__MyDocumentDescriptions  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__DocumentDescription  sap:creatable=(not stated => default true)
+   - EntitySet SAP__FileShareSet  type=C_SLSQTANCONVERSIONRATEQ_CDS.SAP__FileShare  sap:creatable=false
+
+== MMIM_MULTIPLE_MATERIAL_SRV
+   /sap/opu/odata/sap/MMIM_MULTIPLE_MATERIAL_SRV
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=MMIM_MULTIPLE_MATERIAL_SRV.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== MM_PUR_CRFQ_MAINTAIN_SRV
+   /sap/opu/odata/sap/MM_PUR_CRFQ_MAINTAIN_SRV
+   - EntitySet C_CentralReqForQuotationItemTP  type=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralReqForQuotationItemTPType  sap:creatable=(not stated => default true)
+   - EntitySet C_CentralReqForQuotationTypeVH  type=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralReqForQuotationTypeVHType  sap:creatable=false
+   - EntitySet C_CentralRequestForQuotationTP  type=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralRequestForQuotationTPType  sap:creatable=(not stated => default true)
+   - EntitySet C_CntrlReqForQuotationBidderTP  type=MM_PUR_CRFQ_MAINTAIN_SRV.C_CntrlReqForQuotationBidderTPType  sap:creatable=(not stated => default true)
+   - EntitySet C_CntrlSupplierQuotationInfo  type=MM_PUR_CRFQ_MAINTAIN_SRV.C_CntrlSupplierQuotationInfoType  sap:creatable=false
+   - EntitySet I_RequestForQuotationType  type=MM_PUR_CRFQ_MAINTAIN_SRV.I_RequestForQuotationTypeType  sap:creatable=false
+   - FunctionImport CreateCentralQuotation  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.DraftID
+   - FunctionImport A969DE1A8BDCCC66FFAAB49C98705Preparation  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralReqForQuotationItemTPType
+   - FunctionImport C_CentralReqForQuotationItemTPValidation  method=GET  returns=MM_PUR_CRFQ_MAINTAIN_SRV.ValidationFunctionResult
+   - FunctionImport C_CentralRequestForQuotationTPActivation  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralRequestForQuotationTPType
+   - FunctionImport Cancel  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralRequestForQuotationTPType
+   - FunctionImport Complete  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralRequestForQuotationTPType
+   - FunctionImport Copy  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralRequestForQuotationTPType
+   - FunctionImport C_CentralRequestForQuotationTPEdit  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralRequestForQuotationTPType
+   - FunctionImport AF658C94A35701ABE01A9B0469201Preparation  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralRequestForQuotationTPType
+   - FunctionImport Publish  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralRequestForQuotationTPType
+   - FunctionImport SetCntrlRFQForQteAtmnToCmpltd  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CentralRequestForQuotationTPType
+   - FunctionImport C_CentralRequestForQuotationTPValidation  method=GET  returns=MM_PUR_CRFQ_MAINTAIN_SRV.ValidationFunctionResult
+   - FunctionImport A62FE12033DDFC4DD9C8D1BAD3A46Preparation  method=POST  returns=MM_PUR_CRFQ_MAINTAIN_SRV.C_CntrlReqForQuotationBidderTPType
+   - FunctionImport C_CntrlReqForQuotationBidderTPValidation  method=GET  returns=MM_PUR_CRFQ_MAINTAIN_SRV.ValidationFunctionResult
+
+== MM_PUR_QTN_MAINTAIN_SRV
+   /sap/opu/odata/sap/MM_PUR_QTN_MAINTAIN_SRV
+   - EntitySet C_RequestForQuotationFacet  type=MM_PUR_QTN_MAINTAIN_SRV.C_RequestForQuotationFacetType  sap:creatable=false
+   - EntitySet C_SuplrQuotationChgDocItem  type=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationChgDocItemType  sap:creatable=false
+   - EntitySet C_SuplrQuotationEnhWD  type=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType  sap:creatable=(not stated => default true)
+   - EntitySet C_SuplrQuotationItemEnhWD  type=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationItemEnhWDType  sap:creatable=(not stated => default true)
+   - FunctionImport C_SuplrQuotationEnhWDActivation  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType
+   - FunctionImport C_SuplrQuotationEnhWDCancel  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType
+   - FunctionImport C_SuplrQuotationEnhWDComplete  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType
+   - FunctionImport AAE13DD33FBFA6553F9ACwr_qtn_from_rfq_all  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType
+   - FunctionImport C_SuplrQuotationEnhWDEdit  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType
+   - FunctionImport C_SuplrQuotationEnhWDPreparation  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType
+   - FunctionImport C_SuplrQuotationEnhWDSubmit  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType
+   - FunctionImport C_SuplrQuotationEnhWDSubmit_for_approval  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType
+   - FunctionImport C_SuplrQuotationEnhWDValidation  method=GET  returns=MM_PUR_QTN_MAINTAIN_SRV.ValidationFunctionResult
+   - FunctionImport AAE13DD33FBFA6553FWithdraw_from_approval  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationEnhWDType
+   - FunctionImport C_SuplrQuotationItemEnhWDPreparation  method=POST  returns=MM_PUR_QTN_MAINTAIN_SRV.C_SuplrQuotationItemEnhWDType
+   - FunctionImport C_SuplrQuotationItemEnhWDValidation  method=GET  returns=MM_PUR_QTN_MAINTAIN_SRV.ValidationFunctionResult
+
+== MM_PUR_RFQITEM_MNTR_SRV
+   /sap/opu/odata/sap/MM_PUR_RFQITEM_MNTR_SRV
+   - EntitySet C_RequestForQuotationItemMntrResults  type=MM_PUR_RFQITEM_MNTR_SRV.C_RequestForQuotationItemMntrResult  sap:creatable=false
+   - EntitySet C_RequestForQuotationItemMntr  type=MM_PUR_RFQITEM_MNTR_SRV.C_RequestForQuotationItemMntrParameters  sap:creatable=false
+   - EntitySet C_RFQSuppQuotationStatus  type=MM_PUR_RFQITEM_MNTR_SRV.C_RFQSuppQuotationStatusType  sap:creatable=false
+   - EntitySet I_ProcmtQuotationSts  type=MM_PUR_RFQITEM_MNTR_SRV.I_ProcmtQuotationStsType  sap:creatable=false
+   - EntitySet I_RequestForQtanDeadlineWeek  type=MM_PUR_RFQITEM_MNTR_SRV.I_RequestForQtanDeadlineWeekType  sap:creatable=false
+
+== MM_PUR_RFQ_MAINTAIN_SRV
+   /sap/opu/odata/sap/MM_PUR_RFQ_MAINTAIN_SRV
+   - EntitySet C_RequestForQuotationEnhWD  type=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType  sap:creatable=(not stated => default true)
+   - EntitySet C_SupplierQuotationFacet  type=MM_PUR_RFQ_MAINTAIN_SRV.C_SupplierQuotationFacetType  sap:creatable=false
+   - EntitySet I_RequestForQuotationType  type=MM_PUR_RFQ_MAINTAIN_SRV.I_RequestForQuotationTypeType  sap:creatable=false
+   - FunctionImport C_RequestForQuotationEnhWDActivation  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport C_RequestForQuotationEnhWDCancel  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport C_RequestForQuotationEnhWDComplete  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport C_RequestForQuotationEnhWDCopy_rfq  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport A748DE3ED04E5C40555Cwr_rfq_for_materials  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport CreateRFQFromPurReq  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport C_RequestForQuotationEnhWDEdit  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport C_RequestForQuotationEnhWDPreparation  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport SetRFQForQteAutomnToCompleted  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport A748DE3ED04E5C4055549Submit_for_approval  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+   - FunctionImport C_RequestForQuotationEnhWDValidation  method=GET  returns=MM_PUR_RFQ_MAINTAIN_SRV.ValidationFunctionResult
+   - FunctionImport A748DE3ED04E5C4055Withdraw_from_approval  method=POST  returns=MM_PUR_RFQ_MAINTAIN_SRV.C_RequestForQuotationEnhWDType
+
+== SD_CUSTOMER360_OVP
+   /sap/opu/odata/sap/SD_CUSTOMER360_OVP
+   - EntitySet C_RejectedSalesQuotation  type=SD_CUSTOMER360_OVP.C_RejectedSalesQuotationType  sap:creatable=false
+   - EntitySet C_SalesQuotationByOpenStatusSet  type=SD_CUSTOMER360_OVP.C_SalesQuotationByOpenStatusType  sap:creatable=false
+   - EntitySet C_SalesQuotationByOpenStatus  type=SD_CUSTOMER360_OVP.C_SalesQuotationByOpenStatusParameters  sap:creatable=false
+
+== SD_F2200_OVP_ISR_SRV
+   /sap/opu/odata/sap/SD_F2200_OVP_ISR_SRV
+   - EntitySet C_OpenQuotations_F2200  type=SD_F2200_OVP_ISR_SRV.C_OpenQuotations_F2200Type  sap:creatable=false
+   - EntitySet C_SalesQuotationPipeline_F2200  type=SD_F2200_OVP_ISR_SRV.C_SalesQuotationPipeline_F2200Type  sap:creatable=false
+
+== SD_F3014_SALESQUOT_WORKFLOW_SRV
+   /sap/opu/odata/sap/SD_F3014_SALESQUOT_WORKFLOW_SRV
+   - EntitySet C_SalesQuotationItmWrkflwInbox  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.C_SalesQuotationItmWrkflwInboxType  sap:creatable=false
+   - EntitySet C_SalesQuotationWrkflwInbox  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.C_SalesQuotationWrkflwInboxType  sap:creatable=false
+   - EntitySet I_Customer_VH  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.I_Customer_VHType  sap:creatable=false
+   - EntitySet I_User  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.I_UserType  sap:creatable=false
+   - EntitySet SAP__FormatSet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__Format  sap:creatable=false
+   - EntitySet SAP__PDFStandardSet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__PDFStandard  sap:creatable=false
+   - EntitySet SAP__TableColumnsSet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__TableColumns  sap:creatable=false
+   - EntitySet SAP__CoverPageSet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__CoverPage  sap:creatable=false
+   - EntitySet SAP__SignatureSet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__Signature  sap:creatable=false
+   - EntitySet SAP__HierarchySet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__Hierarchy  sap:creatable=false
+   - EntitySet SAP__PDFHeaderSet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__PDFHeader  sap:creatable=false
+   - EntitySet SAP__PDFFooterSet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__PDFFooter  sap:creatable=false
+   - EntitySet SAP__ValueHelpSet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__ValueHelp  sap:creatable=(not stated => default true)
+   - EntitySet SAP__Currencies  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__Currency  sap:creatable=(not stated => default true)
+   - EntitySet SAP__UnitsOfMeasure  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__UnitOfMeasure  sap:creatable=(not stated => default true)
+   - EntitySet SAP__MyDocumentDescriptions  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__DocumentDescription  sap:creatable=(not stated => default true)
+   - EntitySet SAP__FileShareSet  type=SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__FileShare  sap:creatable=false
+   - V4 InsertRestrictions on SD_F3014_SALESQUOT_WORKFLOW_SRV.SAP__DocumentDescription Insertable=false
+
+== S_MMPURWORKFLOWVH_CDS
+   /sap/opu/odata/sap/S_MMPURWORKFLOWVH_CDS
+   - EntitySet I_RequestForQuotationType  type=S_MMPURWORKFLOWVH_CDS.I_RequestForQuotationTypeType  sap:creatable=false
+   - EntitySet I_SupplierQuotationType  type=S_MMPURWORKFLOWVH_CDS.I_SupplierQuotationTypeType  sap:creatable=false
+
+== V4:ui_salesquotationmanage(direct)
+   /sap/opu/odata4/sap/ui_salesquotationmanage/srvd/sap/ui_salesquotationmanage/0001
+   - V4 Action ChangeAddress (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationItemPartnerType, BusinessPartnerName1:Edm.String, BusinessPartnerName2:Edm.String, BusinessPartnerName3:Edm.String, BusinessPartnerName4:Edm.String, StreetName:Edm.String, HouseNumber:Edm.String, DistrictName:Edm.String, PostalCode:Edm.String, CityName:Edm.String, Region:Edm.String, Country:Edm.String, TransportZone:Edm.String, TaxJurisdiction:Edm.String, CorrespondenceLanguage:Edm.String, EmailAddress:Edm.String, POBox:Edm.String, POBoxPostalCode:Edm.String, UnloadingPointName:Edm.String, VATRegistration:Edm.String) bound=true
+   - V4 Action PrepareForEdit (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType) bound=true
+   - V4 Action UpdatePrices (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationItemManageType, PricingType:Edm.String) bound=true
+   - V4 Action ChangeAddress (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SlsQtanShipToPartyManageType, BusinessPartnerName1:Edm.String, BusinessPartnerName2:Edm.String, BusinessPartnerName3:Edm.String, BusinessPartnerName4:Edm.String, StreetName:Edm.String, HouseNumber:Edm.String, DistrictName:Edm.String, PostalCode:Edm.String, CityName:Edm.String, Region:Edm.String, Country:Edm.String, TransportZone:Edm.String, TaxJurisdiction:Edm.String, CorrespondenceLanguage:Edm.String, EmailAddress:Edm.String, POBox:Edm.String, POBoxPostalCode:Edm.String, UnloadingPointName:Edm.String, VATRegistration:Edm.String) bound=true
+   - V4 Action SetRejectionReason (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationItemManageType, SalesDocumentRjcnReason:Edm.String) bound=true
+   - V4 Action DetermineOutputItems (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType) bound=true
+   - V4 Action ChangeValidity (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType, BindingPeriodValidityEndDate:Edm.Date) bound=true
+   - V4 Action ActivateIncompletenessInfo (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType) bound=true
+   - V4 Action CreateWithSalesQuotationType (_it:Collection(com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType), SalesQuotationType:Edm.String, SalesOrganization:Edm.String, DistributionChannel:Edm.String, OrganizationDivision:Edm.String) bound=true
+   - V4 Action CreatePricingElement (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationItemManageType, ConditionType:Edm.String) bound=true
+   - V4 Action CreatePartner (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationItemManageType, PartnerFunction:Edm.String) bound=true
+   - V4 Action CreatePartner (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType, PartnerFunction:Edm.String) bound=true
+   - V4 Action ChangeAddress (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationPartnerType, BusinessPartnerName1:Edm.String, BusinessPartnerName2:Edm.String, BusinessPartnerName3:Edm.String, BusinessPartnerName4:Edm.String, StreetName:Edm.String, HouseNumber:Edm.String, DistrictName:Edm.String, PostalCode:Edm.String, CityName:Edm.String, Region:Edm.String, Country:Edm.String, TransportZone:Edm.String, TaxJurisdiction:Edm.String, CorrespondenceLanguage:Edm.String, EmailAddress:Edm.String, POBox:Edm.String, POBoxPostalCode:Edm.String, UnloadingPointName:Edm.String, VATRegistration:Edm.String) bound=true
+   - V4 Action CreatePricingElement (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType, ConditionType:Edm.String) bound=true
+   - V4 Action WithdrawFromApproval (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType) bound=true
+   - V4 Action RemoveRejectionReason (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationItemManageType) bound=true
+   - V4 Action UpdatePrices (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType, PricingType:Edm.String) bound=true
+   - V4 Action CreateWithRefFromSlsInquiry (_it:Collection(com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType), SalesInquiry:Edm.String, SalesQuotationType:Edm.String) bound=true
+   - V4 Action SaveChanges (_it:com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType) bound=true
+   - EntitySet BillingCompanyCode  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.BillingCompanyCodeType  sap:creatable=(not stated => default true)
+   - EntitySet ChmlCmplncStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ChmlCmplncStatusType  sap:creatable=(not stated => default true)
+   - EntitySet ConditionCalculationType  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ConditionCalculationTypeType  sap:creatable=(not stated => default true)
+   - EntitySet ConditionClass  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ConditionClassType  sap:creatable=(not stated => default true)
+   - EntitySet ConditionInactiveReason  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ConditionInactiveReasonType  sap:creatable=(not stated => default true)
+   - EntitySet ConditionOrigin  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ConditionOriginType  sap:creatable=(not stated => default true)
+   - EntitySet ContactPerson  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ContactPersonType  sap:creatable=(not stated => default true)
+   - EntitySet Country  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.CountryType  sap:creatable=(not stated => default true)
+   - EntitySet CreditLimitDetails  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.CreditLimitDetailsType  sap:creatable=(not stated => default true)
+   - EntitySet CustomerPaymentTerms  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.CustomerPaymentTermsType  sap:creatable=(not stated => default true)
+   - EntitySet CustomerPriceGroup  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.CustomerPriceGroupType  sap:creatable=(not stated => default true)
+   - EntitySet DangerousGoodsStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.DangerousGoodsStatusType  sap:creatable=(not stated => default true)
+   - EntitySet DispatchTime  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.DispatchTimeType  sap:creatable=(not stated => default true)
+   - EntitySet DistributionChannel  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.DistributionChannelType  sap:creatable=(not stated => default true)
+   - EntitySet Division  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.DivisionType  sap:creatable=(not stated => default true)
+   - EntitySet FormOfAddress  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.FormOfAddressType  sap:creatable=(not stated => default true)
+   - EntitySet HdrGeneralIncompletionStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.HdrGeneralIncompletionStatusType  sap:creatable=(not stated => default true)
+   - EntitySet IncotermsClassification  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.IncotermsClassificationType  sap:creatable=(not stated => default true)
+   - EntitySet IncotermsVersion  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.IncotermsVersionType  sap:creatable=(not stated => default true)
+   - EntitySet IncotermValueHelp  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.IncotermValueHelpType  sap:creatable=(not stated => default true)
+   - EntitySet ItemGenIncompletionStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ItemGenIncompletionStatusType  sap:creatable=(not stated => default true)
+   - EntitySet ItemLongTextID  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ItemLongTextIDType  sap:creatable=(not stated => default true)
+   - EntitySet Language  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.LanguageType  sap:creatable=(not stated => default true)
+   - EntitySet LongTextID  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.LongTextIDType  sap:creatable=(not stated => default true)
+   - EntitySet OutputChannel  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OutputChannelType  sap:creatable=(not stated => default true)
+   - EntitySet OutputControlOutputType  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OutputControlOutputTypeType  sap:creatable=(not stated => default true)
+   - EntitySet OutputRequestItemStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OutputRequestItemStatusType  sap:creatable=(not stated => default true)
+   - EntitySet OverallChmlCmplncStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OverallChmlCmplncStatusType  sap:creatable=(not stated => default true)
+   - EntitySet OverallDangerousGoodsStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OverallDangerousGoodsStatusType  sap:creatable=(not stated => default true)
+   - EntitySet OverallSDDocReferenceStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OverallSDDocReferenceStatusType  sap:creatable=(not stated => default true)
+   - EntitySet OverallSDDocumentRjcnStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OverallSDDocumentRjcnStatusType  sap:creatable=(not stated => default true)
+   - EntitySet OverallSDProcessStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OverallSDProcessStatusType  sap:creatable=(not stated => default true)
+   - EntitySet OvrlItmGenIncompletionSts  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OvrlItmGenIncompletionStsType  sap:creatable=(not stated => default true)
+   - EntitySet OvrlSftyDataSheetSts  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OvrlSftyDataSheetStsType  sap:creatable=(not stated => default true)
+   - EntitySet OvrlTradeCmplncEmbargoStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.OvrlTradeCmplncEmbargoStatusType  sap:creatable=(not stated => default true)
+   - EntitySet PartnerFunction  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.PartnerFunctionType  sap:creatable=(not stated => default true)
+   - EntitySet Plant  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.PlantType  sap:creatable=(not stated => default true)
+   - EntitySet PricingConditionType  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.PricingConditionTypeType  sap:creatable=(not stated => default true)
+   - EntitySet ProductGroup  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ProductGroupType  sap:creatable=(not stated => default true)
+   - EntitySet ProductStdVH  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ProductStdVHType  sap:creatable=(not stated => default true)
+   - EntitySet Region  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.RegionType  sap:creatable=(not stated => default true)
+   - EntitySet Route  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.RouteType  sap:creatable=(not stated => default true)
+   - EntitySet SafetyDataSheetStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SafetyDataSheetStatusType  sap:creatable=(not stated => default true)
+   - EntitySet SalesDistrict  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesDistrictType  sap:creatable=(not stated => default true)
+   - EntitySet SalesDocApprovalStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesDocApprovalStatusType  sap:creatable=(not stated => default true)
+   - EntitySet SalesDocPaymentMethod  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesDocPaymentMethodType  sap:creatable=(not stated => default true)
+   - EntitySet SalesDocumentItemCategory  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesDocumentItemCategoryType  sap:creatable=(not stated => default true)
+   - EntitySet SalesDocumentRjcnReason  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesDocumentRjcnReasonType  sap:creatable=(not stated => default true)
+   - EntitySet SalesGroup  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesGroupType  sap:creatable=(not stated => default true)
+   - EntitySet SalesOffice  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesOfficeType  sap:creatable=(not stated => default true)
+   - EntitySet SalesOrganization  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesOrganizationType  sap:creatable=(not stated => default true)
+   - EntitySet SalesQuotationItemManage  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationItemManageType  sap:creatable=(not stated => default true)
+   - EntitySet SalesQuotationItemPartner  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationItemPartnerType  sap:creatable=(not stated => default true)
+   - EntitySet SalesQuotationItemText  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationItemTextType  sap:creatable=(not stated => default true)
+   - EntitySet SalesQuotationManage  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationManageType  sap:creatable=(not stated => default true)
+   - EntitySet SalesQuotationPartner  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationPartnerType  sap:creatable=(not stated => default true)
+   - EntitySet SalesQuotationPricingElement  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationPricingElementType  sap:creatable=(not stated => default true)
+   - EntitySet SalesQuotationText  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationTextType  sap:creatable=(not stated => default true)
+   - EntitySet SalesQuotationType  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesQuotationTypeType  sap:creatable=(not stated => default true)
+   - EntitySet SalesVolume  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SalesVolumeType  sap:creatable=(not stated => default true)
+   - EntitySet SDCustomerAddressVH  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SDCustomerAddressVHType  sap:creatable=(not stated => default true)
+   - EntitySet SDDocReferenceStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SDDocReferenceStatusType  sap:creatable=(not stated => default true)
+   - EntitySet SDDocumentReason  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SDDocumentReasonType  sap:creatable=(not stated => default true)
+   - EntitySet SDDocumentRejectionStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SDDocumentRejectionStatusType  sap:creatable=(not stated => default true)
+   - EntitySet SDProcessStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SDProcessStatusType  sap:creatable=(not stated => default true)
+   - EntitySet ShippingCondition  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ShippingConditionType  sap:creatable=(not stated => default true)
+   - EntitySet ShippingPoint  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.ShippingPointType  sap:creatable=(not stated => default true)
+   - EntitySet SlsOrganizationDistrChnl  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SlsOrganizationDistrChnlType  sap:creatable=(not stated => default true)
+   - EntitySet SlsPricingProcedure  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SlsPricingProcedureType  sap:creatable=(not stated => default true)
+   - EntitySet SlsQtanShipToPartyManage  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SlsQtanShipToPartyManageType  sap:creatable=(not stated => default true)
+   - EntitySet SlsQuotationItemPricingElement  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SlsQuotationItemPricingElementType  sap:creatable=(not stated => default true)
+   - EntitySet StandardPartnerContactInfo  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.StandardPartnerContactInfoType  sap:creatable=(not stated => default true)
+   - EntitySet StorageLocation  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.StorageLocationType  sap:creatable=(not stated => default true)
+   - EntitySet SubsequentDocType  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.SubsequentDocTypeType  sap:creatable=(not stated => default true)
+   - EntitySet TotalCreditCheckStatus  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.TotalCreditCheckStatusType  sap:creatable=(not stated => default true)
+   - EntitySet TransactionCurrency  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.TransactionCurrencyType  sap:creatable=(not stated => default true)
+   - EntitySet TransportationZone  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.TransportationZoneType  sap:creatable=(not stated => default true)
+   - EntitySet TrdCmplncCheckSts  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.TrdCmplncCheckStsType  sap:creatable=(not stated => default true)
+   - EntitySet UnitOfMeasure  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.UnitOfMeasureType  sap:creatable=(not stated => default true)
+   - EntitySet User  type=com.sap.gateway.srvd.ui_salesquotationmanage.v0001.UserType  sap:creatable=(not stated => default true)
+   - V4 InsertRestrictions on SAP__self.Container/SalesQuotationItemManage Insertable=false
+   - V4 InsertRestrictions on SAP__self.Container/SalesQuotationPartner Insertable=false
+   - V4 InsertRestrictions on SAP__self.Container/SalesQuotationPricingElement Insertable=false
+   - V4 InsertRestrictions on SAP__self.Container/SalesQuotationText Insertable=false
+   - V4 InsertRestrictions on SAP__self.Container/SlsQtanShipToPartyManage Insertable=false
+   - V4 InsertRestrictions on SAP__self.Container/SalesQuotationType Insertable=false
+   - V4 InsertRestrictions on SAP__self.Container/SalesQuotationItemText Insertable=false
+   - V4 InsertRestrictions on SAP__self.Container/SlsQuotationItemPricingElement Insertable=false
+   - V4 InsertRestrictions on SAP__self.Container/SalesQuotationManage Insertable=false
+   - V4 InsertRestrictions on SAP__self.Container/SalesQuotationItemPartner Insertable=false
+
+== ZCA_BPF_LAYOUT_METADATA_SRV
+   /sap/opu/odata/sap/CA_BPF_LAYOUT_METADATA_SRV
+   - EntitySet C_SrvcQtanProcFlowInformation  type=CA_BPF_LAYOUT_METADATA_SRV.C_SrvcQtanProcFlowInformationType  sap:creatable=false
+   - EntitySet I_RequestForQuotation  type=CA_BPF_LAYOUT_METADATA_SRV.I_RequestForQuotationType  sap:creatable=false
+   - EntitySet I_SupplierQuotation  type=CA_BPF_LAYOUT_METADATA_SRV.I_SupplierQuotationType  sap:creatable=false
+   - EntitySet R_CentralRequestForQuotation  type=CA_BPF_LAYOUT_METADATA_SRV.R_CentralRequestForQuotationType  sap:creatable=false
+   - EntitySet R_CentralSupplierQuotation  type=CA_BPF_LAYOUT_METADATA_SRV.R_CentralSupplierQuotationType  sap:creatable=false
+
+== ZC_TENDERINGQUERY_CDS
+   /sap/opu/odata/sap/C_TENDERINGQUERY_CDS
+   - EntitySet IsProposedFreightQuotation  type=C_TENDERINGQUERY_CDS.IsProposedFreightQuotation  sap:creatable=false
+   - EntitySet IsProposedFreightQuotationResults  type=C_TENDERINGQUERY_CDS.IsProposedFreightQuotationResult  sap:creatable=false
+   - EntitySet TndrgQuotationEvalResult  type=C_TENDERINGQUERY_CDS.TndrgQuotationEvalResult  sap:creatable=false
+   - EntitySet TndrgQuotationEvalResultResults  type=C_TENDERINGQUERY_CDS.TndrgQuotationEvalResultResult  sap:creatable=false
+   - EntitySet QuotationReviewIsRequired  type=C_TENDERINGQUERY_CDS.QuotationReviewIsRequired  sap:creatable=false
+   - EntitySet QuotationReviewIsRequiredResults  type=C_TENDERINGQUERY_CDS.QuotationReviewIsRequiredResult  sap:creatable=false
+   - EntitySet FreightQuotationStatus  type=C_TENDERINGQUERY_CDS.FreightQuotationStatus  sap:creatable=false
+   - EntitySet FreightQuotationStatusResults  type=C_TENDERINGQUERY_CDS.FreightQuotationStatusResult  sap:creatable=false
+
+== ZFAC_ACE_POSTG_SRV
+   /sap/opu/odata/sap/FAC_ACE_POSTG_SRV
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=FAC_ACE_POSTG_SRV.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZFAC_GL_DOCUMENT_POST_SRV
+   /sap/opu/odata/sap/FAC_GL_DOCUMENT_POST_SRV
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=FAC_FINANCIALS_POSTING_SRV.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZFAC_GL_MANUAL_CLEARING_SRV
+   /sap/opu/odata/sap/FAC_GL_MANUAL_CLEARING_SRV
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=FAC_FINANCIALS_POSTING_SRV.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZFAC_RECURRING_ACCOUNTING_DOC_SRV
+   /sap/opu/odata/sap/FAC_RECURRING_ACCOUNTING_DOC_SRV
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=FAC_FINANCIALS_POSTING_SRV.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZFAP_PAYMENT_POST_SRV
+   /sap/opu/odata/sap/FAP_PAYMENT_POST_SRV
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=FAC_FINANCIALS_POSTING_SRV.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZFAR_DISP_PROCESS_FLOW_SRV
+   /sap/opu/odata/sap/FAR_DISP_PROCESS_FLOW_SRV
+   - EntitySet C_ARProcessFlowQuotation  type=FAR_DISP_PROCESS_FLOW_SRV.C_ARProcessFlowQuotationType  sap:creatable=false
+   - EntitySet VL_SH_FAR_QUOTATION_SH  type=FAR_DISP_PROCESS_FLOW_SRV.VL_SH_FAR_QUOTATION_SH  sap:creatable=false
+
+== ZFAR_PAYMENT_POST_SRV
+   /sap/opu/odata/sap/FAR_PAYMENT_POST_SRV
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=FAC_FINANCIALS_POSTING_SRV.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZFCO_PROF_SEGMENT_SRV
+   /sap/opu/odata/sap/FCO_PROF_SEGMENT_SRV
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=FCO_PROF_SEGMENT_SRV.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZFIN_USER_DEFAULTPARAMETER_SRV
+   /sap/opu/odata/sap/FIN_USER_DEFAULTPARAMETER_SRV
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=FIN_USER_DEFAULTPARAMETER_SRV.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZFTR_MD_GLOBAL_SRV_SRV
+   /sap/opu/odata/sap/FTR_MD_GLOBAL_SRV_SRV
+   - EntitySet I_PriceQuotationType  type=FTR_MD_GLOBAL_SRV_SRV.I_PriceQuotationTypeType  sap:creatable=false
+
+== ZMDC_PROCESS_SRV__1405
+   /sap/opu/odata/sap/MDC_PROCESS_SRV__1405
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=cmpmonproc.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZMDC_PROCESS_SRV__147
+   /sap/opu/odata/sap/MDC_PROCESS_SRV__147
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=cmpmonproc.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+   - EntitySet VL_FV_BP_ENTITY_QUOTA  type=cmpmonproc.VL_FV_BP_ENTITY_QUOTA  sap:creatable=(not stated => default true)
+
+== ZMDC_PROCESS_SRV__194
+   /sap/opu/odata/sap/MDC_PROCESS_SRV__194
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=cmpmonproc.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZMDC_PROCESS_SRV__986
+   /sap/opu/odata/sap/MDC_PROCESS_SRV__986
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=cmpmonproc.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+   - EntitySet VL_FV_BP_ENTITY_QUOTA  type=cmpmonproc.VL_FV_BP_ENTITY_QUOTA  sap:creatable=(not stated => default true)
+
+== ZMDC_TRACK_CHANGES_SRV__194
+   /sap/opu/odata/sap/MDC_TRACK_CHANGES_SRV__194
+   - EntitySet VL_SH_EANE_RFQ_QUOTE_H  type=MDC_TRACK_CHANGES_SRV__194.VL_SH_EANE_RFQ_QUOTE_H  sap:creatable=false
+
+== ZMM_PUR_CQTN_MAINTAIN_SRV
+   /sap/opu/odata/sap/MM_PUR_CQTN_MAINTAIN_SRV
+   - EntitySet C_CentralRequestForQuotationVH  type=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralRequestForQuotationVHType  sap:creatable=false
+   - EntitySet C_CentralSupplierQuotationTP  type=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralSupplierQuotationTPType  sap:creatable=(not stated => default true)
+   - EntitySet C_CntrlSuplrQtanItemPricingTP  type=MM_PUR_CQTN_MAINTAIN_SRV.C_CntrlSuplrQtanItemPricingTPType  sap:creatable=(not stated => default true)
+   - EntitySet C_CntrlSupplierQtanItemDistrTP  type=MM_PUR_CQTN_MAINTAIN_SRV.C_CntrlSupplierQtanItemDistrTPType  sap:creatable=(not stated => default true)
+   - EntitySet C_CntrlSupplierQuotationItemTP  type=MM_PUR_CQTN_MAINTAIN_SRV.C_CntrlSupplierQuotationItemTPType  sap:creatable=(not stated => default true)
+   - EntitySet C_CntrlSupplierQuotationTypeVH  type=MM_PUR_CQTN_MAINTAIN_SRV.C_CntrlSupplierQuotationTypeVHType  sap:creatable=false
+   - FunctionImport C_CentralSupplierQuotationTPActivation  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralSupplierQuotationTPType
+   - FunctionImport Award  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralSupplierQuotationTPType
+   - FunctionImport Cancel  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralSupplierQuotationTPType
+   - FunctionImport Complete  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralSupplierQuotationTPType
+   - FunctionImport CreateCntrlQtanFromCentralRFQ  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralSupplierQuotationTPType
+   - FunctionImport C_CentralSupplierQuotationTPEdit  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralSupplierQuotationTPType
+   - FunctionImport C_CentralSupplierQuotationTPPreparation  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralSupplierQuotationTPType
+   - FunctionImport Submit  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CentralSupplierQuotationTPType
+   - FunctionImport C_CentralSupplierQuotationTPValidation  method=GET  returns=MM_PUR_CQTN_MAINTAIN_SRV.ValidationFunctionResult
+   - FunctionImport C_CntrlSuplrQtanItemPricingTPPreparation  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CntrlSuplrQtanItemPricingTPType
+   - FunctionImport C_CntrlSuplrQtanItemPricingTPValidation  method=GET  returns=MM_PUR_CQTN_MAINTAIN_SRV.ValidationFunctionResult
+   - FunctionImport A53FF42F484FD78F54EFBEDBA76AEPreparation  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CntrlSupplierQtanItemDistrTPType
+   - FunctionImport C_CntrlSupplierQtanItemDistrTPValidation  method=GET  returns=MM_PUR_CQTN_MAINTAIN_SRV.ValidationFunctionResult
+   - FunctionImport ADDA031FF356DC2821FFD15B9CAF8Preparation  method=POST  returns=MM_PUR_CQTN_MAINTAIN_SRV.C_CntrlSupplierQuotationItemTPType
+   - FunctionImport C_CntrlSupplierQuotationItemTPValidation  method=GET  returns=MM_PUR_CQTN_MAINTAIN_SRV.ValidationFunctionResult
+
+== ZMM_PUR_CREATE_FOD_FROM_CQTN_SRV
+   /sap/opu/odata/sap/MM_PUR_CREATE_FOD_FROM_CQTN_SRV
+   - EntitySet C_CntrlQtanFllwOnDocStagingHdr  type=MM_PUR_CREATE_FOD_FROM_CQTN_SRV.C_CntrlQtanFllwOnDocStagingHdrType  sap:creatable=false
+   - EntitySet C_CntrlQtanFllwOnDocStagingItm  type=MM_PUR_CREATE_FOD_FROM_CQTN_SRV.C_CntrlQtanFllwOnDocStagingItmType  sap:creatable=false
+   - EntitySet I_CntrlQtanFllwOnDocStagingHdr  type=MM_PUR_CREATE_FOD_FROM_CQTN_SRV.I_CntrlQtanFllwOnDocStagingHdrType  sap:creatable=false
+
+== ZMM_PUR_QA_MAINTAIN
+   /sap/opu/odata/sap/MM_PUR_QA_MAINTAIN
+   - EntitySet C_PurgQuotaArrgmtItemWD  type=MM_PUR_QA_MAINTAIN.C_PurgQuotaArrgmtItemWDType  sap:creatable=(not stated => default true)
+   - EntitySet C_PurgQuotaArrgmtVH  type=MM_PUR_QA_MAINTAIN.C_PurgQuotaArrgmtVHType  sap:creatable=false
+   - EntitySet C_PurgQuotaArrgmtWithDraft  type=MM_PUR_QA_MAINTAIN.C_PurgQuotaArrgmtWithDraftType  sap:creatable=(not stated => default true)
+   - FunctionImport C_PurgQuotaArrgmtItemWDCopy  method=POST  returns=MM_PUR_QA_MAINTAIN.C_PurgQuotaArrgmtItemWDType
+   - FunctionImport C_PurgQuotaArrgmtItemWDPreparation  method=POST  returns=MM_PUR_QA_MAINTAIN.C_PurgQuotaArrgmtItemWDType
+   - FunctionImport C_PurgQuotaArrgmtItemWDValidation  method=GET  returns=MM_PUR_QA_MAINTAIN.ValidationFunctionResult
+   - FunctionImport C_PurgQuotaArrgmtWithDraftActivation  method=POST  returns=MM_PUR_QA_MAINTAIN.C_PurgQuotaArrgmtWithDraftType
+   - FunctionImport C_PurgQuotaArrgmtWithDraftEdit  method=POST  returns=MM_PUR_QA_MAINTAIN.C_PurgQuotaArrgmtWithDraftType
+   - FunctionImport C_PurgQuotaArrgmtWithDraftPreparation  method=POST  returns=MM_PUR_QA_MAINTAIN.C_PurgQuotaArrgmtWithDraftType
+   - FunctionImport C_PurgQuotaArrgmtWithDraftValidation  method=GET  returns=MM_PUR_QA_MAINTAIN.ValidationFunctionResult
+
+== ZMM_PUR_QTN_COMPARE_SRV
+   /sap/opu/odata/sap/MM_PUR_QTN_COMPARE_SRV
+   - EntitySet C_RequestForQuotationCompare  type=MM_PUR_QTN_COMPARE_SRV.C_RequestForQuotationCompareType  sap:creatable=(not stated => default true)
+   - EntitySet C_SupplierQuotationCompare  type=MM_PUR_QTN_COMPARE_SRV.C_SupplierQuotationCompareType  sap:creatable=(not stated => default true)
+   - EntitySet C_SupplierQuotationItemCompare  type=MM_PUR_QTN_COMPARE_SRV.C_SupplierQuotationItemCompareType  sap:creatable=(not stated => default true)
+   - FunctionImport C_RequestForQuotationCompareActivation  method=POST  returns=MM_PUR_QTN_COMPARE_SRV.C_RequestForQuotationCompareType
+   - FunctionImport C_RequestForQuotationCompareEdit  method=POST  returns=MM_PUR_QTN_COMPARE_SRV.C_RequestForQuotationCompareType
+   - FunctionImport C_RequestForQuotationComparePreparation  method=POST  returns=MM_PUR_QTN_COMPARE_SRV.C_RequestForQuotationCompareType
+   - FunctionImport C_RequestForQuotationCompareValidation  method=GET  returns=MM_PUR_QTN_COMPARE_SRV.ValidationFunctionResult
+   - FunctionImport C_SupplierQuotationComparePreparation  method=POST  returns=MM_PUR_QTN_COMPARE_SRV.C_SupplierQuotationCompareType
+   - FunctionImport C_SupplierQuotationCompareValidation  method=GET  returns=MM_PUR_QTN_COMPARE_SRV.ValidationFunctionResult
+   - FunctionImport A85A3A60427A0F5D008F781A8B14BPreparation  method=POST  returns=MM_PUR_QTN_COMPARE_SRV.C_SupplierQuotationItemCompareType
+   - FunctionImport C_SupplierQuotationItemCompareValidation  method=GET  returns=MM_PUR_QTN_COMPARE_SRV.ValidationFunctionResult
+
+== ZSD_F1852_QUOT_WL_SRV
+   /sap/opu/odata/sap/SD_F1852_QUOT_WL_SRV
+   - EntitySet C_Dischannelvaluehelp  type=SD_F1852_QUOT_WL_SRV.C_DischannelvaluehelpType  sap:creatable=false
+   - EntitySet C_OrgDivisionValueHelp  type=SD_F1852_QUOT_WL_SRV.C_OrgDivisionValueHelpType  sap:creatable=false
+   - EntitySet C_Q2CCustomerQuickView  type=SD_F1852_QUOT_WL_SRV.C_Q2CCustomerQuickViewType  sap:creatable=false
+   - EntitySet C_QuotationWl_F1852  type=SD_F1852_QUOT_WL_SRV.C_QuotationWl_F1852Type  sap:creatable=false
+   - EntitySet C_Quotation_SubsequentDocType  type=SD_F1852_QUOT_WL_SRV.C_Quotation_SubsequentDocTypeType  sap:creatable=false
+   - EntitySet C_SalesDocumentItemWl  type=SD_F1852_QUOT_WL_SRV.C_SalesDocumentItemWlType  sap:creatable=false
+   - EntitySet C_SalesDocumentUserVH  type=SD_F1852_QUOT_WL_SRV.C_SalesDocumentUserVHType  sap:creatable=false
+   - EntitySet C_SalesGroupValueHelp  type=SD_F1852_QUOT_WL_SRV.C_SalesGroupValueHelpType  sap:creatable=false
+   - EntitySet C_SalesOfficeValueHelp  type=SD_F1852_QUOT_WL_SRV.C_SalesOfficeValueHelpType  sap:creatable=false
+   - EntitySet C_SalesQuotationTypeValueHelp  type=SD_F1852_QUOT_WL_SRV.C_SalesQuotationTypeValueHelpType  sap:creatable=false
+   - EntitySet C_SoldToValueHelp  type=SD_F1852_QUOT_WL_SRV.C_SoldToValueHelpType  sap:creatable=false
+   - EntitySet I_CompanyCodeStdVH  type=SD_F1852_QUOT_WL_SRV.I_CompanyCodeStdVHType  sap:creatable=false
+   - EntitySet I_Currency  type=SD_F1852_QUOT_WL_SRV.I_CurrencyType  sap:creatable=false
+   - EntitySet I_CurrencyStdVH  type=SD_F1852_QUOT_WL_SRV.I_CurrencyStdVHType  sap:creatable=false
+   - EntitySet I_Customer_VH  type=SD_F1852_QUOT_WL_SRV.I_Customer_VHType  sap:creatable=false
+   - EntitySet I_Division  type=SD_F1852_QUOT_WL_SRV.I_DivisionType  sap:creatable=false
+   - EntitySet I_OverallSDDocReferenceStatus  type=SD_F1852_QUOT_WL_SRV.I_OverallSDDocReferenceStatusType  sap:creatable=false
+   - EntitySet I_OverallSDDocumentRjcnStatus  type=SD_F1852_QUOT_WL_SRV.I_OverallSDDocumentRjcnStatusType  sap:creatable=false
+   - EntitySet I_OverallSDProcessStatus  type=SD_F1852_QUOT_WL_SRV.I_OverallSDProcessStatusType  sap:creatable=false
+   - EntitySet I_OverallSDProcessStatusText  type=SD_F1852_QUOT_WL_SRV.I_OverallSDProcessStatusTextType  sap:creatable=false
+   - EntitySet I_ProductStdVH  type=SD_F1852_QUOT_WL_SRV.I_ProductStdVHType  sap:creatable=false
+   - EntitySet I_SalesDocAllowedRjcnRsn  type=SD_F1852_QUOT_WL_SRV.I_SalesDocAllowedRjcnRsnType  sap:creatable=false
+   - EntitySet I_SalesDocApprovalStatus  type=SD_F1852_QUOT_WL_SRV.I_SalesDocApprovalStatusType  sap:creatable=false
+   - EntitySet I_SalesDocumentRjcnReason  type=SD_F1852_QUOT_WL_SRV.I_SalesDocumentRjcnReasonType  sap:creatable=false
+   - EntitySet I_SalesDocumentType  type=SD_F1852_QUOT_WL_SRV.I_SalesDocumentTypeType  sap:creatable=false
+   - EntitySet I_SalesOrganization  type=SD_F1852_QUOT_WL_SRV.I_SalesOrganizationType  sap:creatable=false
+   - EntitySet I_SDDocumentReason  type=SD_F1852_QUOT_WL_SRV.I_SDDocumentReasonType  sap:creatable=false
+   - EntitySet SAP__FormatSet  type=SD_F1852_QUOT_WL_SRV.SAP__Format  sap:creatable=false
+   - EntitySet SAP__PDFStandardSet  type=SD_F1852_QUOT_WL_SRV.SAP__PDFStandard  sap:creatable=false
+   - EntitySet SAP__TableColumnsSet  type=SD_F1852_QUOT_WL_SRV.SAP__TableColumns  sap:creatable=false
+   - EntitySet SAP__CoverPageSet  type=SD_F1852_QUOT_WL_SRV.SAP__CoverPage  sap:creatable=false
+   - EntitySet SAP__SignatureSet  type=SD_F1852_QUOT_WL_SRV.SAP__Signature  sap:creatable=false
+   - EntitySet SAP__HierarchySet  type=SD_F1852_QUOT_WL_SRV.SAP__Hierarchy  sap:creatable=false
+   - EntitySet SAP__PDFHeaderSet  type=SD_F1852_QUOT_WL_SRV.SAP__PDFHeader  sap:creatable=false
+   - EntitySet SAP__PDFFooterSet  type=SD_F1852_QUOT_WL_SRV.SAP__PDFFooter  sap:creatable=false
+   - EntitySet SAP__ValueHelpSet  type=SD_F1852_QUOT_WL_SRV.SAP__ValueHelp  sap:creatable=(not stated => default true)
+   - EntitySet SAP__Currencies  type=SD_F1852_QUOT_WL_SRV.SAP__Currency  sap:creatable=(not stated => default true)
+   - EntitySet SAP__UnitsOfMeasure  type=SD_F1852_QUOT_WL_SRV.SAP__UnitOfMeasure  sap:creatable=(not stated => default true)
+   - EntitySet SAP__MyDocumentDescriptions  type=SD_F1852_QUOT_WL_SRV.SAP__DocumentDescription  sap:creatable=(not stated => default true)
+   - EntitySet SAP__FileShareSet  type=SD_F1852_QUOT_WL_SRV.SAP__FileShare  sap:creatable=false
+   - V4 InsertRestrictions on SD_F1852_QUOT_WL_SRV.SAP__DocumentDescription Insertable=false
+
+== ZSD_F1871_QUOT_FS_SRV
+   /sap/opu/odata/sap/SD_F1871_QUOT_FS_SRV
+   - EntitySet C_QuotationFs  type=SD_F1871_QUOT_FS_SRV.C_QuotationFsType  sap:creatable=false
+   - EntitySet C_QuotationitemFs  type=SD_F1871_QUOT_FS_SRV.C_QuotationitemFsType  sap:creatable=false
+   - EntitySet C_SalesDocumentUserVH  type=SD_F1871_QUOT_FS_SRV.C_SalesDocumentUserVHType  sap:creatable=false
+   - EntitySet C_SDDocumentPartnerCard  type=SD_F1871_QUOT_FS_SRV.C_SDDocumentPartnerCardType  sap:creatable=false
+   - EntitySet C_SoldToValueHelp  type=SD_F1871_QUOT_FS_SRV.C_SoldToValueHelpType  sap:creatable=false
+   - EntitySet C_SubsqntSalesOrder  type=SD_F1871_QUOT_FS_SRV.C_SubsqntSalesOrderType  sap:creatable=false
+   - EntitySet C_SubsqntSalesOrderItem  type=SD_F1871_QUOT_FS_SRV.C_SubsqntSalesOrderItemType  sap:creatable=false
+   - EntitySet I_BusinessAreaStdVH  type=SD_F1871_QUOT_FS_SRV.I_BusinessAreaStdVHType  sap:creatable=false
+   - EntitySet I_CompanyCodeStdVH  type=SD_F1871_QUOT_FS_SRV.I_CompanyCodeStdVHType  sap:creatable=false
+   - EntitySet I_CreditControlAreaStdVH  type=SD_F1871_QUOT_FS_SRV.I_CreditControlAreaStdVHType  sap:creatable=false
+   - EntitySet I_Currency  type=SD_F1871_QUOT_FS_SRV.I_CurrencyType  sap:creatable=false
+   - EntitySet I_Customer  type=SD_F1871_QUOT_FS_SRV.I_CustomerType  sap:creatable=false
+   - EntitySet I_Customer_VH  type=SD_F1871_QUOT_FS_SRV.I_Customer_VHType  sap:creatable=false
+   - EntitySet I_DistributionChannel  type=SD_F1871_QUOT_FS_SRV.I_DistributionChannelType  sap:creatable=false
+   - EntitySet I_Division  type=SD_F1871_QUOT_FS_SRV.I_DivisionType  sap:creatable=false
+   - EntitySet I_Material  type=SD_F1871_QUOT_FS_SRV.I_MaterialType  sap:creatable=false
+   - EntitySet I_MaterialGroup  type=SD_F1871_QUOT_FS_SRV.I_MaterialGroupType  sap:creatable=false
+   - EntitySet I_MaterialStdVH  type=SD_F1871_QUOT_FS_SRV.I_MaterialStdVHType  sap:creatable=false
+   - EntitySet I_OverallSDDocReferenceStatus  type=SD_F1871_QUOT_FS_SRV.I_OverallSDDocReferenceStatusType  sap:creatable=false
+   - EntitySet I_OverallSDDocumentRjcnStatus  type=SD_F1871_QUOT_FS_SRV.I_OverallSDDocumentRjcnStatusType  sap:creatable=false
+   - EntitySet I_OverallSDProcessStatus  type=SD_F1871_QUOT_FS_SRV.I_OverallSDProcessStatusType  sap:creatable=false
+   - EntitySet I_ProductStdVH  type=SD_F1871_QUOT_FS_SRV.I_ProductStdVHType  sap:creatable=false
+   - EntitySet I_SalesDocApprovalStatus  type=SD_F1871_QUOT_FS_SRV.I_SalesDocApprovalStatusType  sap:creatable=false
+   - EntitySet I_SalesDocumentRjcnReason  type=SD_F1871_QUOT_FS_SRV.I_SalesDocumentRjcnReasonType  sap:creatable=false
+   - EntitySet I_SalesOrderType  type=SD_F1871_QUOT_FS_SRV.I_SalesOrderTypeType  sap:creatable=false
+   - EntitySet I_SalesOrganization  type=SD_F1871_QUOT_FS_SRV.I_SalesOrganizationType  sap:creatable=false
+   - EntitySet I_SalesQuotation  type=SD_F1871_QUOT_FS_SRV.I_SalesQuotationType  sap:creatable=false
+   - EntitySet I_SDDocReferenceStatus  type=SD_F1871_QUOT_FS_SRV.I_SDDocReferenceStatusType  sap:creatable=false
+   - EntitySet I_SDDocumentRejectionStatus  type=SD_F1871_QUOT_FS_SRV.I_SDDocumentRejectionStatusType  sap:creatable=false
+   - EntitySet I_SDProcessStatus  type=SD_F1871_QUOT_FS_SRV.I_SDProcessStatusType  sap:creatable=false
+   - EntitySet I_SlsQtanApprovalReason  type=SD_F1871_QUOT_FS_SRV.I_SlsQtanApprovalReasonType  sap:creatable=false
+   - EntitySet SAP__FormatSet  type=SD_F1871_QUOT_FS_SRV.SAP__Format  sap:creatable=false
+   - EntitySet SAP__PDFStandardSet  type=SD_F1871_QUOT_FS_SRV.SAP__PDFStandard  sap:creatable=false
+   - EntitySet SAP__TableColumnsSet  type=SD_F1871_QUOT_FS_SRV.SAP__TableColumns  sap:creatable=false
+   - EntitySet SAP__CoverPageSet  type=SD_F1871_QUOT_FS_SRV.SAP__CoverPage  sap:creatable=false
+   - EntitySet SAP__SignatureSet  type=SD_F1871_QUOT_FS_SRV.SAP__Signature  sap:creatable=false
+   - EntitySet SAP__HierarchySet  type=SD_F1871_QUOT_FS_SRV.SAP__Hierarchy  sap:creatable=false
+   - EntitySet SAP__PDFHeaderSet  type=SD_F1871_QUOT_FS_SRV.SAP__PDFHeader  sap:creatable=false
+   - EntitySet SAP__PDFFooterSet  type=SD_F1871_QUOT_FS_SRV.SAP__PDFFooter  sap:creatable=false
+   - EntitySet SAP__ValueHelpSet  type=SD_F1871_QUOT_FS_SRV.SAP__ValueHelp  sap:creatable=(not stated => default true)
+   - EntitySet SAP__Currencies  type=SD_F1871_QUOT_FS_SRV.SAP__Currency  sap:creatable=(not stated => default true)
+   - EntitySet SAP__UnitsOfMeasure  type=SD_F1871_QUOT_FS_SRV.SAP__UnitOfMeasure  sap:creatable=(not stated => default true)
+   - EntitySet SAP__MyDocumentDescriptions  type=SD_F1871_QUOT_FS_SRV.SAP__DocumentDescription  sap:creatable=(not stated => default true)
+   - EntitySet SAP__FileShareSet  type=SD_F1871_QUOT_FS_SRV.SAP__FileShare  sap:creatable=false
+   - EntitySet ClassificationInstanceSet  type=SD_F1871_QUOT_FS_SRV.ClassificationInstance  sap:creatable=false
+   - EntitySet ConfigurationInstanceSet  type=SD_F1871_QUOT_FS_SRV.ConfigurationInstance  sap:creatable=false
+   - EntitySet ConfigurationContextSet  type=SD_F1871_QUOT_FS_SRV.ConfigurationContext  sap:creatable=(not stated => default true)
+   - EntitySet OperationSet  type=SD_F1871_QUOT_FS_SRV.Operation  sap:creatable=false
+   - EntitySet InconsistencyInformationSet  type=SD_F1871_QUOT_FS_SRV.InconsistencyInformation  sap:creatable=false
+   - EntitySet TraceEntrySet  type=SD_F1871_QUOT_FS_SRV.TraceEntry  sap:creatable=false
+   - EntitySet TraceObjectDependencySet  type=SD_F1871_QUOT_FS_SRV.TraceObjectDependency  sap:creatable=false
+   - EntitySet InconsistencyInformationDetailSet  type=SD_F1871_QUOT_FS_SRV.InconsistencyInformationDetail  sap:creatable=false
+   - EntitySet BOMNodeHeaderSet  type=SD_F1871_QUOT_FS_SRV.BOMNodeHeader  sap:creatable=false
+   - EntitySet SequenceSet  type=SD_F1871_QUOT_FS_SRV.Sequence  sap:creatable=false
+   - EntitySet ChangeDocumentSet  type=SD_F1871_QUOT_FS_SRV.ChangeDocument  sap:creatable=false
+   - EntitySet ConfigurationMaterialVariantSet  type=SD_F1871_QUOT_FS_SRV.ConfigurationMaterialVariant  sap:creatable=false
+   - EntitySet ConfigurationDifferenceItemSet  type=SD_F1871_QUOT_FS_SRV.ConfigurationDifferenceItem  sap:creatable=false
+   - EntitySet CharacteristicValueDetailSet  type=SD_F1871_QUOT_FS_SRV.CharacteristicValueDetail  sap:creatable=false
+   - EntitySet UISettingsSet  type=SD_F1871_QUOT_FS_SRV.UISettings  sap:creatable=false
+   - EntitySet ConfigurationProfileSet  type=SD_F1871_QUOT_FS_SRV.ConfigurationProfile  sap:creatable=false
+   - EntitySet ToggleSet  type=SD_F1871_QUOT_FS_SRV.Toggle  sap:creatable=false
+   - EntitySet RoutingNodeSet  type=SD_F1871_QUOT_FS_SRV.RoutingNode  sap:creatable=false
+   - EntitySet StandardValueSet  type=SD_F1871_QUOT_FS_SRV.StandardValue  sap:creatable=false
+   - EntitySet RoutingHeaderSet  type=SD_F1871_QUOT_FS_SRV.RoutingHeader  sap:creatable=false
+   - EntitySet CharacteristicDetailSet  type=SD_F1871_QUOT_FS_SRV.CharacteristicDetail  sap:creatable=false
+   - EntitySet RoutingSet  type=SD_F1871_QUOT_FS_SRV.Routing  sap:creatable=false
+   - EntitySet TraceCharacteristicVHSet  type=SD_F1871_QUOT_FS_SRV.TraceCharacteristicVH  sap:creatable=false
+   - EntitySet DocumentationSet  type=SD_F1871_QUOT_FS_SRV.Documentation  sap:creatable=false
+   - EntitySet VariantValuationDiffCsticSet  type=SD_F1871_QUOT_FS_SRV.VariantValuationDiffCstic  sap:creatable=false
+   - EntitySet OperationPRTSet  type=SD_F1871_QUOT_FS_SRV.OperationPRT  sap:creatable=false
+   - EntitySet TraceCharacteristicSet  type=SD_F1871_QUOT_FS_SRV.TraceCharacteristic  sap:creatable=false
+   - EntitySet TraceCharacteristicValueSet  type=SD_F1871_QUOT_FS_SRV.TraceCharacteristicValue  sap:creatable=false
+   - EntitySet VariantTableSet  type=SD_F1871_QUOT_FS_SRV.TraceVariantTable  sap:creatable=false
+   - EntitySet TraceObjectDependencyVHSet  type=SD_F1871_QUOT_FS_SRV.TraceObjectDependencyVH  sap:creatable=false
+   - EntitySet VariantValuationDiffValueSet  type=SD_F1871_QUOT_FS_SRV.VariantValuationDiffValue  sap:creatable=false
+   - EntitySet TraceCharacteristicResultSet  type=SD_F1871_QUOT_FS_SRV.TraceCharacteristicResult  sap:creatable=false
+   - EntitySet BOMNodeSet  type=SD_F1871_QUOT_FS_SRV.BOMNode  sap:creatable=false
+   - EntitySet ObjectDependencyDetailsSet  type=SD_F1871_QUOT_FS_SRV.ObjectDependencyDetails  sap:creatable=false
+   - EntitySet ObjectDependencyHeaderSet  type=SD_F1871_QUOT_FS_SRV.ObjectDependencyHeader  sap:creatable=false
+   - EntitySet ObjectDependencyCodeSet  type=SD_F1871_QUOT_FS_SRV.ObjectDependencyCode  sap:creatable=false
+   - EntitySet TracePricingFactorSet  type=SD_F1871_QUOT_FS_SRV.TracePricingFactor  sap:creatable=false
+   - EntitySet TraceBAdISet  type=SD_F1871_QUOT_FS_SRV.TraceBAdI  sap:creatable=false
+   - EntitySet ConfigurationPricingRecordSet  type=SD_F1871_QUOT_FS_SRV.ConfigurationPricingRecord  sap:creatable=false
+   - EntitySet UIExtensionSet  type=SD_F1871_QUOT_FS_SRV.UIExtension  sap:creatable=false
+   - EntitySet CharacteristicDefinitionSet  type=SD_F1871_QUOT_FS_SRV.CharacteristicDefinition  sap:creatable=false
+   - EntitySet ClassTypeValueHelpSet  type=SD_F1871_QUOT_FS_SRV.ClassTypeValueHelp  sap:creatable=false
+   - EntitySet C_BOMMaterialVH  type=SD_F1871_QUOT_FS_SRV.C_BOMMaterialVHType  sap:creatable=false
+   - EntitySet C_ProductConfigurationProfile  type=SD_F1871_QUOT_FS_SRV.C_ProductConfigurationProfileType  sap:creatable=false
+   - EntitySet C_VarConfignProductPlantVH  type=SD_F1871_QUOT_FS_SRV.C_VarConfignProductPlantVHType  sap:creatable=false
+   - EntitySet C_VarConfignSalesDocCategoryVH  type=SD_F1871_QUOT_FS_SRV.C_VarConfignSalesDocCategoryVHType  sap:creatable=false
+   - EntitySet C_VarConfignSalesDocItemVH  type=SD_F1871_QUOT_FS_SRV.C_VarConfignSalesDocItemVHType  sap:creatable=false
+   - EntitySet I_BillOfMaterialFormulaVH  type=SD_F1871_QUOT_FS_SRV.I_BillOfMaterialFormulaVHType  sap:creatable=false
+   - EntitySet I_BillOfMaterialItemCategory  type=SD_F1871_QUOT_FS_SRV.I_BillOfMaterialItemCategoryType  sap:creatable=false
+   - EntitySet I_DocInfoRecdDocNmbrStdVH  type=SD_F1871_QUOT_FS_SRV.I_DocInfoRecdDocNmbrStdVHType  sap:creatable=false
+   - EntitySet I_DocInfoRecdDocPrtStdVH  type=SD_F1871_QUOT_FS_SRV.I_DocInfoRecdDocPrtStdVHType  sap:creatable=false
+   - EntitySet I_DocInfoRecdDocTypeStdVH  type=SD_F1871_QUOT_FS_SRV.I_DocInfoRecdDocTypeStdVHType  sap:creatable=false
+   - EntitySet I_DocInfoRecdDocVersStdVH  type=SD_F1871_QUOT_FS_SRV.I_DocInfoRecdDocVersStdVHType  sap:creatable=false
+   - EntitySet I_DocumentInfoRecordDocPrtVH  type=SD_F1871_QUOT_FS_SRV.I_DocumentInfoRecordDocPrtVHType  sap:creatable=false
+   - EntitySet I_UnitOfMeasureStdVH  type=SD_F1871_QUOT_FS_SRV.I_UnitOfMeasureStdVHType  sap:creatable=false
+   - EntitySet CharacteristicsGroupSet  type=SD_F1871_QUOT_FS_SRV.CharacteristicsGroup  sap:creatable=false
+   - EntitySet CharacteristicSet  type=SD_F1871_QUOT_FS_SRV.Characteristic  sap:creatable=false
+   - EntitySet CharacteristicValueSet  type=SD_F1871_QUOT_FS_SRV.CharacteristicValue  sap:creatable=(not stated => default true)
+   - EntitySet ClassificationContextSet  type=SD_F1871_QUOT_FS_SRV.ClassificationContext  sap:creatable=(not stated => default true)
+   - FunctionImport ClassificationInstanceAssign  method=POST  returns=SD_F1871_QUOT_FS_SRV.ClassificationInstance
+   - FunctionImport ClassificationInstanceUnassign  method=POST  returns=SD_F1871_QUOT_FS_SRV.ClassificationInstance
+   - FunctionImport CreateOrderBOM  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport LoadClassificationProposal  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ActivateTrace  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport DeactivateTrace  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ClearTrace  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport IsTraceActive  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport DiscardConfigurationDraft  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport CalculateDifferences  method=GET  returns=Collection(SD_F1871_QUOT_FS_SRV.ConfigurationDifferenceItem)
+   - FunctionImport DeleteBOMItem  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ExplodeBOM  method=POST  returns=SD_F1871_QUOT_FS_SRV.BOMNode
+   - FunctionImport SwitchToETO  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ClearCharacteristic  method=POST  returns=SD_F1871_QUOT_FS_SRV.CharacteristicValueAssignResponse
+   - FunctionImport SetETOStatus  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ComputeDefaultUoM  method=POST  returns=SD_F1871_QUOT_FS_SRV.DefaultUoMResponse
+   - FunctionImport ImportSalesDocumentConfiguration  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ValidateConfigurationInstance  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ValidateConfiguration  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport SetPreferredVariant  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport CreateFullyMatchingProductVariant  method=POST  returns=SD_F1871_QUOT_FS_SRV.CreateFullyMatchingProdVarResponse
+   - FunctionImport ConfigurationLock  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ConfigurationUnlock  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ExplodeRouting  method=POST  returns=SD_F1871_QUOT_FS_SRV.RoutingNode
+   - FunctionImport CalculatePricing  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport ResetConfiguration  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport CalcPossibleValuesForUnassignedCstics  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport CalculateAlternativeValues  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport CalcPossibleValForUnassgndCsticsInSearch  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport CharacteristicValueAssign  method=POST  returns=SD_F1871_QUOT_FS_SRV.CharacteristicValueAssignResponse
+   - FunctionImport CharacteristicValueUnassign  method=POST  returns=SD_F1871_QUOT_FS_SRV.FunctionImportResponse
+   - FunctionImport GetClassificationSettings  method=GET  returns=SD_F1871_QUOT_FS_SRV.ClassificationSettings
+   - FunctionImport SetExpandPagingForCstics  method=POST  returns=SD_F1871_QUOT_FS_SRV.CharacteristicsGroup
+   - V4 InsertRestrictions on SD_F1871_QUOT_FS_SRV.SAP__DocumentDescription Insertable=false
+
+== ZSD_F2187_CUST360_SRV
+   /sap/opu/odata/sap/SD_F2187_CUST360_SRV
+   - EntitySet C_QuotationWl_F1852  type=SD_F2187_CUST360_SRV.C_QuotationWl_F1852Type  sap:creatable=false
+   - EntitySet C_SalesQuotationTypeValueHelp  type=SD_F2187_CUST360_SRV.C_SalesQuotationTypeValueHelpType  sap:creatable=false
+   - EntitySet C_SrvcQtanListRptAndObjPg  type=SD_F2187_CUST360_SRV.C_SrvcQtanListRptAndObjPgType  sap:creatable=false
+   - EntitySet I_ServiceQuotationStatus  type=SD_F2187_CUST360_SRV.I_ServiceQuotationStatusType  sap:creatable=false
+   - FunctionImport REJECT_ALL_ITEMS_QUOTE  method=POST  returns=SD_F2187_CUST360_SRV.FunctionImportResult
+   - FunctionImport EXTEND_VALIDITY_QUOTE  method=POST  returns=SD_F2187_CUST360_SRV.FunctionImportResult
+
+== ZSD_MCC_SQ_MASS_UPDATE_SRV
+   /sap/opu/odata/sap/SD_MCC_SQ_MASS_UPDATE_SRV
+   - EntitySet SlsQtn  type=SD_MCC_SQ_MASS_UPDATE_SRV.SlsQtnType  sap:creatable=false
+   - EntitySet SlsQtnItem  type=SD_MCC_SQ_MASS_UPDATE_SRV.SlsQtnItemType  sap:creatable=false
+   - EntitySet C_SalesQuotationTypeValueHelp  type=SD_MCC_SQ_MASS_UPDATE_SRV.C_SalesQuotationTypeValueHelpType  sap:creatable=false
+   - EntitySet I_SalesQuotationStdVH  type=SD_MCC_SQ_MASS_UPDATE_SRV.I_SalesQuotationStdVHType  sap:creatable=false
+   - EntitySet I_SalesQuotationType  type=SD_MCC_SQ_MASS_UPDATE_SRV.I_SalesQuotationTypeType  sap:creatable=false
+   - EntitySet I_SlsQtanApprovalReason  type=SD_MCC_SQ_MASS_UPDATE_SRV.I_SlsQtanApprovalReasonType  sap:creatable=false
+
+== ZSD_QTAN_PROCFLOW_SRV
+   /sap/opu/odata/sap/SD_QTAN_PROCFLOW_SRV
+   - EntitySet C_SlsQtanProcFlow  type=SD_QTAN_PROCFLOW_SRV.C_SlsQtanProcFlowType  sap:creatable=false
+   - EntitySet I_AccountingDocumentStdVH  type=SD_QTAN_PROCFLOW_SRV.I_AccountingDocumentStdVHType  sap:creatable=false
+   - EntitySet I_AccountingDocumentTypeStdVH  type=SD_QTAN_PROCFLOW_SRV.I_AccountingDocumentTypeStdVHType  sap:creatable=false
+   - EntitySet I_BillingDocument  type=SD_QTAN_PROCFLOW_SRV.I_BillingDocumentType  sap:creatable=false
+   - EntitySet I_BillingDocumentStdVH  type=SD_QTAN_PROCFLOW_SRV.I_BillingDocumentStdVHType  sap:creatable=false
+   - EntitySet I_BillingDocumentType  type=SD_QTAN_PROCFLOW_SRV.I_BillingDocumentTypeType  sap:creatable=false
+   - EntitySet I_BusinessAreaStdVH  type=SD_QTAN_PROCFLOW_SRV.I_BusinessAreaStdVHType  sap:creatable=false
+   - EntitySet I_BusTransTypeStdVH  type=SD_QTAN_PROCFLOW_SRV.I_BusTransTypeStdVHType  sap:creatable=false
+   - EntitySet I_CompanyCodeStdVH  type=SD_QTAN_PROCFLOW_SRV.I_CompanyCodeStdVHType  sap:creatable=false
+   - EntitySet I_ControllingAreaStdVH  type=SD_QTAN_PROCFLOW_SRV.I_ControllingAreaStdVHType  sap:creatable=false
+   - EntitySet I_ControllingObjectStdVH  type=SD_QTAN_PROCFLOW_SRV.I_ControllingObjectStdVHType  sap:creatable=false
+   - EntitySet I_CreditControlAreaStdVH  type=SD_QTAN_PROCFLOW_SRV.I_CreditControlAreaStdVHType  sap:creatable=false
+   - EntitySet I_Customer_VH  type=SD_QTAN_PROCFLOW_SRV.I_Customer_VHType  sap:creatable=false
+   - EntitySet I_DeliveryDocument  type=SD_QTAN_PROCFLOW_SRV.I_DeliveryDocumentType  sap:creatable=false
+   - EntitySet I_DeliveryDocumentType  type=SD_QTAN_PROCFLOW_SRV.I_DeliveryDocumentTypeType  sap:creatable=false
+   - EntitySet I_DunningAreaStdVH  type=SD_QTAN_PROCFLOW_SRV.I_DunningAreaStdVHType  sap:creatable=false
+   - EntitySet I_FinMgmtAreaStdVH  type=SD_QTAN_PROCFLOW_SRV.I_FinMgmtAreaStdVHType  sap:creatable=false
+   - EntitySet I_JournalEntry  type=SD_QTAN_PROCFLOW_SRV.I_JournalEntryType  sap:creatable=false
+   - EntitySet I_JournalEntryStdVH  type=SD_QTAN_PROCFLOW_SRV.I_JournalEntryStdVHType  sap:creatable=false
+   - EntitySet I_LedgerStdVH  type=SD_QTAN_PROCFLOW_SRV.I_LedgerStdVHType  sap:creatable=false
+   - EntitySet I_MaterialStdVH  type=SD_QTAN_PROCFLOW_SRV.I_MaterialStdVHType  sap:creatable=false
+   - EntitySet I_MfgOrderStdVH  type=SD_QTAN_PROCFLOW_SRV.I_MfgOrderStdVHType  sap:creatable=false
+   - EntitySet I_OverallBillingStatus  type=SD_QTAN_PROCFLOW_SRV.I_OverallBillingStatusType  sap:creatable=false
+   - EntitySet I_OverallPackingStatus  type=SD_QTAN_PROCFLOW_SRV.I_OverallPackingStatusType  sap:creatable=false
+   - EntitySet I_OverallPickingStatus  type=SD_QTAN_PROCFLOW_SRV.I_OverallPickingStatusType  sap:creatable=false
+   - EntitySet I_OverallProofOfDelivStatus  type=SD_QTAN_PROCFLOW_SRV.I_OverallProofOfDelivStatusType  sap:creatable=false
+   - EntitySet I_OverallSDDocReferenceStatus  type=SD_QTAN_PROCFLOW_SRV.I_OverallSDDocReferenceStatusType  sap:creatable=false
+   - EntitySet I_OverallSDDocumentRjcnStatus  type=SD_QTAN_PROCFLOW_SRV.I_OverallSDDocumentRjcnStatusType  sap:creatable=false
+   - EntitySet I_OvrlWarehouseActyStatus  type=SD_QTAN_PROCFLOW_SRV.I_OvrlWarehouseActyStatusType  sap:creatable=false
+   - EntitySet I_ReceivablesPayablesItem  type=SD_QTAN_PROCFLOW_SRV.I_ReceivablesPayablesItemType  sap:creatable=false
+   - EntitySet I_RetsMgmtProcessStdVH  type=SD_QTAN_PROCFLOW_SRV.I_RetsMgmtProcessStdVHType  sap:creatable=false
+   - EntitySet I_SalesDocument  type=SD_QTAN_PROCFLOW_SRV.I_SalesDocumentType  sap:creatable=false
+   - EntitySet I_SalesDocumentItemFulfillmnt  type=SD_QTAN_PROCFLOW_SRV.I_SalesDocumentItemFulfillmntType  sap:creatable=false
+   - EntitySet I_SalesDocumentType  type=SD_QTAN_PROCFLOW_SRV.I_SalesDocumentTypeType  sap:creatable=false
+   - EntitySet I_SalesOrderFlfmtIssueBasic  type=SD_QTAN_PROCFLOW_SRV.I_SalesOrderFlfmtIssueBasicType  sap:creatable=false
+   - EntitySet I_ShippingPointStdVH  type=SD_QTAN_PROCFLOW_SRV.I_ShippingPointStdVHType  sap:creatable=false
+   - EntitySet I_Supplier_VH  type=SD_QTAN_PROCFLOW_SRV.I_Supplier_VHType  sap:creatable=false
+   - EntitySet I_TransportationPlanningSts  type=SD_QTAN_PROCFLOW_SRV.I_TransportationPlanningStsType  sap:creatable=false
+   - EntitySet I_WarehouseStagingAreaStdVH  type=SD_QTAN_PROCFLOW_SRV.I_WarehouseStagingAreaStdVHType  sap:creatable=false
+   - EntitySet I_WarehouseStdVH  type=SD_QTAN_PROCFLOW_SRV.I_WarehouseStdVHType  sap:creatable=false
+   - EntitySet SAP__FormatSet  type=SD_QTAN_PROCFLOW_SRV.SAP__Format  sap:creatable=false
+   - EntitySet SAP__PDFStandardSet  type=SD_QTAN_PROCFLOW_SRV.SAP__PDFStandard  sap:creatable=false
+   - EntitySet SAP__TableColumnsSet  type=SD_QTAN_PROCFLOW_SRV.SAP__TableColumns  sap:creatable=false
+   - EntitySet SAP__CoverPageSet  type=SD_QTAN_PROCFLOW_SRV.SAP__CoverPage  sap:creatable=false
+   - EntitySet SAP__SignatureSet  type=SD_QTAN_PROCFLOW_SRV.SAP__Signature  sap:creatable=false
+   - EntitySet SAP__HierarchySet  type=SD_QTAN_PROCFLOW_SRV.SAP__Hierarchy  sap:creatable=false
+   - EntitySet SAP__PDFHeaderSet  type=SD_QTAN_PROCFLOW_SRV.SAP__PDFHeader  sap:creatable=false
+   - EntitySet SAP__PDFFooterSet  type=SD_QTAN_PROCFLOW_SRV.SAP__PDFFooter  sap:creatable=false
+   - EntitySet SAP__ValueHelpSet  type=SD_QTAN_PROCFLOW_SRV.SAP__ValueHelp  sap:creatable=(not stated => default true)
+   - EntitySet SAP__Currencies  type=SD_QTAN_PROCFLOW_SRV.SAP__Currency  sap:creatable=(not stated => default true)
+   - EntitySet SAP__UnitsOfMeasure  type=SD_QTAN_PROCFLOW_SRV.SAP__UnitOfMeasure  sap:creatable=(not stated => default true)
+   - EntitySet SAP__MyDocumentDescriptions  type=SD_QTAN_PROCFLOW_SRV.SAP__DocumentDescription  sap:creatable=(not stated => default true)
+   - EntitySet SAP__FileShareSet  type=SD_QTAN_PROCFLOW_SRV.SAP__FileShare  sap:creatable=false
+   - V4 InsertRestrictions on SD_QTAN_PROCFLOW_SRV.SAP__DocumentDescription Insertable=false
+
+== ZSD_SALES_QTN_IMPORT
+   /sap/opu/odata/sap/SD_SALES_QTN_IMPORT
+   - EntitySet C_SalesQuotationImportHistory  type=SD_SALES_QTN_IMPORT.C_SalesQuotationImportHistoryType  sap:creatable=false
+   - EntitySet C_SalesQuotationTypeValueHelp  type=SD_SALES_QTN_IMPORT.C_SalesQuotationTypeValueHelpType  sap:creatable=false
+   - EntitySet C_SlsQtanImportHistoryItem  type=SD_SALES_QTN_IMPORT.C_SlsQtanImportHistoryItemType  sap:creatable=false
+   - EntitySet I_SalesQuotationImport  type=SD_SALES_QTN_IMPORT.I_SalesQuotationImportType  sap:creatable=false
+   - EntitySet I_SalesQuotationItemImport  type=SD_SALES_QTN_IMPORT.I_SalesQuotationItemImportType  sap:creatable=false
+   - EntitySet I_SalesQuotationItemPartner  type=SD_SALES_QTN_IMPORT.I_SalesQuotationItemPartnerType  sap:creatable=false
+   - EntitySet I_SalesQuotationItemPrcgElmnt  type=SD_SALES_QTN_IMPORT.I_SalesQuotationItemPrcgElmntType  sap:creatable=false
+   - EntitySet I_SalesQuotationPartner  type=SD_SALES_QTN_IMPORT.I_SalesQuotationPartnerType  sap:creatable=false
+   - EntitySet I_SalesQuotationPrcgElmnt  type=SD_SALES_QTN_IMPORT.I_SalesQuotationPrcgElmntType  sap:creatable=false
+
+== ZUI_SRCGPROJAWDSCEN_MANAGE
+   /sap/opu/odata/sap/UI_SRCGPROJAWDSCEN_MANAGE
+   - EntitySet SrcgProjQuotationCompareSet  type=cds_ui_srcgprojawdscen_manage.SrcgProjQuotationCompareType  sap:creatable=false
+   - EntitySet SrcgProjQuotationCompare  type=cds_ui_srcgprojawdscen_manage.SrcgProjQuotationCompareParameters  sap:creatable=false
+   - V4 InsertRestrictions on cds_ui_srcgprojawdscen_manage.cds_ui_srcgprojawdscen_manage_Entities/SrcgProjQuotationCompareSet Insertable=false
+
+
+== NON-200 for quotation-named or direct-probed services
+   HTTP 500 API_SALES_QUOTATION_SRV(direct) /sap/opu/odata/sap/API_SALES_QUOTATION_SRV
+      <?xml version="1.0" encoding="utf-8"?><error xmlns="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata"><code>/IWFND/CM_COS/064</code><message xml:lang="en">No System Alias found for Service 'ZAPI_SALES_QUOTATION_SRV_0001' and user 'KHUSH
+   HTTP 404 V4:api_salesquotation(direct) /sap/opu/odata4/sap/api_salesquotation/srvd_a2x/sap/salesquotation/0001
+      {"error":{"code":"/IWBEP/CM_V4_COS/014","message":"Service group 'API_SALESQUOTATION' not published","@SAP__common.longtextUrl":"../../../../default/iwbep/common/0001/T100Longtexts(MessageClass='%2FIWBEP%2FCM_V4_COS',MessageNumber='014',Variable1='AP

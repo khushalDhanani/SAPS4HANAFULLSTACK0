@@ -1,0 +1,383 @@
+jest.mock('../../../srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter', () => ({
+  getOrdersDueForDelivery: jest.fn(),
+  getShippingPoints: jest.fn(),
+  createDeliveryFromOrder: jest.fn(),
+  getDeliveryStatus: jest.fn(),
+  getBillingDocumentTypes: jest.fn(),
+  createBillingDocument: jest.fn()
+}));
+
+const outboundDeliveryAdapter = require('../../../srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
+const registerOutboundDeliveryHandlers = require('../../../srv/le/outbound-delivery/handlers/outboundDelivery.handler');
+
+function createMockService() {
+  const handlers = {};
+  const mockSrv = {
+    on: (event, entity, handlerFn) => {
+      if (!handlerFn) {
+        handlers[event] = entity;
+      } else {
+        handlers[`${event}_${entity}`] = handlerFn;
+      }
+    }
+  };
+  registerOutboundDeliveryHandlers(mockSrv);
+  return handlers;
+}
+
+// Plant scope of these writes is covered in test/integration/outboundDeliveryPlantScope.test.js.
+const admin = { is: (role) => role === 'Admin' };
+
+describe('Unit: OutboundDeliveryService Handlers', () => {
+  let handlers;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    handlers = createMockService();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  describe('READ OrdersDueForDelivery', () => {
+    test('delegates to adapter and applies paging', async () => {
+      const mockOrders = [
+        { SalesOrder: '5000104', SalesOrderItem: '000010', ScheduleLine: '0001', ShippingPoint: '1120' },
+        { SalesOrder: '5000126', SalesOrderItem: '000010', ScheduleLine: '0001', ShippingPoint: '1120' }
+      ];
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(mockOrders);
+
+      const req = {
+        query: { SELECT: { limit: { rows: { val: 1 } } } }
+      };
+
+      const result = await handlers['READ_OrdersDueForDelivery'](req);
+
+      expect(outboundDeliveryAdapter.getOrdersDueForDelivery).toHaveBeenCalledWith(req);
+      expect(result).toHaveLength(1);
+      expect(result[0].SalesOrder).toBe('5000104');
+    });
+
+    test('filters by the IsDeliverable $filter the worklist sends', async () => {
+      const mockOrders = [
+        { SalesOrder: '5000104', IsDeliverable: true, SalesDocApprovalStatus: 'B' },
+        { SalesOrder: '5000461', IsDeliverable: false, SalesDocApprovalStatus: 'A' }
+      ];
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(mockOrders);
+
+      const req = {
+        query: { SELECT: { where: [{ ref: ['Plant'] }, '=', { val: '1120' }, 'and', { ref: ['IsDeliverable'] }, '=', { val: true }] } }
+      };
+
+      const result = await handlers['READ_OrdersDueForDelivery'](req);
+      expect(result).toHaveLength(1);
+      expect(result[0].SalesOrder).toBe('5000104');
+      expect(result[0].IsDeliverable).toBe(true);
+    });
+
+    test('filters by the SalesDocApprovalStatus $filter the worklist sends', async () => {
+      const mockOrders = [
+        { SalesOrder: '5000104', IsDeliverable: true, SalesDocApprovalStatus: 'B' },
+        { SalesOrder: '5000461', IsDeliverable: false, SalesDocApprovalStatus: 'A' }
+      ];
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(mockOrders);
+
+      const req = {
+        query: { SELECT: { where: [{ ref: ['Plant'] }, '=', { val: '1120' }, 'and', { ref: ['SalesDocApprovalStatus'] }, '=', { val: 'A' }] } }
+      };
+
+      const result = await handlers['READ_OrdersDueForDelivery'](req);
+      expect(result).toHaveLength(1);
+      expect(result[0].SalesOrder).toBe('5000461');
+      expect(result[0].SalesDocApprovalStatus).toBe('A');
+    });
+
+    test('calls req.error when adapter rejects', async () => {
+      const err = new Error('Gateway timeout');
+      err.status = 502;
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockRejectedValue(err);
+
+      const req = {
+        query: {},
+        error: jest.fn()
+      };
+
+      await handlers['READ_OrdersDueForDelivery'](req);
+
+      expect(req.error).toHaveBeenCalledWith(502, 'Gateway timeout');
+    });
+  });
+
+  describe('READ ShippingPointVH', () => {
+    test('hands the request to the adapter, so the adapter can scope the points by the user plant', async () => {
+      outboundDeliveryAdapter.getShippingPoints.mockResolvedValue([]);
+
+      const req = { query: {} };
+      await handlers['READ_ShippingPointVH'](req);
+
+      expect(outboundDeliveryAdapter.getShippingPoints).toHaveBeenCalledWith({ req });
+    });
+
+    test('applies paging to the shipping points', async () => {
+      outboundDeliveryAdapter.getShippingPoints.mockResolvedValue([{ ShippingPoint: '1120' }, { ShippingPoint: '1112' }]);
+
+      const result = await handlers['READ_ShippingPointVH']({ query: { SELECT: { limit: { rows: { val: 1 } } } } });
+
+      expect(result).toEqual([{ ShippingPoint: '1120' }]);
+    });
+
+    test('calls req.error when adapter fails', async () => {
+      const err = new Error('Service unavailable');
+      err.status = 503;
+      outboundDeliveryAdapter.getShippingPoints.mockRejectedValue(err);
+
+      const req = {
+        query: {},
+        error: jest.fn()
+      };
+
+      await handlers['READ_ShippingPointVH'](req);
+
+      expect(req.error).toHaveBeenCalledWith(503, 'Service unavailable');
+    });
+  });
+
+  describe('createOutboundDelivery action', () => {
+    test('rejects with 400 when SalesOrder is missing', async () => {
+      const req = {
+        data: { SalesOrder: '' },
+        error: jest.fn()
+      };
+
+      await handlers['createOutboundDelivery'](req);
+
+      expect(req.error).toHaveBeenCalledWith(400, 'SalesOrder is required to create an outbound delivery.');
+      expect(outboundDeliveryAdapter.createDeliveryFromOrder).not.toHaveBeenCalled();
+    });
+
+    test('creates outbound delivery with specified shipping point and delivery date', async () => {
+      outboundDeliveryAdapter.createDeliveryFromOrder.mockResolvedValue({
+        OutboundDelivery: '13000526',
+        ReferenceSDDocument: '5000104',
+        ShippingPoint: '1120'
+      });
+
+      const req = {
+        data: {
+          SalesOrder: '5000104',
+          ShippingPoint: '1120',
+          DeliveryDate: '2025-08-14'
+        },
+        user: admin,
+        error: jest.fn()
+      };
+
+      const result = await handlers['createOutboundDelivery'](req);
+
+      expect(outboundDeliveryAdapter.createDeliveryFromOrder).toHaveBeenCalledWith({
+        salesOrder: '5000104',
+        shippingPoint: '1120',
+        deliveryDate: '2025-08-14'
+      });
+      expect(result).toBe('13000526');
+      expect(req.error).not.toHaveBeenCalled();
+    });
+
+    test('rejects with 400 when ShippingPoint is missing and never defaults to first list entry', async () => {
+      const req = {
+        data: {
+          SalesOrder: '5000104'
+        },
+        error: jest.fn()
+      };
+
+      await handlers['createOutboundDelivery'](req);
+
+      expect(req.error).toHaveBeenCalledWith(400, 'ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
+      expect(outboundDeliveryAdapter.createDeliveryFromOrder).not.toHaveBeenCalled();
+    });
+
+    test('propagates mapped adapter error to req.error', async () => {
+      const err = new Error('Subsequent documents not possible due to approval status of the document.');
+      err.status = 400;
+      outboundDeliveryAdapter.createDeliveryFromOrder.mockRejectedValue(err);
+
+      const req = {
+        data: {
+          SalesOrder: '5000461',
+          ShippingPoint: 'WAVG'
+        },
+        user: admin,
+        error: jest.fn()
+      };
+
+      await handlers['createOutboundDelivery'](req);
+
+      expect(req.error).toHaveBeenCalledWith(
+        400,
+        'Subsequent documents not possible due to approval status of the document.'
+      );
+    });
+
+    test('returns an empty string, never a made-up number, when the adapter got no delivery number', async () => {
+      outboundDeliveryAdapter.createDeliveryFromOrder.mockResolvedValue({ OutboundDelivery: '', ReferenceSDDocument: '5000104', ShippingPoint: '1120' });
+      const req = { data: { SalesOrder: '5000104', ShippingPoint: '1120' }, user: admin, error: jest.fn() };
+
+      await expect(handlers['createOutboundDelivery'](req)).resolves.toBe('');
+    });
+  });
+
+  describe('getDefaultShippingPoint function', () => {
+    test('does not default shipping point to first list entry', async () => {
+      const result = await handlers['getDefaultShippingPoint']();
+
+      expect(result).toEqual({
+        ShippingPoint: '',
+        ShippingPoints: []
+      });
+    });
+  });
+
+  describe('getOrdersDueMetrics function', () => {
+    test('counts schedule lines and distinct shipping points over the full unpaged set', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue([
+        { SalesOrder: '5000104', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '1120', IsDeliverable: true, SalesDocApprovalStatus: 'B' },
+        { SalesOrder: '5000104', SalesOrderItem: '20', ScheduleLine: '1', ShippingPoint: '1120', IsDeliverable: true, SalesDocApprovalStatus: '' },
+        { SalesOrder: '5000105', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '1112', IsDeliverable: false, SalesDocApprovalStatus: 'A' },
+        { SalesOrder: '5000106', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '', IsDeliverable: false, SalesDocApprovalStatus: 'C' }
+      ]);
+      const req = { error: jest.fn() };
+      const res = await handlers['getOrdersDueMetrics'](req);
+      expect(res).toEqual({
+        scheduleLineCount: 4,
+        readyToDeliverCount: 2,
+        inApprovalCount: 1,
+        shippingPointCount: 2,
+        distinctOrdersCount: 3,
+        readyOrdersCount: 1,
+        inApprovalOrdersCount: 1
+      });
+      expect(outboundDeliveryAdapter.getOrdersDueForDelivery).toHaveBeenCalledWith(req);
+      expect(req.error).not.toHaveBeenCalled();
+    });
+
+    test('reports an error instead of zero counts when SAP read fails', async () => {
+      const err = new Error('S/4HANA GET failed');
+      err.status = 502;
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockRejectedValue(err);
+      const req = { error: jest.fn() };
+      await handlers['getOrdersDueMetrics'](req);
+      expect(req.error).toHaveBeenCalledWith(502, 'S/4HANA GET failed');
+    });
+  });
+
+  describe('getBillingDocumentTypes / createBillingDocument actions', () => {
+    test('getDeliveryStatus returns SAP statuses and 404 when the delivery does not exist', async () => {
+      outboundDeliveryAdapter.getDeliveryStatus.mockResolvedValueOnce({ DeliveryDocument: '13000515', OverallPickingStatus: 'C' });
+      expect(await handlers['getDeliveryStatus']({ data: { DeliveryDocument: '13000515' }, error: jest.fn() })).toEqual({ DeliveryDocument: '13000515', OverallPickingStatus: 'C' });
+      outboundDeliveryAdapter.getDeliveryStatus.mockResolvedValueOnce(null);
+      const req = { data: { DeliveryDocument: '99' }, error: jest.fn() };
+      await handlers['getDeliveryStatus'](req);
+      expect(req.error).toHaveBeenCalledWith(404, expect.stringContaining('99'));
+    });
+
+    test('delegate to the adapter and return SAP results unchanged', async () => {
+      outboundDeliveryAdapter.getBillingDocumentTypes.mockResolvedValue([{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }]);
+      outboundDeliveryAdapter.createBillingDocument.mockResolvedValue({ BillingDocument: '90000123', Messages: [] });
+      const req = (data) => ({ data, user: admin, error: jest.fn() });
+      expect(await handlers['getBillingDocumentTypes'](req({ DeliveryDocument: '13000526' }))).toEqual([{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }]);
+      expect(await handlers['createBillingDocument'](req({ DeliveryDocument: '13000526', BillingDocumentType: 'F2', BillingDocumentDate: '2026-09-22' }))).toEqual({ BillingDocument: '90000123', Messages: [] });
+      expect(outboundDeliveryAdapter.createBillingDocument).toHaveBeenCalledWith({ deliveryDocument: '13000526', billingDocumentType: 'F2', billingDocumentDate: '2026-09-22' });
+    });
+
+    test('forwards ETag property in data to createBillingDocument adapter call', async () => {
+      outboundDeliveryAdapter.createBillingDocument.mockResolvedValue({ BillingDocument: '90000123', Messages: [] });
+      const req = {
+        data: { DeliveryDocument: '13000526', BillingDocumentType: 'F2', ETag: 'W/"etag-val-456"' },
+        user: admin,
+        error: jest.fn()
+      };
+      await handlers['createBillingDocument'](req);
+      expect(outboundDeliveryAdapter.createBillingDocument).toHaveBeenCalledWith(
+        { deliveryDocument: '13000526', billingDocumentType: 'F2', billingDocumentDate: undefined },
+        { ifMatch: 'W/"etag-val-456"' }
+      );
+    });
+  });
+
+  describe('getPlantContext', () => {
+    test('Admin without a Plant attribute: unrestricted, no plant to pre-select', () => {
+      const req = { user: { is: (r) => r === 'Admin', attr: {} } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: [], unrestricted: true });
+    });
+
+    test('Admin with a Plant attribute: unrestricted, plant pre-selected', () => {
+      const req = { user: { is: (r) => r === 'Admin', attr: { Plant: [' 1120 '] } } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: ['1120'], unrestricted: true });
+    });
+
+    test('non-Admin: exactly the authorized plants', () => {
+      const req = { user: { is: () => false, attr: { Plant: ['1120', 'x1'] } } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: ['1120', 'X1'], unrestricted: false });
+    });
+
+    test('non-Admin without plants: none (the worklist read then fails closed with 403)', () => {
+      const req = { user: { is: () => false, attr: {} } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: [], unrestricted: false });
+    });
+  });
+
+  describe('getOrdersDueMetrics', () => {
+    test('passes the adapter 400 (no plant) through as 400', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockRejectedValue(Object.assign(new Error('No plant resolved'), { status: 400 }));
+      const req = { data: {}, error: jest.fn() };
+      await handlers['getOrdersDueMetrics'](req);
+      expect(req.error).toHaveBeenCalledWith(400, 'No plant resolved');
+    });
+  });
+
+  describe('READ OrdersDueForDelivery text search (computed rows: the handler applies contains itself)', () => {
+    const rows = [
+      { SalesOrder: '5000287', ShipToParty: '10135', ShippingPoint: '1112' },
+      { SalesOrder: '6000028', ShipToParty: '20077', ShippingPoint: '1104' }
+    ];
+    const contains = (field, val) => ({ func: 'contains', args: [{ ref: [field] }, { val }] });
+
+    test('keeps rows matching any searched field (OR group)', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(rows);
+      const where = [{ ref: ['Plant'] }, '=', { val: '1120' }, 'and', { xpr: [contains('SalesOrder', '0135'), 'or', contains('ShipToParty', '0135'), 'or', contains('ShippingPoint', '0135')] }];
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: { where } } });
+      expect(result.map(r => r.SalesOrder)).toEqual(['5000287']);
+    });
+
+    test.each([
+      ['a lower-case term on an upper-case value', 'wavg', 'WAVG'],
+      ['an upper-case term on a lower-case value', 'WAVG', 'wavg']
+    ])('search ignores case: %s', async (_label, term, value) => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue([
+        { SalesOrder: '5000287', ShippingPoint: value },
+        { SalesOrder: '6000028', ShippingPoint: '1104' }
+      ]);
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: { where: [contains('ShippingPoint', term)] } } });
+      expect(result.map(r => r.SalesOrder)).toEqual(['5000287']);
+    });
+
+    test('matches the sales order number', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(rows);
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: { where: [contains('SalesOrder', '6000028')] } } });
+      expect(result.map(r => r.SalesOrder)).toEqual(['6000028']);
+    });
+
+    test('without a search returns all rows', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(rows);
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: {} } });
+      expect(result).toHaveLength(2);
+    });
+
+    test('searchTerms ignores fields the rows do not carry', () => {
+      const { searchTerms } = require('../../../srv/le/outbound-delivery/handlers/outboundDelivery.handler');
+      expect(searchTerms([contains('Material', 'X'), 'or', contains('SalesOrder', 'ab')])).toEqual([{ field: 'SalesOrder', term: 'AB' }]);
+    });
+  });
+});

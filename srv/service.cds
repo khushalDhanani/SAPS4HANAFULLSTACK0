@@ -1,6 +1,13 @@
 using from './mm/purchase-order/service';
-using from './fi/journal-entry/service';
 using from './sd/sales-inquiry/service';
-using from './ewm/warehouse-management/service';
-using from './wm/goods-issue/service';
-using from './wm/goods-receipt/service';
+using from './sd/sales-order/service';
+using from './le/outbound-delivery/service';
+using from './sd/customer-invoice/service';
+using from './sd/customer-return/service';
+using from './ai/service';
+using from './wm/handling-unit/service';
+using from './wm/packing-instruction/service';
+using from './wm/quarantine-label/service';
+using from './wm/mib-label/service';
+using from './admin/service';
+using from './admin/sap-logs-service';

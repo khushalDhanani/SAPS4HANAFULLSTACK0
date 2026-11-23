@@ -3,7 +3,11 @@
   "sap.app": {
     "id": "saps4hana.fiori",
     "type": "application",
-    "i18n": "i18n/i18n.properties",
+    "i18n": {
+      "bundleUrl": "i18n/i18n.properties",
+      "supportedLocales": ["", "en"],
+      "fallbackLocale": "en"
+    },
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
     "applicationVersion": {
@@ -18,16 +22,40 @@
           "odataVersion": "4.0"
         }
       },
-      "fiService": {
-        "uri": "/odata/v4/journal-entry/",
+      "salesInquiryService": {
+        "uri": "/odata/v4/sales-inquiry/",
         "type": "OData",
         "settings": {
           "annotations": [],
           "odataVersion": "4.0"
         }
       },
-      "salesInquiryService": {
-        "uri": "/odata/v4/sales-inquiry/",
+      "salesOrderService": {
+        "uri": "/odata/v4/sales-order/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "outboundDeliveryService": {
+        "uri": "/odata/v4/outbound-delivery/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "customerInvoiceService": {
+        "uri": "/odata/v4/customer-invoice/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "customerReturnService": {
+        "uri": "/odata/v4/customer-return/",
         "type": "OData",
         "settings": {
           "annotations": [],
@@ -45,6 +73,10 @@
     }
   },
   "sap.ui5": {
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
     "rootView": {
       "viewName": "saps4hana.fiori.view.App",
       "type": "XML",
@@ -57,6 +89,7 @@
         "sap.m": {},
         "sap.ui.comp": {},
         "sap.f": {},
+        "sap.tnt": {},
         "sap.uxap": {}
       }
     },
@@ -64,7 +97,9 @@
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
-          "bundleName": "saps4hana.fiori.i18n.i18n"
+          "bundleName": "saps4hana.fiori.i18n.i18n",
+          "supportedLocales": ["", "en"],
+          "fallbackLocale": "en"
         }
       },
       "": {
@@ -74,15 +109,36 @@
           "autoExpandSelect": true
         }
       },
-      "fiService": {
-        "dataSource": "fiService",
+      "salesInquiry": {
+        "dataSource": "salesInquiryService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
         }
       },
-      "salesInquiry": {
-        "dataSource": "salesInquiryService",
+      "salesOrder": {
+        "dataSource": "salesOrderService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "outboundDelivery": {
+        "dataSource": "outboundDeliveryService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "customerInvoice": {
+        "dataSource": "customerInvoiceService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "customerReturn": {
+        "dataSource": "customerReturnService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -103,13 +159,16 @@
         "type": "View",
         "path": "saps4hana.fiori.view",
         "controlId": "app",
-        "controlAggregation": "pages"
+        "controlAggregation": "pages",
+        "bypassed": {
+          "target": "TargetDashboard"
+        }
       },
       "routes": [
         {
           "name": "default",
           "pattern": "",
-          "target": "TargetLogin"
+          "target": "TargetDashboard"
         },
         {
           "name": "login",
@@ -118,7 +177,7 @@
         },
         {
           "name": "dashboard",
-          "pattern": "dashboard",
+          "pattern": "dashboard/:section::?query:",
           "target": "TargetDashboard"
         },
         {
@@ -137,11 +196,6 @@
           "target": "TargetPurchaseOrderDetail"
         },
         {
-          "name": "journalEntries",
-          "pattern": "fi/journal-entries",
-          "target": "TargetJournalEntries"
-        },
-        {
           "name": "salesInquiries",
           "pattern": "sd/sales-inquiries",
           "target": "TargetSalesInquiries"
@@ -157,29 +211,66 @@
           "target": "TargetSalesInquiryDetail"
         },
         {
-          "name": "ewmWarehouseCockpit",
-          "pattern": "ewm/cockpit",
-          "target": "TargetWarehouseCockpit"
+          "name": "salesOrders",
+          "pattern": "sd/sales-orders",
+          "target": "TargetSalesOrders"
         },
         {
-          "name": "ewmRfTerminal",
-          "pattern": "ewm/rf-terminal",
-          "target": "TargetRfTerminal"
+          "name": "createSalesOrder",
+          "pattern": "sd/sales-orders/create",
+          "target": "TargetCreateSalesOrder"
+        },
+
+        {
+          "name": "ordersDueForDelivery",
+          "pattern": "le/orders-due",
+          "target": "TargetOrdersDueForDelivery"
         },
         {
-          "name": "createWarehouseTask",
-          "pattern": "ewm/tasks/create",
-          "target": "TargetCreateWarehouseTask"
+          "name": "customerInvoices",
+          "pattern": "sd/invoices",
+          "target": "TargetCustomerInvoices"
         },
         {
-          "name": "wmGoodsIssue",
-          "pattern": "wm/goods-issue",
-          "target": "TargetGoodsIssue"
+          "name": "customerReturns",
+          "pattern": "sd/returns",
+          "target": "TargetCustomerReturns"
         },
         {
-          "name": "wmGoodsReceipt",
-          "pattern": "wm/goods-receipt",
-          "target": "TargetGoodsReceipt"
+          "name": "createCustomerReturn",
+          "pattern": "sd/returns/create",
+          "target": "TargetCreateCustomerReturn"
+
+        },
+        {
+          "name": "wmHandlingUnitDetail",
+          "pattern": "wm/handling-unit/{hu}:?query:",
+          "target": "TargetHandlingUnitDetail"
+        },
+        {
+          "name": "wmHandlingUnits",
+          "pattern": "wm/handling-unit",
+          "target": "TargetHandlingUnits"
+        },
+        {
+          "name": "wmPackingInstructionDetail",
+          "pattern": "wm/packing-instruction/{systemUUID}",
+          "target": "TargetPackingInstructionDetail"
+        },
+        {
+          "name": "wmPackingInstructions",
+          "pattern": "wm/packing-instruction",
+          "target": "TargetPackingInstructions"
+        },
+        {
+          "name": "wmQuarantineLabels",
+          "pattern": "wm/quarantine-labels",
+          "target": "TargetQuarantineLabels"
+        },
+        {
+          "name": "wmMibLabel",
+          "pattern": "wm/mib-label",
+          "target": "TargetMibLabel"
         }
       ],
       "targets": {
@@ -206,11 +297,6 @@
           "name": "CreatePurchaseOrder",
           "path": "saps4hana.fiori.modules.mm.purchase-order.view"
         },
-        "TargetJournalEntries": {
-          "id": "journalEntries",
-          "name": "JournalEntries",
-          "path": "saps4hana.fiori.modules.fi.journal-entry.view"
-        },
         "TargetSalesInquiries": {
           "id": "salesInquiries",
           "name": "SalesInquiries",
@@ -226,30 +312,67 @@
           "name": "SalesInquiryDetail",
           "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
         },
-        "TargetWarehouseCockpit": {
-          "id": "warehouseCockpit",
-          "name": "WarehouseCockpit",
-          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
+        "TargetSalesOrders": {
+          "id": "salesOrders",
+          "name": "SalesOrders",
+          "path": "saps4hana.fiori.modules.sd.sales-order.view"
         },
-        "TargetRfTerminal": {
-          "id": "rfTerminal",
-          "name": "RfTerminal",
-          "path": "saps4hana.fiori.modules.ewm.rf-terminal.view"
+        "TargetCreateSalesOrder": {
+          "id": "createSalesOrder",
+          "name": "CreateSalesOrder",
+          "path": "saps4hana.fiori.modules.sd.sales-order.view"
         },
-        "TargetCreateWarehouseTask": {
-          "id": "createWarehouseTask",
-          "name": "CreateWarehouseTask",
-          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
+
+        "TargetOrdersDueForDelivery": {
+          "id": "ordersDueForDelivery",
+          "name": "OrdersDueForDelivery",
+          "path": "saps4hana.fiori.modules.le.outbound-delivery.view"
         },
-        "TargetGoodsIssue": {
-          "id": "goodsIssue",
-          "name": "GoodsIssue",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        "TargetCustomerInvoices": {
+          "id": "customerInvoices",
+          "name": "CustomerInvoices",
+          "path": "saps4hana.fiori.modules.sd.customer-invoice.view"
         },
-        "TargetGoodsReceipt": {
-          "id": "goodsReceipt",
-          "name": "GoodsReceipt",
-          "path": "saps4hana.fiori.modules.wm.goods-receipt.view"
+        "TargetCustomerReturns": {
+          "id": "customerReturns",
+          "name": "CustomerReturns",
+          "path": "saps4hana.fiori.modules.sd.customer-return.view"
+        },
+        "TargetCreateCustomerReturn": {
+          "id": "createCustomerReturn",
+          "name": "CreateCustomerReturn",
+          "path": "saps4hana.fiori.modules.sd.customer-return.view"
+
+        },
+        "TargetHandlingUnits": {
+          "id": "handlingUnits",
+          "name": "HandlingUnits",
+          "path": "saps4hana.fiori.modules.wm.handling-unit.view"
+        },
+        "TargetHandlingUnitDetail": {
+          "id": "handlingUnitDetail",
+          "name": "HandlingUnitDetail",
+          "path": "saps4hana.fiori.modules.wm.handling-unit.view"
+        },
+        "TargetPackingInstructions": {
+          "id": "packingInstructions",
+          "name": "PackingInstructions",
+          "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
+        },
+        "TargetQuarantineLabels": {
+          "id": "quarantineLabels",
+          "name": "QuarantineLabels",
+          "path": "saps4hana.fiori.modules.wm.quarantine-label.view"
+        },
+        "TargetMibLabel": {
+          "id": "mibLabel",
+          "name": "MibLabel",
+          "path": "saps4hana.fiori.modules.wm.mib-label.view"
+        },
+        "TargetPackingInstructionDetail": {
+          "id": "packingInstructionDetail",
+          "name": "PackingInstructionDetail",
+          "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
         }
       }
     }

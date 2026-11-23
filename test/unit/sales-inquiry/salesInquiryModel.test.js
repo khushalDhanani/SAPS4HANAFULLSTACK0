@@ -63,8 +63,8 @@ describe("SalesInquiryModel - Initial State and User Resolution", () => {
         expect(SalesInquiryModel.getCurrentUserName(mockComponent)).toBe("sales_rep");
     });
 
-    test("getCurrentUserName falls back to alice when no component or user model", () => {
-        expect(SalesInquiryModel.getCurrentUserName(null)).toBe("alice");
+    test("getCurrentUserName returns no name, never an invented one, when no component or user model", () => {
+        expect(SalesInquiryModel.getCurrentUserName(null)).toBe("");
     });
 
     test("createInitialModel initializes header and item with 10-increment numbering", () => {
@@ -73,17 +73,17 @@ describe("SalesInquiryModel - Initial State and User Resolution", () => {
         const aItems = oModel.getProperty("/items");
 
         expect(oHeader.CreatedByUser).toBe("testuser");
-        expect(oHeader.SalesInquiryType).toBe("ZIN");
-        expect(oHeader.SalesOrganization).toBe("1000");
-        expect(oHeader.DistributionChannel).toBe("10");
-        expect(oHeader.OrganizationDivision).toBe("52");
+        expect(oHeader.SalesInquiryType).toBe("");
+        expect(oHeader.SalesOrganization).toBe("");
+        expect(oHeader.DistributionChannel).toBe("");
+        expect(oHeader.OrganizationDivision).toBe("");
         expect(oHeader.StatusText).toBe("Draft");
-        expect(oHeader.TransactionCurrency).toBe("INR");
+        expect(oHeader.TransactionCurrency).toBe("");
 
         expect(aItems.length).toBe(1);
         expect(aItems[0].SalesInquiryItem).toBe("000010");
-        expect(aItems[0].OrderQuantity).toBe(1);
-        expect(aItems[0].OrderQuantityUnit).toBe("PC");
+        expect(aItems[0].OrderQuantity).toBe("");
+        expect(aItems[0].OrderQuantityUnit).toBe("");
     });
 });
 
@@ -109,14 +109,14 @@ describe("SalesInquiryModel - Configuration Defaults & Cascading Derivations", (
     };
 
     test("applyConfigurationDefaults prefers ZIN when available", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SalesInquiryType", "");
         SalesInquiryModel.applyConfigurationDefaults(oModel, mockConfig);
         expect(oModel.getProperty("/header/SalesInquiryType")).toBe("ZIN");
     });
 
     test("applyConfigurationDefaults respects user modification flag", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SalesInquiryType", "IN");
         SalesInquiryModel.markUserModified(oModel, "SalesInquiryType", true);
 
@@ -125,7 +125,7 @@ describe("SalesInquiryModel - Configuration Defaults & Cascading Derivations", (
     });
 
     test("applyConfigurationDefaults filters channels by sales org and division by org + channel", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SalesOrganization", "1000");
         oModel.setProperty("/header/DistributionChannel", "");
         oModel.setProperty("/header/OrganizationDivision", "");
@@ -138,7 +138,7 @@ describe("SalesInquiryModel - Configuration Defaults & Cascading Derivations", (
 
 describe("SalesInquiryModel - Customer Commercial Defaults", () => {
     test("deriveCustomerDefaults populates Sold-to details and derives Ship-To and Currency", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         const customerDefaults = {
             derived: true,
             CustomerName: "ACME Corp",
@@ -157,7 +157,7 @@ describe("SalesInquiryModel - Customer Commercial Defaults", () => {
     });
 
     test("deriveCustomerDefaults respects user-modified Ship-To and Currency", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/ShipToParty", "CUSTOM_SHIP_TO");
         oModel.setProperty("/header/TransactionCurrency", "USD");
         SalesInquiryModel.markUserModified(oModel, "ShipToParty", true);
@@ -178,13 +178,15 @@ describe("SalesInquiryModel - Customer Commercial Defaults", () => {
 
 describe("SalesInquiryModel - Item Management & Calculations", () => {
     test("addItem increments item numbers in 10s (000010, 000020...)", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         expect(oModel.getProperty("/items").length).toBe(1);
         expect(oModel.getProperty("/items/0/SalesInquiryItem")).toBe("000010");
 
         SalesInquiryModel.addItem(oModel);
         expect(oModel.getProperty("/items").length).toBe(2);
         expect(oModel.getProperty("/items/1/SalesInquiryItem")).toBe("000020");
+        expect(oModel.getProperty("/items/1/OrderQuantity")).toBe("");
+        expect(oModel.getProperty("/items/1/OrderQuantityUnit")).toBe("");
 
         SalesInquiryModel.addItem(oModel);
         expect(oModel.getProperty("/items").length).toBe(3);
@@ -192,7 +194,7 @@ describe("SalesInquiryModel - Item Management & Calculations", () => {
     });
 
     test("deleteItem removes item and re-sequences 10-increment numbers", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         SalesInquiryModel.addItem(oModel); // 000020
         SalesInquiryModel.addItem(oModel); // 000030
         expect(oModel.getProperty("/items").length).toBe(3);
@@ -206,7 +208,7 @@ describe("SalesInquiryModel - Item Management & Calculations", () => {
     });
 
     test("calculateTotals computes line net amount and header total", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         SalesInquiryModel.addItem(oModel);
 
         oModel.setProperty("/items/0/OrderQuantity", 2);
@@ -222,7 +224,12 @@ describe("SalesInquiryModel - Item Management & Calculations", () => {
     });
 
     test("updateStatus transitions to Ready to Create when all mandatory fields are present", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
+        oModel.setProperty("/header/SalesInquiryType", "ZIN");
+        oModel.setProperty("/header/SalesOrganization", "1000");
+        oModel.setProperty("/header/DistributionChannel", "10");
+        oModel.setProperty("/header/OrganizationDivision", "52");
+        oModel.setProperty("/header/TransactionCurrency", "INR");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/items/0/Material", "MAT-01");
         oModel.setProperty("/items/0/OrderQuantity", 2);
@@ -236,7 +243,7 @@ describe("SalesInquiryModel - Item Management & Calculations", () => {
 
 describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     test("validateForm fails when required header fields are missing", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", ""); // Missing Sold-to
 
         const isValid = SalesInquiryModel.validateForm(oModel);
@@ -246,7 +253,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("validateForm catches invalid currency code", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/TransactionCurrency", "INVALID_CURRENCY");
 
@@ -256,7 +263,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("validateForm catches invalid date sequence (end date before start date)", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/BindingPeriodValidityStartDate", "2026-05-10");
         oModel.setProperty("/header/BindingPeriodValidityEndDate", "2026-05-01"); // Before start
@@ -267,7 +274,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("validateForm validates item material, positive quantity, and unit", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/items/0/Material", ""); // Missing
         oModel.setProperty("/items/0/OrderQuantity", 0); // Invalid quantity <= 0
@@ -282,7 +289,12 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("validateForm succeeds when all header and item mandatory fields are provided", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
+        oModel.setProperty("/header/SalesInquiryType", "ZIN");
+        oModel.setProperty("/header/SalesOrganization", "1000");
+        oModel.setProperty("/header/DistributionChannel", "10");
+        oModel.setProperty("/header/OrganizationDivision", "52");
+        oModel.setProperty("/header/TransactionCurrency", "INR");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/BindingPeriodValidityStartDate", "2026-05-01");
         oModel.setProperty("/header/BindingPeriodValidityEndDate", "2026-05-31");
@@ -297,7 +309,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("clearErrors clears all header and item errors", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", "");
         SalesInquiryModel.validateForm(oModel);
         expect(oModel.getProperty("/hasError")).toBe(true);
@@ -309,7 +321,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("applyMaterialDefaults sets Material, description and direct UNIT based on Material master data configuration", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         // Pre-set an error state on OrderQuantityUnit
         oModel.setProperty("/items/0/errors/OrderQuantityUnit", { state: "Error", text: "Unit is required" });
         oModel.setProperty("/items/0/errors/Material", { state: "Error", text: "Material is required" });
@@ -331,11 +343,42 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
         expect(oModel.getProperty("/items/0/OrderQuantityUnit")).toBe("KG");
         expect(oModel.getProperty("/items/0/errors/Material/state")).toBe("None");
         expect(oModel.getProperty("/items/0/errors/OrderQuantityUnit/state")).toBe("None");
+
+        // Selecting a different material afterward must properly update the description (no stale data)
+        const secondMaterialData = {
+            Material: "1000000004",
+            MaterialName: "Advanced Polypropylene Polymer",
+            MaterialBaseUnit: "PC"
+        };
+        const secondReport = SalesInquiryModel.applyMaterialDefaults(oModel, "/items/0", secondMaterialData);
+        expect(secondReport.Material).toBe("1000000004");
+        expect(secondReport.SalesInquiryItemText).toBe("Advanced Polypropylene Polymer");
+        expect(secondReport.OrderQuantityUnit).toBe("PC");
+
+        expect(oModel.getProperty("/items/0/Material")).toBe("1000000004");
+        expect(oModel.getProperty("/items/0/SalesInquiryItemText")).toBe("Advanced Polypropylene Polymer");
+        expect(oModel.getProperty("/items/0/OrderQuantityUnit")).toBe("PC");
+
+        // When bForce is explicitly false, existing description is preserved
+        const thirdMaterialData = {
+            Material: "1000000005",
+            MaterialName: "Third Product",
+            MaterialBaseUnit: "KG"
+        };
+        const thirdReport = SalesInquiryModel.applyMaterialDefaults(oModel, "/items/0", thirdMaterialData, false);
+        expect(thirdReport.Material).toBe("1000000005");
+        expect(thirdReport.SalesInquiryItemText).toBeUndefined();
+        expect(oModel.getProperty("/items/0/Material")).toBe("1000000005");
+        expect(oModel.getProperty("/items/0/SalesInquiryItemText")).toBe("Advanced Polypropylene Polymer");
     });
 
     describe("SalesInquiryModel - API Payload Builder (buildPayload)", () => {
         test("buildPayload strips CustomerCity, CustomerCountry, and other non-contract UI properties from header", () => {
-            const oModel = SalesInquiryModel.createInitialModel("alice");
+            const oModel = SalesInquiryModel.createInitialModel("khushal");
+            oModel.setProperty("/header/SalesInquiryType", "ZIN");
+            oModel.setProperty("/header/SalesOrganization", "1000");
+            oModel.setProperty("/header/DistributionChannel", "10");
+            oModel.setProperty("/header/OrganizationDivision", "52");
             oModel.setProperty("/header/SoldToParty", "10135");
             SalesInquiryModel.deriveCustomerDefaults(oModel, "10135", {
                 CustomerName: "Divi's Laboratories Limited",
@@ -375,7 +418,8 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
         });
 
         test("buildPayload strips item errors object while preserving all item contract fields", () => {
-            const oModel = SalesInquiryModel.createInitialModel("alice");
+            const oModel = SalesInquiryModel.createInitialModel("khushal");
+            oModel.setProperty("/header/TransactionCurrency", "INR");
             oModel.setProperty("/items/0/Material", "4000000091");
             oModel.setProperty("/items/0/SalesInquiryItemText", "BPAO88063");
             oModel.setProperty("/items/0/OrderQuantity", 5);
@@ -402,6 +446,20 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
         test("buildPayload returns empty header and items for falsy model", () => {
             const payload = SalesInquiryModel.buildPayload(null);
             expect(payload).toEqual({ header: {}, items: [] });
+        });
+
+        test("buildPayload does not fall back to PC or default org/currency when fields are empty", () => {
+            const oModel = new MockJSONModel({
+                header: { SalesInquiryType: "", SalesOrganization: "", DistributionChannel: "", OrganizationDivision: "", TransactionCurrency: "" },
+                items: [{ SalesInquiryItem: "10", Material: "MAT1", OrderQuantity: 5, OrderQuantityUnit: "" }]
+            });
+            const payload = SalesInquiryModel.buildPayload(oModel);
+            expect(payload.header.SalesInquiryType).toBe("");
+            expect(payload.header.SalesOrganization).toBe("");
+            expect(payload.header.DistributionChannel).toBe("");
+            expect(payload.header.OrganizationDivision).toBe("");
+            expect(payload.header.TransactionCurrency).toBe("");
+            expect(payload.items[0].OrderQuantityUnit).toBe("");
         });
     });
 });

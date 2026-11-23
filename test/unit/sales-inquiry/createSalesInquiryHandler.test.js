@@ -1,0 +1,238 @@
+jest.mock('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter', () => {
+    const mockAdapter = {
+        createSalesInquiryViaRfc: jest.fn(),
+        getSalesMetrics: jest.fn(),
+        getInquiryMetrics: jest.fn((opts) => mockAdapter.getSalesMetrics({ ...opts, entity: 'inquiry' })),
+        getCustomerDefaults: jest.fn(),
+        getInquiryCreationCapabilities: jest.fn()
+    };
+    return mockAdapter;
+});
+
+const salesInquiryAdapter = require('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
+const registerSalesInquiryHandlers = require('../../../srv/sd/sales-inquiry/handlers/salesInquiry.handler');
+
+function getAllHandlers() {
+    const handlers = {};
+    registerSalesInquiryHandlers({ on: (event, ...args) => { handlers[event] = args[args.length - 1]; } });
+    return handlers;
+}
+
+function handler() {
+    return getAllHandlers().createSalesInquiry;
+}
+
+describe('Unit: createSalesInquiry handler', () => {
+    beforeEach(() => {
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockReset();
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+    afterEach(() => jest.restoreAllMocks());
+
+    const validPayload = {
+        header: {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            SoldToParty: '10135',
+            TransactionCurrency: 'INR'
+        },
+        items: [
+            {
+                SalesInquiryItem: '000010',
+                Material: '4000000091',
+                OrderQuantity: 10,
+                OrderQuantityUnit: 'KG',
+                Plant: '1120',
+                NetPriceAmount: 250.00
+            }
+        ]
+    };
+
+    test('returns the trimmed SAP document number', async () => {
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockResolvedValue({ SalesInquiry: ' 1000529 ' });
+
+        const req = { data: validPayload, user: { id: 'khushal' }, error: jest.fn() };
+
+        await expect(handler()(req)).resolves.toBe('1000529');
+        expect(req.error).not.toHaveBeenCalled();
+    });
+
+    test('sends the validated, normalized and mapped payload to the adapter', async () => {
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockResolvedValue({ SalesInquiry: '1000529' });
+
+        await handler()({ data: validPayload, user: { id: 'khushal' }, error: jest.fn() });
+
+        expect(salesInquiryAdapter.createSalesInquiryViaRfc).toHaveBeenCalledTimes(1);
+        const [header, items, options] = salesInquiryAdapter.createSalesInquiryViaRfc.mock.calls[0];
+        expect(header).toMatchObject({
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            SoldToParty: '10135',
+            TransactionCurrency: 'INR'
+        });
+        // 10 x 250.00 = 2500.00, formatted by the mapper as 3 and 2 decimals
+        expect(items).toEqual([{
+            SalesInquiryItem: '000010',
+            Material: '4000000091',
+            SalesInquiryItemText: '',
+            OrderQuantity: '10.000',
+            OrderQuantityUnit: 'KG',
+            NetPriceAmount: '250.00',
+            NetAmount: '2500.00',
+            TransactionCurrency: 'INR',
+            Plant: '1120'
+        }]);
+        expect(options).toEqual({ user: 'khushal' });
+    });
+
+    test('rejects with HTTP 502 when SAP returns no SalesInquiry document number', async () => {
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockResolvedValue({
+            SalesInquiry: '',
+            SalesDocument: '',
+            TotalNetAmount: '2500.00'
+        });
+
+        const req = {
+            data: validPayload,
+            user: { id: 'khushal' },
+            error: jest.fn()
+        };
+
+        await handler()(req);
+        expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('no Sales Inquiry document number was returned by SAP'));
+    });
+
+    test('rejects invalid payload with HTTP 400', async () => {
+        const req = {
+            data: { header: null, items: [] },
+            user: { id: 'khushal' },
+            error: jest.fn()
+        };
+
+        await handler()(req);
+        expect(req.error).toHaveBeenCalledWith(400, expect.any(String));
+        expect(salesInquiryAdapter.createSalesInquiryViaRfc).not.toHaveBeenCalled();
+    });
+
+    test('handles total failure at header creation with HTTP 500', async () => {
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockRejectedValue(new Error('Customer 10135 does not exist'));
+
+        const req = {
+            data: validPayload,
+            user: { id: 'khushal' },
+            error: jest.fn()
+        };
+
+        await handler()(req);
+        expect(req.error).toHaveBeenCalledWith(500, expect.stringContaining('Failed to create Sales Inquiry: Customer 10135 does not exist'));
+    });
+
+    test('propagates partial creation error with HTTP 502 and document number to prevent duplicate retries', async () => {
+        const message = 'Sales Inquiry 1000529 was created in SAP S/4HANA, but adding item 000010 failed: Material blocked. Do not retry: check or complete inquiry 1000529 in SAP.';
+        const partialErr = Object.assign(new Error(message), {
+            name: 'PartialSalesInquiryError',
+            SalesInquiry: '1000529',
+            documentNumber: '1000529',
+            isPartialCreation: true,
+            status: 502
+        });
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockRejectedValue(partialErr);
+
+        const req = {
+            data: validPayload,
+            user: { id: 'khushal' },
+            error: jest.fn()
+        };
+
+        await handler()(req);
+        expect(req.error).toHaveBeenCalledWith(502, message);
+        expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('1000529'));
+        expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('Do not retry'));
+    });
+
+    describe('getCustomerDefaults', () => {
+        test('passes customer and sales area to the adapter in positional order', async () => {
+            salesInquiryAdapter.getCustomerDefaults.mockResolvedValue({ Customer: '10135', Currency: 'INR' });
+            const req = { data: { Customer: '10135', SalesOrganization: '1000', DistributionChannel: '10', Division: '52' }, error: jest.fn() };
+            await getAllHandlers().getCustomerDefaults(req);
+            expect(salesInquiryAdapter.getCustomerDefaults).toHaveBeenCalledWith('10135', '1000', '10', '52');
+            expect(req.error).not.toHaveBeenCalled();
+        });
+
+        test('propagates adapter failure via req.error (502) instead of throwing', async () => {
+            const err = new Error('C_SoldToValueHelp unavailable'); err.status = 502;
+            salesInquiryAdapter.getCustomerDefaults.mockRejectedValue(err);
+            const req = { data: { Customer: '10135' }, error: jest.fn() };
+            await getAllHandlers().getCustomerDefaults(req);
+            expect(req.error).toHaveBeenCalledWith(502, 'C_SoldToValueHelp unavailable');
+        });
+
+        test('defaults to HTTP 502 when the adapter error has no status', async () => {
+            salesInquiryAdapter.getCustomerDefaults.mockRejectedValue(new Error('RFC unavailable'));
+            const req = { data: {}, error: jest.fn() };
+            await getAllHandlers().getCustomerDefaults(req);
+            expect(req.error).toHaveBeenCalledWith(502, 'RFC unavailable');
+        });
+    });
+
+    describe('getInquiryCreationCapabilities', () => {
+        test('propagates adapter failure via req.error (502) instead of throwing', async () => {
+            salesInquiryAdapter.getInquiryCreationCapabilities.mockRejectedValue(new Error('metadata read failed'));
+            const req = { error: jest.fn() };
+            await getAllHandlers().getInquiryCreationCapabilities(req);
+            expect(req.error).toHaveBeenCalledWith(502, 'metadata read failed');
+        });
+    });
+
+    describe('getSalesInquiryMetrics', () => {
+        test('propagates error via req.error on failure', async () => {
+            const mockError = new Error('SD_F2370_INQY_WL_SRV unavailable');
+            mockError.status = 502;
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const mockReq = { error: jest.fn() };
+            const allHandlers = getAllHandlers();
+            await allHandlers.getSalesInquiryMetrics(mockReq);
+
+            expect(mockReq.error).toHaveBeenCalledWith(502, 'SD_F2370_INQY_WL_SRV unavailable');
+        });
+    });
+
+    describe('getSalesOrderMetrics', () => {
+        test('propagates error via req.error on failure', async () => {
+            const mockError = new Error('SD_F2370_INQY_WL_SRV unavailable');
+            mockError.status = 502;
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const mockReq = { error: jest.fn() };
+            const allHandlers = getAllHandlers();
+            await allHandlers.getSalesOrderMetrics(mockReq);
+
+            expect(mockReq.error).toHaveBeenCalledWith(502, 'SD_F2370_INQY_WL_SRV unavailable');
+        });
+
+        test('defaults to HTTP 502 when error status is not provided', async () => {
+            const mockError = new Error('Gateway connection refused');
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const mockReq = { error: jest.fn() };
+            const allHandlers = getAllHandlers();
+            await allHandlers.getSalesOrderMetrics(mockReq);
+
+            expect(mockReq.error).toHaveBeenCalledWith(502, 'Gateway connection refused');
+        });
+
+        test('throws error when req is not provided on failure', async () => {
+            const mockError = new Error('SD_F2370_INQY_WL_SRV unavailable');
+            mockError.status = 502;
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const allHandlers = getAllHandlers();
+            await expect(allHandlers.getSalesOrderMetrics()).rejects.toThrow('SD_F2370_INQY_WL_SRV unavailable');
+        });
+    });
+});

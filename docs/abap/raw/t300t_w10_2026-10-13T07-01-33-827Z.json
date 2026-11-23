@@ -1,0 +1,43 @@
+{
+  "ET_DATA": [],
+  "DELIMITER": "|",
+  "GET_SORTED": "",
+  "NO_DATA": "",
+  "QUERY_TABLE": "T300T",
+  "ROWCOUNT": 0,
+  "ROWSKIPS": 0,
+  "USE_ET_DATA_4_RETURN": "",
+  "DATA": [
+    {
+      "WA": "E|W10|B21/7 HW Internal"
+    }
+  ],
+  "FIELDS": [
+    {
+      "FIELDNAME": "SPRAS",
+      "OFFSET": "000000",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Language Key"
+    },
+    {
+      "FIELDNAME": "LGNUM",
+      "OFFSET": "000002",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Warehouse Number / Warehouse Complex"
+    },
+    {
+      "FIELDNAME": "LNUMT",
+      "OFFSET": "000006",
+      "LENGTH": "000025",
+      "TYPE": "C",
+      "FIELDTEXT": "Warehouse Number Description"
+    }
+  ],
+  "OPTIONS": [
+    {
+      "TEXT": "LGNUM = 'W10'"
+    }
+  ]
+}

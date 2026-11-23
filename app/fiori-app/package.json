@@ -9,7 +9,12 @@
     "lint": "ui5lint"
   },
   "devDependencies": {
-    "@ui5/cli": "^4.0.0",
-    "@ui5/linter": "^1.23.5"
+    "@sap/ux-ui5-tooling": "^1.34.0",
+    "@ui5/cli": "^4.0.71",
+    "@ui5/linter": "^1.23.5",
+    "jspdf": "^4.2.1"
+  },
+  "overrides": {
+    "dompurify": "^3.2.4"
   }
 }

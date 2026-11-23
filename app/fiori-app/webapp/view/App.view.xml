@@ -3,13 +3,38 @@
     xmlns:mvc="sap.ui.core.mvc"
     displayBlock="true"
     xmlns="sap.m"
-    xmlns:core="sap.ui.core">
-    <VBox fitContainer="true" height="100%" class="appRootContainer">
-        <core:Fragment fragmentName="saps4hana.fiori.fragment.CommonHeader" type="XML" />
-        <App id="app" class="appPagesContainer">
-            <layoutData>
-                <FlexItemData growFactor="1" shrinkFactor="1" baseSize="0" />
-            </layoutData>
-        </App>
-    </VBox>
+    xmlns:core="sap.ui.core"
+    xmlns:tnt="sap.tnt"
+    class="sapUiSizeCompact">
+    <tnt:ToolPage id="appToolPage" sideExpanded="false" class="appRootContainer">
+        <tnt:header>
+            <core:Fragment fragmentName="saps4hana.fiori.fragment.CommonHeader" type="XML" />
+        </tnt:header>
+        <tnt:sideContent>
+            <tnt:SideNavigation
+                id="appSideNavigation"
+                visible="{auth>/isAuthenticated}"
+                selectedKey="{shellModel>/sideNavKey}"
+                ariaLabel="{i18n>sideNavAriaLabel}"
+                itemPress=".onSideNavItemPress">
+                <tnt:item>
+                    <tnt:NavigationList>
+                        <tnt:NavigationListItem id="sideNavOverview" key="overview" icon="sap-icon://home" text="{i18n>tabOverviewTitle}" tooltip="{i18n>tabOverviewTooltip}" />
+                        <tnt:NavigationListItem id="sideNavMM" key="mm" icon="sap-icon://supplier" text="{i18n>tabMMTitle}" tooltip="{i18n>tabMMTooltip}" />
+                        <tnt:NavigationListItem id="sideNavSD" key="sd" icon="sap-icon://sales-order" text="{i18n>tabSDTitle}" tooltip="{i18n>tabSDTooltip}" />
+                        <tnt:NavigationListItem id="sideNavEWM" key="ewm" icon="sap-icon://inventory" text="{i18n>tabEWMTitle}" tooltip="{i18n>tabEWMTooltip}" />
+                        <tnt:NavigationListItem id="sideNavAdministration" icon="sap-icon://group" text="{i18n>tabAdminTitle}" tooltip="{i18n>tabAdminTooltip}" selectable="false" visible="{path: 'auth>/user/scopes', formatter: '.isAdmin'}">
+                            <tnt:items>
+                                <tnt:NavigationListItem id="sideNavUserMaster" key="user-master" text="{i18n>tabUserMasterTitle}" tooltip="{i18n>tabUserMasterTooltip}" />
+                                <tnt:NavigationListItem id="sideNavSapLogs" key="sap-logs" icon="sap-icon://log" text="{i18n>tabSapLogsTitle}" tooltip="{i18n>tabSapLogsTooltip}" />
+                            </tnt:items>
+                        </tnt:NavigationListItem>
+                    </tnt:NavigationList>
+                </tnt:item>
+            </tnt:SideNavigation>
+        </tnt:sideContent>
+        <tnt:mainContents>
+            <App id="app" class="appPagesContainer" />
+        </tnt:mainContents>
+    </tnt:ToolPage>
 </mvc:View>

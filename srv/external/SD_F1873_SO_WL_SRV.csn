@@ -1,0 +1,2817 @@
+{
+ "meta": {
+  "creator": "cds-dk 10.1.2"
+ },
+ "$version": "2.0",
+ "definitions": {
+  "SD_F1873_SO_WL_SRV": {
+   "kind": "service",
+   "@cds.external": true,
+   "@m.IsDefaultEntityContainer": "true",
+   "@sap.message.scope.supported": "true",
+   "@sap.supported.formats": "atom json xlsx pdf"
+  },
+  "SD_F1873_SO_WL_SRV.C_Dischannelvaluehelp": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Distribution Channel by Sales Org.",
+   "elements": {
+    "SalesOrganization": {
+     "key": true,
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Sales Organization",
+     "notNull": true
+    },
+    "DistributionChannel": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "DistributionChannelName",
+     "@sap.label": "Distribution Channel",
+     "notNull": true
+    },
+    "DistributionChannelName": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Distribution Channel Description"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_EmployeeValueHelp": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Employee Responsible",
+   "@sap.value.list": "true",
+   "elements": {
+    "PersonnelNumber": {
+     "key": true,
+     "type": "cds.String",
+     "length": 8,
+     "@sap.display.format": "NonNegative",
+     "@sap.text": "PersonFullName",
+     "@sap.label": "Personnel Number",
+     "notNull": true
+    },
+    "Person": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "PersonFullName",
+     "@sap.label": "Business Partner",
+     "@sap.quickinfo": "Business Partner Number"
+    },
+    "Employee": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "ID Number",
+     "@sap.quickinfo": "Identification Number"
+    },
+    "FirstName": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "First Name",
+     "@sap.quickinfo": "First Name of Business Partner (Person)"
+    },
+    "LastName": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Last Name",
+     "@sap.quickinfo": "Last Name of Business Partner (Person)"
+    },
+    "PersonFullName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Full Name"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_OrgDivisionValueHelp": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Division by Distribution Chain",
+   "elements": {
+    "SalesOrganization": {
+     "key": true,
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Sales Organization",
+     "notNull": true
+    },
+    "DistributionChannel": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Distribution Channel",
+     "notNull": true
+    },
+    "Division": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "DivisionName",
+     "@sap.label": "Division",
+     "notNull": true
+    },
+    "DivisionName": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Division Description"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_Q2CCustomerQuickView": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.content.version": "1",
+   "@sap.label": "Customer",
+   "elements": {
+    "Customer": {
+     "key": true,
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "CustomerName",
+     "@sap.label": "Customer",
+     "@sap.quickinfo": "Customer Number",
+     "notNull": true
+    },
+    "CustomerName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Name",
+     "@sap.quickinfo": "Name of Customer"
+    },
+    "BusinessPartnerImageURL": {
+     "type": "cds.String",
+     "length": 500
+    },
+    "PostalCode": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Postal Code",
+     "@sap.quickinfo": "City postal code"
+    },
+    "CityName": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "City"
+    },
+    "Country": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Country/Region Key"
+    },
+    "OrganizationBPName1": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Name"
+    },
+    "OrganizationBPName2": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Name 2"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_SalesDocumentItemWl": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "View for item attribute search in sales document worklists",
+   "elements": {
+    "SalesDocument": {
+     "key": true,
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Sales Document",
+     "notNull": true
+    },
+    "SalesDocumentItem": {
+     "key": true,
+     "type": "cds.String",
+     "length": 6,
+     "@sap.display.format": "NonNegative",
+     "@sap.label": "Sales Document Item",
+     "notNull": true
+    },
+    "Material": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Product",
+     "@sap.quickinfo": "Product Number",
+     "@sap.value.list": "standard"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_SalesDocumentUserVH": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Sales Document User",
+   "elements": {
+    "UserID": {
+     "key": true,
+     "type": "cds.String",
+     "length": 12,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "UserDescription",
+     "@sap.label": "User ID",
+     "notNull": true
+    },
+    "UserDescription": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Description",
+     "@sap.quickinfo": "User Description"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_SalesGroupValueHelp": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Sales Group",
+   "elements": {
+    "SalesOffice": {
+     "key": true,
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Sales Office",
+     "notNull": true
+    },
+    "SalesGroup": {
+     "key": true,
+     "type": "cds.String",
+     "length": 3,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "SalesGroupName",
+     "@sap.label": "Sales Team",
+     "notNull": true
+    },
+    "SalesGroupName": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Sales Group Description"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_SalesOfficeValueHelp": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Sales Office",
+   "elements": {
+    "SalesOrganization": {
+     "key": true,
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Sales Organization",
+     "notNull": true
+    },
+    "DistributionChannel": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Distribution Channel",
+     "notNull": true
+    },
+    "OrganizationDivision": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Division",
+     "notNull": true
+    },
+    "SalesOffice": {
+     "key": true,
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "SalesOfficeName",
+     "@sap.label": "Sales Office",
+     "notNull": true
+    },
+    "SalesOfficeName": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Sales Office Description"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_SalesOrderTypeVH_F1873": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Sales Order Types",
+   "elements": {
+    "SalesOrderType": {
+     "key": true,
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "SalesOrderTypeName",
+     "@sap.label": "Sales Order Type",
+     "notNull": true
+    },
+    "SalesDocumentTypeLangDepdnt": {
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Language key",
+     "@sap.quickinfo": "Language key for sales document type"
+    },
+    "SalesOrderTypeName": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Description",
+     "@sap.quickinfo": "Sales Document Type Description"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Sales Orders",
+   "elements": {
+    "SalesOrder": {
+     "key": true,
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Sales Order",
+     "notNull": true
+    },
+    "SoldToParty": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "SoldToPartyName",
+     "@sap.label": "Sold-to Party",
+     "@sap.value.list": "standard"
+    },
+    "SoldToPartyName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Full Name",
+     "@sap.quickinfo": "Full Name of Person",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false"
+    },
+    "ShipToParty": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "ShipToPartyName",
+     "@sap.label": "Ship-to Party",
+     "@sap.value.list": "standard"
+    },
+    "ShipToPartyName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Full Name",
+     "@sap.quickinfo": "Full Name of Person",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false"
+    },
+    "PayerParty": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "PayerPartyName",
+     "@sap.label": "Payer",
+     "@sap.value.list": "standard"
+    },
+    "PayerPartyName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Full Name",
+     "@sap.quickinfo": "Full Name of Person",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false"
+    },
+    "BillToParty": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "BillToPartyName",
+     "@sap.label": "Bill-to Party",
+     "@sap.value.list": "standard"
+    },
+    "BillToPartyName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Full Name",
+     "@sap.quickinfo": "Full Name of Person",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false"
+    },
+    "SalesEmployee": {
+     "type": "cds.String",
+     "length": 8,
+     "@sap.display.format": "NonNegative",
+     "@sap.text": "SalesEmployeeName",
+     "@sap.label": "Sales Employee",
+     "@sap.value.list": "standard"
+    },
+    "SalesEmployeeName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Full Name",
+     "@sap.quickinfo": "Full Name of Person",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false"
+    },
+    "ResponsibleEmployee": {
+     "type": "cds.String",
+     "length": 8,
+     "@sap.display.format": "NonNegative",
+     "@sap.text": "ResponsibleEmployeeName",
+     "@sap.label": "Employee Responsible",
+     "@sap.value.list": "standard"
+    },
+    "ResponsibleEmployeeName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Full Name",
+     "@sap.quickinfo": "Full Name of Person",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false"
+    },
+    "PurchaseOrderByCustomer": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Customer Reference"
+    },
+    "RequestedDeliveryDate": {
+     "type": "cds.Date",
+     "@sap.display.format": "Date",
+     "@sap.label": "Requested Delivery Date"
+    },
+    "OverallSDProcessStatus": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OverallSDProcessStatus/OverallSDProcessStatus_Text",
+     "@sap.label": "Overall Status",
+     "@sap.quickinfo": "Overall Processing Status (Header/All Items)",
+     "@sap.value.list": "fixed-values"
+    },
+    "OverallSDDocumentRejectionSts": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OverallSDDocumentRejectionSts/OverallSDDocumentRejectionSts_Text",
+     "@sap.label": "Rejection Status",
+     "@sap.quickinfo": "Rejection Status (All Items)",
+     "@sap.value.list": "fixed-values"
+    },
+    "SalesOrderDownPaymentStatus": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_DownPaymentStatus/ContractDownPaymentStatus_Text",
+     "@sap.label": "Down Payment Status",
+     "@sap.value.list": "fixed-values"
+    },
+    "OverallBillingBlockStatus": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OverallBillingBlockStatus/OverallBillingBlockStatus_Text",
+     "@sap.label": "Billing Block Status",
+     "@sap.quickinfo": "Billing Block Status (All Items)",
+     "@sap.value.list": "fixed-values"
+    },
+    "SalesDocApprovalStatus": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_SalesDocApprovalStatus/SalesDocApprovalStatus_Text",
+     "@sap.label": "Approval Status",
+     "@sap.quickinfo": "Document Approval Status",
+     "@sap.value.list": "fixed-values"
+    },
+    "OverallChmlCmplncStatus": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OverallChmlCmplncStatus/OverallChmlCmplncStatus_Text",
+     "@sap.label": "Product Marketability Status",
+     "@sap.quickinfo": "Product Marketability Status (All Items)",
+     "@sap.value.list": "fixed-values"
+    },
+    "OverallDangerousGoodsStatus": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OverallDangerousGoodsStatus/OverallDangerousGoodsStatus_Text",
+     "@sap.label": "Dangerous Goods Status",
+     "@sap.quickinfo": "Dangerous Goods Status (All Items)",
+     "@sap.value.list": "fixed-values"
+    },
+    "OverallSafetyDataSheetStatus": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OvrlSftyDataSheetSts/OverallSafetyDataSheetStatus_Text",
+     "@sap.label": "Safety Data Sheet Status",
+     "@sap.quickinfo": "Safety Data Sheet Status (All Items)",
+     "@sap.value.list": "fixed-values"
+    },
+    "OverallTrdCmplncEmbargoSts": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OvrlTradeCmplncEmbargoStatus/OverallTrdCmplncEmbargoSts_Text",
+     "@sap.label": "Embargo Status",
+     "@sap.quickinfo": "Embargo Status (All Items)",
+     "@sap.value.list": "fixed-values"
+    },
+    "OvrlTrdCmplncSnctndListChkSts": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OvTrdCmplncSnctndListChkSts/OvrlTrdCmplncSnctndListChkSts_Text",
+     "@sap.label": "Screening Status",
+     "@sap.quickinfo": "Screening Status (All Items)",
+     "@sap.value.list": "fixed-values"
+    },
+    "OvrlTrdCmplncLegalCtrlChkSts": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OvrlTrdCmplncLegalCtrlChkSts/OvrlTrdCmplncLegalCtrlChkSts_Text",
+     "@sap.label": "Legal Control Status",
+     "@sap.quickinfo": "Legal Control Status (All Items)",
+     "@sap.value.list": "fixed-values"
+    },
+    "BusinessSolutionOrder": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Solution Order"
+    },
+    "TransactionCurrency": {
+     "type": "cds.String",
+     "length": 5,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_TransactionCurrency/Currency_Text",
+     "@sap.label": "Document Currency",
+     "@sap.quickinfo": "SD Document Currency",
+     "@sap.filterable": "false",
+     "@sap.value.list": "standard",
+     "@sap.semantics": "currency-code"
+    },
+    "TotalNetAmount": {
+     "type": "cds.Decimal",
+     "precision": 16,
+     "scale": 3,
+     "@sap.unit": "TransactionCurrency",
+     "@sap.label": "Net Value",
+     "@sap.quickinfo": "Net Value of the Sales Document in Document Currency",
+     "@sap.filterable": "false"
+    },
+    "SalesOrderDate": {
+     "type": "cds.Date",
+     "@sap.display.format": "Date",
+     "@sap.label": "Document Date",
+     "@sap.quickinfo": "Document Date (Date Received/Sent)"
+    },
+    "SalesOrderType": {
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_SalesDocumentType/SalesOrderTypeName",
+     "@sap.label": "Order Type",
+     "@sap.quickinfo": "Sales Order Type",
+     "@sap.value.list": "fixed-values"
+    },
+    "CreationDate": {
+     "type": "cds.Date",
+     "@sap.display.format": "Date",
+     "@sap.label": "Created On",
+     "@sap.quickinfo": "Record Created On"
+    },
+    "LastChangeDate": {
+     "type": "cds.Date",
+     "@sap.display.format": "Date",
+     "@sap.label": "Changed On",
+     "@sap.quickinfo": "Last Changed On"
+    },
+    "LastChangeDateTime": {
+     "type": "cds.Timestamp",
+     "@odata.Type": "Edm.DateTimeOffset",
+     "@odata.Precision": 7,
+     "@sap.label": "Last Changed On",
+     "@sap.quickinfo": "Last Changed Date Time",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.filterable": "false"
+    },
+    "CreatedByUser": {
+     "type": "cds.String",
+     "length": 12,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_CreatedByUser/UserDescription",
+     "@sap.label": "Created By",
+     "@sap.quickinfo": "Name of Person Responsible for Creating the Object",
+     "@sap.value.list": "standard"
+    },
+    "LastChangedByUser": {
+     "type": "cds.String",
+     "length": 12,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_LastChangedByUser/UserDescription",
+     "@sap.label": "Last Changed By",
+     "@sap.quickinfo": "User Who Last Changed the Business Document",
+     "@sap.value.list": "standard"
+    },
+    "SalesOrganization": {
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_SalesOrganization/SalesOrganization_Text",
+     "@sap.label": "Sales Organization",
+     "@sap.value.list": "standard"
+    },
+    "DistributionChannel": {
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_DistributionChannel/DistributionChannelName",
+     "@sap.label": "Distribution Channel",
+     "@sap.value.list": "standard"
+    },
+    "OrganizationDivision": {
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_OrganizationDivision/Division_Text",
+     "@sap.label": "Division",
+     "@sap.value.list": "standard"
+    },
+    "SalesOffice": {
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_SalesOffice/SalesOfficeName",
+     "@sap.label": "Sales Office",
+     "@sap.value.list": "standard"
+    },
+    "SalesGroup": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_SalesGroup/SalesGroupName",
+     "@sap.label": "Sales Team",
+     "@sap.value.list": "standard"
+    },
+    "ReferenceSDDocument": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Reference Document",
+     "@sap.quickinfo": "Document Number of Reference Document"
+    },
+    "SDDocumentReason": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_SDDocumentReason/SDDocumentReason_Text",
+     "@sap.label": "Order Reason",
+     "@sap.quickinfo": "Order Reason (Reason for the Business Transaction)",
+     "@sap.value.list": "fixed-values"
+    },
+    "DeliveryBlockReason": {
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_DeliveryBlockReason/DeliveryBlockReason_Text",
+     "@sap.label": "Delivery Block",
+     "@sap.quickinfo": "Delivery Block (Document Header)",
+     "@sap.value.list": "fixed-values"
+    },
+    "HeaderBillingBlockReason": {
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_HeaderBillingBlockReason/BillingBlockReason_Text",
+     "@sap.label": "Billing Block",
+     "@sap.quickinfo": "Billing Block in SD Document",
+     "@sap.value.list": "fixed-values"
+    },
+    "SalesDocumentRjcnReason": {
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "to_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text",
+     "@sap.label": "Reason for Rejection",
+     "@sap.quickinfo": "Reason for Rejection of Sales Documents",
+     "@sap.filterable": "false",
+     "@sap.value.list": "fixed-values"
+    },
+    "SlsOrdApprovalStsCriticality": {
+     "type": "cds.Integer",
+     "@odata.Type": "Edm.Byte"
+    },
+    "OrganizationBPName1": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Name"
+    },
+    "OrganizationBPName2": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Name 2"
+    },
+    "to_CreatedByUser": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.C_SalesDocumentUserVH",
+     "keys": []
+    },
+    "to_DeliveryBlockReason": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_DeliveryBlockReason",
+     "keys": []
+    },
+    "to_DistributionChannel": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.C_Dischannelvaluehelp",
+     "keys": []
+    },
+    "to_Division": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.C_OrgDivisionValueHelp",
+     "keys": []
+    },
+    "to_DownPaymentStatus": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_ContractDownPaymentStatus",
+     "keys": []
+    },
+    "to_HeaderBillingBlockReason": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_BillingBlockReason",
+     "keys": []
+    },
+    "to_LastChangedByUser": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.C_SalesDocumentUserVH",
+     "keys": []
+    },
+    "to_OrganizationDivision": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_Division",
+     "keys": []
+    },
+    "to_OverallBillingBlockStatus": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OverallBillingBlockStatus",
+     "keys": []
+    },
+    "to_OverallChmlCmplncStatus": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OverallChmlCmplncStatus",
+     "keys": []
+    },
+    "to_OverallDangerousGoodsStatus": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OverallDangerousGoodsStatus",
+     "keys": []
+    },
+    "to_OverallSDDocumentRejectionSts": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OverallSDDocumentRjcnStatus",
+     "keys": []
+    },
+    "to_OverallSDProcessStatus": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OverallSDProcessStatus",
+     "keys": []
+    },
+    "to_OvrlSftyDataSheetSts": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OvrlSftyDataSheetSts",
+     "keys": []
+    },
+    "to_OvrlTradeCmplncEmbargoStatus": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OvrlTradeCmplncEmbargoStatus",
+     "keys": []
+    },
+    "to_OvrlTrdCmplncLegalCtrlChkSts": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OvrlTrdCmplncLegalCtrlChkSts",
+     "keys": []
+    },
+    "to_OvTrdCmplncSnctndListChkSts": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OvTrdCmplncSnctndListChkSts",
+     "keys": []
+    },
+    "to_SalesDocApprovalStatus": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_SalesDocApprovalStatus",
+     "keys": []
+    },
+    "to_SalesDocumentItemWl": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.C_SalesDocumentItemWl",
+     "cardinality": {
+      "max": "*"
+     },
+     "keys": []
+    },
+    "to_SalesDocumentRjcnReason": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_SalesDocumentRjcnReason",
+     "keys": []
+    },
+    "to_SalesDocumentType": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.C_SalesOrderTypeVH_F1873",
+     "keys": []
+    },
+    "to_SalesGroup": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.C_SalesGroupValueHelp",
+     "keys": []
+    },
+    "to_SalesOffice": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.C_SalesOfficeValueHelp",
+     "keys": []
+    },
+    "to_SalesOrganization": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_SalesOrganization",
+     "keys": []
+    },
+    "to_SDDocumentReason": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_SDDocumentReason",
+     "keys": []
+    },
+    "to_SoldToParty": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.C_Q2CCustomerQuickView",
+     "keys": []
+    },
+    "to_TransactionCurrency": {
+     "@sap.filterable": "false",
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_Currency",
+     "keys": []
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.C_SoldToValueHelp": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Sold-to Party",
+   "@sap.value.list": "true",
+   "elements": {
+    "Customer": {
+     "key": true,
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "CustomerName",
+     "@sap.label": "Customer",
+     "@sap.quickinfo": "Customer Number",
+     "notNull": true
+    },
+    "CustomerName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Name",
+     "@sap.quickinfo": "Name of Customer"
+    },
+    "OrganizationBPName1": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Name"
+    },
+    "OrganizationBPName2": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Name 2"
+    },
+    "BusinessPartnerImageURL": {
+     "type": "cds.String",
+     "length": 255
+    },
+    "PostalCode": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Postal Code",
+     "@sap.quickinfo": "City postal code"
+    },
+    "CityName": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "City"
+    },
+    "Country": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Country/Region Key"
+    },
+    "StreetName": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Street"
+    },
+    "HouseNumber": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.label": "House Number"
+    },
+    "InternationalPhoneNumber": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Telephone number",
+     "@sap.quickinfo": "Complete Number: Dialing Code+Number+Extension",
+     "@sap.semantics": "tel"
+    },
+    "InternationalMobilePhoneNumber": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Telephone number",
+     "@sap.quickinfo": "Complete Number: Dialing Code+Number+Extension",
+     "@sap.semantics": "tel"
+    },
+    "EmailAddress": {
+     "type": "cds.String",
+     "length": 241,
+     "@sap.label": "E-Mail Address",
+     "@sap.semantics": "email"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_BillingBlockReason": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Billing Block Reason",
+   "elements": {
+    "BillingBlockReason": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "BillingBlockReason_Text",
+     "@sap.label": "Billing Block",
+     "notNull": true
+    },
+    "BillingBlockReason_Text": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Billing Block Desc.",
+     "@sap.quickinfo": "Billing Block Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_CompanyCodeStdVH": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Company Code",
+   "@sap.value.list": "true",
+   "elements": {
+    "CompanyCode": {
+     "key": true,
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "CompanyCodeName",
+     "@sap.label": "Company Code",
+     "notNull": true
+    },
+    "CompanyCodeName": {
+     "type": "cds.String",
+     "length": 25,
+     "@sap.label": "Company Name",
+     "@sap.quickinfo": "Name of Company Code or Company"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_ContractDownPaymentStatus": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Value help of contract down payment status",
+   "elements": {
+    "ContractDownPaymentStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.text": "ContractDownPaymentStatus_Text",
+     "notNull": true
+    },
+    "ContractDownPaymentStatus_Text": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    },
+    "to_Text": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_ContractDownPaymentStatusT",
+     "cardinality": {
+      "max": "*"
+     },
+     "keys": []
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_ContractDownPaymentStatusT": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Contract Down Payment Status - Text",
+   "elements": {
+    "ContractDownPaymentStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "notNull": true
+    },
+    "Language": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.label": "Lang.",
+     "@sap.quickinfo": "Language Key",
+     "notNull": true
+    },
+    "ContractDownPaymentStatusDesc": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_Currency": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Currency",
+   "elements": {
+    "Currency": {
+     "key": true,
+     "type": "cds.String",
+     "length": 5,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "Currency_Text",
+     "@sap.label": "Currency",
+     "@sap.quickinfo": "Currency Key",
+     "@sap.semantics": "currency-code",
+     "notNull": true
+    },
+    "Currency_Text": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    },
+    "Decimals": {
+     "type": "cds.Integer",
+     "@odata.Type": "Edm.Byte",
+     "@sap.label": "Decimal Places",
+     "@sap.quickinfo": "Number of decimal places"
+    },
+    "CurrencyISOCode": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "ISO Code",
+     "@sap.quickinfo": "ISO Currency Code"
+    },
+    "AlternativeCurrencyKey": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Alternative Key"
+    },
+    "IsPrimaryCurrencyForISOCrcy": {
+     "type": "cds.Boolean",
+     "@sap.label": "Primary",
+     "@sap.quickinfo": "Primary SAP Currency Code for ISO Code"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_CurrencyStdVH": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Currency",
+   "@sap.value.list": "true",
+   "elements": {
+    "Currency": {
+     "key": true,
+     "type": "cds.String",
+     "length": 5,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "Currency_Text",
+     "@sap.label": "Currency",
+     "@sap.quickinfo": "Currency Key",
+     "@sap.semantics": "currency-code",
+     "notNull": true
+    },
+    "Currency_Text": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_Customer_VH": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Customer",
+   "@sap.value.list": "true",
+   "elements": {
+    "Customer": {
+     "key": true,
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "BPCustomerName",
+     "@sap.label": "Customer",
+     "@sap.quickinfo": "Customer Number",
+     "notNull": true
+    },
+    "OrganizationBPName1": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Customer Name 1",
+     "@sap.quickinfo": "Name"
+    },
+    "BusinessPartnerName1": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Business Partner Name 1",
+     "@sap.quickinfo": "Name 1"
+    },
+    "OrganizationBPName2": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Customer Name 2",
+     "@sap.quickinfo": "Name 2"
+    },
+    "BusinessPartnerName2": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Business Partner Name 2",
+     "@sap.quickinfo": "Name 2"
+    },
+    "Country": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Country/Region",
+     "@sap.quickinfo": "Country/Region Key"
+    },
+    "CityName": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "City"
+    },
+    "BPAddrCityName": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Business Partner Address City",
+     "@sap.quickinfo": "City"
+    },
+    "StreetName": {
+     "type": "cds.String",
+     "length": 35,
+     "@sap.label": "Street",
+     "@sap.quickinfo": "Street and House Number"
+    },
+    "BPAddrStreetName": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Business Partner Address Street",
+     "@sap.quickinfo": "Street"
+    },
+    "PostalCode": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Postal Code"
+    },
+    "CustomerName": {
+     "type": "cds.String",
+     "length": 80,
+     "@sap.label": "Customer Name",
+     "@sap.quickinfo": "Name of Customer"
+    },
+    "BPCustomerName": {
+     "type": "cds.String",
+     "length": 81,
+     "@sap.label": "Business Partner Customer Name",
+     "@sap.quickinfo": "Customer Name"
+    },
+    "CustomerAccountGroup": {
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Account group",
+     "@sap.quickinfo": "Customer Account Group"
+    },
+    "AuthorizationGroup": {
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Authorization",
+     "@sap.quickinfo": "Authorization Group"
+    },
+    "IsBusinessPurposeCompleted": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Purpose Complete Flag",
+     "@sap.quickinfo": "Business Purpose Completed Flag"
+    },
+    "IsCompetitor": {
+     "type": "cds.Boolean",
+     "@sap.label": "Competitors",
+     "@sap.quickinfo": "Indicator: Competitor"
+    },
+    "BusinessPartner": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Business Partner",
+     "@sap.quickinfo": "Business Partner Number"
+    },
+    "BusinessPartnerType": {
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Business Partner Type"
+    },
+    "DataControllerSet": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Ctrlr. Set",
+     "@sap.quickinfo": "BP: Data Controller Set Flag"
+    },
+    "DataController1": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    },
+    "DataController2": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    },
+    "DataController3": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    },
+    "DataController4": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    },
+    "DataController5": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    },
+    "DataController6": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    },
+    "DataController7": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    },
+    "DataController8": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    },
+    "DataController9": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    },
+    "DataController10": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Data Controller",
+     "@sap.quickinfo": "BP: Data Controller (Internal Use Only)"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_DeliveryBlockReason": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Delivery Block Reason",
+   "elements": {
+    "DeliveryBlockReason": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "DeliveryBlockReason_Text",
+     "@sap.label": "Delivery Block",
+     "@sap.quickinfo": "Default Delivery Block",
+     "notNull": true
+    },
+    "DeliveryBlockReason_Text": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Delivery Block Desc.",
+     "@sap.quickinfo": "Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    },
+    "DeliveryDueListBlock": {
+     "type": "cds.Boolean",
+     "@sap.label": "Delv. Due List Block",
+     "@sap.quickinfo": "Delivery Due List Block"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_Division": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Division",
+   "elements": {
+    "Division": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "Division_Text",
+     "@sap.label": "Division",
+     "notNull": true
+    },
+    "Division_Text": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Division Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    },
+    "DivisionOID": {
+     "type": "cds.String",
+     "length": 128,
+     "@sap.label": "Division OID",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_MaterialStdVH": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Material",
+   "elements": {
+    "Material": {
+     "key": true,
+     "type": "cds.String",
+     "length": 40,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "Material_Text",
+     "@sap.label": "Material",
+     "@sap.quickinfo": "Material Number",
+     "notNull": true
+    },
+    "Material_Text": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Material Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OmniChnlSalesPromotionStatus": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Omni Channel Sales Promotion Status",
+   "elements": {
+    "OmniChnlSalesPromotionStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.text": "OmniChnlSalesPromotionStatus_Text",
+     "notNull": true
+    },
+    "OmniChnlSalesPromotionStatus_Text": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OverallBillingBlockStatus": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Overall Billing Block Status",
+   "elements": {
+    "OverallBillingBlockStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.text": "OverallBillingBlockStatus_Text",
+     "notNull": true
+    },
+    "OverallBillingBlockStatus_Text": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Description",
+     "@sap.quickinfo": "Status Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OverallChmlCmplncStatus": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Overall Chemical Compliance Check Status",
+   "elements": {
+    "OverallChmlCmplncStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "OverallChmlCmplncStatus_Text",
+     "@sap.label": "Prod. Marktablty Sts",
+     "@sap.quickinfo": "Product Marketability Status (All Items)",
+     "notNull": true
+    },
+    "OverallChmlCmplncStatus_Text": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OverallDangerousGoodsStatus": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Overall Dangerous Goods Status",
+   "elements": {
+    "OverallDangerousGoodsStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "OverallDangerousGoodsStatus_Text",
+     "@sap.label": "Dangerous Goods Sts",
+     "@sap.quickinfo": "Dangerous Goods Status (All Items)",
+     "notNull": true
+    },
+    "OverallDangerousGoodsStatus_Text": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OverallSDDocumentRjcnStatus": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Overall SD Document Rejection Status",
+   "elements": {
+    "OverallSDDocumentRejectionSts": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "OverallSDDocumentRejectionSts_Text",
+     "@sap.label": "Rejection Status",
+     "@sap.quickinfo": "Rejection Status (All Items)",
+     "notNull": true
+    },
+    "OverallSDDocumentRejectionSts_Text": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Description",
+     "@sap.quickinfo": "Status Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OverallSDProcessStatus": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Overall SD Process Status",
+   "elements": {
+    "OverallSDProcessStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "OverallSDProcessStatus_Text",
+     "@sap.label": "Overall Status",
+     "@sap.quickinfo": "Overall Processing Status (Header/All Items)",
+     "notNull": true
+    },
+    "OverallSDProcessStatus_Text": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Overall Status",
+     "@sap.heading": "Description",
+     "@sap.quickinfo": "Status Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.filterable": "false"
+    },
+    "to_Text": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.I_OverallSDProcessStatusText",
+     "cardinality": {
+      "max": "*"
+     },
+     "keys": []
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OverallSDProcessStatusText": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Overall SD Process Status - Text",
+   "elements": {
+    "OverallSDProcessStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Status",
+     "@sap.quickinfo": "General SD status",
+     "notNull": true
+    },
+    "Language": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.label": "Language Key",
+     "notNull": true
+    },
+    "OverallSDProcessStatusDesc": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Description",
+     "@sap.quickinfo": "Status Description"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OvrlSftyDataSheetSts": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Overall Safety Data Sheet Status",
+   "elements": {
+    "OverallSafetyDataSheetStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "OverallSafetyDataSheetStatus_Text",
+     "@sap.label": "Sfty Data Sheet Sts",
+     "@sap.quickinfo": "Safety Data Sheet Status (All Items)",
+     "notNull": true
+    },
+    "OverallSafetyDataSheetStatus_Text": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OvrlTradeCmplncEmbargoStatus": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Overall Trade Compliance Embargo Status",
+   "elements": {
+    "OverallTrdCmplncEmbargoSts": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "OverallTrdCmplncEmbargoSts_Text",
+     "@sap.label": "Embargo Status",
+     "@sap.quickinfo": "Embargo Status (All Items)",
+     "notNull": true
+    },
+    "OverallTrdCmplncEmbargoSts_Text": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OvrlTrdCmplncLegalCtrlChkSts": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Ovrl Trade Cmplnc Legal Ctrl Chk Sts",
+   "elements": {
+    "OvrlTrdCmplncLegalCtrlChkSts": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "OvrlTrdCmplncLegalCtrlChkSts_Text",
+     "@sap.label": "Legal Control Status",
+     "notNull": true
+    },
+    "OvrlTrdCmplncLegalCtrlChkSts_Text": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_OvTrdCmplncSnctndListChkSts": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Ovrl Trade Compl Snctnd List Chk Sts",
+   "elements": {
+    "OvrlTrdCmplncSnctndListChkSts": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "OvrlTrdCmplncSnctndListChkSts_Text",
+     "@sap.label": "Screening Status",
+     "@sap.quickinfo": "Screening Status (All Items)",
+     "notNull": true
+    },
+    "OvrlTrdCmplncSnctndListChkSts_Text": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_ProductStdVH": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Product Value Help",
+   "@sap.value.list": "true",
+   "elements": {
+    "Product": {
+     "key": true,
+     "type": "cds.String",
+     "length": 40,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "Product_Text",
+     "@sap.label": "Product",
+     "@sap.quickinfo": "Product Number",
+     "notNull": true
+    },
+    "Product_Text": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Product Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    },
+    "ProductExternalID": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "External Product ID",
+     "@sap.quickinfo": "External Representation of Material Number"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_SalesDocApprovalStatus": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Approval Sts for Sales Document",
+   "elements": {
+    "SalesDocApprovalStatus": {
+     "key": true,
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "SalesDocApprovalStatus_Text",
+     "@sap.label": "Approval Status",
+     "@sap.quickinfo": "Document Approval Status",
+     "notNull": true
+    },
+    "SalesDocApprovalStatus_Text": {
+     "type": "cds.String",
+     "length": 60,
+     "@sap.label": "Short Description",
+     "@sap.quickinfo": "Short Text for Fixed Values",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_SalesDocumentRjcnReason": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Sales Document Rejection Reason",
+   "elements": {
+    "SalesDocumentRjcnReason": {
+     "key": true,
+     "type": "cds.String",
+     "length": 2,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "SalesDocumentRjcnReason_Text",
+     "@sap.label": "Reason for Rejection",
+     "@sap.quickinfo": "Reason for Rejection of Sales Documents",
+     "notNull": true
+    },
+    "SalesDocumentRjcnReason_Text": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_SalesOrganization": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Sales Organization",
+   "elements": {
+    "SalesOrganization": {
+     "key": true,
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "SalesOrganization_Text",
+     "@sap.label": "Sales Organization",
+     "notNull": true
+    },
+    "SalesOrganization_Text": {
+     "type": "cds.String",
+     "length": 20,
+     "@sap.label": "Sales Organization Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    },
+    "SalesOrganizationCurrency": {
+     "type": "cds.String",
+     "length": 5,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Statistics Currency",
+     "@sap.quickinfo": "Statistics currency",
+     "@sap.filterable": "false",
+     "@sap.semantics": "currency-code"
+    },
+    "CompanyCode": {
+     "type": "cds.String",
+     "length": 4,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Company Code",
+     "@sap.quickinfo": "Company code of the sales organization",
+     "@sap.filterable": "false",
+     "@sap.value.list": "standard"
+    },
+    "IntercompanyBillingCustomer": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Customer Interc. Bl.",
+     "@sap.quickinfo": "Customer Number for Intercompany Billing",
+     "@sap.filterable": "false",
+     "@sap.value.list": "standard"
+    },
+    "AddressID": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Address"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.I_SDDocumentReason": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.searchable": "true",
+   "@sap.content.version": "1",
+   "@sap.label": "Order Reason",
+   "elements": {
+    "SDDocumentReason": {
+     "key": true,
+     "type": "cds.String",
+     "length": 3,
+     "@sap.display.format": "UpperCase",
+     "@sap.text": "SDDocumentReason_Text",
+     "@sap.label": "Order Reason",
+     "@sap.quickinfo": "Order Reason (Reason for the Business Transaction)",
+     "notNull": true
+    },
+    "SDDocumentReason_Text": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.label": "Description",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false"
+    },
+    "RetroBillingUsage": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Retroactive Billing",
+     "@sap.quickinfo": "Use of Order Reason for Retroactive Billing"
+    },
+    "SelfBillingValueItem": {
+     "type": "cds.String",
+     "length": 1,
+     "@sap.display.format": "UpperCase",
+     "@sap.label": "Self-Bill.Value Item",
+     "@sap.quickinfo": "Value Item for Self-Billing"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__Currencies": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.content.version": "1",
+   "elements": {
+    "CurrencyCode": {
+     "key": true,
+     "type": "cds.String",
+     "length": 5,
+     "@sap.label": "Currency",
+     "@sap.semantics": "currency-code",
+     "notNull": true
+    },
+    "ISOCode": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.label": "ISO code",
+     "notNull": true
+    },
+    "Text": {
+     "type": "cds.String",
+     "length": 15,
+     "@sap.label": "Short Text",
+     "notNull": true
+    },
+    "DecimalPlaces": {
+     "type": "cds.Integer",
+     "@odata.Type": "Edm.Byte",
+     "@sap.label": "Decimals",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__UnitsOfMeasure": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.content.version": "1",
+   "elements": {
+    "UnitCode": {
+     "key": true,
+     "type": "cds.String",
+     "length": 3,
+     "@sap.label": "Internal UoM",
+     "@sap.semantics": "unit-of-measure",
+     "notNull": true
+    },
+    "ISOCode": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.label": "ISO Code",
+     "notNull": true
+    },
+    "ExternalCode": {
+     "type": "cds.String",
+     "length": 3,
+     "@sap.label": "Commercial",
+     "notNull": true
+    },
+    "Text": {
+     "type": "cds.String",
+     "length": 30,
+     "@sap.label": "Meas. Unit Text",
+     "notNull": true
+    },
+    "DecimalPlaces": {
+     "type": "cds.Integer",
+     "@sap.label": "Decimal Places"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__MyDocumentDescriptions": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.content.version": "1",
+   "elements": {
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "notNull": true
+    },
+    "CreatedBy": {
+     "type": "cds.String",
+     "length": 12,
+     "notNull": true
+    },
+    "CreatedAt": {
+     "type": "cds.DateTime",
+     "@odata.Type": "Edm.DateTime",
+     "@sap.label": "Time Stamp",
+     "notNull": true
+    },
+    "FileName": {
+     "type": "cds.String",
+     "length": 256,
+     "notNull": true
+    },
+    "Title": {
+     "type": "cds.String",
+     "length": 256,
+     "notNull": true
+    },
+    "Format": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.SAP__FormatSet",
+     "keys": []
+    },
+    "FileShare": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.SAP__FileShareSet",
+     "keys": []
+    },
+    "TableColumns": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.SAP__TableColumnsSet",
+     "cardinality": {
+      "max": "*"
+     },
+     "keys": []
+    },
+    "CoverPage": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.SAP__CoverPageSet",
+     "cardinality": {
+      "max": "*"
+     },
+     "keys": []
+    },
+    "Signature": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.SAP__SignatureSet",
+     "keys": []
+    },
+    "PDFStandard": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.SAP__PDFStandardSet",
+     "keys": []
+    },
+    "Hierarchy": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.SAP__HierarchySet",
+     "keys": []
+    },
+    "Header": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.SAP__PDFHeaderSet",
+     "keys": []
+    },
+    "Footer": {
+     "type": "cds.Association",
+     "target": "SD_F1873_SO_WL_SRV.SAP__PDFFooterSet",
+     "keys": []
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__FileShareSet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.pageable": "false",
+   "@sap.addressable": "false",
+   "@sap.content.version": "1",
+   "elements": {
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Repository": {
+     "type": "cds.String",
+     "length": 100,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Folder": {
+     "type": "cds.String",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__FormatSet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.pageable": "false",
+   "@sap.addressable": "false",
+   "@sap.content.version": "1",
+   "elements": {
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "FitToPage": {
+     "type": "SD_F1873_SO_WL_SRV.SAP__FitToPage",
+     "notNull": true
+    },
+    "FontSize": {
+     "type": "cds.Integer",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Orientation": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "PaperSize": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "BorderSize": {
+     "type": "cds.Integer",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "MarginSize": {
+     "type": "cds.Integer",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "FontName": {
+     "type": "cds.String",
+     "length": 255,
+     "@sap.label": "Font Name",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Padding": {
+     "type": "cds.Integer",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "TextDirectionLayout": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__PDFStandardSet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.pageable": "false",
+   "@sap.addressable": "false",
+   "@sap.content.version": "1",
+   "elements": {
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "UsePDFAConformance": {
+     "type": "cds.Boolean",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "DoEnableAccessibility": {
+     "type": "cds.Boolean",
+     "@sap.label": "Indicator",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__TableColumnsSet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.pageable": "false",
+   "@sap.addressable": "false",
+   "@sap.content.version": "1",
+   "elements": {
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Name": {
+     "key": true,
+     "type": "cds.String",
+     "length": 256,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Header": {
+     "key": true,
+     "type": "cds.String",
+     "length": 256,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Format": {
+     "type": "SD_F1873_SO_WL_SRV.SAP__TableColumnFormat",
+     "notNull": true
+    },
+    "HorizontalAlignment": {
+     "type": "cds.String",
+     "length": 10,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__CoverPageSet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.pageable": "false",
+   "@sap.addressable": "false",
+   "@sap.content.version": "1",
+   "elements": {
+    "Title": {
+     "key": true,
+     "type": "cds.String",
+     "length": 256,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Name": {
+     "key": true,
+     "type": "cds.String",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Value": {
+     "type": "cds.String",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__SignatureSet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.pageable": "false",
+   "@sap.addressable": "false",
+   "@sap.content.version": "1",
+   "elements": {
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "DoSign": {
+     "type": "cds.Boolean",
+     "@sap.label": "Indicator",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Reason": {
+     "type": "cds.String",
+     "length": 256,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__HierarchySet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.pageable": "false",
+   "@sap.addressable": "false",
+   "@sap.content.version": "1",
+   "elements": {
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "DistanceFromRootElement": {
+     "type": "cds.String",
+     "length": 256,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "DrillStateElement": {
+     "type": "cds.String",
+     "length": 256,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__PDFHeaderSet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.pageable": "false",
+   "@sap.addressable": "false",
+   "@sap.content.version": "1",
+   "elements": {
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Right": {
+     "type": "SD_F1873_SO_WL_SRV.SAP__HeaderFooterField",
+     "notNull": true
+    },
+    "Left": {
+     "type": "SD_F1873_SO_WL_SRV.SAP__HeaderFooterField",
+     "notNull": true
+    },
+    "Center": {
+     "type": "SD_F1873_SO_WL_SRV.SAP__HeaderFooterField",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__PDFFooterSet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.creatable": "false",
+   "@sap.updatable": "false",
+   "@sap.deletable": "false",
+   "@sap.pageable": "false",
+   "@sap.addressable": "false",
+   "@sap.content.version": "1",
+   "elements": {
+    "Id": {
+     "key": true,
+     "type": "cds.UUID",
+     "@sap.label": "UUID",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "Right": {
+     "type": "SD_F1873_SO_WL_SRV.SAP__HeaderFooterField",
+     "notNull": true
+    },
+    "Left": {
+     "type": "SD_F1873_SO_WL_SRV.SAP__HeaderFooterField",
+     "notNull": true
+    },
+    "Center": {
+     "type": "SD_F1873_SO_WL_SRV.SAP__HeaderFooterField",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__ValueHelpSet": {
+   "kind": "entity",
+   "@cds.external": true,
+   "@cds.persistence.skip": true,
+   "@sap.content.version": "1",
+   "elements": {
+    "VALUEHELP": {
+     "key": true,
+     "type": "cds.String",
+     "notNull": true
+    },
+    "FIELD_VALUE": {
+     "type": "cds.String",
+     "length": 10,
+     "notNull": true
+    },
+    "DESCRIPTION": {
+     "type": "cds.String"
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__FitToPage": {
+   "kind": "type",
+   "@cds.external": true,
+   "elements": {
+    "ErrorRecoveryBehavior": {
+     "type": "cds.String",
+     "length": 8,
+     "@sap.label": "Error behavior",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "IsEnabled": {
+     "type": "cds.Boolean",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "MinimumFontSize": {
+     "type": "cds.Integer",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__TableColumnFormat": {
+   "kind": "type",
+   "@cds.external": true,
+   "elements": {
+    "DisplayFormat": {
+     "type": "cds.String",
+     "length": 40,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "IANATimezone": {
+     "type": "cds.String",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    },
+    "IANATimezoneProperty": {
+     "type": "cds.String",
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  },
+  "SD_F1873_SO_WL_SRV.SAP__HeaderFooterField": {
+   "kind": "type",
+   "@cds.external": true,
+   "elements": {
+    "Type": {
+     "type": "cds.String",
+     "length": 256,
+     "@sap.creatable": "false",
+     "@sap.updatable": "false",
+     "@sap.sortable": "false",
+     "@sap.filterable": "false",
+     "notNull": true
+    }
+   }
+  }
+ }
+}

@@ -32,15 +32,83 @@ sap.ui.define([
         },
 
         /**
+         * Convenience method for getting a model by name from view or owner component.
+         * @param {string} [sName] the model name
+         * @returns {sap.ui.model.Model|null}
+         */
+        getModel: function (sName) {
+            return (this.getView() && this.getView().getModel(sName)) ||
+                   (this.getOwnerComponent() && typeof this.getOwnerComponent().getModel === "function" && this.getOwnerComponent().getModel(sName)) ||
+                   null;
+        },
+
+        /**
+         * Convenience method for setting a model on the view.
+         * @param {sap.ui.model.Model} oModel the model instance
+         * @param {string} [sName] the model name
+         * @returns {sap.ui.core.mvc.Controller} this controller instance for chaining
+         */
+        setModel: function (oModel, sName) {
+            var oView = this.getView();
+            if (oView) {
+                oView.setModel(oModel, sName);
+            }
+            return this;
+        },
+
+        /**
          * Convenience method for getting the resource bundle text.
          * @param {string} sKey the key of the text
          * @param {string[]} [aArgs] optional arguments
-         * @returns {string} the localized text or key fallback
+         * @param {string} [sFallback] optional fallback string if bundle or key is missing
+         * @returns {string} the localized text or key/fallback
          */
-        getText: function (sKey, aArgs) {
+        /**
+         * After a create whose result SAP did not confirm, turns off submit in the form's model, because a second
+         * submit could duplicate the document. The form's next reset turns it on again.
+         * Matches the server's wording, the one thing every error path here carries: see srv/common/visibleError.js.
+         *
+         * @param {sap.ui.model.Model} oModel the form's model
+         * @param {string} sMessage the error text
+         * @returns {string|null} the text to show when submit was turned off, otherwise null
+         */
+        blockSubmitIfNotConfirmed: function (oModel, sMessage) {
+            if (!/NOT confirmed|Do not retry|Check it in SAP before/.test(sMessage || "")) return null;
+            oModel.setProperty("/submitBlocked", true);
+            return sMessage + "\n\n" + this.getText("msgSubmitBlockedNotConfirmed", null, "Create is turned off on this form so this cannot be sent twice. After you have checked SAP, leave this form and start again.");
+        },
+
+        getText: function (sKey, aArgs, sFallback) {
             var oResourceModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("i18n") : (this.getView() ? this.getView().getModel("i18n") : null);
             var oBundle = oResourceModel ? oResourceModel.getResourceBundle() : null;
-            return oBundle ? oBundle.getText(sKey, aArgs) : sKey;
+            var aTextArgs = Array.isArray(aArgs) ? aArgs : undefined;
+            if (oBundle) {
+                var sFound = oBundle.getText(sKey, aTextArgs);
+                if (sFound !== sKey) {
+                    return sFound;
+                }
+            }
+            if (sFallback !== undefined) {
+                var sResult = sFallback;
+                if (Array.isArray(aArgs) && aArgs.length > 0) {
+                    aArgs.forEach(function (arg, idx) {
+                        sResult = sResult.replace(new RegExp("\\{" + idx + "\\}", "g"), arg);
+                    });
+                }
+                return sResult;
+            }
+            return oBundle ? oBundle.getText(sKey, aTextArgs) : sKey;
+        },
+
+        /**
+         * Returns the content density class for the application.
+         * Official SAPUI5 Compact Density is applied across the entire application.
+         *
+         * @returns {string} "sapUiSizeCompact"
+         */
+        getContentDensityClass: function () {
+            var oComp = this.getOwnerComponent();
+            return (oComp && oComp.getContentDensityClass) ? oComp.getContentDensityClass() : "sapUiSizeCompact";
         },
 
         /**
@@ -55,40 +123,25 @@ sap.ui.define([
         },
 
         /**
-         * Computes procurement KPI metrics (totalCount, supplierCount, completeRate)
-         * from a sap.m.Table updateFinished event.
+         * Computes procurement KPI metrics from a sap.m.Table updateFinished event.
+         * Shows live total count from the binding's $count parameter (or '-' if absent).
+         * Eliminates synthetic / page-scoped supplier counts and completeness rates.
          *
          * @param {sap.m.Table} oTable
          * @param {sap.ui.base.Event} [oEvent]
-         * @returns {{ totalCount: number, supplierCount: number, completeRate: number }}
+         * @returns {{ totalCount: number|string }}
          */
         calculateKpiMetrics: function (oTable, oEvent) {
-            var aItems = oTable ? oTable.getItems() : [];
-            var iTotal = (oEvent && oEvent.getParameter("total")) || aItems.length;
-
-            var oSuppliers = {};
-            var iCompleted = 0;
-
-            aItems.forEach(function (oItem) {
-                var oContext = oItem.getBindingContext();
-                if (oContext) {
-                    var sSupplier = oContext.getProperty("Supplier");
-                    if (sSupplier) {
-                        oSuppliers[sSupplier] = true;
-                    }
-                    if (oContext.getProperty("PurchasingCompletenessStatus")) {
-                        iCompleted++;
-                    }
+            var iTotal = null;
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var vTotal = oEvent.getParameter("total");
+                if (typeof vTotal === "number" && !isNaN(vTotal)) {
+                    iTotal = vTotal;
                 }
-            });
-
-            var iSupplierCount = Object.keys(oSuppliers).length;
-            var iRate = aItems.length > 0 ? Math.round((iCompleted / aItems.length) * 100) : 100;
+            }
 
             return {
-                totalCount: iTotal,
-                supplierCount: iSupplierCount > 0 ? iSupplierCount : iTotal,
-                completeRate: iRate
+                totalCount: iTotal !== null ? iTotal : "-"
             };
         },
 
@@ -108,6 +161,7 @@ sap.ui.define([
                     controller: this
                 }).then(function (oPopover) {
                     that.getView().addDependent(oPopover);
+                    oPopover.addStyleClass(that.getContentDensityClass());
                     return oPopover;
                 });
             }
@@ -178,6 +232,7 @@ sap.ui.define([
                     controller: this
                 }).then(function (oDialog) {
                     that.getView().addDependent(oDialog);
+                    oDialog.addStyleClass(that.getContentDensityClass());
                     return oDialog;
                 });
             }

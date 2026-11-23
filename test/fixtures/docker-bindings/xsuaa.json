@@ -1,0 +1,7 @@
+{
+  "name": "test-xsuaa-binding",
+  "label": "xsuaa",
+  "credentials": {
+    "fixture": "not-a-real-credential"
+  }
+}

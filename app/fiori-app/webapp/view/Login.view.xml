@@ -8,7 +8,8 @@
     <Page
         id="loginPage"
         showHeader="false"
-        enableScrolling="false">
+        enableScrolling="false"
+        class="sapUiSizeCompact">
         <content>
             <VBox
                 id="loginCenterBox"
@@ -16,11 +17,11 @@
                 alignItems="Center"
                 justifyContent="Center">
                 
-                <Panel id="loginPanel" width="400px" class="sapUiResponsiveMargin">
+                <Panel id="loginPanel" width="25rem" class="sapUiResponsiveMargin loginPanel">
                     <headerToolbar>
                         <Toolbar>
                             <core:Icon src="sap-icon://dimension" />
-                            <Title text="SAP S/4HANA" level="H2" />
+                            <Title text="{i18n>loginTitle}" level="H2" />
                         </Toolbar>
                     </headerToolbar>
                     <content>
@@ -46,6 +47,7 @@
                                 <Input
                                     id="inputUsername"
                                     value="{loginView>/username}"
+                                    valueLiveUpdate="true"
                                     placeholder="{i18n>loginUsernamePlaceholder}"
                                     valueState="{loginView>/usernameState}"
                                     valueStateText="{loginView>/usernameStateText}"
@@ -57,6 +59,7 @@
                                     id="inputPassword"
                                     type="Password"
                                     value="{loginView>/password}"
+                                    valueLiveUpdate="true"
                                     placeholder="{i18n>loginPasswordPlaceholder}"
                                     valueState="{loginView>/passwordState}"
                                     valueStateText="{loginView>/passwordStateText}"

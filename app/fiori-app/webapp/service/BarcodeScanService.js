@@ -21,7 +21,9 @@ sap.ui.define([
 ) {
     "use strict";
 
-    var _fnHardwareCallback = null;
+    // Consumers of hardware scans, most recent last. Only the most recent one receives a scan, so a screen
+    // that attaches later does not lose its callback when an earlier screen detaches, and vice versa.
+    var _aHardwareCallbacks = [];
     var _sKeyBuffer = "";
     var _nLastKeyTime = 0;
     var _nMaxInterKeyDelay = 50; // ms between keys for laser hardware scanners
@@ -30,10 +32,26 @@ sap.ui.define([
     var _oActiveCameraDialog = null;
     var _nAnimationId = null;
 
+    function _addClass(oControl, sClass) {
+        if (oControl && typeof oControl.addStyleClass === "function") {
+            oControl.addStyleClass(sClass);
+        }
+        return oControl;
+    }
+
     /**
      * Internal keydown listener to capture Zebra hardware laser scans in keystroke wedge mode
      */
+    function _activeCallback() {
+        return _aHardwareCallbacks.length ? _aHardwareCallbacks[_aHardwareCallbacks.length - 1] : null;
+    }
+
+    function _removeCallback(fnCallback) {
+        _aHardwareCallbacks = _aHardwareCallbacks.filter(function (fn) { return fn !== fnCallback; });
+    }
+
     function _onKeyDown(oEvent) {
+        var _fnHardwareCallback = _activeCallback();
         if (!_fnHardwareCallback) return;
 
         var nNow = Date.now();
@@ -49,10 +67,12 @@ sap.ui.define([
             if (_sKeyBuffer.length >= 3) {
                 var sScanned = _sKeyBuffer.trim();
                 _sKeyBuffer = "";
-                // If focus is not inside an active input, prevent standard enter navigation
+                // If focus is not inside an active input, the scan suffix Enter must not also act on the focused
+                // control (e.g. press a focused list row): consume it completely.
                 var oActive = document.activeElement;
                 if (!oActive || oActive.tagName !== "INPUT") {
                     oEvent.preventDefault();
+                    oEvent.stopPropagation();
                 }
                 try {
                     _fnHardwareCallback(sScanned, "ZEBRA_KEYSTROKE_WEDGE");
@@ -71,6 +91,7 @@ sap.ui.define([
      * Custom DOM event listener for Zebra DataWedge Web intents
      */
     function _onDataWedgeCustomEvent(oEvent) {
+        var _fnHardwareCallback = _activeCallback();
         if (!_fnHardwareCallback) return;
         var sBarcode = (oEvent.detail && (oEvent.detail.data || oEvent.detail.barcode || oEvent.detail.value)) || "";
         if (sBarcode) {
@@ -80,11 +101,14 @@ sap.ui.define([
 
     var BarcodeScanService = {
         /**
-         * Attach a global listener for Zebra hardware laser scanners (both DataWedge events and keystroke wedge)
+         * Attach a global listener for Zebra hardware laser scanners (both DataWedge events and keystroke wedge).
+         * The most recently attached consumer receives the scans; attaching the same function again moves it to the front.
          * @param {Function} fnCallback - Function receiving (sBarcode, sSource)
          */
         attachHardwareScanner: function (fnCallback) {
-            _fnHardwareCallback = fnCallback;
+            if (typeof fnCallback !== "function") return;
+            _removeCallback(fnCallback);
+            _aHardwareCallbacks.push(fnCallback);
             _sKeyBuffer = "";
             _nLastKeyTime = 0;
 
@@ -97,12 +121,18 @@ sap.ui.define([
         },
 
         /**
-         * Detach the hardware scanner listener
+         * Detach one consumer; scans go back to the consumer attached before it. Without an argument every
+         * consumer is detached. The global listeners are removed when no consumer is left.
+         * @param {Function} [fnCallback] - The function passed to attachHardwareScanner
          */
-        detachHardwareScanner: function () {
-            _fnHardwareCallback = null;
+        detachHardwareScanner: function (fnCallback) {
+            if (typeof fnCallback === "function") {
+                _removeCallback(fnCallback);
+            } else {
+                _aHardwareCallbacks = [];
+            }
             _sKeyBuffer = "";
-            if (_bListenerAttached && typeof window !== "undefined") {
+            if (_aHardwareCallbacks.length === 0 && _bListenerAttached && typeof window !== "undefined") {
                 window.removeEventListener("keydown", _onKeyDown, true);
                 window.removeEventListener("datawedge:scan", _onDataWedgeCustomEvent);
                 document.removeEventListener("barcodeScan", _onDataWedgeCustomEvent);
@@ -115,7 +145,7 @@ sap.ui.define([
          * @returns {boolean}
          */
         isHardwareScannerAttached: function () {
-            return !!_fnHardwareCallback;
+            return _aHardwareCallbacks.length > 0;
         },
 
         /**
@@ -198,14 +228,13 @@ sap.ui.define([
                         title: sTitle + " (Camera Simulation)",
                         contentWidth: "360px",
                         content: [
-                            new VBox({
-                                class: "sapUiSmallMargin",
+                            _addClass(new VBox({
                                 items: [
                                     new Text({ text: "Camera stream is unavailable in this browser session. You can enter or simulate a barcode scan below:" }),
-                                    new Label({ text: "Barcode Value:", class: "sapUiTinyMarginTop" }),
+                                    _addClass(new Label({ text: "Barcode Value:" }), "sapUiTinyMarginTop"),
                                     oSimInput
                                 ]
-                            })
+                            }), "sapUiSmallMargin")
                         ],
                         beginButton: new Button({
                             text: "Submit Scan",
@@ -228,6 +257,9 @@ sap.ui.define([
                             }
                         })
                     });
+                    if (oSimDialog.addStyleClass) {
+                        oSimDialog.addStyleClass("sapUiSizeCompact");
+                    }
                     oSimDialog.open();
                     return;
                 }
@@ -275,19 +307,17 @@ sap.ui.define([
                     title: sTitle,
                     contentWidth: "380px",
                     content: [
-                        new VBox({
-                            class: "sapUiSmallMargin",
+                        _addClass(new VBox({
                             items: [
                                 oVideoHtml,
-                                new HBox({
+                                _addClass(new HBox({
                                     justifyContent: "SpaceBetween",
                                     alignItems: "Center",
-                                    class: "sapUiTinyMarginTop sapUiTinyMarginBottom",
                                     items: [
-                                        new Text({ text: "Align barcode inside the reticle", class: "textMuted" }),
+                                        _addClass(new Text({ text: "Align barcode inside the reticle" }), "textMuted"),
                                         oBtnTorch
                                     ]
-                                }),
+                                }), "sapUiTinyMarginTop sapUiTinyMarginBottom"),
                                 new Label({ text: "Manual Entry (Fallback):" }),
                                 new HBox({
                                     width: "100%",
@@ -306,7 +336,7 @@ sap.ui.define([
                                     ]
                                 })
                             ]
-                        })
+                        }), "sapUiSmallMargin")
                     ],
                     endButton: new Button({
                         text: "Cancel",
@@ -320,6 +350,9 @@ sap.ui.define([
                 });
 
                 _oActiveCameraDialog = oDialog;
+                if (oDialog.addStyleClass) {
+                    oDialog.addStyleClass("sapUiSizeCompact");
+                }
                 oDialog.open();
 
                 // Initialize camera stream
@@ -336,7 +369,9 @@ sap.ui.define([
                     var videoEl = document.getElementById(sVideoId);
                     if (videoEl) {
                         videoEl.srcObject = stream;
-                        videoEl.play().catch(function () {});
+                        videoEl.play().catch(function () {
+                            // Autoplay rejection: the stream is attached; the browser will play on user gesture.
+                        });
                     }
 
                     // If BarcodeDetector is available, initiate frame scanning loop
@@ -376,6 +411,25 @@ sap.ui.define([
                     MessageToast.show("Camera access unavailable. Please use manual entry.");
                 });
             });
+        },
+
+        /**
+         * Convenience callback wrapper for camera scanning
+         * @param {string} sTitle
+         * @param {Function} fnCallback
+         * @returns {Promise<string>}
+         */
+        openCameraScanner: function (sTitle, fnCallback) {
+            return this.scanWithCamera({ title: sTitle })
+                .then(function (sResult) {
+                    if (typeof fnCallback === "function") {
+                        fnCallback(sResult);
+                    }
+                    return sResult;
+                })
+                .catch(function () {
+                    // Cancelled or unavailable
+                });
         }
     };
 

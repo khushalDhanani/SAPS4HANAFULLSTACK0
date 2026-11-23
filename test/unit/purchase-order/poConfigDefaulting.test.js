@@ -48,6 +48,13 @@ const mockODataClient = {
 const originalSap = global.sap;
 
 beforeAll(() => {
+    // Exercise the shared reader with mocked transport, rather than duplicating its logic.
+    require('vm').runInNewContext(require('fs').readFileSync(
+        require('path').resolve(__dirname, '../../../app/fiori-app/webapp/service/ODataClient.js'), 'utf8'), {
+        sap: { ui: { define: (_deps, factory) => {
+            mockODataClient.readEntitySet = factory({}).readEntitySet;
+        } } }
+    });
     global.sap = {
         ui: {
             define: function (deps, factory) {
@@ -107,15 +114,19 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
             expect(oData.header.DocumentDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         });
 
-        it('should ensure Document Date is Today when applying defaults', () => {
-            const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
-            oModel.setProperty('/header/DocumentDate', '');
+        it('should fill an empty Document Date with the calendar date of a clock fixed at 12:00 UTC', () => {
+            jest.useFakeTimers({ now: new Date('2026-09-05T12:00:00Z') });
+            try {
+                const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
+                oModel.setProperty('/header/DocumentDate', '');
 
-            const oReport = PurchaseOrderModel.applyConfigurationDefaults(oModel, mockConfigData);
-            const sToday = new Date().toISOString().split('T')[0];
+                const oReport = PurchaseOrderModel.applyConfigurationDefaults(oModel, mockConfigData);
 
-            expect(oModel.getProperty('/header/DocumentDate')).toBe(sToday);
-            expect(oReport.applied.DocumentDate).toBe(sToday);
+                expect(oModel.getProperty('/header/DocumentDate')).toBe('2026-09-05');
+                expect(oReport.applied.DocumentDate).toBe('2026-09-05');
+            } finally {
+                jest.useRealTimers();
+            }
         });
     });
 
@@ -165,21 +176,13 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
     });
 
     describe('3. Document Type Driving Configuration', () => {
-        it('should drive ZDOM as default document type when available in configuration', () => {
+        it('should not default an empty Document Type once the user has modified it', () => {
             const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
-            PurchaseOrderModel.applyConfigurationDefaults(oModel, mockConfigData);
-
-            expect(oModel.getProperty('/header/PurchaseOrderType')).toBe('ZDOM');
-        });
-
-        it('should preserve user-entered Document Type if user explicitly changed it', () => {
-            const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
-            oModel.setProperty('/header/PurchaseOrderType', 'FO');
             PurchaseOrderModel.markUserModified(oModel, 'PurchaseOrderType', true);
 
             PurchaseOrderModel.applyConfigurationDefaults(oModel, mockConfigData);
 
-            expect(oModel.getProperty('/header/PurchaseOrderType')).toBe('FO');
+            expect(oModel.getProperty('/header/PurchaseOrderType')).toBe('');
         });
     });
 
@@ -353,21 +356,34 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
     });
 
     describe('7. PurchaseOrderService loadConfiguration and getSupplierDefaults', () => {
-        it('loadConfiguration should aggregate all value help collections', async () => {
-            mockODataClient.get.mockImplementation(async (url) => {
-                if (url.includes('/DocumentTypeVH')) return { value: mockConfigData.documentTypes };
-                if (url.includes('/CompanyCodeVH')) return { value: mockConfigData.companyCodes };
-                if (url.includes('/PurchasingOrgVH')) return { value: mockConfigData.purchasingOrgs };
-                if (url.includes('/PurchasingGroupVH')) return { value: mockConfigData.purchasingGroups };
-                return { value: [] };
-            });
+        // Stands in for the UI5 OData V4 model the controller passes in (CreatePurchaseOrder.controller.js:74-75).
+        const fakeODataModel = (fnRows) => ({
+            bindList: (sPath) => ({
+                requestContexts: () => fnRows(sPath).then(aRows => aRows.map(row => ({ getObject: () => row })))
+            })
+        });
 
-            const config = await PurchaseOrderService.loadConfiguration();
+        it('loadConfiguration should read each value help through the OData model into its own list', async () => {
+            const mRows = {
+                '/DocumentTypeVH': mockConfigData.documentTypes,
+                '/CompanyCodeVH': mockConfigData.companyCodes,
+                '/PurchasingOrgVH': mockConfigData.purchasingOrgs,
+                '/PurchasingGroupVH': mockConfigData.purchasingGroups
+            };
 
-            expect(config.documentTypes).toHaveLength(3);
-            expect(config.companyCodes).toHaveLength(3);
-            expect(config.purchasingOrgs).toHaveLength(3);
-            expect(config.purchasingGroups).toHaveLength(2);
+            const config = await PurchaseOrderService.loadConfiguration(fakeODataModel(sPath => Promise.resolve(mRows[sPath])));
+
+            expect(config).toEqual(mockConfigData);
+        });
+
+        it('loadConfiguration should resolve four empty lists when one value help read fails', async () => {
+            jest.spyOn(console, 'warn').mockImplementation(() => {});
+            const fnRows = sPath => (sPath === '/CompanyCodeVH' ? Promise.reject(new Error('HTTP 503')) : Promise.resolve([{ any: 'row' }]));
+
+            const config = await PurchaseOrderService.loadConfiguration(fakeODataModel(fnRows));
+
+            expect(config).toEqual({ documentTypes: [], companyCodes: [], purchasingOrgs: [], purchasingGroups: [] });
+            console.warn.mockRestore();
         });
 
         it('getSupplierDefaults should return supplier defaults from API function', async () => {
@@ -389,9 +405,36 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
             expect(defaults.PaymentTerms).toBe('AT01');
             expect(defaults.IncotermsClassification).toBe('CIF');
             expect(defaults.derived).toBe(true);
+            expect(defaults.source).toBe('from last PO');
         });
 
-        it('getSupplierDefaults should gracefully fall back to empty when unconfigured', async () => {
+        it('getSupplierDefaults should query fallback ordered by PurchaseOrder desc and return source', async () => {
+            // First call fails (function import)
+            mockODataClient.get.mockResolvedValueOnce({ value: null });
+            // Fallback query succeeds
+            mockODataClient.get.mockResolvedValueOnce({
+                value: [{
+                    PurchaseOrder: '4500000999',
+                    DocumentCurrency: 'EUR',
+                    PaymentTerms: '0001',
+                    IncotermsClassification: 'FOB',
+                    IncotermsTransferLocation: 'HAMBURG'
+                }]
+            });
+
+            const defaults = await PurchaseOrderService.getSupplierDefaults('10300001', '1010', '1010');
+
+            expect(mockODataClient.get).toHaveBeenCalledWith(
+                expect.stringContaining('$orderby=PurchaseOrder desc')
+            );
+            expect(defaults.Currency).toBe('EUR');
+            expect(defaults.PaymentTerms).toBe('0001');
+            expect(defaults.derived).toBe(true);
+            expect(defaults.source).toBe('from last PO');
+            expect(defaults.lastPurchaseOrder).toBe('4500000999');
+        });
+
+        it('getSupplierDefaults returns blanks flagged "lookup failed" (not "no history") when SAP cannot be read', async () => {
             mockODataClient.get.mockRejectedValue(new Error('Network error'));
 
             const defaults = await PurchaseOrderService.getSupplierDefaults('UNKNOWN', '1000', 'AE01');
@@ -400,6 +443,54 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
             expect(defaults.Currency).toBe('');
             expect(defaults.PaymentTerms).toBe('');
             expect(defaults.derived).toBe(false);
+            expect(defaults.source).toBe('lookup failed');
+            expect(defaults.lastPurchaseOrder).toBe('');
+        });
+    });
+
+    describe('8. Supplier Defaults Derivation Labeling & Resetting on User Modification', () => {
+        it('should populate supplierDefaultsSource and message with last PO document number', () => {
+            const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
+            const oDefaults = {
+                Currency: 'USD',
+                PaymentTerms: '0002',
+                IncotermsClassification: 'FCA',
+                IncotermsLocation1: 'NEW YORK',
+                derived: true,
+                source: 'from last PO',
+                lastPurchaseOrder: '4500012345'
+            };
+
+            const oReport = PurchaseOrderModel.deriveSupplierDefaults(oModel, '10300001', oDefaults);
+
+            expect(oReport.derived).toBe(true);
+            expect(oReport.source).toBe('from last PO 4500012345');
+            expect(oReport.lastPurchaseOrder).toBe('4500012345');
+
+            expect(oModel.getProperty('/supplierDefaultsDerived')).toBe(true);
+            expect(oModel.getProperty('/supplierDefaultsSource')).toBe('from last PO 4500012345');
+            expect(oModel.getProperty('/supplierDefaultsMessage')).toContain('from last PO (4500012345)');
+            expect(oModel.getProperty('/configDerived/Currency')).toBe(true);
+            expect(oModel.getProperty('/configDerived/PaymentTerms')).toBe(true);
+        });
+
+        it('should clear configDerived flag when user manually modifies a derived field', () => {
+            const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
+            const oDefaults = {
+                Currency: 'EUR',
+                PaymentTerms: '0001',
+                derived: true,
+                source: 'from last PO',
+                lastPurchaseOrder: '4500011111'
+            };
+
+            PurchaseOrderModel.deriveSupplierDefaults(oModel, '10300001', oDefaults);
+            expect(oModel.getProperty('/configDerived/Currency')).toBe(true);
+
+            // User changes Currency manually
+            PurchaseOrderModel.markUserModified(oModel, 'Currency', true);
+            expect(oModel.getProperty('/userModified/Currency')).toBe(true);
+            expect(oModel.getProperty('/configDerived/Currency')).toBe(false);
         });
     });
 

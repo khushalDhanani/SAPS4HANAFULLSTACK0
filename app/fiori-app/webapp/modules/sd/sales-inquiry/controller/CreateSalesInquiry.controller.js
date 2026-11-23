@@ -1,5 +1,6 @@
 sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
+    "sap/ui/model/json/JSONModel",
     "sap/m/MessageBox",
     "sap/m/MessageToast",
     "sap/m/MessagePopover",
@@ -9,11 +10,76 @@ sap.ui.define([
     "sap/ui/model/FilterOperator",
     "saps4hana/fiori/modules/sd/sales-inquiry/model/SalesInquiryModel",
     "saps4hana/fiori/service/ValueHelpService",
-    "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService"
-], function (BaseController, MessageBox, MessageToast, MessagePopover, MessageItem, BusyIndicator, Filter, FilterOperator, SalesInquiryModel, ValueHelpService, SalesInquiryService) {
+    "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService",
+    "saps4hana/fiori/modules/sd/sales-inquiry/controller/CreateSalesInquiryHeaderSync",
+    "saps4hana/fiori/modules/sd/sales-inquiry/controller/CreateSalesInquiryCustomerManager",
+    "saps4hana/fiori/modules/sd/sales-inquiry/controller/CreateSalesInquiryItemManager",
+    "saps4hana/fiori/modules/sd/sales-inquiry/controller/CreateSalesInquiryValueHelp",
+    "saps4hana/fiori/modules/sd/sales-inquiry/controller/CreateSalesInquiryMessages"
+], function (
+    BaseController,
+    JSONModel,
+    MessageBox,
+    MessageToast,
+    MessagePopover,
+    MessageItem,
+    BusyIndicator,
+    Filter,
+    FilterOperator,
+    SalesInquiryModel,
+    ValueHelpService,
+    SalesInquiryService,
+    _HeaderSync,
+    _CustomerManager,
+    _ItemManager,
+    _ValueHelp,
+    _Messages
+) {
     "use strict";
 
-    return BaseController.extend("saps4hana.fiori.modules.sd.sales-inquiry.controller.CreateSalesInquiry", {
+    var isNode = typeof module !== "undefined" && module.exports;
+    function req(mod, path) { return mod || (isNode ? require(path) : {}); }
+    var HeaderSync = req(_HeaderSync, "./CreateSalesInquiryHeaderSync");
+    var CustomerManager = req(_CustomerManager, "./CreateSalesInquiryCustomerManager");
+    var ItemManager = req(_ItemManager, "./CreateSalesInquiryItemManager");
+    var ValueHelp = req(_ValueHelp, "./CreateSalesInquiryValueHelp");
+    var Messages = req(_Messages, "./CreateSalesInquiryMessages");
+
+    var mHeaderSync = HeaderSync.createCreateSalesInquiryHeaderSync ? HeaderSync.createCreateSalesInquiryHeaderSync({
+        SalesInquiryModel: SalesInquiryModel,
+        Filter: Filter,
+        FilterOperator: FilterOperator
+    }) : {};
+
+    var mCustomerManager = CustomerManager.createCreateSalesInquiryCustomerManager ? CustomerManager.createCreateSalesInquiryCustomerManager({
+        SalesInquiryModel: SalesInquiryModel,
+        SalesInquiryService: SalesInquiryService,
+        MessageBox: MessageBox,
+        MessageToast: MessageToast
+    }) : {};
+
+    var mItemManager = ItemManager.createCreateSalesInquiryItemManager ? ItemManager.createCreateSalesInquiryItemManager({
+        SalesInquiryModel: SalesInquiryModel,
+        SalesInquiryService: SalesInquiryService
+    }) : {};
+
+    var mValueHelp = ValueHelp.createCreateSalesInquiryValueHelp ? ValueHelp.createCreateSalesInquiryValueHelp({
+        SalesInquiryModel: SalesInquiryModel,
+        SalesInquiryService: SalesInquiryService,
+        ValueHelpService: ValueHelpService,
+        Filter: Filter,
+        FilterOperator: FilterOperator
+    }) : {};
+
+    var mMessages = Messages.createCreateSalesInquiryMessages ? Messages.createCreateSalesInquiryMessages({
+        JSONModel: JSONModel,
+        MessagePopover: MessagePopover,
+        MessageItem: MessageItem,
+        MessageToast: MessageToast,
+        SalesInquiryModel: SalesInquiryModel
+    }) : {};
+
+    var oMembers = {
         onInit: function () {
             this._resetModel(false);
             var oRouter = this.getOwnerComponent().getRouter();
@@ -25,6 +91,9 @@ sap.ui.define([
             var oModel = SalesInquiryModel.createInitialModel(sUser);
             this.getView().setModel(oModel, "newInquiry");
             SalesInquiryModel.updateStatus(oModel);
+            if (this._oCapabilities) {
+                SalesInquiryModel.applyCapabilities(oModel, this._oCapabilities);
+            }
 
             if (this._oMessagePopover) {
                 this._oMessagePopover.close();
@@ -32,28 +101,60 @@ sap.ui.define([
 
             if (bLoadConfig) {
                 this._loadConfigurationAndDefaults();
+                this._loadCapabilities();
             }
         },
 
-        _loadConfigurationAndDefaults: function () {
+        /**
+         * Asks the backend which incompletion extension fields the SAP inquiry service accepts, so the
+         * form can require those and warn about the rest (to be maintained directly in SAP).
+         */
+        _loadCapabilities: function () {
+            var that = this;
+            if (this._oCapabilities) {
+                return Promise.resolve(this._oCapabilities);
+            }
+            return SalesInquiryService.getInquiryCreationCapabilities().then(function (oCaps) {
+                that._oCapabilities = oCaps || {};
+                var oModel = that.getView().getModel("newInquiry");
+                if (oModel) {
+                    SalesInquiryModel.applyCapabilities(oModel, that._oCapabilities);
+                }
+                return that._oCapabilities;
+            }).catch(function (err) {
+                console.warn("[CreateSalesInquiry] Error loading creation capabilities:", err);
+                return that._oCapabilities || null;
+            });
+        },
+
+        _loadConfigurationAndDefaults: function (bForce) {
             var that = this;
             var oModel = this.getView().getModel("newInquiry");
 
-            if (this._oConfigData) {
+            if (this._oConfigData && !bForce) {
                 SalesInquiryModel.applyConfigurationDefaults(oModel, this._oConfigData);
-                return Promise.resolve(this._oConfigData);
+                if (typeof this._updateOrganizationalFilters === "function") {
+                    this._updateOrganizationalFilters();
+                }
             }
 
-            return SalesInquiryService.loadConfiguration().then(function (oConfigData) {
+            var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+            var oConfigPromise = oSalesInquiryModel ?
+                SalesInquiryService.loadConfiguration(oSalesInquiryModel) :
+                SalesInquiryService.loadConfiguration();
+            return oConfigPromise.then(function (oConfigData) {
                 that._oConfigData = oConfigData;
                 var oCurrentModel = that.getView().getModel("newInquiry");
                 if (oCurrentModel) {
                     SalesInquiryModel.applyConfigurationDefaults(oCurrentModel, oConfigData);
-                    that._updateOrganizationalFilters();
+                    if (typeof that._updateOrganizationalFilters === "function") {
+                        that._updateOrganizationalFilters();
+                    }
                 }
                 return oConfigData;
             }).catch(function (err) {
                 console.warn("[CreateSalesInquiry] Error loading config data:", err);
+                return that._oConfigData || null;
             });
         },
 
@@ -61,322 +162,30 @@ sap.ui.define([
             this._resetModel(true);
         },
 
-        onInquiryTypeChange: function (oEvent) {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.markUserModified(oModel, "SalesInquiryType", true);
-            SalesInquiryModel.validateSingleField(oModel, "SalesInquiryType");
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onInquiryTypeSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newInquiry");
-                oModel.setProperty("/header/SalesInquiryType", sKey);
-                SalesInquiryModel.markUserModified(oModel, "SalesInquiryType", true);
-                this.onInquiryTypeChange();
-            }
-        },
-
-        onSalesOrgChange: function (oEvent) {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.markUserModified(oModel, "SalesOrganization", true);
-            this._updateOrganizationalFilters();
-            SalesInquiryModel.validateSingleField(oModel, "SalesOrganization");
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onSalesOrgSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newInquiry");
-                oModel.setProperty("/header/SalesOrganization", sKey);
-                SalesInquiryModel.markUserModified(oModel, "SalesOrganization", true);
-                this.onSalesOrgChange();
-            }
-        },
-
-        onDistChannelChange: function (oEvent) {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.markUserModified(oModel, "DistributionChannel", true);
-            this._updateOrganizationalFilters();
-            SalesInquiryModel.validateSingleField(oModel, "DistributionChannel");
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onDistChannelSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newInquiry");
-                oModel.setProperty("/header/DistributionChannel", sKey);
-                SalesInquiryModel.markUserModified(oModel, "DistributionChannel", true);
-                this.onDistChannelChange();
-            }
-        },
-
-        onDivisionChange: function (oEvent) {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.markUserModified(oModel, "OrganizationDivision", true);
-            SalesInquiryModel.validateSingleField(oModel, "OrganizationDivision");
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onDivisionSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newInquiry");
-                oModel.setProperty("/header/OrganizationDivision", sKey);
-                SalesInquiryModel.markUserModified(oModel, "OrganizationDivision", true);
-                this.onDivisionChange();
-            }
-        },
-
-        _updateOrganizationalFilters: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            if (!oModel) return;
-            var sOrg = oModel.getProperty("/header/SalesOrganization");
-            var sChannel = oModel.getProperty("/header/DistributionChannel");
-
-            var oDistInput = this.byId("inDistChannel");
-            if (oDistInput) {
-                var oDistBinding = oDistInput.getBinding("suggestionItems");
-                if (oDistBinding) {
-                    var aDistFilters = sOrg ? [new Filter("SalesOrganization", FilterOperator.EQ, sOrg)] : [];
-                    oDistBinding.filter(aDistFilters);
-                }
-            }
-
-            var oDivInput = this.byId("inDivision");
-            if (oDivInput) {
-                var oDivBinding = oDivInput.getBinding("suggestionItems");
-                if (oDivBinding) {
-                    var aDivFilters = [];
-                    if (sOrg) aDivFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
-                    if (sChannel) aDivFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
-                    oDivBinding.filter(aDivFilters);
-                }
-            }
-        },
-
-        onSoldToPartyChange: function (oEvent) {
-            var oModel = this.getView().getModel("newInquiry");
-            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : oModel.getProperty("/header/SoldToParty");
-            SalesInquiryModel.markUserModified(oModel, "SoldToParty", true);
-            this._deriveCustomerData(sVal);
-            SalesInquiryModel.validateSingleField(oModel, "SoldToParty");
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onSoldToPartyLiveChange: function (oEvent) {
-            var sVal = oEvent.getParameter("value");
-            var oModel = this.getView().getModel("newInquiry");
-            oModel.setProperty("/header/SoldToParty", sVal);
-            SalesInquiryModel.markUserModified(oModel, "SoldToParty", true);
-            if (sVal && sVal.length >= 4) {
-                this._deriveCustomerData(sVal);
-            }
-            SalesInquiryModel.validateSingleField(oModel, "SoldToParty");
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onSoldToPartySelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var sDesc = oItem.getAdditionalText() || "";
-                var oModel = this.getView().getModel("newInquiry");
-                oModel.setProperty("/header/SoldToParty", sKey);
-                if (sDesc) {
-                    oModel.setProperty("/header/CustomerName", sDesc);
-                }
-                SalesInquiryModel.markUserModified(oModel, "SoldToParty", true);
-                this._deriveCustomerData(sKey);
-                SalesInquiryModel.validateSingleField(oModel, "SoldToParty");
-                SalesInquiryModel.updateStatus(oModel);
-            }
-        },
-
-        onShipToPartySelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var sDesc = oItem.getAdditionalText() || "";
-                var oModel = this.getView().getModel("newInquiry");
-                oModel.setProperty("/header/ShipToParty", sKey);
-                if (sDesc) {
-                    oModel.setProperty("/header/ShipToPartyName", sDesc);
-                }
-                this.onHeaderFieldChange();
-            }
-        },
-
-        _deriveCustomerData: function (sCustomer) {
-            var that = this;
-            var oModel = this.getView().getModel("newInquiry");
-            if (!sCustomer || String(sCustomer).trim() === "") {
-                SalesInquiryModel.deriveCustomerDefaults(oModel, "", null);
-                return;
-            }
-
-            var sOrg = oModel.getProperty("/header/SalesOrganization");
-            var sChannel = oModel.getProperty("/header/DistributionChannel");
-            var sDivision = oModel.getProperty("/header/OrganizationDivision");
-
-            SalesInquiryService.getCustomerDefaults(sCustomer, sOrg, sChannel, sDivision).then(function (oDefaults) {
-                var oCurrentModel = that.getView().getModel("newInquiry");
-                if (oCurrentModel && oCurrentModel.getProperty("/header/SoldToParty") === sCustomer) {
-                    SalesInquiryModel.deriveCustomerDefaults(oCurrentModel, sCustomer, oDefaults);
-                }
-            }).catch(function (err) {
-                console.warn("[CreateSalesInquiry] Error fetching customer defaults:", err);
-            });
-        },
-
-        onValidityDateChange: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            var dStart = oModel.getProperty("/header/BindingPeriodValidityStartDate");
-            var dEnd = oModel.getProperty("/header/BindingPeriodValidityEndDate");
-
-            if (dStart && dEnd && new Date(dEnd) < new Date(dStart)) {
-                SalesInquiryModel.setFieldValidation(oModel, "BindingPeriodValidityEndDate", "Error", "End Date must be >= Start Date");
-            } else {
-                SalesInquiryModel.setFieldValidation(oModel, "BindingPeriodValidityEndDate", "None", "");
-            }
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onCurrencyChange: function (oEvent) {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.markUserModified(oModel, "TransactionCurrency", true);
-            SalesInquiryModel.validateSingleField(oModel, "TransactionCurrency");
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onCurrencySelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newInquiry");
-                oModel.setProperty("/header/TransactionCurrency", sKey);
-                SalesInquiryModel.markUserModified(oModel, "TransactionCurrency", true);
-                this.onCurrencyChange();
-            }
-        },
-
-        onHeaderFieldChange: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onAddItem: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.addItem(oModel);
-        },
-
-        onDeleteItem: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem");
-            if (oItem) {
-                var sPath = oItem.getBindingContext("newInquiry").getPath();
-                var oModel = this.getView().getModel("newInquiry");
-                SalesInquiryModel.deleteItem(oModel, sPath);
-            }
-        },
-
-        onItemMaterialChange: function (oEvent) {
-            var oSource = oEvent.getSource();
-            var oContext = oSource.getBindingContext("newInquiry");
-            if (!oContext) return;
-
-            var sVal = oSource.getValue();
-            var oModel = this.getView().getModel("newInquiry");
-            var sPath = oContext.getPath();
-
-            if (!sVal || sVal.trim() === "") {
-                oModel.setProperty(sPath + "/errors/Material", { state: "Error", text: "Material is required" });
-            } else {
-                oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
-                // Directly retrieve and set Unit from S/4HANA material configuration on manual input
-                SalesInquiryService.getMaterialDetails(sVal).then(function (oMaterial) {
-                    if (oMaterial) {
-                        SalesInquiryModel.applyMaterialDefaults(oModel, sPath, oMaterial);
-                        SalesInquiryModel.updateStatus(oModel);
-                    }
-                });
-            }
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onItemMaterialSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            var oSource = oEvent.getSource();
-            var oContext = oSource.getBindingContext("newInquiry");
-            if (!oContext || !oItem) return;
-
-            var sKey = oItem.getKey() || oItem.getText();
-            var oModel = this.getView().getModel("newInquiry");
-            var sPath = oContext.getPath();
-
-            var oBindingCtx = oItem.getBindingContext("salesInquiry") || oItem.getBindingContext();
-            var oMaterialData = oBindingCtx ? oBindingCtx.getObject() : null;
-
-            if (oMaterialData) {
-                SalesInquiryModel.applyMaterialDefaults(oModel, sPath, oMaterialData);
-            } else {
-                oModel.setProperty(sPath + "/Material", sKey);
-                var sDesc = oItem.getAdditionalText() || "";
-                if (sDesc && !oModel.getProperty(sPath + "/SalesInquiryItemText")) {
-                    oModel.setProperty(sPath + "/SalesInquiryItemText", sDesc);
-                }
-                oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
-            }
-
-            // Ensure Unit is derived from S/4HANA if not already present in suggestion context
-            var sCurrentUnit = oModel.getProperty(sPath + "/OrderQuantityUnit");
-            if (!sCurrentUnit || sCurrentUnit === "PC") {
-                SalesInquiryService.getMaterialUnit(sKey).then(function (sUnit) {
-                    if (sUnit) {
-                        oModel.setProperty(sPath + "/OrderQuantityUnit", sUnit);
-                        oModel.setProperty(sPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
-                        SalesInquiryModel.updateStatus(oModel);
-                    }
-                });
-            }
-
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onItemCalculationChange: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.calculateTotals(oModel);
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onItemFieldChange: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.updateStatus(oModel);
-        },
-
-        onCheckIncompletion: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            var bValid = SalesInquiryModel.validateForm(oModel);
-            if (bValid) {
-                MessageToast.show("Document is complete. No incompletions detected.");
-            } else {
-                this.onMessageButtonPress();
-            }
-        },
-
         onSave: function () {
             var that = this;
             var oModel = this.getView().getModel("newInquiry");
+            if (oModel.getProperty("/submitBlocked")) return;
             var bValid = SalesInquiryModel.validateForm(oModel);
 
+            var aItems = oModel.getProperty("/items") || [];
+            var bItemsPlantValid = true;
+            aItems.forEach(function (itm) {
+                if (!itm.Plant || String(itm.Plant).trim() === "") {
+                    itm.errors = itm.errors || {};
+                    itm.errors.Plant = { state: "Error", text: "Plant is required for each line item" };
+                    bItemsPlantValid = false;
+                }
+            });
+            if (!bItemsPlantValid) {
+                oModel.setProperty("/items", aItems);
+                bValid = false;
+            }
+
             if (!bValid) {
-                this.onMessageButtonPress();
+                if (typeof this.onMessageButtonPress === "function") {
+                    this.onMessageButtonPress();
+                }
                 return;
             }
 
@@ -395,7 +204,7 @@ sap.ui.define([
                                 SalesInquiry: sInquiryId
                             });
                         } else if (sAction === "Create Another") {
-                            that._resetModel();
+                            that._resetModel(true);
                         } else {
                             that.getOwnerComponent().getRouter().navTo("salesInquiries");
                         }
@@ -406,7 +215,27 @@ sap.ui.define([
                 var sErrMsg = (error && error.message) ? error.message : "An unexpected error occurred.";
                 oModel.setProperty("/errorMessage", sErrMsg);
                 oModel.setProperty("/hasError", true);
-                MessageBox.error("Failed to create Sales Inquiry: " + sErrMsg);
+
+                var sInquiryMatch = sErrMsg.match(/Sales Inquiry (\d+)/i);
+                var sPartialInquiryId = (error && (error.SalesInquiry || error.documentNumber)) || (sInquiryMatch ? sInquiryMatch[1] : null);
+
+                if (sPartialInquiryId) {
+                    MessageBox.warning(sErrMsg, {
+                        title: "Partial Creation in SAP",
+                        actions: ["Display Inquiry " + sPartialInquiryId, "Close"],
+                        emphasizedAction: "Display Inquiry " + sPartialInquiryId,
+                        onClose: function (sAction) {
+                            that._resetModel(true);
+                            if (sAction && sAction.indexOf("Display Inquiry") === 0) {
+                                that.getOwnerComponent().getRouter().navTo("salesInquiryDetail", {
+                                    SalesInquiry: sPartialInquiryId
+                                });
+                            }
+                        }
+                    });
+                } else {
+                    MessageBox.error(that.blockSubmitIfNotConfirmed(oModel, sErrMsg) || ("Failed to create Sales Inquiry: " + sErrMsg));
+                }
             });
         },
 
@@ -423,195 +252,20 @@ sap.ui.define([
             });
         },
 
-        onItemUnitSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            var oSource = oEvent.getSource();
-            var oContext = oSource.getBindingContext("newInquiry");
-            if (!oContext || !oItem) return;
-
-            var sKey = oItem.getKey() || oItem.getText();
-            var oModel = this.getView().getModel("newInquiry");
-            var sPath = oContext.getPath();
-
-            oModel.setProperty(sPath + "/OrderQuantityUnit", sKey);
-            oModel.setProperty(sPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
-            this.onItemFieldChange();
-        },
-
-        onSuggest: function (oEvent) {
-            var sValue = oEvent.getParameter("suggestValue");
-            var oInput = oEvent.getSource();
-            var oModel = this.getView().getModel("newInquiry");
-            var aContextFilters = [];
-            var sId = oInput.getId();
-
-            if (sId.indexOf("inDistChannel") !== -1) {
-                var sOrg = oModel.getProperty("/header/SalesOrganization");
-                if (sOrg) {
-                    aContextFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
-                }
-            } else if (sId.indexOf("inDivision") !== -1) {
-                var sOrg = oModel.getProperty("/header/SalesOrganization");
-                var sChannel = oModel.getProperty("/header/DistributionChannel");
-                if (sOrg) {
-                    aContextFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
-                }
-                if (sChannel) {
-                    aContextFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
-                }
-            }
-
-            ValueHelpService.applySuggestionFilter(oInput, sValue, aContextFilters);
-        },
-
-        onValueHelpRequest: function (oEvent) {
-            var oInput = oEvent.getSource();
-            var oView = this.getView();
-            var that = this;
-            var oModel = oView.getModel("newInquiry");
-
-            var aInitialFilters = [];
-            var sId = oInput.getId();
-
-            if (sId.indexOf("inDistChannel") !== -1) {
-                var sOrg = oModel.getProperty("/header/SalesOrganization");
-                if (sOrg) {
-                    aInitialFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
-                }
-            } else if (sId.indexOf("inDivision") !== -1) {
-                var sOrg = oModel.getProperty("/header/SalesOrganization");
-                var sChannel = oModel.getProperty("/header/DistributionChannel");
-                if (sOrg) {
-                    aInitialFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
-                }
-                if (sChannel) {
-                    aInitialFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
-                }
-            }
-
-            ValueHelpService.openValueHelp(oView, oInput, function (sKey, oSelectedItem, oData) {
-                // Check if this input is in the line items table
-                var oRowContext = oInput.getBindingContext("newInquiry");
-                if (oRowContext) {
-                    var sRowPath = oRowContext.getPath();
-                    var sValPath = oInput.getBindingPath("value");
-
-                    if (sValPath === "Material" || sId.indexOf("Material") !== -1) {
-                        var oMatData = oData || {
-                            Material: sKey,
-                            Material_Text: (oSelectedItem && oSelectedItem.getDescription && oSelectedItem.getDescription()) || ""
-                        };
-                        SalesInquiryModel.applyMaterialDefaults(oModel, sRowPath, oMatData);
-                        if (!oData || !oData.MaterialBaseUnit) {
-                            SalesInquiryService.getMaterialUnit(sKey).then(function (sUnit) {
-                                if (sUnit) {
-                                    oModel.setProperty(sRowPath + "/OrderQuantityUnit", sUnit);
-                                    oModel.setProperty(sRowPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
-                                    SalesInquiryModel.updateStatus(oModel);
-                                }
-                            });
-                        }
-                        SalesInquiryModel.updateStatus(oModel);
-                    } else if (sValPath === "OrderQuantityUnit") {
-                        oModel.setProperty(sRowPath + "/OrderQuantityUnit", sKey);
-                        oModel.setProperty(sRowPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
-                        SalesInquiryModel.updateStatus(oModel);
-                    }
-                    return;
-                }
-
-                // Header fields
-                if (sId.indexOf("inInquiryType") !== -1) {
-                    that.onInquiryTypeChange();
-                } else if (sId.indexOf("inSalesOrg") !== -1) {
-                    that.onSalesOrgChange();
-                } else if (sId.indexOf("inDistChannel") !== -1) {
-                    that.onDistChannelChange();
-                } else if (sId.indexOf("inDivision") !== -1) {
-                    that.onDivisionChange();
-                } else if (sId.indexOf("inSoldToParty") !== -1) {
-                    if (oData && (oData.CustomerName || oData.CityName)) {
-                        oModel.setProperty("/header/CustomerName", oData.CustomerName || oData.OrganizationBPName1 || "");
-                        oModel.setProperty("/header/CustomerCity", oData.CityName || "");
-                        oModel.setProperty("/header/CustomerCountry", oData.Country || "");
-                    }
-                    that.onSoldToPartyChange();
-                } else if (sId.indexOf("inShipToParty") !== -1) {
-                    if (oData && oData.CustomerName) {
-                        oModel.setProperty("/header/ShipToPartyName", oData.CustomerName);
-                    }
-                    that.onHeaderFieldChange();
-                } else if (sId.indexOf("inCurrency") !== -1) {
-                    that.onCurrencyChange();
-                }
-            }, aInitialFilters);
-        },
-
-        onMessageButtonPress: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            var oErrors = oModel.getProperty("/errors") || {};
-            var aItems = oModel.getProperty("/items") || [];
-            var aMessages = [];
-
-            Object.keys(oErrors).forEach(function (field) {
-                if (oErrors[field].state === "Error") {
-                    aMessages.push({
-                        type: "Error",
-                        title: oErrors[field].text,
-                        subtitle: "Header: " + field
-                    });
-                }
-            });
-
-            aItems.forEach(function (item, idx) {
-                if (item.errors) {
-                    Object.keys(item.errors).forEach(function (field) {
-                        if (item.errors[field].state === "Error") {
-                            aMessages.push({
-                                type: "Error",
-                                title: item.errors[field].text,
-                                subtitle: "Item " + (idx + 1) + ": " + field
-                            });
-                        }
-                    });
-                }
-            });
-
-            if (aMessages.length === 0) {
-                MessageToast.show("No issues detected.");
-                return;
-            }
-
-            if (!this._oMessagePopover) {
-                this._oMessagePopover = new MessagePopover({
-                    items: {
-                        path: "msg>/",
-                        template: new MessageItem({
-                            type: "{msg>type}",
-                            title: "{msg>title}",
-                            subtitle: "{msg>subtitle}"
-                        })
-                    }
-                });
-            }
-
-            var oMsgModel = new JSONModel(aMessages);
-            this._oMessagePopover.setModel(oMsgModel, "msg");
-            var oBtn = this.byId("btnInquiryMessages") || this.byId("btnSaveInquiry");
-            this._oMessagePopover.openBy(oBtn);
-        },
-
-        onDismissError: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            oModel.setProperty("/hasError", false);
-            oModel.setProperty("/errorMessage", "");
-        },
-
         onExit: function () {
             if (this._oMessagePopover) {
                 this._oMessagePopover.destroy();
                 this._oMessagePopover = null;
             }
         }
-    });
+    };
+
+    Object.assign(oMembers, mHeaderSync, mCustomerManager, mItemManager, mValueHelp, mMessages);
+
+    var CreateSalesInquiryController = BaseController.extend("saps4hana.fiori.modules.sd.sales-inquiry.controller.CreateSalesInquiry", oMembers);
+
+    var oTargetProto = CreateSalesInquiryController.prototype || CreateSalesInquiryController;
+    Object.assign(oTargetProto, mHeaderSync, mCustomerManager, mItemManager, mValueHelp, mMessages);
+
+    return CreateSalesInquiryController;
 });

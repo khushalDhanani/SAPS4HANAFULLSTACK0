@@ -1,0 +1,4 @@
+@EndUserText.label: 'Reservation Entry Service Definition'
+define service ZUI_RES_ENTRY_O4 {
+  expose ZC_RES_ENTRY as ReservationEntry;
+}

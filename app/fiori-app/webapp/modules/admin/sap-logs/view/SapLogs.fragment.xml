@@ -1,0 +1,279 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <VBox class="sapUiSmallMarginTop" busy="{sapLogsView>/busy}" busyIndicatorDelay="0">
+        <!-- Header -->
+        <HBox justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap" class="sapUiSmallMarginBottom">
+            <VBox>
+                <Title text="{i18n>sapLogsHeaderTitle}" level="H3" titleStyle="H4" />
+                <Text text="{i18n>sapLogsHeaderSubtitle}" class="textMuted" />
+            </VBox>
+        </HBox>
+
+        <!-- Message Alerts -->
+        <MessageStrip
+            id="sapLogsErrorStrip"
+            text="{sapLogsView>/errorMessage}"
+            type="Error"
+            showIcon="true"
+            visible="{= !!${sapLogsView>/errorMessage} }"
+            class="sapUiSmallMarginBottom" />
+
+        <MessageStrip
+            id="sapLogsWarningStrip"
+            text="{sapLogsView>/warningMessage}"
+            type="Warning"
+            showIcon="true"
+            visible="{= !!${sapLogsView>/warningMessage} }"
+            class="sapUiSmallMarginBottom" />
+
+        <!-- IconTabBar -->
+        <IconTabBar
+            id="sapLogsIconTabBar"
+            selectedKey="{sapLogsView>/selectedTab}"
+            select=".onSapLogsTabSelect"
+            headerBackgroundDesign="Transparent">
+            <items>
+                <!-- SM21 System Log Tab -->
+                <IconTabFilter
+                    id="tabFilterSm21"
+                    key="sm21"
+                    icon="sap-icon://log"
+                    text="{i18n>sapLogsTabSm21Title}"
+                    count="{sapLogsView>/sm21/count}">
+                    <VBox class="sapUiTinyMarginTop">
+                        <!-- SM21 Filter Toolbar -->
+                        <OverflowToolbar id="toolbarSm21" class="sapUiTinyMarginBottom">
+                            <Label text="{i18n>sapLogsLabelTimeWindow}" />
+                            <SegmentedButton
+                                id="segBtnSm21Preset"
+                                selectedKey="{sapLogsView>/sm21/preset}"
+                                selectionChange=".onSapLogsSm21PresetChange">
+                                <items>
+                                    <SegmentedButtonItem key="15m" text="{i18n>sapLogsPreset15m}" />
+                                    <SegmentedButtonItem key="1h" text="{i18n>sapLogsPreset1h}" />
+                                    <SegmentedButtonItem key="4h" text="{i18n>sapLogsPreset4h}" />
+                                    <SegmentedButtonItem key="24h" text="{i18n>sapLogsPreset24h}" />
+                                </items>
+                            </SegmentedButton>
+
+                            <ToolbarSeparator />
+
+                            <Label text="{i18n>sapLogsColInstance}" />
+                            <Input
+                                id="inputSm21Instance"
+                                value="{sapLogsView>/sm21/instance}"
+                                placeholder="{i18n>sapLogsInstancePlaceholder}"
+                                width="12rem"
+                                submit=".onRefreshSapLogs" />
+
+                            <Label text="{i18n>sapLogsLabelMaxRows}" />
+                            <Select
+                                id="selectSm21MaxRows"
+                                selectedKey="{sapLogsView>/sm21/maxRows}"
+                                change=".onRefreshSapLogs"
+                                width="6rem">
+                                <items>
+                                    <core:Item key="100" text="{i18n>sapLogsRows100}" />
+                                    <core:Item key="250" text="{i18n>sapLogsRows250}" />
+                                    <core:Item key="500" text="{i18n>sapLogsRows500}" />
+                                </items>
+                            </Select>
+
+                            <Button
+                                id="btnRefreshSm21"
+                                text="{i18n>sapLogsBtnRefresh}"
+                                icon="sap-icon://refresh"
+                                type="Emphasized"
+                                press=".onRefreshSapLogs" />
+
+                            <ToolbarSpacer />
+
+                            <SearchField
+                                id="searchSm21"
+                                value="{sapLogsView>/sm21/search}"
+                                placeholder="{i18n>sapLogsSearchPlaceholder}"
+                                liveChange=".onSearchSapLogs"
+                                width="16rem" />
+                        </OverflowToolbar>
+
+                        <!-- SM21 Table -->
+                        <Table
+                            id="tableSm21Logs"
+                            noDataText="{i18n>sapLogsNoData}"
+                            items="{sapLogsView>/sm21/filteredEntries}"
+                            growing="true"
+                            growingThreshold="50"
+                            sticky="ColumnHeaders">
+                            <columns>
+                                <Column width="13rem">
+                                    <Text text="{i18n>sapLogsColTime}" />
+                                </Column>
+                                <Column width="8rem">
+                                    <Text text="{i18n>sapLogsColType}" />
+                                </Column>
+                                <Column width="10rem">
+                                    <Text text="{i18n>sapLogsColInstance}" />
+                                </Column>
+                                <Column width="8rem">
+                                    <Text text="{i18n>sapLogsColUser}" />
+                                </Column>
+                                <Column width="10rem">
+                                    <Text text="{i18n>sapLogsColTcode}" />
+                                </Column>
+                                <Column>
+                                    <Text text="{i18n>sapLogsColMessage}" />
+                                </Column>
+                                <Column width="6rem" hAlign="End">
+                                    <Text text="{i18n>sapLogsColActions}" />
+                                </Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{path: 'sapLogsView>timestamp', formatter: '.formatSapLogsUtc'}" />
+                                        <ObjectStatus
+                                            text="{sapLogsView>entryType}"
+                                            state="{path: 'sapLogsView>entryType', formatter: '.formatSapLogsSeverityState'}"
+                                            icon="{path: 'sapLogsView>entryType', formatter: '.formatSapLogsSeverityIcon'}" />
+                                        <Text text="{= ${sapLogsView>instance} || '-' }" />
+                                        <Text text="{= ${sapLogsView>user} || ${i18n>sapLogsUserRedacted} }" />
+                                        <Text text="{= ${sapLogsView>tcode} || ${sapLogsView>program} || '-' }" />
+                                        <Text text="{= ${sapLogsView>messageText} || ${sapLogsView>message} || '-' }" />
+                                        <Button
+                                            icon="sap-icon://detail-view"
+                                            text="{i18n>sapLogsBtnDetail}"
+                                            type="Transparent"
+                                            press=".onOpenSapLogsDetail" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
+                </IconTabFilter>
+
+                <!-- SM20 Security Audit Log Tab -->
+                <IconTabFilter
+                    id="tabFilterSm20"
+                    key="sm20"
+                    icon="sap-icon://shield"
+                    text="{i18n>sapLogsTabSm20Title}"
+                    count="{sapLogsView>/sm20/count}">
+                    <VBox class="sapUiTinyMarginTop">
+                        <!-- SM20 Filter Toolbar -->
+                        <OverflowToolbar id="toolbarSm20" class="sapUiTinyMarginBottom">
+                            <Label text="{i18n>sapLogsLabelTimeWindow}" />
+                            <SegmentedButton
+                                id="segBtnSm20Preset"
+                                selectedKey="{sapLogsView>/sm20/preset}"
+                                selectionChange=".onSapLogsSm20PresetChange">
+                                <items>
+                                    <SegmentedButtonItem key="15m" text="{i18n>sapLogsPreset15m}" />
+                                    <SegmentedButtonItem key="1h" text="{i18n>sapLogsPreset1h}" />
+                                    <SegmentedButtonItem key="4h" text="{i18n>sapLogsPreset4h}" />
+                                    <SegmentedButtonItem key="6h" text="{i18n>sapLogsPreset6h}" />
+                                </items>
+                            </SegmentedButton>
+
+                            <ToolbarSeparator />
+
+                            <Label text="{i18n>sapLogsColUser}" />
+                            <Input
+                                id="inputSm20UserFilter"
+                                value="{sapLogsView>/sm20/userFilter}"
+                                placeholder="{i18n>sapLogsUserFilterPlaceholder}"
+                                width="10rem"
+                                submit=".onRefreshSapLogs" />
+
+                            <Label text="{i18n>sapLogsLabelMaxRows}" />
+                            <Select
+                                id="selectSm20MaxRows"
+                                selectedKey="{sapLogsView>/sm20/maxRows}"
+                                change=".onRefreshSapLogs"
+                                width="6rem">
+                                <items>
+                                    <core:Item key="100" text="{i18n>sapLogsRows100}" />
+                                    <core:Item key="250" text="{i18n>sapLogsRows250}" />
+                                    <core:Item key="500" text="{i18n>sapLogsRows500}" />
+                                </items>
+                            </Select>
+
+                            <Button
+                                id="btnRefreshSm20"
+                                text="{i18n>sapLogsBtnRefresh}"
+                                icon="sap-icon://refresh"
+                                type="Emphasized"
+                                press=".onRefreshSapLogs" />
+
+                            <ToolbarSpacer />
+
+                            <SearchField
+                                id="searchSm20"
+                                value="{sapLogsView>/sm20/search}"
+                                placeholder="{i18n>sapLogsSearchPlaceholder}"
+                                liveChange=".onSearchSapLogs"
+                                width="16rem" />
+                        </OverflowToolbar>
+
+                        <!-- SM20 Table -->
+                        <Table
+                            id="tableSm20Logs"
+                            noDataText="{i18n>sapLogsNoData}"
+                            items="{sapLogsView>/sm20/filteredEntries}"
+                            growing="true"
+                            growingThreshold="50"
+                            sticky="ColumnHeaders">
+                            <columns>
+                                <Column width="13rem">
+                                    <Text text="{i18n>sapLogsColTime}" />
+                                </Column>
+                                <Column width="9rem">
+                                    <Text text="{i18n>sapLogsColEvent}" />
+                                </Column>
+                                <Column width="8rem">
+                                    <Text text="{i18n>sapLogsColUser}" />
+                                </Column>
+                                <Column width="8rem">
+                                    <Text text="{i18n>sapLogsColClient}" />
+                                </Column>
+                                <Column width="10rem">
+                                    <Text text="{i18n>sapLogsColTcode}" />
+                                </Column>
+                                <Column width="10rem">
+                                    <Text text="{i18n>sapLogsDetailTerminal}" />
+                                </Column>
+                                <Column>
+                                    <Text text="{i18n>sapLogsColMessage}" />
+                                </Column>
+                                <Column width="6rem" hAlign="End">
+                                    <Text text="{i18n>sapLogsColActions}" />
+                                </Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{= ${sapLogsView>date} + ' ' + ${sapLogsView>time} + ' UTC' }" />
+                                        <ObjectStatus
+                                            text="{= ${sapLogsView>eventId} || ${sapLogsView>eventText} || '-' }"
+                                            state="{parts: ['sapLogsView>eventId', 'sapLogsView>severity'], formatter: '.formatSapLogsSeverityState'}"
+                                            icon="{parts: ['sapLogsView>eventId', 'sapLogsView>severity'], formatter: '.formatSapLogsSeverityIcon'}" />
+                                        <Text text="{= ${sapLogsView>user} || ${i18n>sapLogsUserRedacted} }" />
+                                        <Text text="{= ${sapLogsView>client} || '-' }" />
+                                        <Text text="{= ${sapLogsView>tcode} || ${sapLogsView>program} || '-' }" />
+                                        <Text text="{= ${sapLogsView>terminal} || '-' }" />
+                                        <Text text="{= ${sapLogsView>message} || '-' }" />
+                                        <Button
+                                            icon="sap-icon://detail-view"
+                                            text="{i18n>sapLogsBtnDetail}"
+                                            type="Transparent"
+                                            press=".onOpenSapLogsDetail" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
+                </IconTabFilter>
+            </items>
+        </IconTabBar>
+    </VBox>
+</core:FragmentDefinition>

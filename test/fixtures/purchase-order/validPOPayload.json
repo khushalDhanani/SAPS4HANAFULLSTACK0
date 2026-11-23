@@ -1,6 +1,6 @@
 {
   "header": {
-    "PurchaseOrderType": "NB",
+    "PurchaseOrderType": "ZTST",
     "CompanyCode": "1010",
     "PurchasingOrganization": "1010",
     "PurchasingGroup": "001",

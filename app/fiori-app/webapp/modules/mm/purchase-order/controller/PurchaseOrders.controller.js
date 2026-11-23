@@ -6,7 +6,18 @@ sap.ui.define([
     "sap/ui/model/Sorter",
     "sap/ui/core/library",
     "sap/m/MessageBox",
-    "saps4hana/fiori/service/ValueHelpService"
+    "saps4hana/fiori/service/ValueHelpService",
+    "saps4hana/fiori/service/ODataClient",
+    "sap/ui/core/Fragment",
+    "sap/ui/core/InvisibleMessage",
+    "saps4hana/fiori/model/formatter",
+    "./PurchaseOrderAiPrompt",
+    "./PurchaseOrderAiIntent",
+    "./PurchaseOrderAiStream",
+    "./PurchaseOrderAiDataFetcher",
+    "./PurchaseOrderAiWidget",
+    "./PurchaseOrderAiChat",
+    "./PurchaseOrderTableFilter"
 ], function (
     BaseController,
     JSONModel,
@@ -15,29 +26,57 @@ sap.ui.define([
     Sorter,
     coreLibrary,
     MessageBox,
-    ValueHelpService
+    ValueHelpService,
+    ODataClient,
+    Fragment,
+    InvisibleMessage,
+    formatter,
+    _AiPrompt,
+    _AiIntent,
+    _AiStream,
+    _AiDataFetcher,
+    _AiWidget,
+    _AiChat,
+    _TableFilter
 ) {
     "use strict";
 
+    var isNode = typeof module !== "undefined" && module.exports;
+    var AiPrompt = _AiPrompt || (isNode ? require("./PurchaseOrderAiPrompt") : {});
+    var AiIntent = _AiIntent || (isNode ? require("./PurchaseOrderAiIntent") : {});
+    var AiStream = _AiStream || (isNode ? require("./PurchaseOrderAiStream") : {});
+    var AiDataFetcher = _AiDataFetcher || (isNode ? require("./PurchaseOrderAiDataFetcher") : {});
+    var AiWidget = _AiWidget || (isNode ? require("./PurchaseOrderAiWidget") : {});
+    var AiChat = _AiChat || (isNode ? require("./PurchaseOrderAiChat") : {});
+    var TableFilter = _TableFilter || (isNode ? require("./PurchaseOrderTableFilter") : {});
+
+    if (AiPrompt && typeof AiPrompt.setFilterClasses === "function") {
+        AiPrompt.setFilterClasses(Filter, FilterOperator);
+    }
+
     var SortOrder = coreLibrary.SortOrder;
 
-    return BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.PurchaseOrders", {
+    var PurchaseOrdersController = BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.PurchaseOrders", {
         onInit: function () {
             this._sCurrentSortProperty = "CreationDate";
             this._bCurrentSortDescending = true;
 
             var oViewModel = new JSONModel({
-                totalCount: 0,
-                supplierCount: 0,
-                completeRate: 100,
+                totalCount: "-",
+                supplierCount: "-",
                 sortProperty: this._sCurrentSortProperty,
                 sortDescending: this._bCurrentSortDescending
             });
             this.getView().setModel(oViewModel, "viewModel");
 
+            this._loadServerSupplierCount();
+
             var oTable = this.byId("purchaseOrdersTable");
-            oTable.attachEventOnce("updateFinished", this._updateKpiMetrics, this);
-            oTable.attachUpdateFinished(this._updateKpiMetrics, this);
+            if (oTable) {
+                oTable.attachUpdateFinished(this._updateKpiMetrics, this);
+            } else {
+                console.error("[PurchaseOrders] Control 'purchaseOrdersTable' was not found in the view; the KPI tiles will not update.");
+            }
 
             var oOwnerComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
             var oRouter = oOwnerComp ? oOwnerComp.getRouter() : null;
@@ -50,14 +89,20 @@ sap.ui.define([
         },
 
         _onRouteMatched: function () {
+            if (!this._bRouteMatchedBefore) {
+                this._bRouteMatchedBefore = true;
+                return;
+            }
             var oTable = this.byId("purchaseOrdersTable");
             var oBinding = oTable ? oTable.getBinding("items") : null;
             if (oBinding) {
                 oBinding.refresh();
             }
+            this._loadServerSupplierCount();
         },
 
         onAfterRendering: function () {
+            this._initAIWidget();
             var oTable = this.byId("purchaseOrdersTable");
             var oBinding = oTable ? oTable.getBinding("items") : null;
             if (oBinding && !this._bDataReceivedAttached) {
@@ -68,27 +113,23 @@ sap.ui.define([
                     var oStatus = that.byId("connectionStatus");
                     if (oError) {
                         var iStatus = oError.statusCode || oError.status || (oError.response && oError.response.statusCode) || 500;
-                        var sMessage = oError.message || "Failed to load Purchase Orders from SAP S/4HANA.";
+                        var sMessage = oError.message || that.getText("poLoadErrorMsg", null, "Failed to load Purchase Orders from SAP S/4HANA.");
                         if (oStatus) {
                             oStatus.setState("Error");
-                            oStatus.setText(iStatus === 401 ? "S/4HANA Auth Error (401)" : "Connection Error (" + iStatus + ")");
+                            oStatus.setText(iStatus === 401 ? that.getText("poStatusAuthError", null, "S/4HANA Auth Error (401)") : that.getText("poStatusConnError", [iStatus], "Connection Error (" + iStatus + ")"));
                             oStatus.setIcon("sap-icon://alert");
                         }
                         if (iStatus === 401) {
                             MessageBox.error(
-                                "Failed to load Purchase Orders from SAP S/4HANA.\n\n" +
-                                "The SAP S/4HANA Gateway rejected the configured credentials with HTTP 401 Unauthorized.\n\n" +
-                                "Action Required:\n" +
-                                "1. Verify that the password in .env.local is current.\n" +
-                                "2. Check transaction SU01 in SAP to ensure user account is not locked due to failed logon attempts.",
-                                { title: "S/4HANA Authentication Error" }
+                                that.getText("poAuthErrorMsg", null, "Failed to load Purchase Orders from SAP S/4HANA.\n\nThe SAP S/4HANA Gateway rejected the configured credentials with HTTP 401 Unauthorized.\n\nAction Required:\n1. Ask your administrator to verify the SAP connection credentials: the BTP destination in a deployed system, or .env.local in local development.\n2. Check transaction SU01 in SAP to ensure user account is not locked due to failed logon attempts."),
+                                { title: that.getText("poAuthErrorTitle", null, "S/4HANA Authentication Error") }
                             );
                         } else {
-                            MessageBox.error(sMessage, { title: "Error Loading Purchase Orders" });
+                            MessageBox.error(sMessage, { title: that.getText("poLoadErrorTitle", null, "Error Loading Purchase Orders") });
                         }
                     } else if (oStatus) {
                         oStatus.setState("Success");
-                        oStatus.setText("Live S/4HANA");
+                        oStatus.setText(that.getText("poStatusConnected", null, "Live S/4HANA"));
                         oStatus.setIcon("sap-icon://connected");
                     }
                 });
@@ -101,254 +142,43 @@ sap.ui.define([
             var oViewModel = this.getView().getModel("viewModel");
             if (oViewModel) {
                 oViewModel.setProperty("/totalCount", oKpis.totalCount);
-                oViewModel.setProperty("/supplierCount", oKpis.supplierCount);
-                oViewModel.setProperty("/completeRate", oKpis.completeRate);
             }
         },
 
-        _buildFilterBarContextFilters: function (oSource) {
-            var aFilters = [];
-            if (!oSource) return aFilters;
-            var sId = typeof oSource.getId === "function" ? oSource.getId() : (oSource.id || "");
-
-            if (sId.indexOf("fbSupplier") !== -1) {
-                var oFbCompanyCode = typeof this.byId === "function" ? this.byId("fbCompanyCode") : null;
-                var sCoCode = oFbCompanyCode && typeof oFbCompanyCode.getValue === "function" ? oFbCompanyCode.getValue().trim() : "";
-                if (sCoCode) {
-                    aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, sCoCode));
-                }
-            } else if (sId.indexOf("fbPurchasingOrg") !== -1) {
-                var oFbCoCode = typeof this.byId === "function" ? this.byId("fbCompanyCode") : null;
-                var sCoCode2 = oFbCoCode && typeof oFbCoCode.getValue === "function" ? oFbCoCode.getValue().trim() : "";
-                if (sCoCode2) {
-                    aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, sCoCode2));
-                }
+        _loadServerSupplierCount: function () {
+            var oViewModel = this.getView().getModel("viewModel");
+            if (!oViewModel) {
+                return Promise.resolve();
             }
-
-            return aFilters;
-        },
-
-        onValueHelpRequest: function (oEvent) {
-            var oSource = oEvent.getSource();
-            var aInitialFilters = this._buildFilterBarContextFilters(oSource);
-            if (aInitialFilters.length > 0) {
-                ValueHelpService.openValueHelp(this.getView(), oSource, null, aInitialFilters);
-            } else {
-                ValueHelpService.openValueHelp(this.getView(), oSource);
-            }
-        },
-
-        onSuggest: function (oEvent) {
-            var oSource = oEvent.getSource();
-            var sValue = oEvent.getParameter("suggestValue");
-            var aContextFilters = this._buildFilterBarContextFilters(oSource);
-            if (aContextFilters.length > 0) {
-                ValueHelpService.applySuggestionFilter(oSource, sValue, aContextFilters);
-            } else {
-                ValueHelpService.applySuggestionFilter(oSource, sValue);
-            }
-        },
-
-        onSearch: function () {
-            this._applyFilters();
-        },
-
-        onFilterBarSearch: function () {
-            this._applyFilters();
-        },
-
-        onFilterBarClear: function () {
-            var oFbPO = this.byId("fbPO");
-            var oFbSupplier = this.byId("fbSupplier");
-            var oFbCompanyCode = this.byId("fbCompanyCode");
-            var oFbPurchasingOrg = this.byId("fbPurchasingOrg");
-            var oFbPurchasingGroup = this.byId("fbPurchasingGroup");
-            var oFbDocType = this.byId("fbDocType");
-            var oFbDateRange = this.byId("fbDateRange");
-            var oFbCreatedBy = this.byId("fbCreatedBy");
-            var oFbStatus = this.byId("fbStatus");
-
-            if (oFbPO) oFbPO.setValue("");
-            if (oFbSupplier) oFbSupplier.setValue("");
-            if (oFbCompanyCode) oFbCompanyCode.setValue("");
-            if (oFbPurchasingOrg) oFbPurchasingOrg.setValue("");
-            if (oFbPurchasingGroup) oFbPurchasingGroup.setValue("");
-            if (oFbDocType) oFbDocType.setValue("");
-            if (oFbCreatedBy) oFbCreatedBy.setValue("");
-
-            if (oFbDateRange) {
-                oFbDateRange.setValue("");
-                if (typeof oFbDateRange.setDateValue === "function") {
-                    oFbDateRange.setDateValue(null);
-                    oFbDateRange.setSecondDateValue(null);
-                }
-            }
-
-            if (oFbStatus) {
-                oFbStatus.setSelectedKey("");
-            }
-
-            this._applyFilters();
-        },
-
-        _formatDateToISO: function (oDate) {
-            if (!oDate || !(oDate instanceof Date) || isNaN(oDate.getTime())) {
-                return null;
-            }
-            var iYear = oDate.getFullYear();
-            var sMonth = String(oDate.getMonth() + 1).padStart(2, "0");
-            var sDay = String(oDate.getDate()).padStart(2, "0");
-            return iYear + "-" + sMonth + "-" + sDay;
-        },
-
-        _buildFilterCriteria: function () {
-            var aFilters = [];
-
-            // 1. Global Toolbar Search Query
-            var oSearchField = this.byId("searchField");
-            var sQuery = oSearchField ? oSearchField.getValue() : "";
-            if (sQuery && sQuery.trim().length > 0) {
-                var sTrimmed = sQuery.trim();
-                aFilters.push(new Filter({
-                    filters: [
-                        new Filter("PurchaseOrder", FilterOperator.Contains, sTrimmed),
-                        new Filter("Supplier", FilterOperator.Contains, sTrimmed),
-                        new Filter("SupplierName", FilterOperator.Contains, sTrimmed),
-                        new Filter("CompanyCode", FilterOperator.Contains, sTrimmed),
-                        new Filter("CreatedByUser", FilterOperator.Contains, sTrimmed),
-                        new Filter("UserFullName", FilterOperator.Contains, sTrimmed)
-                    ],
-                    and: false
-                }));
-            }
-
-            // 2. FilterBar: Purchase Order Number
-            var oFbPO = this.byId("fbPO");
-            if (oFbPO && oFbPO.getValue().trim() !== "") {
-                aFilters.push(new Filter("PurchaseOrder", FilterOperator.Contains, oFbPO.getValue().trim()));
-            }
-
-            // 3. FilterBar: Supplier (Matches ID or Name)
-            var oFbSupplier = this.byId("fbSupplier");
-            if (oFbSupplier && oFbSupplier.getValue().trim() !== "") {
-                var sSupplier = oFbSupplier.getValue().trim();
-                aFilters.push(new Filter({
-                    filters: [
-                        new Filter("Supplier", FilterOperator.Contains, sSupplier),
-                        new Filter("SupplierName", FilterOperator.Contains, sSupplier)
-                    ],
-                    and: false
-                }));
-            }
-
-            // 4. FilterBar: Company Code
-            var oFbCompanyCode = this.byId("fbCompanyCode");
-            if (oFbCompanyCode && oFbCompanyCode.getValue().trim() !== "") {
-                aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, oFbCompanyCode.getValue().trim()));
-            }
-
-            // 5. FilterBar: Purchasing Organization
-            var oFbPurchasingOrg = this.byId("fbPurchasingOrg");
-            if (oFbPurchasingOrg && oFbPurchasingOrg.getValue().trim() !== "") {
-                aFilters.push(new Filter("PurchasingOrganization", FilterOperator.EQ, oFbPurchasingOrg.getValue().trim()));
-            }
-
-            // 6. FilterBar: Purchasing Group
-            var oFbPurchasingGroup = this.byId("fbPurchasingGroup");
-            if (oFbPurchasingGroup && oFbPurchasingGroup.getValue().trim() !== "") {
-                aFilters.push(new Filter("PurchasingGroup", FilterOperator.EQ, oFbPurchasingGroup.getValue().trim()));
-            }
-
-            // 7. FilterBar: Purchase Order Type
-            var oFbDocType = this.byId("fbDocType");
-            if (oFbDocType && oFbDocType.getValue().trim() !== "") {
-                aFilters.push(new Filter("PurchaseOrderType", FilterOperator.EQ, oFbDocType.getValue().trim()));
-            }
-
-            // 8. FilterBar: Creation Date Range
-            var oFbDateRange = this.byId("fbDateRange");
-            if (oFbDateRange) {
-                var dStart = typeof oFbDateRange.getDateValue === "function" ? oFbDateRange.getDateValue() : null;
-                var dEnd = typeof oFbDateRange.getSecondDateValue === "function" ? oFbDateRange.getSecondDateValue() : null;
-                var sStart = this._formatDateToISO(dStart);
-                var sEnd = this._formatDateToISO(dEnd);
-
-                if (sStart && sEnd) {
-                    if (sStart === sEnd) {
-                        aFilters.push(new Filter("CreationDate", FilterOperator.EQ, sStart));
-                    } else {
-                        aFilters.push(new Filter("CreationDate", FilterOperator.BT, sStart, sEnd));
+            return ODataClient.get("/odata/v4/purchase-order/getDashboardMetrics()")
+                .then(function (res) {
+                    var oMetrics = res;
+                    if (typeof oMetrics === "string") {
+                        try {
+                            oMetrics = JSON.parse(oMetrics);
+                        } catch (e) {
+                            oMetrics = null;
+                        }
                     }
-                } else if (sStart) {
-                    aFilters.push(new Filter("CreationDate", FilterOperator.GE, sStart));
-                }
-            }
-
-            // 9. FilterBar: Created By (Matches Username or Full Name)
-            var oFbCreatedBy = this.byId("fbCreatedBy");
-            if (oFbCreatedBy && oFbCreatedBy.getValue().trim() !== "") {
-                var sCreatedBy = oFbCreatedBy.getValue().trim();
-                aFilters.push(new Filter({
-                    filters: [
-                        new Filter("CreatedByUser", FilterOperator.Contains, sCreatedBy),
-                        new Filter("UserFullName", FilterOperator.Contains, sCreatedBy)
-                    ],
-                    and: false
-                }));
-            }
-
-            // 10. FilterBar: Display Status (Approved, Draft, In Approval, Rejected)
-            var oFbStatus = this.byId("fbStatus");
-            if (oFbStatus) {
-                var sStatusKey = oFbStatus.getSelectedKey();
-                if (sStatusKey === "Approved" || sStatusKey === "true") {
-                    aFilters.push(new Filter({
-                        filters: [
-                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "04"),
-                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "05"),
-                            new Filter("PurchasingCompletenessStatus", FilterOperator.EQ, true)
-                        ],
-                        and: false
-                    }));
-                } else if (sStatusKey === "Draft" || sStatusKey === "false") {
-                    aFilters.push(new Filter({
-                        filters: [
-                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "01"),
-                            new Filter("PurchasingCompletenessStatus", FilterOperator.EQ, false)
-                        ],
-                        and: false
-                    }));
-                } else if (sStatusKey === "In Approval") {
-                    aFilters.push(new Filter({
-                        filters: [
-                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "02"),
-                            new Filter("ReleaseIsNotCompleted", FilterOperator.EQ, true)
-                        ],
-                        and: false
-                    }));
-                } else if (sStatusKey === "Rejected") {
-                    aFilters.push(new Filter({
-                        filters: [
-                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "38"),
-                            new Filter("PurchasingDocumentDeletionCode", FilterOperator.EQ, "L")
-                        ],
-                        and: false
-                    }));
-                }
-            }
-
-            return aFilters;
-        },
-
-        _applyFilters: function () {
-            var aFilters = this._buildFilterCriteria();
-            var oFinalFilter = aFilters.length > 0 ? new Filter({ filters: aFilters, and: true }) : [];
-
-            var oTable = this.byId("purchaseOrdersTable");
-            var oBinding = oTable ? oTable.getBinding("items") : null;
-            if (oBinding) {
-                oBinding.filter(oFinalFilter);
-            }
+                    if (oMetrics && typeof oMetrics.value === "string") {
+                        try {
+                            oMetrics = JSON.parse(oMetrics.value);
+                        } catch (e) {
+                            oMetrics = null;
+                        }
+                    }
+                    if (oMetrics && oMetrics.supplierCount != null) {
+                        oViewModel.setProperty("/supplierCount", oMetrics.supplierCount);
+                    } else {
+                        oViewModel.setProperty("/supplierCount", "-");
+                    }
+                    if (oMetrics && oMetrics.totalCount != null) {
+                        oViewModel.setProperty("/totalCount", oMetrics.totalCount);
+                    }
+                })
+                .catch(function () {
+                    oViewModel.setProperty("/supplierCount", "-");
+                });
         },
 
         onSortColumn: function (oEvent) {
@@ -399,9 +229,9 @@ sap.ui.define([
             var oTable = this.byId("purchaseOrdersTable");
             var oBinding = oTable ? oTable.getBinding("items") : null;
             if (oBinding) {
-                // oBinding.refresh() reloads data while retaining active filters ($filter) and sorters ($orderby)
                 oBinding.refresh();
             }
+            this._loadServerSupplierCount();
         },
 
         onNavBack: function () {
@@ -427,4 +257,40 @@ sap.ui.define([
             }
         }
     });
+
+    // Wire static methods and constants
+    Object.assign(PurchaseOrdersController, AiPrompt, AiIntent, AiStream);
+
+    // Wire prototype methods
+    var mTableFilter = TableFilter && typeof TableFilter.createTableFilter === "function" ? TableFilter.createTableFilter({
+        Filter: Filter,
+        FilterOperator: FilterOperator,
+        ValueHelpService: ValueHelpService,
+        ControllerClass: PurchaseOrdersController
+    }) : {};
+
+    var mAiDataFetcher = AiDataFetcher && typeof AiDataFetcher.createAiDataFetcher === "function" ? AiDataFetcher.createAiDataFetcher({
+        Filter: Filter,
+        FilterOperator: FilterOperator,
+        Sorter: Sorter,
+        ODataClient: ODataClient,
+        formatter: formatter,
+        ControllerClass: PurchaseOrdersController
+    }) : {};
+
+    var mAiWidget = AiWidget && typeof AiWidget.createAiWidget === "function" ? AiWidget.createAiWidget({
+        Fragment: Fragment,
+        JSONModel: JSONModel,
+        ControllerClass: PurchaseOrdersController
+    }) : {};
+
+    var mAiChat = AiChat && typeof AiChat.createAiChat === "function" ? AiChat.createAiChat({
+        ODataClient: ODataClient,
+        InvisibleMessage: InvisibleMessage,
+        ControllerClass: PurchaseOrdersController
+    }) : {};
+
+    Object.assign(PurchaseOrdersController.prototype, mTableFilter, mAiDataFetcher, mAiWidget, mAiChat);
+
+    return PurchaseOrdersController;
 });

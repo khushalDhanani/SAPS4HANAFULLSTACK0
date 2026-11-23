@@ -9,6 +9,16 @@ const { POST, GET } = cds.test(__dirname + '/../../../');
 
 describe('Security & Authorization: Purchase Order RBAC', () => {
 
+    beforeAll(() => {
+        process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+        process.env.LOCAL_AUTH_SECRET = 'test-secret-key-po-auth-2026';
+    });
+
+    afterAll(() => {
+        delete process.env.ENABLE_DEV_TOKEN_ISSUER;
+        delete process.env.LOCAL_AUTH_SECRET;
+    });
+
     let readFsSpy;
     let readMaintSpy;
     let createPOSpy;
@@ -70,10 +80,10 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
         });
     });
 
-    describe('Viewer Role Authorization (bob)', () => {
+    describe('Viewer Role Authorization (test-viewer-1120)', () => {
         it('should allow Viewer to READ PurchaseOrders entity set', async () => {
             const { status, data } = await GET('/odata/v4/purchase-order/PurchaseOrders', {
-                auth: { username: 'bob', password: '' }
+                auth: { username: 'test-viewer-1120', password: '' }
             });
 
             expect(status).toBe(200);
@@ -83,7 +93,7 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
 
         it('should allow Viewer to READ Value Helps', async () => {
             const { status, data } = await GET('/odata/v4/purchase-order/DocumentTypeVH', {
-                auth: { username: 'bob', password: '' }
+                auth: { username: 'test-viewer-1120', password: '' }
             });
 
             expect(status).toBe(200);
@@ -93,7 +103,7 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
         it('should REJECT Viewer attempting to invoke createPurchaseOrder with 403 Forbidden', async () => {
             try {
                 await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload, {
-                    auth: { username: 'bob', password: '' }
+                    auth: { username: 'test-viewer-1120', password: '' }
                 });
                 throw new Error('Expected 403 Forbidden but request succeeded');
             } catch (error) {
@@ -103,10 +113,10 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
         });
     });
 
-    describe('PurchasingManager Role Authorization (alice)', () => {
+    describe('PurchasingManager Role Authorization (khushal)', () => {
         it('should allow PurchasingManager to invoke createPurchaseOrder action', async () => {
             const { status, data } = await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload, {
-                auth: { username: 'alice', password: '' }
+                auth: { username: 'khushal', password: '' }
             });
 
             expect(status).toBe(200);
@@ -116,7 +126,7 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
 
         it('should allow PurchasingManager to READ PurchaseOrders entity set', async () => {
             const { status, data } = await GET('/odata/v4/purchase-order/PurchaseOrders', {
-                auth: { username: 'alice', password: '' }
+                auth: { username: 'khushal', password: '' }
             });
 
             expect(status).toBe(200);
@@ -124,9 +134,42 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
         });
     });
 
+    describe('Rules in service.cds beyond PurchaseOrders and the create action', () => {
+        const viewer = { auth: { username: 'test-viewer-1120', password: '' } };
+        const manager = { auth: { username: 'khushal', password: '' } };
+
+        it('should reject an unauthenticated read of PurchaseOrderItems with 401', async () => {
+            await expect(GET('/odata/v4/purchase-order/PurchaseOrderItems')).rejects.toMatchObject({ response: { status: 401 } });
+        });
+
+        it('should allow a Viewer to read PurchaseOrderItems', async () => {
+            const { status } = await GET('/odata/v4/purchase-order/PurchaseOrderItems', viewer);
+            expect(status).toBe(200);
+        });
+
+        it('should reject an unauthenticated getSupplierDefaults call with 401', async () => {
+            await expect(GET("/odata/v4/purchase-order/getSupplierDefaults(Supplier='',CompanyCode='',PurchasingOrganization='')"))
+                .rejects.toMatchObject({ response: { status: 401 } });
+        });
+
+        it('should allow a Viewer to call getSupplierDefaults', async () => {
+            const { status } = await GET("/odata/v4/purchase-order/getSupplierDefaults(Supplier='',CompanyCode='',PurchasingOrganization='')", viewer);
+            expect(status).toBe(200);
+        });
+
+        it('should reject an unauthenticated getDashboardMetrics call with 401', async () => {
+            await expect(GET('/odata/v4/purchase-order/getDashboardMetrics()')).rejects.toMatchObject({ response: { status: 401 } });
+        });
+
+        it('should refuse a write to the @readonly PurchaseOrders entity even for a PurchasingManager', async () => {
+            await expect(POST('/odata/v4/purchase-order/PurchaseOrders', { PurchaseOrder: '4500009999' }, manager))
+                .rejects.toMatchObject({ response: { status: 405 } });
+        });
+    });
+
     describe('Local Development Bearer Token Authorization (JWT with XSUAA Claims)', () => {
         it('should allow PurchasingManager Bearer token to invoke createPurchaseOrder', async () => {
-            const token = localTokenUtil.issueToken('KHUSHAL', ['PurchasingManager', 'Viewer', 'User']).token;
+            const token = localTokenUtil.issueToken('KHUSHAL', ['PurchasingManager', 'Viewer']).token;
             const { status, data } = await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload, {
                 headers: { authorization: 'Bearer ' + token }
             });
@@ -137,7 +180,7 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
         });
 
         it('should REJECT Viewer Bearer token attempting to invoke createPurchaseOrder with 403 Forbidden', async () => {
-            const token = localTokenUtil.issueToken('bob_local', ['Viewer', 'User']).token;
+            const token = localTokenUtil.issueToken('bob_local', ['Viewer']).token;
             try {
                 await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload, {
                     headers: { authorization: 'Bearer ' + token }
@@ -150,7 +193,7 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
         });
 
         it('should allow Viewer Bearer token to READ PurchaseOrders entity set', async () => {
-            const token = localTokenUtil.issueToken('bob_local', ['Viewer', 'User']).token;
+            const token = localTokenUtil.issueToken('bob_local', ['Viewer']).token;
             const { status, data } = await GET('/odata/v4/purchase-order/PurchaseOrders', {
                 headers: { authorization: 'Bearer ' + token }
             });
