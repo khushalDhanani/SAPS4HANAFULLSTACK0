@@ -174,27 +174,35 @@ sap.ui.define([
                             } catch {
                                 oSelectedData = null;
                             }
-                            if (!oSelectedData || typeof oSelectedData !== "object") {
+                            // One dialog serves customers, materials, units and more, so most of the fields below do
+                            // not exist on the selected entity. The row object already holds every loaded property;
+                            // asking an OData V4 context for a property it does not have logs "Failed to drill-down"
+                            // for each one. getProperty is therefore only the fallback when no row object was returned.
+                            var bHasRowObject = !!oSelectedData && typeof oSelectedData === "object";
+                            if (!bHasRowObject) {
                                 oSelectedData = {};
                             }
+                            var fnProp = function (sName) {
+                                return bHasRowObject ? undefined : oBindingContext.getProperty(sName);
+                            };
 
-                            oSelectedData.Customer = oSelectedData.Customer || oBindingContext.getProperty("Customer") || sKey;
-                            oSelectedData.CustomerName = oSelectedData.CustomerName || oBindingContext.getProperty("CustomerName") || oSelectedItem.getDescription() || "";
-                            oSelectedData.OrganizationBPName1 = oSelectedData.OrganizationBPName1 || oBindingContext.getProperty("OrganizationBPName1") || "";
-                            oSelectedData.CityName = oSelectedData.CityName || oBindingContext.getProperty("CityName") || "";
-                            oSelectedData.Country = oSelectedData.Country || oBindingContext.getProperty("Country") || "";
-                            oSelectedData.SupplierAccountGroup = oSelectedData.SupplierAccountGroup || oBindingContext.getProperty("SupplierAccountGroup") || "";
+                            oSelectedData.Customer = oSelectedData.Customer || fnProp("Customer") || sKey;
+                            oSelectedData.CustomerName = oSelectedData.CustomerName || fnProp("CustomerName") || oSelectedItem.getDescription() || "";
+                            oSelectedData.OrganizationBPName1 = oSelectedData.OrganizationBPName1 || fnProp("OrganizationBPName1") || "";
+                            oSelectedData.CityName = oSelectedData.CityName || fnProp("CityName") || "";
+                            oSelectedData.Country = oSelectedData.Country || fnProp("Country") || "";
+                            oSelectedData.SupplierAccountGroup = oSelectedData.SupplierAccountGroup || fnProp("SupplierAccountGroup") || "";
 
-                            oSelectedData.Material = oSelectedData.Material || oBindingContext.getProperty("Material") || sKey;
-                            oSelectedData.MaterialName = oSelectedData.MaterialName || oBindingContext.getProperty("MaterialName") || oBindingContext.getProperty("Material_Text") || oSelectedItem.getDescription() || "";
-                            oSelectedData.Material_Text = oSelectedData.Material_Text || oBindingContext.getProperty("Material_Text") || oBindingContext.getProperty("MaterialName") || oSelectedItem.getDescription() || "";
-                            oSelectedData.MaterialBaseUnit = oSelectedData.MaterialBaseUnit || oBindingContext.getProperty("MaterialBaseUnit") || "";
-                            oSelectedData.Plant = oSelectedData.Plant || oBindingContext.getProperty("Plant") || "";
-                            oSelectedData.MaterialGroup = oSelectedData.MaterialGroup || oBindingContext.getProperty("MaterialGroup") || "";
-                            oSelectedData.MaterialType = oSelectedData.MaterialType || oBindingContext.getProperty("MaterialType") || "";
+                            oSelectedData.Material = oSelectedData.Material || fnProp("Material") || sKey;
+                            oSelectedData.MaterialName = oSelectedData.MaterialName || fnProp("MaterialName") || fnProp("Material_Text") || oSelectedItem.getDescription() || "";
+                            oSelectedData.Material_Text = oSelectedData.Material_Text || fnProp("Material_Text") || fnProp("MaterialName") || oSelectedItem.getDescription() || "";
+                            oSelectedData.MaterialBaseUnit = oSelectedData.MaterialBaseUnit || fnProp("MaterialBaseUnit") || "";
+                            oSelectedData.Plant = oSelectedData.Plant || fnProp("Plant") || "";
+                            oSelectedData.MaterialGroup = oSelectedData.MaterialGroup || fnProp("MaterialGroup") || "";
+                            oSelectedData.MaterialType = oSelectedData.MaterialType || fnProp("MaterialType") || "";
 
-                            oSelectedData.UnitOfMeasure = oSelectedData.UnitOfMeasure || oBindingContext.getProperty("UnitOfMeasure") || sKey;
-                            oSelectedData.UnitOfMeasure_Text = oSelectedData.UnitOfMeasure_Text || oBindingContext.getProperty("UnitOfMeasure_Text") || oSelectedItem.getDescription() || "";
+                            oSelectedData.UnitOfMeasure = oSelectedData.UnitOfMeasure || fnProp("UnitOfMeasure") || sKey;
+                            oSelectedData.UnitOfMeasure_Text = oSelectedData.UnitOfMeasure_Text || fnProp("UnitOfMeasure_Text") || oSelectedItem.getDescription() || "";
                         }
 
                         if (typeof fnCallback === "function") {
