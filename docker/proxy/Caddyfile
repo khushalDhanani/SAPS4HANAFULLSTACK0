@@ -3,9 +3,12 @@
 # No certificate is requested from a public authority.
 {
 	admin off
+	# A client that connects by IP address sends no server name; it gets the certificate of SERVER_NAME.
+	default_sni {$SERVER_NAME}
 }
 
-{$SERVER_NAME}:443 {
+# Any host name or address on 443: the server is reached both by name and by IP address.
+:443 {
 	tls /run/certs/server.crt /run/certs/server.key
 
 	header {
