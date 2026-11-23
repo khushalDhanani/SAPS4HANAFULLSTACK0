@@ -17,6 +17,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `main` (updated to `origin/main` commit `4aeee341`).
+- **Docker Compose Standalone Container Crash Loop Fix — PASS (2026-11-23 14:30 IST):** Fixed container restart crash loop on `docker compose -f docker-compose.yml up` (`Error: Authentication kind "jwt" configured, but no XSUAA instance bound to application`). Defaulted `docker-compose.yml` and `Dockerfile` `NODE_ENV` to `development`, removed premature `srv/csn.json` compilation from `Dockerfile` preventing duplicate artifact definition collisions, moved `@cap-js/sqlite` to runtime `dependencies` for lean container execution, and verified live container health (`Up (healthy)`, HTTP 200 `{"status":"UP"}` on `http://localhost:4004/health`). Added test suite `test/unit/tools/dockerConfig.test.js` (4/4 PASS). All 25 tools test suites pass (264/264 tests); `eslint`, `scan:secrets`, and `mta validate` pass clean.
 - **Secret scanner Docker template allowance (`.env.docker.example`) — PASS (2026-11-23 13:12 IST):** Permitted `.env.docker.example` in `tools/scan-secrets.js` and `.gitignore` alongside `.env.example` and `.env.docker.local.example`. Scan passes for 1,035 tracked files (0 secrets detected); all 21 scanner unit tests pass. Root eslint exits 0; git diff check clean.
 - **Coverage gate and legacy inquiry path (2026-11-23) — PARTIAL (local, uncommitted):** Jest coverage covers `server.js` and `srv/**` (except generated `srv/external/**`) with enforced floors for `global`, `srv/integration/s4hana` and auth. The legacy OData Sales Inquiry creator is removed and the order path refuses type `ZIN`. Full suite: 210 suites, 3,444 passed, 13 skipped; 92.22% lines over 142 files. E2E not run. See the two 2026-11-23 Changes Log entries.
 - **Goods Receipt feature — REMOVED (2026-11-21, PARTIALLY COMPLETE):** the Goods Receipt feature (movement 101) is removed from the source and the final audit is done (13:28 IST entry). Verified: local lint, Jest, accessibility, performance, SAP-free E2E, CDS and UI5 production builds, MTA validation and build; hosted CI success on `601b289e`. Not done, each needing a decision or approval: any deployment, the physical database cleanup (`docs/decisions/goods-receipt-database-cleanup-plan.md`), withdrawal of the obsolete SAP authorization, SAP-connected E2E. Earlier entries in this file that describe Goods Receipt hardening (Phases 1–3, highest-risk findings, GR-03) are historical: that code no longer exists.
@@ -401,6 +402,39 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-23 14:30 IST — Docker container XSUAA crash loop fix & standalone configuration — PASS
+
+- REQUEST: Fix `docker compose -f docker-compose.yml ps` container restart loop: `Error: Authentication kind "jwt" configured, but no XSUAA instance bound to application. Either bind an XSUAA instance, or switch to an authentication kind that does not require a binding.` and connection refused on `curl http://localhost:4004/health`.
+- INSPECT:
+  - Root cause 1: `Dockerfile` and `docker-compose.yml` hardcoded/defaulted `NODE_ENV=production` and `CDS_ENV=production`. In CAP, production profile activates `auth.kind: "jwt"` requiring a bound XSUAA instance in `VCAP_SERVICES`. Running standalone via `docker-compose.yml` does not bind Cloud Foundry XSUAA, throwing an immediate fatal initialization error.
+  - Root cause 2: `Dockerfile` Stage 2 compiled `srv/service.cds` to `srv/csn.json` and placed it inside `srv/` alongside `srv/*.cds`. `@sap/cds` automatically loads all models in `srv/`, causing duplicate artifact definition collisions for `C_PURCHASEORDER_FS_SRV`. `@sap/cds` contains `@sap/cds-compiler` in its production dependencies and compiles models dynamically on startup.
+  - Root cause 3: `@cap-js/sqlite` was placed in `devDependencies`. The multi-stage `Dockerfile` uses `npm ci --omit=dev`, omitting SQLite from the lean runtime container and causing runtime failure when running with SQLite persistence.
+  - Root cause 4: Direct S/4 credentials (`S4_DESTINATION_URL`, `S4_CLIENT`, `S4_USERNAME`, `S4_PASSWORD`) in `docker-compose.yml` and `.env` are strictly designed for local/development mode; `productionGuard.js` forbids them in `production`.
+- CHANGED:
+  - `docker-compose.yml`: Defaulted `NODE_ENV` to `${NODE_ENV:-development}` for the backend service.
+  - `Dockerfile`: Defaulted `NODE_ENV=development`, removed hardcoded `CDS_ENV=production`, and removed premature `srv/csn.json` compilation from Stage 2.
+  - `package.json`: Moved `@cap-js/sqlite` from `devDependencies` to `dependencies` so `npm ci --omit=dev` installs SQLite runtime support.
+  - `package-lock.json`: Synchronized lockfile via `npm install --package-lock-only`.
+  - `.env.docker.example`: Set `NODE_ENV=development` with explanatory guidance.
+  - `docs/DOCKER.md`: Documented `NODE_ENV=development` for standalone container execution with mocked auth & direct S/4 connection.
+  - `test/unit/tools/dockerConfig.test.js`: Added unit tests verifying `package.json`, `docker-compose.yml`, `Dockerfile`, and `.env.docker.example` configuration integrity.
+- TEST DECISION: TEST ADDED — `test/unit/tools/dockerConfig.test.js` (4/4 tests PASS).
+- VALIDATION:
+  - `docker compose -f docker-compose.yml build backend` → ✅ PASSED (image built cleanly).
+  - `docker compose -f docker-compose.yml up -d` → ✅ PASSED (`saps4hana-backend` started and healthy).
+  - `docker compose -f docker-compose.yml ps` → ✅ PASSED (`Up ... (healthy)` on `0.0.0.0:4004->4004/tcp`).
+  - `curl -v http://localhost:4004/health` → ✅ PASSED (HTTP 200 OK `{"status":"UP"}`).
+  - `npx jest test/unit/tools/dockerConfig.test.js --no-coverage` → ✅ PASSED (4/4 passed).
+  - `npx jest test/unit/tools --no-coverage` → ✅ PASSED (25 suites, 264/264 passed).
+  - `npm run lint` → ✅ PASSED (0 errors, 0 warnings).
+  - `npm run scan:secrets` → ✅ PASSED (1,035 tracked files, 0 secrets detected).
+  - `npm run validate:mta` → ✅ PASSED (MTA valid).
+  - `git diff --check` → ✅ PASSED (0 whitespace errors).
+- NOT VERIFIED: Live SAP S/4HANA transactional writes (Docker container tested with safe read-only `/health` probe; live writes gated).
+- ASSUMPTIONS: None. Standalone Docker stack uses `NODE_ENV=development` (mock auth + SQLite + direct S4 credentials); production profile remains reserved for BTP/XSUAA bound environments.
+- NEXT: Push changes and monitor CI.
+- FINAL STATUS: PASS.
 
 ### 2026-11-23 13:12 IST — Secret scanner allowance for `.env.docker.example` — PASS
 

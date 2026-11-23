@@ -64,7 +64,7 @@ cp .env.docker.example .env
 Edit `.env` to configure your SAP S/4HANA target system:
 
 ```properties
-NODE_ENV=production
+NODE_ENV=development
 PORT=4004
 
 # SAP S/4HANA Connection Configuration
@@ -76,6 +76,9 @@ S4_USERNAME=YOUR_SAP_USERNAME
 S4_PASSWORD=YOUR_SAP_PASSWORD
 S4_DESTINATION_NAME=S4HANA_PO_API
 ```
+
+> [!NOTE]
+> For standalone containerized execution without BTP service bindings, `NODE_ENV=development` is used. This enables CAP's built-in authentication with mock users (`khushal` / `S4_USERNAME`) and direct S/4HANA Gateway connectivity without requiring bound Cloud Foundry XSUAA or Destination services. For BTP/Cloud Foundry deployments with bound XSUAA and Destination services (`VCAP_SERVICES`), use `NODE_ENV=production`.
 
 > [!WARNING]
 > Never commit `.env` or files containing plain-text SAP credentials to source control. `.env` is ignored by `.gitignore` and `.dockerignore`.

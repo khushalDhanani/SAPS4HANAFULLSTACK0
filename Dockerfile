@@ -1,6 +1,6 @@
 # ==============================================================================
 # Production Multi-Stage Dockerfile for SAP S/4HANA Full-Stack Platform
-# Multi-stage build producing a lean, secure, non-root Node.js production image
+# Multi-stage build producing a lean, secure, non-root Node.js image
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -21,25 +21,7 @@ COPY app/fiori-app/webapp ./webapp
 RUN npm run build
 
 # ------------------------------------------------------------------------------
-# Stage 2: Compile CAP CDS Models
-# ------------------------------------------------------------------------------
-FROM node:22-bookworm-slim AS cap-builder
-WORKDIR /build
-
-# Copy root package descriptors and install tooling dependencies
-COPY package*.json ./
-RUN npm ci
-
-# Copy CDS definitions, external models, and persistence schemas
-COPY srv ./srv
-COPY db ./db
-COPY server.js ./
-
-# Compile CDS models to compiled service notation (CSN) for production
-RUN npx cds compile srv/service.cds --to csn -o srv/csn.json
-
-# ------------------------------------------------------------------------------
-# Stage 3: Lean Production Runtime Image
+# Stage 2: Lean Runtime Image
 # ------------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime
 
@@ -48,10 +30,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends dumb-init curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Runtime environment settings
-ENV NODE_ENV=production \
-    PORT=4004 \
-    CDS_ENV=production
+# Runtime environment settings (defaults to development for standalone execution without BTP XSUAA binding)
+ENV NODE_ENV=development \
+    PORT=4004
 
 # Create app directory with non-root ownership
 WORKDIR /home/node/app
@@ -60,7 +41,7 @@ RUN chown -R node:node /home/node/app
 # Drop root privileges for container security
 USER node
 
-# Copy package descriptors and install production-only dependencies
+# Copy package descriptors and install runtime dependencies
 COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
@@ -70,9 +51,6 @@ COPY --chown=node:node xs-security.json ./
 COPY --chown=node:node srv ./srv
 COPY --chown=node:node db ./db
 COPY --chown=node:node config ./config
-
-# Copy compiled CSN from Stage 2
-COPY --chown=node:node --from=cap-builder /build/srv/csn.json ./srv/csn.json
 
 # Copy UI5 source webapp and optimized dist bundle from Stage 1
 COPY --chown=node:node app/fiori-app/package*.json ./app/fiori-app/

@@ -12,7 +12,7 @@ services:
     ports:
       - "${PORT:-4004}:4004"
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_ENV=${NODE_ENV:-development}
       - PORT=4004
       - S4_SYSTEM_NAME=${S4_SYSTEM_NAME:-S4HANA_DEV}
       - S4_DESTINATION_URL=${S4_DESTINATION_URL:-https://s4hana.your-company.com:44300}
