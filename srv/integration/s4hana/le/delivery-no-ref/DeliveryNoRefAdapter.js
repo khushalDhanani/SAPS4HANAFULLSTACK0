@@ -1,6 +1,7 @@
 const LOG = require('../../../../common/logger')('delivery-no-ref-adapter');
 const { S4HttpClient } = require('../../S4HttpClient');
-const s4Config = require('../../../../common/s4Config');
+const { RfcClient } = require('../../RfcClient');
+const businessConfigResolver = require('../../../../common/BusinessConfigResolver');
 const { odataString } = require('../../../../common/filterUtils');
 const { mapS4Error } = require('../../S4ErrorMapper');
 
@@ -53,6 +54,7 @@ function _toError(mapped) {
 class DeliveryNoRefAdapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
+    this.rfc = options.rfc || (RfcClient.isAvailable() ? new RfcClient() : null);
     this.servicePath = options.servicePath || SERVICE_PATH;
   }
 
@@ -60,16 +62,17 @@ class DeliveryNoRefAdapter {
    * Creates an Outbound Delivery without reference using C_DelivWthoutRefQuickCreate deep insert.
    *
    * @param {Object} payload
-   * @param {string} payload.shippingPoint - e.g. '1104'
-   * @param {string} [payload.deliveryType='LO2'] - e.g. 'LO2'
-   * @param {string} [payload.salesOrg='1000'] - Sales Organization
-   * @param {string} [payload.distChannel='10'] - Distribution Channel
-   * @param {string} [payload.division='52'] - Division
-   * @param {string} payload.shipToParty - Customer number e.g. '10135'
-   * @param {string} payload.plant - Delivering Plant e.g. '1110'
-   * @param {string} payload.storageLocation - Storage Location e.g. 'FG01'
+   * @param {string} payload.shippingPoint       - e.g. '1104' (required)
+   * @param {string} [payload.deliveryType='LO2']- e.g. 'LO2'
+   * @param {string} [payload.salesOrg]          - Override SalesOrganization (read from SAP customizing if absent)
+   * @param {string} [payload.distChannel]       - Override DistributionChannel (read from SAP customizing if absent)
+   * @param {string} [payload.division]          - Override Division (read from SAP customizing if absent)
+   * @param {string} payload.shipToParty         - Customer number e.g. '10135'
+   * @param {string} payload.plant               - Delivering Plant (WERKS, e.g. '1110') — used as resolver key
+   * @param {string} payload.storageLocation     - Storage Location e.g. 'FG01'
+   * @param {string} [payload.warehouseNumber]   - WM Warehouse (LGNUM, e.g. 'W01'); used to narrow resolver lookup
    * @param {string|Date} payload.plannedGoodsIssueDate - Planned GI date
-   * @param {Array<Object>} payload.items - Line items [{ material, quantity, uom, itemNo }]
+   * @param {Array<Object>} payload.items        - Line items [{ material, quantity, uom, itemNo }]
    * @param {Object} [options]
    * @returns {Promise<Object>} Created delivery details from SAP
    */
@@ -127,12 +130,38 @@ class DeliveryNoRefAdapter {
       }
     }
 
+    // Resolve org context: the caller's values when it declares them trusted, otherwise SAP customizing.
+    const { isTrusted: _isTrusted, trustedContext: _trustedContext, trustedOverrides: _trustedOverrides, ...httpOptions } = options;
+    const isTrusted = _isTrusted === true || _trustedContext === true;
+    const trustedOverrides = _trustedOverrides || (isTrusted ? {
+      salesOrganization:   String(payload.salesOrg || '').trim() || undefined,
+      distributionChannel: String(payload.distChannel || '').trim() || undefined,
+      division:            String(payload.division || '').trim() || undefined
+    } : undefined);
+
+    const cfg = await (this.resolver || businessConfigResolver).resolve({
+      plant: String(payload.plant).trim(),
+      warehouseNumber: payload.warehouseNumber || '',
+      storageLocation: String(payload.storageLocation || '').trim(),
+      flow: 'delivery-no-ref',
+      fields: ['salesOrganization', 'distributionChannel', 'division'],
+      trustedOverrides,
+      rfc: this.rfc
+    }).catch((err) => {
+      if (/could not resolve/.test(err.message)) {
+        err.status = 400;
+        const sapReadFailure = /SAP reads failed: .*/.exec(err.message)?.[0];
+        err.message = `Enter Sales Organization, Distribution Channel and Division: they could not be read from SAP for plant ${String(payload.plant).trim()}, storage location ${String(payload.storageLocation).trim()}.${sapReadFailure ? ` ${sapReadFailure}` : ''}`;
+      }
+      throw err;
+    });
+
     const s4Payload = {
       ShippingPoint: String(payload.shippingPoint).trim(),
       DeliveryDocumentType: String(payload.deliveryType || 'LO2').trim(),
-      SalesOrganization: String(payload.salesOrg || s4Config.getSalesOrganization() || '1000').trim(),
-      DistributionChannel: String(payload.distChannel || s4Config.getDistributionChannel() || '10').trim(),
-      Division: String(payload.division || s4Config.getDivision() || '52').trim(),
+      SalesOrganization:   cfg.salesOrganization,
+      DistributionChannel: cfg.distributionChannel,
+      Division:            cfg.division,
       ShipToParty: String(payload.shipToParty).trim(),
       Plant: String(payload.plant).trim(),
       StorageLocation: String(payload.storageLocation).trim(),
@@ -140,11 +169,11 @@ class DeliveryNoRefAdapter {
       to_DeliveryItemQuickCreate: s4Items
     };
 
-    LOG.info(`Creating Delivery Without Reference: SP=${s4Payload.ShippingPoint}, Type=${s4Payload.DeliveryDocumentType}, Plant=${s4Payload.Plant}, SLoc=${s4Payload.StorageLocation}, ShipTo=${s4Payload.ShipToParty}, Items=${s4Items.length}`);
+    LOG.info(`Creating Delivery Without Reference: SP=${s4Payload.ShippingPoint}, Type=${s4Payload.DeliveryDocumentType}, SalesOrg=${s4Payload.SalesOrganization}, Plant=${s4Payload.Plant}, SLoc=${s4Payload.StorageLocation}, ShipTo=${s4Payload.ShipToParty}, Items=${s4Items.length}`);
 
     try {
       const res = await this.client.post(`${this.servicePath}/C_DelivWthoutRefQuickCreate`, {
-        ...options,
+        ...httpOptions,
         data: s4Payload
       });
 
@@ -168,6 +197,7 @@ class DeliveryNoRefAdapter {
         ItemCount: s4Items.length
       };
     } catch (err) {
+      if (err.$sanitize === false) throw err; // see srv/common/visibleError.js
       const mapped = mapS4Error(err, 'createDeliveryWithoutRef');
       LOG.error(`Failed to create delivery without reference: ${mapped.message}`);
       throw _toError(mapped);

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 'use strict';
 /**
  * Read-only discovery for the WM sandbox matrix (Phase A). Every value comes from the live system
@@ -9,7 +10,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
-const s4Config = require('../srv/common/s4Config');
+const { resolveWarehouse } = require('../srv/integration/s4hana/wm/warehouseResolver');
 
 const MVTS = ['201', '241', '311', '301'];
 const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -20,8 +21,8 @@ const num = (v) => { let s = String(v ?? '').trim(); if (!s) return 0; const neg
 /** OR list as one short WHERE line per value (RFC_READ_TABLE rejects long / "suspicious" lines). */
 const orList = (field, values) => values.map((v, i) => `${i === 0 ? '( ' : 'OR '}${field} = '${v}'`).concat([')']);
 const andOr = (field, values) => orList(field, values).map((l, i) => (i === 0 ? `AND ${l}` : l));
-/** Storage types the repo marks as not pickable (package.json cds.s4.mvt261NotReadyBins). */
-const notReadyTypes = () => { try { return (require('@sap/cds').env.s4.mvt261NotReadyBins || []).map((b) => b.storageType); } catch (_) { return []; } };
+/** Storage types the repo marks as not pickable (package.json cds.s4.notReadyBins). */
+const notReadyTypes = () => { try { return (require('@sap/cds').env.s4.notReadyBins || []).map((b) => b.storageType); } catch (_) { return []; } };
 
 function createReaders(rfc) {
   const dd03l = async (tab) => {
@@ -44,7 +45,7 @@ function createReaders(rfc) {
 
   return {
     dd03l, dd04t, fieldsWithText,
-    warehouse: () => s4Config.getWarehouseNumber(),
+    warehouse: (lgnum) => resolveWarehouse(rfc, { warehouseNumber: lgnum }),
 
     /** A1: plant / storage location pairs assigned to the warehouse (T320). */
     wmPairs: (wh) => rfc.readTable('T320', ['WERKS', 'LGORT', 'LGNUM', 'LGNTB', 'OBEST'], [`LGNUM = '${wh}'`]),
@@ -138,8 +139,8 @@ function createReaders(rfc) {
 
     /** A5d: recent reservations per movement type with their WM / MM document chain. */
     recentReservations: (mvt, days = 30, max = 5) => rfc.readTable('RKPF', ['RSNUM', 'BWART', 'RSDAT', 'USNAM', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO'], [`BWART = '${mvt}'`, `AND RSDAT >= '${daysAgo(days)}'`], max),
-    /** WM movement type the app itself puts on a staging TR (ReservationProcessAdapter.createTransferRequirement). */
-    appTrMovementType: (mvt) => (mvt === '201' || mvt === '241' ? '311' : mvt),
+    /** WM movement type used by the app's TR flow is exactly the requested inventory movement type. */
+    appTrMovementType: (mvt) => mvt,
     chain: async (wh, rsnum, rsdat = '', expectedBwlvs = '') => {
       const rs = String(rsnum).padStart(10, '0');
       const resb = await rfc.readTable('RESB', ['RSPOS', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'BDMNG', 'ENMNG', 'KZEAR', 'XLOEK'], [`RSNUM = '${rs}'`]);
@@ -147,7 +148,7 @@ function createReaders(rfc) {
       let ltbk = await rfc.readTable('LTBK', LTBK_F, [`LGNUM = '${wh}'`, `AND RSNUM = '${rs}'`]);
       let link = 'LTBK-RSNUM';
       if (!ltbk.length && rsdat && resb[0]) {
-        // 311/301 staging TRs are created without RSNUM (ReservationProcessAdapter.createTransferRequirement):
+        // 311/301 staging TRs are created without RSNUM (the removed tr-to flow):
         // candidate TRs of the same day whose first item carries the reservation's material and quantity.
         const sameDay = await rfc.readTable('LTBK', LTBK_F, [`LGNUM = '${wh}'`, `AND BDATU = '${rsdat}'`], 50);
         for (const h of sameDay) {
@@ -259,8 +260,9 @@ if (require.main === module) {
   const table = (rows, cols) => { if (!rows || !rows.length) { out('(no rows)'); return; } out(`| ${cols.join(' | ')} |`); out(`|${cols.map(() => '---').join('|')}|`); for (const r of rows) out(`| ${cols.map((c) => String(r[c] ?? '').replace(/\|/g, '/')).join(' | ')} |`); };
   const r = createReaders(new RfcClient());
   (async () => {
-    const wh = r.warehouse();
-    out(`\n## Discovery (${new Date().toISOString().slice(0, 10)}, read-only; warehouse ${wh} from cds.s4.warehouseNumber)`);
+    const lgnum = process.argv.find((arg) => arg.startsWith('--lgnum='))?.slice('--lgnum='.length) || '';
+    const wh = await r.warehouse(lgnum);
+    out(`\n## Discovery (${new Date().toISOString().slice(0, 10)}, read-only; request warehouse ${wh})`);
 
     out('\n### A1. WM-managed plant / storage location pairs (T320)');
     let pairs = [];
@@ -296,7 +298,7 @@ if (require.main === module) {
     let allInterim = [];
     try { allInterim = await r.interimTypes(wh); } catch (e) { notRead('T333 interim types', e); }
     const interim = [...new Set([...allInterim, ...notReadyTypes()])];
-    out(`Storage types excluded: interim types named by any T333 row of ${wh} (VLTYP/NLTYP/RLTYP) = ${allInterim.join(', ') || '-'}; repo config cds.s4.mvt261NotReadyBins = ${notReadyTypes().join(', ') || '-'}`);
+    out(`Storage types excluded: interim types named by any T333 row of ${wh} (VLTYP/NLTYP/RLTYP) = ${allInterim.join(', ') || '-'}; repo config notReadyBins = ${notReadyTypes().join(', ') || '-'}`);
     try {
       stock = await r.stock(wh, interim);
       const inWm = stock.filter((s) => pairs.some((p) => p.WERKS === s.WERKS && p.LGORT === s.LGORT));

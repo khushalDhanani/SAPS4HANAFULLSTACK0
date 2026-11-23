@@ -26,4 +26,15 @@ describe('plantScope(user)', () => {
     expect(r).not.toBeNull();
     expect(r).toContain('AB/C'); // bogus code, but harmless: it matches no real plant
   });
+  it('null or undefined user -> [] (never null, never crashes)', () => {
+    expect(plantScope(null)).toEqual([]);
+    expect(plantScope(undefined)).toEqual([]);
+  });
+  it('plain user object without is() method resolves attr.Plant correctly', () => {
+    expect(plantScope({ attr: { Plant: ['1120'] } })).toEqual(['1120']);
+    expect(plantScope({})).toEqual([]);
+  });
+  it('coerces numeric plant values to strings and normalizes', () => {
+    expect(plantScope(user({ attr: { Plant: [1120, 1130] } }))).toEqual(['1120', '1130']);
+  });
 });

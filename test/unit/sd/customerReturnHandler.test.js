@@ -131,17 +131,6 @@ describe('Unit: CustomerReturnService Handlers', () => {
     });
   });
 
-  describe('getReturnReasons', () => {
-    test('delegates to adapter', async () => {
-      const reasons = [{ ReasonCode: '101', ReasonText: 'Poor quality' }];
-      customerReturnAdapter.getReturnReasons.mockResolvedValueOnce(reasons);
-
-      const req = { error: jest.fn() };
-      const res = await handlers['getReturnReasons'](req);
-      expect(res).toBe(reasons);
-    });
-  });
-
   describe('getReferenceDocuments', () => {
     test('delegates to adapter with search and top params', async () => {
       const refDocs = [{ ReferenceSDDocument: '31000007', SoldToParty: '10082' }];
@@ -178,31 +167,44 @@ describe('Unit: CustomerReturnService Handlers', () => {
     });
   });
 
-  describe('getPlants', () => {
-    test('delegates to adapter', async () => {
-      const plants = [{ Plant: '1110', PlantName: 'Ascend Plant 1' }];
-      customerReturnAdapter.getPlants.mockResolvedValueOnce(plants);
-
-      const req = { error: jest.fn() };
-      const res = await handlers['getPlants'](req);
-      expect(customerReturnAdapter.getPlants).toHaveBeenCalled();
-      expect(res).toBe(plants);
-    });
-  });
-
   describe('getDocumentTypes', () => {
-    test('delegates to adapter', async () => {
-      const docTypes = [{ CustomerReturnType: 'ZRET', CustomerReturnType_Text: 'Sales Return Order' }];
+    const hardCodedZret = [{ CustomerReturnType: 'ZRET', CustomerReturnType_Text: 'Sales Return Order' }];
+
+    test('returns the types SAP delivered when there are any', async () => {
+      const docTypes = [{ CustomerReturnType: 'ZRE2', CustomerReturnType_Text: 'Second return type' }];
       customerReturnAdapter.getDocumentTypes.mockResolvedValueOnce(docTypes);
 
-      const req = { error: jest.fn() };
-      const res = await handlers['getDocumentTypes'](req);
-      expect(customerReturnAdapter.getDocumentTypes).toHaveBeenCalled();
-      expect(res).toBe(docTypes);
+      await expect(handlers['getDocumentTypes']({ error: jest.fn() })).resolves.toEqual(docTypes);
+    });
+
+    // Current behavior, not an endorsement: whether an outage should be hidden this way is an open question (see the audit ask file).
+    test('returns the hard-coded ZRET entry when SAP delivers no types', async () => {
+      customerReturnAdapter.getDocumentTypes.mockResolvedValueOnce([]);
+
+      await expect(handlers['getDocumentTypes']({ error: jest.fn() })).resolves.toEqual(hardCodedZret);
+    });
+
+    test('returns the hard-coded ZRET entry when the SAP read fails', async () => {
+      customerReturnAdapter.getDocumentTypes.mockRejectedValueOnce(new Error('SAP down'));
+
+      await expect(handlers['getDocumentTypes']({ error: jest.fn() })).resolves.toEqual(hardCodedZret);
     });
   });
 
   describe('createCustomerReturn', () => {
+    test('a user named alice has no special access: without a role the request is refused', async () => {
+      const req = {
+        data: { CustomerReturnType: 'CBAR', SoldToParty: '10001', ReturnsOrderReason: '101' },
+        user: { id: 'alice', is: jest.fn().mockReturnValue(false) },
+        error: jest.fn()
+      };
+
+      await handlers['createCustomerReturn'](req);
+
+      expect(req.error).toHaveBeenCalledWith(403, expect.stringContaining('not authorized'));
+      expect(customerReturnAdapter.createCustomerReturn).not.toHaveBeenCalled();
+    });
+
     test('rejects missing SoldToParty with 400', async () => {
       const req = {
         data: { ReturnsOrderReason: '101' },
@@ -223,31 +225,51 @@ describe('Unit: CustomerReturnService Handlers', () => {
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('ReturnsOrderReason is mandatory'));
     });
 
-    test('delegates to adapter when input is valid', async () => {
-      const mockResult = {
-        CustomerReturn: '4500099',
-        CustomerReturnType: 'ZRET',
-        SoldToParty: '10082',
-        TotalNetAmount: 15000,
-        TransactionCurrency: 'INR',
-        Success: true,
-        Message: 'Customer Return 4500099 successfully created'
-      };
-      customerReturnAdapter.createCustomerReturn.mockResolvedValueOnce(mockResult);
+    test('passes only the declared action fields to the adapter', async () => {
+      customerReturnAdapter.createCustomerReturn.mockResolvedValueOnce({ CustomerReturn: '4500099', Success: true });
 
       const req = {
         data: {
           SoldToParty: '10082',
           ReturnsOrderReason: '101',
-          ReferenceSDDocument: '31000007'
+          ReferenceSDDocument: '31000007',
+          NotAnActionField: 'dropped'
         },
         user: { is: jest.fn().mockReturnValue(true) },
         error: jest.fn()
       };
 
-      const res = await handlers['createCustomerReturn'](req);
-      expect(customerReturnAdapter.createCustomerReturn).toHaveBeenCalled();
-      expect(res).toEqual(mockResult);
+      await handlers['createCustomerReturn'](req);
+
+      expect(customerReturnAdapter.createCustomerReturn).toHaveBeenCalledTimes(1);
+      const [payload] = customerReturnAdapter.createCustomerReturn.mock.calls[0];
+      expect(payload.NotAnActionField).toBeUndefined();
+      expect(payload).toEqual({ SoldToParty: '10082', ReturnsOrderReason: '101', ReferenceSDDocument: '31000007' });
+    });
+
+    describe('route selection (CUSTOMER_RETURN_ROUTE)', () => {
+      const req = () => ({
+        data: { SoldToParty: '10276', ReturnsOrderReason: '008', ReferenceSDDocument: '5000446' },
+        user: { is: jest.fn().mockReturnValue(true) },
+        error: jest.fn()
+      });
+      afterEach(() => { delete process.env.CUSTOMER_RETURN_ROUTE; });
+
+      test('uses the BAPI route only when CUSTOMER_RETURN_ROUTE=rfc', async () => {
+        process.env.CUSTOMER_RETURN_ROUTE = 'rfc';
+        customerReturnAdapter.createCustomerReturnViaRfc.mockResolvedValueOnce({ CustomerReturn: '4500200', Success: true });
+        const res = await handlers['createCustomerReturn'](req());
+        expect(customerReturnAdapter.createCustomerReturnViaRfc).toHaveBeenCalledWith(expect.objectContaining({ SoldToParty: '10276', ReturnsOrderReason: '008', ReferenceSDDocument: '5000446' }));
+        expect(customerReturnAdapter.createCustomerReturn).not.toHaveBeenCalled();
+        expect(res.CustomerReturn).toBe('4500200');
+      });
+
+      test('keeps the Lean Order route by default', async () => {
+        customerReturnAdapter.createCustomerReturn.mockResolvedValueOnce({ CustomerReturn: '4500201', Success: true });
+        await handlers['createCustomerReturn'](req());
+        expect(customerReturnAdapter.createCustomerReturn).toHaveBeenCalled();
+        expect(customerReturnAdapter.createCustomerReturnViaRfc).not.toHaveBeenCalled();
+      });
     });
 
     test('forwards 501 when adapter throws missing persistence capability error', async () => {

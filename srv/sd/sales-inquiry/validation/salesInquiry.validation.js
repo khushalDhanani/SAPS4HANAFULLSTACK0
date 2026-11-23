@@ -181,6 +181,5 @@ function validateCreateSalesDocumentPayload(payload) {
 
 module.exports = {
     validateCreateSalesInquiryPayload: validateCreateSalesDocumentPayload,
-    validateCreateSalesOrderPayload: validateCreateSalesDocumentPayload,
-    validateSalesDocumentPayload: validateCreateSalesDocumentPayload
+    validateCreateSalesOrderPayload: validateCreateSalesDocumentPayload
 };

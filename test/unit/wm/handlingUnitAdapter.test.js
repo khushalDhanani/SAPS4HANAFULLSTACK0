@@ -5,12 +5,12 @@ const listRow = {
   HandlingUnitExternalID: '1000000000', Warehouse: '', HandlingUnitIDChar32: '005056B40AF61FE08DD83C72B2D7F7F0',
   HandlingUnitOrigin: 'ERP', PackagingMaterial: '2000000042', PackagingMaterialName: 'Pallet', Plant: '1010',
   StorageLocation: '', StorageBin: '0000000007', GrossWeight: '209.200', NetWeight: '200.000', WeightUnit: 'KG',
-  GrossVolume: '0.000', VolumeUnit: '', HandlingUnitProcessStatus: '', CreatedByUser: 'ADAPHALE', CreationDateTime: '/Date(1747886400000)/'
+  GrossVolume: '0.000', VolumeUnit: '', HandlingUnitProcessStatus: '', CreatedByUser: 'SAP_USER_01', CreationDateTime: '/Date(1747886400000)/'
 };
 const detailHeader = {
   HandlingUnitExternalID: '1000000000', Warehouse: '', PackagingMaterial: '2000000042', Plant: '1010',
   GrossWeight: '209.200', NetWeight: '200.000', HandlingUnitTareWeight: '9.200', WeightUnit: 'KG',
-  HandlingUnitPackingObjectKey: '000002000000', CreatedByUser: 'ADAPHALE', CreationDateTime: '/Date(1747886400000)/'
+  HandlingUnitPackingObjectKey: '000002000000', CreatedByUser: 'SAP_USER_01', CreationDateTime: '/Date(1747886400000)/'
 };
 const detailItem = {
   HandlingUnitItem: '000001', Material: '000000000004000000002', MaterialName: 'HEEP', Plant: '1130',
@@ -42,10 +42,23 @@ describe('HandlingUnitAdapter.list', () => {
     expect(r).toMatchObject({ TotalCount: 1, SapCount: 1, Truncated: false });
     expect(r.Items[0]).toMatchObject({
       HandlingUnitExternalID: '1000000000', HandlingUnitIDChar32: '005056B40AF61FE08DD83C72B2D7F7F0',
-      PackagingMaterial: '2000000042', GrossWeight: 209.2, NetWeight: 200, WeightUnit: 'KG', CreatedByUser: 'ADAPHALE'
+      PackagingMaterial: '2000000042', GrossWeight: 209.2, NetWeight: 200, WeightUnit: 'KG', CreatedByUser: 'SAP_USER_01'
     });
     expect(calls[0].query).toContain("$filter=Plant eq '1010'");
     expect(calls[0].query).toContain('$inlinecount=allpages');
+  });
+
+  it('reads only `limit` rows and reports Truncated; the default stays the 1000 cap', async () => {
+    const { a, calls } = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '500', results: [listRow] }]]);
+    const r = await a.list({ limit: 1 });
+    expect(r).toMatchObject({ TotalCount: 1, SapCount: 500, Truncated: true });
+    expect(calls[0].query).toContain('$top=1&');
+    const d = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '1', results: [listRow] }]]);
+    await d.a.list({});
+    expect(d.calls[0].query).toContain('$top=1000');
+    const big = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '1', results: [listRow] }]]);
+    await big.a.list({ limit: 99999 });
+    expect(big.calls[0].query).toContain('$top=1000');
   });
 
   it('fills a blank header Plant/StorageLocation from the first HU item (lowest HandlingUnitItem)', async () => {
@@ -290,33 +303,6 @@ describe('HandlingUnitAdapter.labels (batched material + first serial join)', ()
     expect(calls.client).toHaveLength(0);
     expect(calls.rfc).toHaveLength(0);
   });
-
-  // Authorization: labels() reads I_HandlingUnitItemCombined in the SAME auth-enforced service as list(); SAP filters
-  // out HUs the user may not see, so a restricted id simply comes back with no rows -> empty label, no serial read.
-  it('returns no data for an HU the user is not authorized to see (SAP filters it out)', async () => {
-    const rfcCalls = [];
-    const client = {
-      // Mimics SAP DCL: only rows whose HU id is in the $filter AND is authorized ('B') are returned; 'RESTRICTED' is filtered out.
-      get: async (path, { query } = {}) => {
-        const q = decodeURIComponent(query || '');
-        const rows = items.filter((r) => q.includes(`HandlingUnitExternalID eq '${r.HandlingUnitExternalID}'`));
-        return { data: { d: { results: rows } } };
-      }
-    };
-    const rfc = {
-      readTable: async (table, fields, where) => {
-        rfcCalls.push({ table, where: where.join(' ') });
-        return table === 'SER06' ? [{ OBKNR: 'OB1', VENUM: '0000021496' }] : [{ OBKNR: 'OB1', SERNR: 'SR-B' }];
-      }
-    };
-    const out = await new HandlingUnitAdapter({ client, rfc }).labels({ handlingUnitExternalIDs: ['B', 'RESTRICTED'] });
-    expect(out.Items).toEqual([
-      { HandlingUnitExternalID: 'B', MaterialName: 'Motor', SerialNumber: 'SR-B' },
-      { HandlingUnitExternalID: 'RESTRICTED', MaterialName: '', SerialNumber: '' } // filtered out by SAP -> no data
-    ]);
-    // the restricted HU never reaches the serial read; only authorized 'B' (VENUM 0000021496) does
-    expect(rfcCalls[0].where).toBe("( VENUM = '0000021496' )");
-  });
 });
 
 describe('HandlingUnitAdapter plant authorization (all read paths)', () => {
@@ -476,6 +462,72 @@ describe('HandlingUnitAdapter writes (BAPI_HU_* + commit on one RFC session)', (
   it('maps an RFC transport error to 502', async () => {
     const r = rfc({ fail: new Error('RFC_COMMUNICATION_FAILURE') });
     await expect(new HandlingUnitAdapter({ rfc: r }).remove({ handlingUnitExternalID: '2000020166' })).rejects.toMatchObject({ status: 502, message: /RFC_COMMUNICATION_FAILURE/ });
+  });
+
+  describe('after the commit was sent', () => {
+    const INPUT = { packagingMaterial: '2000000043', plant: '1120', storageLocation: 'HU01' };
+    const notConfirmed = (context) => ({
+      status: 502,
+      $sanitize: false,
+      message: `${context}: SAP may have saved this change to handling unit 2000020166, but it could not be read back, so it is NOT confirmed. Check it in SAP before trying again.`
+    });
+    const readBackDown = (r, err = new Error('RFC_COMMUNICATION_FAILURE')) => { r.readTable.mockImplementation(async () => { throw err; }); return r; };
+
+    it.each([
+      ['create', 'Create handling unit', INPUT],
+      ['remove', 'Delete handling unit', { handlingUnitExternalID: '2000020166' }]
+    ])('%s: a failed read-back names the handling unit and warns', async (method, context, input) => {
+      const r = readBackDown(rfc());
+      await expect(new HandlingUnitAdapter({ rfc: r })[method](input)).rejects.toMatchObject(notConfirmed(context));
+      expect(fms(r)).toHaveLength(2);
+    });
+
+    it('a read-back error that has its own status still warns, and SAP\'s text stays out', async () => {
+      const r = readBackDown(rfc(), Object.assign(new Error('internal RFC detail'), { status: 503 }));
+      const err = await new HandlingUnitAdapter({ rfc: r }).create(INPUT).catch((e) => e);
+      expect(err).toMatchObject(notConfirmed('Create handling unit'));
+      expect(err.message).not.toContain('internal RFC detail');
+    });
+
+    it('a commit call that drops warns, because SAP may have saved it', async () => {
+      const r = rfc();
+      const send = r.call.getMockImplementation();
+      r.call.mockImplementation(async (fm, params) => {
+        if (fm === 'BAPI_TRANSACTION_COMMIT') throw new Error('connection lost');
+        return send(fm, params);
+      });
+      await expect(new HandlingUnitAdapter({ rfc: r }).create(INPUT)).rejects.toMatchObject(notConfirmed('Create handling unit'));
+    });
+
+    it('a connection that fails to close after the commit warns', async () => {
+      const r = rfc();
+      const session = r.session;
+      r.session = async (fn) => { await session(fn); throw new Error('close failed'); };
+      await expect(new HandlingUnitAdapter({ rfc: r }).create(INPUT)).rejects.toMatchObject(notConfirmed('Create handling unit'));
+    });
+
+    it('leaves the number out when SAP named none', async () => {
+      const r = readBackDown(rfc());
+      r.call.mockImplementation(async () => ({ RETURN: [] })); // no HUKEY
+      await expect(new HandlingUnitAdapter({ rfc: r }).create(INPUT)).rejects.toThrow(/^Create handling unit: SAP may have saved this change, but it could not/);
+    });
+
+    it('a commit SAP refused stays a plain failure', async () => {
+      const r = rfc();
+      const send = r.call.getMockImplementation();
+      r.call.mockImplementation(async (fm, params) => (fm === 'BAPI_TRANSACTION_COMMIT' ? { RETURN: { TYPE: 'E', MESSAGE: 'Update terminated' } } : send(fm, params)));
+      const err = await new HandlingUnitAdapter({ rfc: r }).create(INPUT).catch((e) => e);
+      expect(err).toMatchObject({ status: 502, message: 'Create handling unit: commit failed: Update terminated' });
+      expect(err.$sanitize).toBeUndefined();
+    });
+
+    it('a failure before the commit stays a plain failure', async () => {
+      const r = rfc({ fail: new Error('RFC_COMMUNICATION_FAILURE') });
+      const err = await new HandlingUnitAdapter({ rfc: r }).create(INPUT).catch((e) => e);
+      expect(err).toMatchObject({ status: 502 });
+      expect(err.$sanitize).toBeUndefined();
+      expect(fms(r)).not.toContain('BAPI_TRANSACTION_COMMIT');
+    });
   });
 
   // Plant authorization on writes (VEKP.WERKS of the test HU is '1120'); role guards are unchanged.

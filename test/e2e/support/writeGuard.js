@@ -1,0 +1,61 @@
+'use strict';
+
+/**
+ * Tier 0 E2E write guard: Playwright suites must not write to SAP by accident.
+ *
+ * Every browser request is classified before it leaves the page. Reads pass: GET/HEAD/OPTIONS, and OData
+ * `$batch` POSTs whose inner requests are all GET (UI5 OData V4 models send reads this way). Everything else
+ * (action POSTs, PATCH/PUT/DELETE/MERGE, `$batch` containing a change, the AI stream) is aborted and recorded.
+ * A suite that needs a live SAP write must not use this guard and needs the user's written go per call (AGENTS.md).
+ */
+
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+// Fail closed: every request-shaped line counts whatever its case, indentation or verb; only an exact GET is a read.
+const BATCH_LINE = /^[ \t]*([A-Za-z]+)[ \t]+\S+[ \t]+HTTP\/\d(?:\.\d)?[ \t\r]*$/gm;
+const WRITE_VERB_LINE = /^[ \t]*(?:POST|PUT|PATCH|DELETE|MERGE)\b/im; // a write verb that is not a well-formed request line
+const METHOD_OVERRIDE = /^[ \t]*x-http-method(?:-override)?[ \t]*:/im; // tunnels a write through a GET
+
+/**
+ * allowWrites: RegExps of paths a gated live Tier C suite may POST to (only ever passed by liveWriteGate users).
+ * @returns {{ allow: boolean, reason: string }}
+ */
+function classifyRequest({ method, url, postData, headers = {} }, allowWrites = []) {
+    const m = String(method || '').toUpperCase();
+    if (Object.keys(headers).some((h) => /^x-http-method(-override)?$/i.test(h))) return { allow: false, reason: 'method override header' };
+    if (READ_METHODS.has(m)) return { allow: true, reason: 'read method' };
+
+    let pathname = '';
+    try { pathname = new URL(url).pathname; } catch (_) { pathname = String(url || ''); }
+    if (m === 'POST' && allowWrites.some((re) => re.test(pathname))) return { allow: true, reason: `allowed live write ${pathname}` };
+
+    if (m === 'POST' && /\/\$batch$/.test(pathname)) {
+        const body = String(postData || '');
+        const inner = [...body.matchAll(BATCH_LINE)].map((x) => x[1]);
+        if (inner.length === 0) return { allow: false, reason: '$batch without readable request lines' };
+        if (METHOD_OVERRIDE.test(body)) return { allow: false, reason: '$batch contains a method override header' };
+        if (WRITE_VERB_LINE.test(body)) return { allow: false, reason: '$batch contains a write verb line' };
+        const writes = inner.filter((x) => x !== 'GET');
+        return writes.length === 0
+            ? { allow: true, reason: `$batch of ${inner.length} GET` }
+            : { allow: false, reason: `$batch contains ${writes.join(', ')}` };
+    }
+    return { allow: false, reason: `${m} ${pathname}` };
+}
+
+/**
+ * Routes every request of a Playwright context through classifyRequest.
+ * @returns {Array<{ method: string, url: string, reason: string }>} live list of blocked requests
+ */
+async function installWriteGuard(context, { allowWrites = [] } = {}) {
+    const blocked = [];
+    await context.route('**/*', (route) => {
+        const req = route.request();
+        const verdict = classifyRequest({ method: req.method(), url: req.url(), postData: req.postData(), headers: req.headers() }, allowWrites);
+        if (verdict.allow) return route.continue();
+        blocked.push({ method: req.method(), url: req.url(), reason: verdict.reason });
+        return route.abort('blockedbyclient');
+    });
+    return blocked;
+}
+
+module.exports = { classifyRequest, installWriteGuard };

@@ -12,15 +12,17 @@ sap.ui.define([
     return Controller.extend("saps4hana.fiori.controller.Login", {
         onInit: function () {
             var sSavedUser = "";
+            var bRememberMe = false;
             var oAuthModel = AuthService.getModel();
             if (oAuthModel) {
                 sSavedUser = oAuthModel.getProperty("/savedUsername") || "";
+                bRememberMe = Boolean(oAuthModel.getProperty("/rememberMe"));
             }
 
             var oViewModel = new JSONModel({
                 username: sSavedUser,
                 password: "",
-                rememberMe: true,
+                rememberMe: bRememberMe,
                 isBusy: false,
                 hasError: false,
                 errorMessage: "",
@@ -54,11 +56,14 @@ sap.ui.define([
             var oViewModel = this.getView().getModel("loginView");
             if (oViewModel) {
                 var sSavedUser = "";
+                var bRememberMe = false;
                 var oAuthModel = AuthService.getModel();
                 if (oAuthModel) {
                     sSavedUser = oAuthModel.getProperty("/savedUsername") || "";
+                    bRememberMe = Boolean(oAuthModel.getProperty("/rememberMe"));
                 }
                 oViewModel.setProperty("/username", sSavedUser);
+                oViewModel.setProperty("/rememberMe", bRememberMe);
                 oViewModel.setProperty("/password", "");
                 oViewModel.setProperty("/isBusy", false);
                 oViewModel.setProperty("/hasError", false);

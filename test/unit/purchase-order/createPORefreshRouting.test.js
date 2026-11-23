@@ -45,6 +45,8 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
     let originalSessionStorage;
     let PurchaseOrderModel;
     let AuthService;
+    let authServiceFactory;
+    let BaseObjectMock;
 
     const createStorageMock = () => {
         let store = {};
@@ -77,16 +79,26 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             return Subclass;
         };
 
+        // AuthService delegates header sync to AuthModelSync; load the real module so it can be injected.
+        let AuthModelSync;
+        global.sap = { ui: { define: function (deps, factory) { AuthModelSync = factory(); } } };
+        require('../../../app/fiori-app/webapp/service/AuthModelSync');
+
         // Mock sap environment for UI5 modules
         global.sap = {
             ui: {
                 define: function (deps, factory) {
                     if (deps.includes("saps4hana/fiori/service/ODataClient")) {
+                        authServiceFactory = factory;
+                        BaseObjectMock = BaseObject;
                         AuthService = factory(
                             BaseObject,
                             MockJSONModel,
                             { warning: jest.fn() },
-                            { post: jest.fn(), get: jest.fn().mockResolvedValue(null) }
+                            { post: jest.fn(), get: jest.fn().mockResolvedValue(null) },
+                            undefined, // AuthStorage: not exercised by this suite
+                            undefined, // AuthUserHelper: not exercised by this suite
+                            AuthModelSync
                         );
                     } else {
                         PurchaseOrderModel = factory(MockJSONModel);
@@ -112,33 +124,40 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
         global.sessionStorage = originalSessionStorage;
     });
 
+    describe('AuthService role check without AuthUserHelper', () => {
+        it('fails closed: no role and no delivery permission is granted when the helper cannot be resolved', () => {
+            const log = { warning: jest.fn() };
+            const service = authServiceFactory(
+                BaseObjectMock,
+                MockJSONModel,
+                log,
+                { post: jest.fn(), get: jest.fn().mockResolvedValue(null) }
+            );
+            service.init({ getModel: jest.fn(() => null), setModel: jest.fn() });
+            service.getModel().setProperty("/user", { username: "admin", scopes: ["Admin"] });
+
+            expect(service.hasAnyRole(["Admin"])).toBe(false);
+            expect(service.hasAnyRole([])).toBe(false);
+            expect(service.canCreateDelivery()).toBe(false);
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining("role check denied"));
+        });
+    });
+
     describe('AuthService.syncModelHeaders', () => {
-        it('should synchronize authorization header to all 6 models (default, fiService, salesInquiry, goodsIssue, goodsReceipt, warehouseMgmt)', () => {
+        it('should synchronize authorization header to active models (default, salesInquiry, outboundDelivery)', () => {
             const defaultModel = {
-                changeHttpHeaders: jest.fn()
-            };
-            const fiModel = {
                 changeHttpHeaders: jest.fn()
             };
             const sdModel = {
                 changeHttpHeaders: jest.fn()
             };
-            const giModel = {
-                changeHttpHeaders: jest.fn()
-            };
             const grModel = {
-                changeHttpHeaders: jest.fn()
-            };
-            const wmModel = {
                 changeHttpHeaders: jest.fn()
             };
             const mockComponent = {
                 getModel: jest.fn((name) => {
-                    if (name === "fiService") return fiModel;
                     if (name === "salesInquiry") return sdModel;
-                    if (name === "goodsIssue") return giModel;
-                    if (name === "goodsReceipt") return grModel;
-                    if (name === "warehouseMgmt") return wmModel;
+                    if (name === "outboundDelivery") return grModel;
                     return defaultModel;
                 }),
                 setModel: jest.fn()
@@ -152,19 +171,10 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             expect(defaultModel.changeHttpHeaders).toHaveBeenCalledWith({
                 Authorization: "Bearer sample-jwt-token"
             });
-            expect(fiModel.changeHttpHeaders).toHaveBeenCalledWith({
-                Authorization: "Bearer sample-jwt-token"
-            });
             expect(sdModel.changeHttpHeaders).toHaveBeenCalledWith({
                 Authorization: "Bearer sample-jwt-token"
             });
-            expect(giModel.changeHttpHeaders).toHaveBeenCalledWith({
-                Authorization: "Bearer sample-jwt-token"
-            });
             expect(grModel.changeHttpHeaders).toHaveBeenCalledWith({
-                Authorization: "Bearer sample-jwt-token"
-            });
-            expect(wmModel.changeHttpHeaders).toHaveBeenCalledWith({
                 Authorization: "Bearer sample-jwt-token"
             });
         });
@@ -209,6 +219,24 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             expect(() => {
                 AuthService.syncModelHeaders(mockComponent);
             }).not.toThrow();
+        });
+
+        it('should warn instead of silently skipping when AuthModelSync cannot be resolved', () => {
+            const log = { warning: jest.fn() };
+            const defaultModel = { changeHttpHeaders: jest.fn() };
+            const mockComponent = { getModel: jest.fn(() => defaultModel), setModel: jest.fn() };
+            const serviceWithoutSync = authServiceFactory(
+                BaseObjectMock,
+                MockJSONModel,
+                log,
+                { post: jest.fn(), get: jest.fn().mockResolvedValue(null) }
+            );
+
+            serviceWithoutSync.init(mockComponent);
+            serviceWithoutSync.syncModelHeaders(mockComponent);
+
+            expect(defaultModel.changeHttpHeaders).not.toHaveBeenCalled();
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining("AuthModelSync could not be resolved"));
         });
     });
 
@@ -268,47 +296,4 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
         });
     });
 
-    describe('Shell Navigation Synchronization', () => {
-        it('should map createPurchaseOrder route to correct Shell title and enable back button', () => {
-            const mockShellModel = new MockJSONModel({
-                currentTitle: "",
-                showNavButton: false
-            });
-
-            // Simulate App.controller shell update logic
-            function updateShell(sRouteName) {
-                let sTitle = "";
-                let bShowNav = false;
-                if (sRouteName === "createPurchaseOrder") {
-                    sTitle = "Create Purchase Order";
-                    bShowNav = true;
-                } else if (sRouteName === "purchaseOrders") {
-                    sTitle = "Purchase Orders";
-                    bShowNav = true;
-                } else if (sRouteName === "dashboard") {
-                    sTitle = "Enterprise Operations Dashboard";
-                    bShowNav = false;
-                }
-                mockShellModel.setProperty("/currentTitle", sTitle);
-                mockShellModel.setProperty("/showNavButton", bShowNav);
-            }
-
-            updateShell("createPurchaseOrder");
-            expect(mockShellModel.getProperty("/currentTitle")).toBe("Create Purchase Order");
-            expect(mockShellModel.getProperty("/showNavButton")).toBe(true);
-
-            updateShell("purchaseOrders");
-            expect(mockShellModel.getProperty("/currentTitle")).toBe("Purchase Orders");
-            expect(mockShellModel.getProperty("/showNavButton")).toBe(true);
-        });
-
-        it('should handle direct URL hash mm/purchase-orders/create correctly on refresh', () => {
-            const sHash = "mm/purchase-orders/create";
-            let sDerivedRoute = "";
-            if (sHash.indexOf("mm/purchase-orders/create") === 0) {
-                sDerivedRoute = "createPurchaseOrder";
-            }
-            expect(sDerivedRoute).toBe("createPurchaseOrder");
-        });
-    });
 });

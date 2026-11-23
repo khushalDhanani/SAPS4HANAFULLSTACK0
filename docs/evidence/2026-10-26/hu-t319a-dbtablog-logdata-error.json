@@ -1,0 +1,8 @@
+{
+  "mode": "READ-ONLY",
+  "operation": "RFC_READ_TABLE DBTABLOG including LOGDATA for TABNAME T319A",
+  "result": "FAILED",
+  "errorClass": "SAP RFC_READ_TABLE parser error (ID SAIS, type E, number 000)",
+  "detail": "The SAP parser rejected the LOGDATA request. The complete response was not preserved in the raw capture; old/new values are therefore not evidenced.",
+  "writesPerformed": false
+}

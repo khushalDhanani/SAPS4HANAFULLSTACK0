@@ -39,8 +39,10 @@ class MockJSONModel {
 }
 
 class MockFilter {
-    constructor(config) {
+    constructor(config, operator, value) {
         this.config = config;
+        this.operator = operator;
+        this.value = value;
     }
 }
 
@@ -181,6 +183,15 @@ describe("SalesOrders Controller", () => {
         });
     });
 
+    test("_onRouteMatched skips the reload on the first match and refreshes on a return visit", () => {
+        controller.onInit();
+        mockBinding.refresh.mockClear();
+        controller._onRouteMatched();
+        expect(mockBinding.refresh).not.toHaveBeenCalled();
+        controller._onRouteMatched();
+        expect(mockBinding.refresh).toHaveBeenCalledTimes(1);
+    });
+
     test("onInit sets up salesOrdersView model with '-' initial KPIs and attaches pattern matched", async () => {
         controller.onInit();
         const viewModel = mockView.getModel("salesOrdersView");
@@ -245,8 +256,10 @@ describe("SalesOrders Controller", () => {
         expect(viewModel.getProperty("/totalCount")).toBe(3);
     });
 
-    test("onUpdateFinished sets totalCount to '-' when $count parameter is absent", () => {
+    test("onUpdateFinished replaces an earlier totalCount with '-' when $count parameter is absent", () => {
         controller.onInit();
+        const viewModel = mockView.getModel("salesOrdersView");
+        viewModel.setProperty("/totalCount", 42);
 
         const mockEvent = {
             getSource: () => ({}),
@@ -255,7 +268,6 @@ describe("SalesOrders Controller", () => {
 
         controller.onUpdateFinished(mockEvent);
 
-        const viewModel = mockView.getModel("salesOrdersView");
         expect(viewModel.getProperty("/totalCount")).toBe("-");
     });
 
@@ -276,18 +288,16 @@ describe("SalesOrders Controller", () => {
         expect(mockRouter.navTo).toHaveBeenCalledWith("createSalesOrder");
     });
 
-    test("onSearch applies filter on table items", () => {
-        controller.byId = jest.fn((id) => {
-            if (id === "salesOrdersTable") return mockTable;
-            return null;
-        });
-
-        const mockEvent = {
-            getParameter: (param) => (param === "query" ? "10135" : "")
-        };
-
-        controller.onSearch(mockEvent);
-        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
+    test.each([
+        ["10135", ["SalesOrder", "SoldToParty", "PurchaseOrderByCustomer"]],
+        ["ZDOM", ["SalesOrder", "SoldToParty", "PurchaseOrderByCustomer", "SalesOrderType"]]
+    ])("onSearch '%s' searches only fields SAP can filter (no SoldToPartyName; SalesOrderType only up to 4 chars)", (query, fields) => {
+        controller.byId = jest.fn((id) => (id === "salesOrdersTable" ? mockTable : null));
+        controller.onSearch({ getParameter: (p) => (p === "query" ? query : "") });
+        const aFilters = mockBinding.filter.mock.calls.slice(-1)[0][0];
+        const oOr = aFilters.find((f) => f.config && f.config.filters);
+        expect(oOr.config.filters.map((f) => f.config)).toEqual(fields);
+        expect(oOr.config.filters.every((f) => f.operator === "Contains" && f.value === query)).toBe(true);
     });
 
     test("onRefresh refreshes table items binding", () => {
@@ -306,7 +316,6 @@ describe("SalesOrders Controller", () => {
                         return {
                             getProperty: (prop) => {
                                 if (prop === "SalesOrder") return "5000104";
-                                if (prop === "ShippingPoint") return "1120";
                                 return null;
                             }
                         };
@@ -320,7 +329,8 @@ describe("SalesOrders Controller", () => {
 
         const dialogModel = mockView.getModel("deliveryDialog");
         expect(dialogModel.getProperty("/salesOrder")).toBe("5000104");
-        expect(dialogModel.getProperty("/shippingPoint")).toBe("1120");
+        // The worklist entity has no ShippingPoint; the user enters it in the dialog
+        expect(dialogModel.getProperty("/shippingPoint")).toBe("");
         expect(dialogModel.getProperty("/deliveryDate")).toBeDefined();
         expect(controller._openCreateDeliveryDialog).toHaveBeenCalled();
     });

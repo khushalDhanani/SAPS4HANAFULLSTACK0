@@ -1,0 +1,40 @@
+{
+  "capturedAt": "2026-10-26T04:38:21.804Z",
+  "mode": "READ-ONLY",
+  "tables": {
+    "VEKP": [
+      {
+        "VENUM": "0000021384",
+        "EXIDV": "00000000002000020150",
+        "STATUS": "0020",
+        "STATS": "",
+        "WMSTA": "",
+        "ERLKZ": "",
+        "HU_LGORT": "X",
+        "LGORT": "",
+        "VPOBJ": "12",
+        "VPOBJKEY": "0180000117",
+        "VHILM": "000000002000000340",
+        "VHART": "Z007",
+        "WERKS": "",
+        "LGNUM": "W01"
+      },
+      {
+        "VENUM": "0000021385",
+        "EXIDV": "00000000002000020151",
+        "STATUS": "0020",
+        "STATS": "",
+        "WMSTA": "",
+        "ERLKZ": "",
+        "HU_LGORT": "X",
+        "LGORT": "",
+        "VPOBJ": "12",
+        "VPOBJKEY": "0180000117",
+        "VHILM": "000000002000000340",
+        "VHART": "Z007",
+        "WERKS": "",
+        "LGNUM": "W01"
+      }
+    ]
+  }
+}

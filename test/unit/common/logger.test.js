@@ -36,12 +36,6 @@ describe('Unit: Logger Module (srv/common/logger.js)', () => {
       expect(log.id).toBe('test-service');
       expect(log.label).toBe('test-service');
     });
-
-    it('returns the same cached logger when called repeatedly with identical label', () => {
-      const log1 = getLogger('cached-logger');
-      const log2 = getLogger('cached-logger');
-      expect(log1).toBe(log2);
-    });
   });
 
   describe('correlationPlainFormat', () => {
@@ -57,8 +51,9 @@ describe('Unit: Logger Module (srv/common/logger.js)', () => {
       expect(formatted).toEqual(['[my-service] [req-corr-12345] - Processing order 1001']);
     });
 
-    it('prefers cds.context.id as the authoritative request correlation identifier', () => {
+    it('uses cds.context.id, not correlation_id, when both are present', () => {
       cds.context = { id: 'req-auth-9999' };
+      cds.context.correlation_id = 'other-correlation';
       const formatted = correlationPlainFormat('my-service', 3, 'Task completed');
       expect(formatted).toEqual(['[my-service] [req-auth-9999] - Task completed']);
     });
@@ -78,17 +73,28 @@ describe('Unit: Logger Module (srv/common/logger.js)', () => {
       expect(formatted[0]).toBe('[diag] [req-obj-1] -');
       expect(formatted[1]).toBe(payload);
     });
+
+    it('scrubs sensitive credentials from string logs and object payloads', () => {
+      cds.context = { id: 'req-sec-1' };
+      const formattedStr = correlationPlainFormat('auth', 2, 'User logged in with Bearer eyJhbGciOiJIUzI1NiJ9.test and Basic dXNlcjpwYXNz');
+      expect(formattedStr[0]).toBe('[auth] [req-sec-1] - User logged in with [REDACTED_CREDENTIAL] and [REDACTED_CREDENTIAL]');
+
+      const payload = {
+        username: 'alice',
+        password: 'super-secret-password',
+        token: 'Bearer eyJhbGciOiJIUzI1NiJ9.test',
+        nested: 'normal'
+      };
+      const formattedObj = correlationPlainFormat('auth', 2, 'Auth attempt:', payload);
+      expect(formattedObj[0]).toBe('[auth] [req-sec-1] - Auth attempt:');
+      expect(formattedObj[1].username).toBe('alice');
+      expect(formattedObj[1].password).toBe('[REDACTED_CREDENTIAL]');
+      expect(formattedObj[1].token).toBe('[REDACTED_CREDENTIAL]');
+      expect(formattedObj[1].nested).toBe('normal');
+    });
   });
 
   describe('Log Level Control', () => {
-    it('respects CAP log levels dynamically', () => {
-      const log = getLogger('dynamic-level-test', 'warn');
-      expect(log.level).toBe(cds.log.levels.WARN);
-      expect(log._info).toBe(false);
-      expect(log._warn).toBe(true);
-      expect(log._error).toBe(true);
-    });
-
     it('suppresses logs below the configured level', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
       const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});

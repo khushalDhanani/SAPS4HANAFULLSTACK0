@@ -57,7 +57,7 @@
         </content>
         <beginButton>
             <Button id="piCreateSubmit" text="{i18n>piCreateSubmit}" type="Emphasized" press=".onSubmitCreate"
-                enabled="{= !${piCreate>/busy} &amp;&amp; !!${piCreate>/externalName} &amp;&amp; !!${piCreate>/weightUnit} &amp;&amp; !!${piCreate>/pkgMaterial} }" />
+                enabled="{= !${piCreate>/busy} &amp;&amp; !${piCreate>/submitBlocked} &amp;&amp; !!${piCreate>/externalName} &amp;&amp; !!${piCreate>/weightUnit} &amp;&amp; !!${piCreate>/pkgMaterial} }" />
         </beginButton>
         <endButton>
             <Button id="piCreateCancel" text="{i18n>piCreateCancel}" press=".onCancelCreate" />

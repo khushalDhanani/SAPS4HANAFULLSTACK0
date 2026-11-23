@@ -174,4 +174,76 @@ describe('Unit: Validation', () => {
         expect(result.message).toContain('NetPriceAmount must be a non-negative number');
     });
 
+    describe('rules the schema defines for both layers (purchaseOrderRules.json: "across CAP backend and SAPUI5 frontend")', () => {
+        const zdomPayload = (headerChanges, itemChanges) => ({
+            header: {
+                PurchaseOrderType: 'ZDOM',
+                CompanyCode: '1000',
+                PurchasingOrganization: 'AE01',
+                PurchasingGroup: '101',
+                Supplier: '100102',
+                Currency: 'INR',
+                DocumentDate: '2026-09-24',
+                ...headerChanges
+            },
+            items: [{
+                PurchaseOrderItem: '10',
+                Material: 'MAT101',
+                Plant: '1000',
+                StorageLocation: '100A',
+                OrderQuantity: '10',
+                UnitOfMeasure: 'PC',
+                PurchaseOrderItemCategory: '0',
+                AccountAssignmentCategory: '',
+                ...itemChanges
+            }]
+        });
+
+        it('should accept a ZDOM payload whose plant starts with the allowed prefix 1', () => {
+            expect(validateCreatePurchaseOrderPayload(zdomPayload()).isValid).toBe(true);
+        });
+
+        it.each([['NB'], ['nb'], ['FO']])('should reject the document type %s, which has no Z prefix', (type) => {
+            const result = validateCreatePurchaseOrderPayload(zdomPayload({ PurchaseOrderType: type }));
+            expect(result.isValid).toBe(false);
+            expect(result.errors).toContainEqual(expect.objectContaining({
+                field: 'header.PurchaseOrderType',
+                message: `Document Type '${type.toUpperCase()}' must start with 'Z'`
+            }));
+        });
+
+        it('should accept a lower-case Z document type', () => {
+            expect(validateCreatePurchaseOrderPayload(zdomPayload({ PurchaseOrderType: ' zdom ' })).isValid).toBe(true);
+        });
+
+        it('should reject a ZDOM plant outside the allowed prefix 1, naming the item', () => {
+            const result = validateCreatePurchaseOrderPayload(zdomPayload({}, { Plant: '2000' }));
+            expect(result.isValid).toBe(false);
+            expect(result.errors).toContainEqual(expect.objectContaining({
+                field: 'items[0].Plant',
+                message: expect.stringContaining("Plant '2000' must start with '1' for Document Type 'ZDOM'")
+            }));
+        });
+
+        it('should accept a plant with spaces around it', () => {
+            expect(validateCreatePurchaseOrderPayload(zdomPayload({}, { Plant: ' 1120 ' })).isValid).toBe(true);
+        });
+
+        it('should apply the prefix of the chosen type: ZDIS takes plant prefix 2', () => {
+            const result = validateCreatePurchaseOrderPayload(zdomPayload({ PurchaseOrderType: 'ZDIS' }, { Plant: '1120' }));
+            expect(result.errors.map(e => e.field)).toContain('items[0].Plant');
+        });
+
+        it('should not limit the plant for a type with no plant prefix: ZSTO', () => {
+            const result = validateCreatePurchaseOrderPayload(zdomPayload({ PurchaseOrderType: 'ZSTO' }, { Plant: '2000' }));
+            expect(result.errors.map(e => e.field)).not.toContain('items[0].Plant');
+        });
+
+        it('should report a missing plant once, not as a prefix error', () => {
+            const result = validateCreatePurchaseOrderPayload(zdomPayload({}, { Plant: '' }));
+            expect(result.errors.filter(e => e.field === 'items[0].Plant')).toHaveLength(1);
+            expect(result.message).not.toContain('must start with');
+        });
+    });
+
 });

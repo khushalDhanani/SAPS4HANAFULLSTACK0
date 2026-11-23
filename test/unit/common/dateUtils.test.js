@@ -2,15 +2,12 @@ const { formatDateToYMD } = require('../../../srv/common/dateUtils');
 
 describe('Unit: dateUtils (formatDateToYMD)', () => {
   it('should format /Date(epoch)/ format correctly', () => {
-    const epoch = 1757376000000;
-    const formatted = formatDateToYMD(`/Date(${epoch})/`);
-    expect(formatted).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // 1757376000000 ms = 2025-09-09T00:00:00Z
+    expect(formatDateToYMD('/Date(1757376000000)/')).toBe('2025-09-09');
   });
 
   it('should format /Date(epoch+tz)/ format correctly', () => {
-    const epoch = 1757376000000;
-    const formatted = formatDateToYMD(`/Date(${epoch}+0000)/`);
-    expect(formatted).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(formatDateToYMD('/Date(1757376000000+0000)/')).toBe('2025-09-09');
   });
 
   it('should format ISO datetime string to YYYY-MM-DD', () => {

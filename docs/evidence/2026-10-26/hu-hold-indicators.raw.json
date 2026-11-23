@@ -1,0 +1,57 @@
+{
+  "capturedAt": "2026-10-26T04:38:12.428Z",
+  "mode": "READ-ONLY",
+  "tables": {
+    "LQUA": [
+      {
+        "LGNUM": "W01",
+        "LGTYP": "OH1",
+        "LGPLA": "ONHOLD",
+        "LENUM": "00000000002000020150",
+        "MATNR": "000000008000006485",
+        "WERKS": "1120",
+        "LGORT": "CS02",
+        "BESTQ": "",
+        "SOBKZ": "",
+        "SONUM": "",
+        "SKZUE": "",
+        "SKZUA": "",
+        "SKZSE": "",
+        "SKZSA": "",
+        "SKZSI": "",
+        "SPGRU": "",
+        "GESME": "1.000",
+        "VERME": "1.000",
+        "EINME": "0.000",
+        "AUSME": "0.000",
+        "LETYP": "E10",
+        "KZHUQ": "X"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "OH1",
+        "LGPLA": "ONHOLD",
+        "LENUM": "00000000002000020151",
+        "MATNR": "000000008000006485",
+        "WERKS": "1120",
+        "LGORT": "CS02",
+        "BESTQ": "",
+        "SOBKZ": "",
+        "SONUM": "",
+        "SKZUE": "",
+        "SKZUA": "",
+        "SKZSE": "",
+        "SKZSA": "",
+        "SKZSI": "",
+        "SPGRU": "",
+        "GESME": "1.000",
+        "VERME": "1.000",
+        "EINME": "0.000",
+        "AUSME": "0.000",
+        "LETYP": "E10",
+        "KZHUQ": "X"
+      }
+    ],
+    "VEKP": []
+  }
+}

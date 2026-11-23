@@ -3,7 +3,11 @@
   "sap.app": {
     "id": "saps4hana.fiori",
     "type": "application",
-    "i18n": "i18n/i18n.properties",
+    "i18n": {
+      "bundleUrl": "i18n/i18n.properties",
+      "supportedLocales": ["", "en"],
+      "fallbackLocale": "en"
+    },
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
     "applicationVersion": {
@@ -12,14 +16,6 @@
     "dataSources": {
       "mainService": {
         "uri": "/odata/v4/purchase-order/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
-      },
-      "fiService": {
-        "uri": "/odata/v4/journal-entry/",
         "type": "OData",
         "settings": {
           "annotations": [],
@@ -36,22 +32,6 @@
       },
       "salesOrderService": {
         "uri": "/odata/v4/sales-order/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
-      },
-      "goodsIssueService": {
-        "uri": "/odata/v4/goods-issue/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
-      },
-      "goodsReceiptService": {
-        "uri": "/odata/v4/goods-receipt/",
         "type": "OData",
         "settings": {
           "annotations": [],
@@ -81,22 +61,6 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
-      },
-      "trToService": {
-        "uri": "/odata/v4/tr-to/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
-      },
-      "reservationEntryService": {
-        "uri": "/odata/v4/reservation-entry/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
       }
     }
   },
@@ -109,6 +73,10 @@
     }
   },
   "sap.ui5": {
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
     "rootView": {
       "viewName": "saps4hana.fiori.view.App",
       "type": "XML",
@@ -121,6 +89,7 @@
         "sap.m": {},
         "sap.ui.comp": {},
         "sap.f": {},
+        "sap.tnt": {},
         "sap.uxap": {}
       }
     },
@@ -128,18 +97,13 @@
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
-          "bundleName": "saps4hana.fiori.i18n.i18n"
+          "bundleName": "saps4hana.fiori.i18n.i18n",
+          "supportedLocales": ["", "en"],
+          "fallbackLocale": "en"
         }
       },
       "": {
         "dataSource": "mainService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
-      },
-      "fiService": {
-        "dataSource": "fiService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -154,20 +118,6 @@
       },
       "salesOrder": {
         "dataSource": "salesOrderService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
-      },
-      "goodsIssue": {
-        "dataSource": "goodsIssueService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
-      },
-      "goodsReceipt": {
-        "dataSource": "goodsReceiptService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -193,20 +143,6 @@
           "operationMode": "Server",
           "autoExpandSelect": true
         }
-      },
-      "trTo": {
-        "dataSource": "trToService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
-      },
-      "reservationEntry": {
-        "dataSource": "reservationEntryService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
       }
     },
     "resources": {
@@ -223,7 +159,10 @@
         "type": "View",
         "path": "saps4hana.fiori.view",
         "controlId": "app",
-        "controlAggregation": "pages"
+        "controlAggregation": "pages",
+        "bypassed": {
+          "target": "TargetDashboard"
+        }
       },
       "routes": [
         {
@@ -238,7 +177,7 @@
         },
         {
           "name": "dashboard",
-          "pattern": "dashboard",
+          "pattern": "dashboard/:section::?query:",
           "target": "TargetDashboard"
         },
         {
@@ -255,11 +194,6 @@
           "name": "purchaseOrderDetail",
           "pattern": "mm/purchase-orders/{PurchaseOrder}",
           "target": "TargetPurchaseOrderDetail"
-        },
-        {
-          "name": "journalEntries",
-          "pattern": "fi/journal-entries",
-          "target": "TargetJournalEntries"
         },
         {
           "name": "salesInquiries",
@@ -286,46 +220,7 @@
           "pattern": "sd/sales-orders/create",
           "target": "TargetCreateSalesOrder"
         },
-        {
-          "name": "wmGoodsIssue201Pending",
-          "pattern": "wm/goods-issue/201/open-reservations:?query:",
-          "target": "TargetGoodsIssue201Pending"
-        },
-        {
-          "name": "wmGoodsIssue201",
-          "pattern": "wm/goods-issue/cost-center-201:?query:",
-          "target": "TargetGoodsIssue201"
-        },
-        {
-          "name": "wmGoodsIssue301Pending",
-          "pattern": "wm/goods-issue/301/open-transfers:?query:",
-          "target": "TargetGoodsIssue301Pending"
-        },
-        {
-          "name": "wmGoodsIssue301",
-          "pattern": "wm/goods-issue/plant-transfer-301:?query:",
-          "target": "TargetGoodsIssue301"
-        },
-        {
-          "name": "wmGoodsIssue311Pending",
-          "pattern": "wm/goods-issue/311/open-transfers:?query:",
-          "target": "TargetGoodsIssue311Pending"
-        },
-        {
-          "name": "wmGoodsIssue311",
-          "pattern": "wm/goods-issue/sloc-transfer-311:?query:",
-          "target": "TargetGoodsIssue311"
-        },
-        {
-          "name": "wmGoodsReceipt",
-          "pattern": "wm/goods-receipt",
-          "target": "TargetGoodsReceipt"
-        },
-        {
-          "name": "wmGoodsReceiptDetail",
-          "pattern": "wm/goods-receipt/{delivery}",
-          "target": "TargetGoodsReceipt"
-        },
+
         {
           "name": "ordersDueForDelivery",
           "pattern": "le/orders-due",
@@ -345,31 +240,7 @@
           "name": "createCustomerReturn",
           "pattern": "sd/returns/create",
           "target": "TargetCreateCustomerReturn"
-        },
-        {
-          "name": "wmTrTo",
-          "pattern": "wm/tr-to",
-          "target": "TargetTrTo"
-        },
-        {
-          "name": "wmCycle261",
-          "pattern": "wm/mvt261/open/{reservation}/{item}/cycle",
-          "target": "TargetCycle261"
-        },
-        {
-          "name": "wmScan261",
-          "pattern": "wm/mvt261/open/{reservation}/{item}",
-          "target": "TargetScan261"
-        },
-        {
-          "name": "wmOpen261",
-          "pattern": "wm/mvt261/open",
-          "target": "TargetOpen261"
-        },
-        {
-          "name": "wmMvt261",
-          "pattern": "wm/mvt261",
-          "target": "TargetMvt261"
+
         },
         {
           "name": "wmHandlingUnitDetail",
@@ -392,34 +263,14 @@
           "target": "TargetPackingInstructions"
         },
         {
-          "name": "wmReservationEntryList",
-          "pattern": "wm/reservation-entry",
-          "target": "TargetReservationEntryList"
+          "name": "wmQuarantineLabels",
+          "pattern": "wm/quarantine-labels",
+          "target": "TargetQuarantineLabels"
         },
         {
-          "name": "wmReservationEntryCreate",
-          "pattern": "wm/reservation-entry/create",
-          "target": "TargetReservationEntryDetail"
-        },
-        {
-          "name": "wmReservationEntryDetail",
-          "pattern": "wm/reservation-entry/{ReservationNo}/{ReservationItem}",
-          "target": "TargetReservationEntryDetail"
-        },
-        {
-          "name": "wmWarehouseScanTo",
-          "pattern": "wm/scan-to",
-          "target": "TargetWarehouseScanTo"
-        },
-        {
-          "name": "wmWarehouseScanToDetailWithWh",
-          "pattern": "wm/scan-to/{lgnum}/{docType}/{number}",
-          "target": "TargetWarehouseScanToDetail"
-        },
-        {
-          "name": "wmWarehouseScanToDetail",
-          "pattern": "wm/scan-to/{docType}/{number}",
-          "target": "TargetWarehouseScanToDetail"
+          "name": "wmMibLabel",
+          "pattern": "wm/mib-label",
+          "target": "TargetMibLabel"
         }
       ],
       "targets": {
@@ -446,11 +297,6 @@
           "name": "CreatePurchaseOrder",
           "path": "saps4hana.fiori.modules.mm.purchase-order.view"
         },
-        "TargetJournalEntries": {
-          "id": "journalEntries",
-          "name": "JournalEntries",
-          "path": "saps4hana.fiori.modules.fi.journal-entry.view"
-        },
         "TargetSalesInquiries": {
           "id": "salesInquiries",
           "name": "SalesInquiries",
@@ -476,41 +322,7 @@
           "name": "CreateSalesOrder",
           "path": "saps4hana.fiori.modules.sd.sales-order.view"
         },
-        "TargetGoodsIssue201": {
-          "id": "goodsIssue201",
-          "name": "GoodsIssue201",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
-        "TargetGoodsIssue201Pending": {
-          "id": "goodsIssue201Pending",
-          "name": "GoodsIssue201Pending",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
-        "TargetGoodsIssue301Pending": {
-          "id": "goodsIssue301Pending",
-          "name": "GoodsIssue301Pending",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
-        "TargetGoodsIssue301": {
-          "id": "goodsIssue301",
-          "name": "GoodsIssue301",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
-        "TargetGoodsIssue311Pending": {
-          "id": "goodsIssue311Pending",
-          "name": "GoodsIssue311Pending",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
-        "TargetGoodsIssue311": {
-          "id": "goodsIssue311",
-          "name": "GoodsIssue311",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
-        "TargetGoodsReceipt": {
-          "id": "goodsReceipt",
-          "name": "GoodsReceipt",
-          "path": "saps4hana.fiori.modules.wm.goods-receipt.view"
-        },
+
         "TargetOrdersDueForDelivery": {
           "id": "ordersDueForDelivery",
           "name": "OrdersDueForDelivery",
@@ -530,31 +342,7 @@
           "id": "createCustomerReturn",
           "name": "CreateCustomerReturn",
           "path": "saps4hana.fiori.modules.sd.customer-return.view"
-        },
-        "TargetTrTo": {
-          "id": "trTo",
-          "name": "TrTo",
-          "path": "saps4hana.fiori.modules.wm.tr-to.view"
-        },
-        "TargetScan261": {
-          "id": "scan261",
-          "name": "Scan261",
-          "path": "saps4hana.fiori.modules.wm.mvt261.view"
-        },
-        "TargetCycle261": {
-          "id": "cycle261",
-          "name": "Cycle261",
-          "path": "saps4hana.fiori.modules.wm.mvt261.view"
-        },
-        "TargetOpen261": {
-          "id": "open261",
-          "name": "Open261",
-          "path": "saps4hana.fiori.modules.wm.mvt261.view"
-        },
-        "TargetMvt261": {
-          "id": "mvt261",
-          "name": "Mvt261",
-          "path": "saps4hana.fiori.modules.wm.mvt261.view"
+
         },
         "TargetHandlingUnits": {
           "id": "handlingUnits",
@@ -571,30 +359,20 @@
           "name": "PackingInstructions",
           "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
         },
+        "TargetQuarantineLabels": {
+          "id": "quarantineLabels",
+          "name": "QuarantineLabels",
+          "path": "saps4hana.fiori.modules.wm.quarantine-label.view"
+        },
+        "TargetMibLabel": {
+          "id": "mibLabel",
+          "name": "MibLabel",
+          "path": "saps4hana.fiori.modules.wm.mib-label.view"
+        },
         "TargetPackingInstructionDetail": {
           "id": "packingInstructionDetail",
           "name": "PackingInstructionDetail",
           "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
-        },
-        "TargetReservationEntryList": {
-          "id": "reservationEntryList",
-          "name": "ReservationEntryList",
-          "path": "saps4hana.fiori.modules.wm.reservation-entry.view"
-        },
-        "TargetReservationEntryDetail": {
-          "id": "reservationEntryDetail",
-          "name": "ReservationEntryDetail",
-          "path": "saps4hana.fiori.modules.wm.reservation-entry.view"
-        },
-        "TargetWarehouseScanTo": {
-          "id": "warehouseScanTo",
-          "name": "WarehouseScanTo",
-          "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
-        },
-        "TargetWarehouseScanToDetail": {
-          "id": "warehouseScanToDetail",
-          "name": "WarehouseScanToDetail",
-          "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
         }
       }
     }

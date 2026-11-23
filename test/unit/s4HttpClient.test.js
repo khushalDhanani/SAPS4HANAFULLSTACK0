@@ -28,7 +28,7 @@ function makeClient(overrides = {}) {
     const client = new S4HttpClient({
         getDestination,
         executeHttpRequest,
-        env: overrides.env || {},
+        env: { S4_DESTINATION_NAME: 'S4HANA_PO_API', ...(overrides.env || {}) }, // the client has no built-in destination name any more
         cdsRequires: overrides.cdsRequires || (() => ({}))
     });
     return { client, executeHttpRequest, getDestination };
@@ -45,8 +45,8 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
         });
 
         it('derives the OData V4 service root', () => {
-            expect(serviceRootOf('/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem(ReservationNo=\'1\')/ns.postGoodsIssue'))
-                .toBe('/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/');
+            expect(serviceRootOf('/sap/opu/odata4/sap/c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001/SalesOrder(\'1\')/ns.confirm'))
+                .toBe('/sap/opu/odata4/sap/c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001/');
         });
 
         it('joins query strings regardless of leading ? or & and existing queries', () => {
@@ -248,13 +248,29 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(postConfig.headers['x-custom-header']).toBe('safe-val');
         });
 
+        it('normalizes and propagates ifMatch or etag to If-Match header', async () => {
+            const executeHttpRequest = jest.fn()
+                .mockResolvedValueOnce(csrfResponse)
+                .mockResolvedValueOnce({ status: 200, data: {}, headers: {} });
+            const { client } = makeClient({ executeHttpRequest });
+
+            await client.post('/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/Action', {
+                data: {},
+                ifMatch: 'W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"'
+            });
+
+            const [, postConfig] = executeHttpRequest.mock.calls[1];
+            expect(postConfig.headers['If-Match']).toBe('W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"');
+            expect(postConfig.headers['if-match']).toBeUndefined();
+        });
+
         it('uses an explicit csrfPath when the caller provides one', async () => {
             const executeHttpRequest = jest.fn()
                 .mockResolvedValueOnce(csrfResponse)
                 .mockResolvedValueOnce({ status: 200, data: {}, headers: {} });
             const { client } = makeClient({ executeHttpRequest });
 
-            await client.post('/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem/ns.postGoodsIssue', {
+            await client.post('/sap/opu/odata4/sap/c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001/SalesOrder/ns.confirm', {
                 data: { IssueQty: 1 },
                 csrfPath: '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1'
             });
@@ -263,19 +279,56 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(executeHttpRequest.mock.calls[1][1].data).toEqual({ IssueQty: 1 });
         });
 
-        it('continues without a token when the CSRF probe fails, so SAP reports the real outcome of the POST', async () => {
+        it('fails closed when the CSRF probe fails: the POST is not sent and SAP\'s own 4xx status is kept', async () => {
             const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-            const executeHttpRequest = jest.fn()
-                .mockRejectedValueOnce(wrappedSdkError(403, 'Forbidden'))
-                .mockRejectedValueOnce(wrappedSdkError(403, { error: { code: 'CSRF', message: { value: 'CSRF token validation failed' } } }));
+            const executeHttpRequest = jest.fn().mockRejectedValueOnce(wrappedSdkError(403, 'Forbidden'));
             const { client } = makeClient({ executeHttpRequest });
 
             await expect(client.post('/sap/opu/odata/sap/API_X_SRV/Set', { data: { a: 1 } })).rejects.toMatchObject({
-                status: 403, code: 'CSRF', message: expect.stringContaining('CSRF token validation failed')
+                status: 403, code: 'S4_CSRF_TOKEN_UNAVAILABLE', message: expect.stringContaining('NOT sent')
             });
-            expect(executeHttpRequest.mock.calls[1][1].headers['x-csrf-token']).toBeUndefined();
+            expect(executeHttpRequest).toHaveBeenCalledTimes(1); // the probe only
             expect(warn).toHaveBeenCalledTimes(1);
             warn.mockRestore();
+        });
+
+        it.each([
+            ['a timeout', () => Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' })],
+            ['a gateway 502', () => wrappedSdkError(502, 'Bad Gateway')],
+            ['a refused connection', () => Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })]
+        ])('reports %s on the CSRF probe as 503 "not sent", never as an unconfirmed write', async (_label, makeErr) => {
+            const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            const executeHttpRequest = jest.fn().mockRejectedValueOnce(makeErr());
+            const { client } = makeClient({ executeHttpRequest });
+
+            const err = await client.post('/sap/opu/odata/sap/API_X_SRV/Set', { data: {} }).catch((e) => e);
+
+            expect(err).toMatchObject({ status: 503, code: 'S4_CSRF_TOKEN_UNAVAILABLE' });
+            expect(err.code).not.toBe('SAP_WRITE_NOT_CONFIRMED');
+            expect(executeHttpRequest).toHaveBeenCalledTimes(1);
+            warn.mockRestore();
+        });
+
+        it('uses a token that SAP returns on an error answer of the probe', async () => {
+            const probeError = wrappedSdkError(404, 'Not Found');
+            probeError.cause.response.headers = { 'x-csrf-token': 'TOKEN-ON-ERROR' };
+            const executeHttpRequest = jest.fn().mockRejectedValueOnce(probeError).mockResolvedValueOnce({ status: 201, data: {}, headers: {} });
+            const { client } = makeClient({ executeHttpRequest });
+
+            await client.post('/sap/opu/odata/sap/API_X_SRV/Set', { data: {} });
+
+            expect(executeHttpRequest.mock.calls[1][1].headers['x-csrf-token']).toBe('TOKEN-ON-ERROR');
+        });
+
+        it('never re-sends a write: one failed POST is one request to SAP', async () => {
+            const executeHttpRequest = jest.fn()
+                .mockResolvedValueOnce(csrfResponse)
+                .mockRejectedValueOnce(wrappedSdkError(503, 'Service Unavailable'));
+            const { client } = makeClient({ executeHttpRequest });
+
+            await expect(client.post('/sap/opu/odata/sap/API_X_SRV/Set', { data: {} })).rejects.toBeDefined();
+
+            expect(executeHttpRequest.mock.calls.filter(([, config]) => config.method === 'post')).toHaveLength(1);
         });
 
         it('never keeps a token or cookie on the client between calls', async () => {
@@ -333,4 +386,36 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(S4HttpClient.requestTimeoutMs()).toBe(30000);
         });
     });
+});
+
+describe('unansweredWrite', () => {
+  const { unansweredWrite } = require('../../srv/integration/s4hana/S4HttpClient');
+  const coded = (code) => Object.assign(new Error('x'), { code });
+  const answered = (status) => Object.assign(new Error('x'), { response: { status } });
+
+  it.each([
+    ['a timeout', coded('ECONNABORTED')],
+    ['ETIMEDOUT', coded('ETIMEDOUT')],
+    ['a reset', coded('ECONNRESET')],
+    ['an error with no code', new Error('socket hang up')],
+    ['a gateway 502', answered(502)],
+    ['a gateway 504', answered(504)],
+    ['a code wrapped by the Cloud SDK', Object.assign(new Error('x'), { cause: coded('ECONNABORTED') })],
+    ['a response wrapped by the Cloud SDK', Object.assign(new Error('x'), { cause: answered(504) })]
+  ])('reports %s as not confirmed', (_name, err) => {
+    expect(unansweredWrite(err)).toMatchObject({ status: 504, code: 'SAP_WRITE_NOT_CONFIRMED', $sanitize: false, cause: err });
+  });
+
+  it.each([
+    ['ECONNREFUSED', coded('ECONNREFUSED')],
+    ['ENOTFOUND', coded('ENOTFOUND')],
+    ['EAI_AGAIN', coded('EAI_AGAIN')],
+    ['EHOSTUNREACH', coded('EHOSTUNREACH')],
+    ['ENETUNREACH', coded('ENETUNREACH')],
+    ['SAP refusing with 400', answered(400)],
+    ['SAP answering 500', answered(500)],
+    ['SAP answering 503', answered(503)]
+  ])('does not report %s, which proves SAP did not save it or answered', (_name, err) => {
+    expect(unansweredWrite(err)).toBeNull();
+  });
 });

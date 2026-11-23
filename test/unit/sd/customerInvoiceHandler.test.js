@@ -253,6 +253,7 @@ describe('Unit: CustomerInvoiceService Handlers', () => {
       expect(res.Success).toBe(true);
       expect(res.AccountingDocument).toBe('9000000101');
     });
+
   });
 
   describe('cancelBillingDocument', () => {

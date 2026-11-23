@@ -2,9 +2,23 @@
 const cds = require('@sap/cds');
 const LOG = require('../../../../common/logger')('purchase-order-adapter');
 const SessionContext = require('../../SessionContext');
-const { S4HttpClient } = require('../../S4HttpClient');
+const { S4HttpClient, unansweredWrite } = require('../../S4HttpClient');
 const s4Config = require('../../s4Config');
 const TtlCache = require('../../../../common/TtlCache');
+
+const DASHBOARD_METRIC_KEYS = [
+  'totalCount',
+  'supplierCount',
+  'salesInquiryCount',
+  'customerCount',
+  'openSalesOrderCount',
+  'totalSalesOrderCount',
+  'warehouseCount',
+  'openReservationCount',
+  'ordersDueCount',
+  'customerInvoiceCount',
+  'customerReturnCount'
+];
 
 /**
  * Adapter class to encapsulate all communication with S/4HANA services
@@ -193,7 +207,9 @@ class PurchaseOrderAdapter {
         ...(cookie ? { 'Cookie': cookie } : {}),
         ...(token ? { 'X-CSRF-Token': token } : {})
       }
-    }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : !token });
+    }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : !token }).catch((err) => {
+      throw unansweredWrite(err) || err;
+    });
 
     const activationResult = actResp.data;
     return activationResult.d || activationResult;
@@ -213,35 +229,6 @@ class PurchaseOrderAdapter {
 
     // 2. Activate draft within the exact same isolated session context
     return await this.activateDraft(session.draftData, session, options);
-  }
-
-  /**
-   * Reads the real Business Partner count directly from SAP ZAPI_GETBUPA_SRV.
-   *
-   * @param {Object} [options]
-   * @returns {Promise<number|null>} null when SAP did not return a count
-   */
-  async getBusinessPartnerCount(options = {}) {
-    const dest = options.destination || await this._getDestination(options);
-    const executeFn = options.executeHttpRequest || this.client._execute;
-    const rootUrl = (dest.url || '').replace(/\/sap\/opu\/odata\/.*$/, '');
-
-    try {
-      const res = await executeFn(dest, {
-        method: 'get',
-        url: `${rootUrl}/sap/opu/odata/sap/ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count`,
-        headers: {
-          'Accept': 'text/plain',
-          ...(dest.headers || {}),
-          ...(options.headers || {})
-        }
-      });
-      const n = Number(String(res.data ?? '').trim());
-      return String(res.data ?? '').trim() !== '' && Number.isInteger(n) && n >= 0 ? n : null;
-    } catch (e) {
-      LOG.warn('Warning fetching BP count from ZAPI_GETBUPA_SRV:', e.message);
-      return null;
-    }
   }
 
   /**
@@ -302,54 +289,15 @@ class PurchaseOrderAdapter {
         }
       };
 
-      // Plain-text /$count responses.
-      const fetchRawCount = async (serviceRelPath) => {
-        if (authFailed) return null;
-        try {
-          const res = await executeFn(dest, {
-            method: 'get',
-            url: `${rootUrl}${serviceRelPath}`,
-            headers: { ...reqHeaders, 'Accept': 'text/plain, */*' }
-          });
-          return toCount(res && res.data);
-        } catch (err) {
-          lastError = err.message || String(err);
-          const status = err.response?.status || err.status;
-          if (status === 401 || String(lastError).includes('401')) {
-            authFailed = true;
-          }
-          LOG.warn(`Dashboard metric unavailable (${serviceRelPath}): ${err.message}`);
-          return null;
-        }
-      };
-
       const sources = {
         totalCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs?$inlinecount=allpages&$top=1&$select=PurchaseOrder'),
         supplierCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_SupplierValueHelp?$inlinecount=allpages&$top=1'),
-        productCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_MaterialValueHelp?$inlinecount=allpages&$top=1'),
-        fiDocCount: () => fetchCount('/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified?$inlinecount=allpages&$top=1'),
         salesInquiryCount: () => fetchCount('/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370?$inlinecount=allpages&$top=1'),
         customerCount: () => fetchCount('/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV/I_Customer_VH?$inlinecount=allpages&$top=1'),
         openSalesOrderCount: () => fetchCount("/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1&$filter=OverallSDProcessStatus ne 'C'"),
         totalSalesOrderCount: () => fetchCount('/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1'),
-        bpCount: () => fetchRawCount('/sap/opu/odata/sap/ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count'),
-        glAccountCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_GLAccountStdVH?$inlinecount=allpages&$top=1'),
-        costCenterCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_CostCenterVH?$inlinecount=allpages&$top=1'),
-        profitCenterCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_ProfitCenterStdVH?$inlinecount=allpages&$top=1'),
-        fixedAssetCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_MasterFixedAssetStdVH?$inlinecount=allpages&$top=1'),
-        wbsElementCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_WBSElementBasicDataStdVH?$inlinecount=allpages&$top=1'),
-        internalOrderCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_InternalOrderStdVH?$inlinecount=allpages&$top=1'),
-        purchaseContractCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_PurchaseContractValHelp?$inlinecount=allpages&$top=1'),
-        companyCodeCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_CompanyCodeValueHelp?$inlinecount=allpages&$top=1'),
-        plantCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_PlantValueHelp?$inlinecount=allpages&$top=1'),
-        storageLocationCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp?$inlinecount=allpages&$top=1'),
-        materialGroupCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_MaterialGroupValueHelp?$inlinecount=allpages&$top=1'),
-        purchasingOrgCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchasingOrgValueHelp?$inlinecount=allpages&$top=1'),
-        purchasingGroupCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchasingGroupValueHelp?$inlinecount=allpages&$top=1'),
         warehouseCount: () => fetchCount('/sap/opu/odata/sap/API_WAREHOUSE/Warehouse?$inlinecount=allpages&$top=1'),
         openReservationCount: () => fetchCount('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem?$inlinecount=allpages&$top=1&$filter=ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false'),
-        inboundDeliveryCount: () => fetchCount('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$inlinecount=allpages&$top=1'),
-        gatewayCatalogCount: () => fetchRawCount('/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection/$count'),
         ordersDueCount: () => fetchCount('/sap/opu/odata/sap/LE_SHP_QC_DLVREF_SRV/C_DelivWthRefQuickCreate?$inlinecount=allpages&$top=1'),
         customerInvoiceCount: () => fetchCount('/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/C_BillingDocument_F0797?$inlinecount=allpages&$top=1'),
         customerReturnCount: () => fetchCount('/sap/opu/odata/sap/SD_F2651_CRT_CREATE_SRV/C_CustomerReturnOPg?$inlinecount=allpages&$top=1')
@@ -357,24 +305,8 @@ class PurchaseOrderAdapter {
 
       const MASTER_DATA_METRIC_KEYS = new Set([
         'supplierCount',
-        'productCount',
         'customerCount',
-        'bpCount',
-        'glAccountCount',
-        'costCenterCount',
-        'profitCenterCount',
-        'fixedAssetCount',
-        'wbsElementCount',
-        'internalOrderCount',
-        'purchaseContractCount',
-        'companyCodeCount',
-        'plantCount',
-        'storageLocationCount',
-        'materialGroupCount',
-        'purchasingOrgCount',
-        'purchasingGroupCount',
-        'warehouseCount',
-        'gatewayCatalogCount'
+        'warehouseCount'
       ]);
 
       const keys = Object.keys(sources);
@@ -422,17 +354,19 @@ class PurchaseOrderAdapter {
       return metrics;
     };
 
+    const totalMetricsCount = DASHBOARD_METRIC_KEYS.length;
+
     if (useCache && !options.forceRefresh) {
       return await this.metricsCache.getOrSet(
         cacheKey,
         fetchMetrics,
-        (metrics) => (metrics?.unavailable?.length === 26 ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000))
+        (metrics) => (metrics?.unavailable?.length === totalMetricsCount ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000))
       );
     }
 
     const result = await fetchMetrics();
     if (useCache) {
-      const ttl = result?.unavailable?.length === 26 ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000);
+      const ttl = result?.unavailable?.length === totalMetricsCount ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000);
       this.metricsCache.set(cacheKey, result, ttl);
     }
     return result;

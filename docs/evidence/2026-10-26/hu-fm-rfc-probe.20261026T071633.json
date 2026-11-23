@@ -1,0 +1,3655 @@
+{
+  "capturedAt": "2026-10-26T07:16:27.843Z",
+  "readOnly": true,
+  "functionName": "HU_CREATE_GOODS_MOVEMENT",
+  "queries": [
+    {
+      "table": "TFDIR",
+      "fields": [
+        "FUNCNAME",
+        "FMODE",
+        "PNAME"
+      ],
+      "where": [
+        "FUNCNAME = 'HU_CREATE_GOODS_MOVEMENT'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "FMODE": "",
+          "PNAME": "SAPLHU_GOODS_MOVEMENT"
+        }
+      ]
+    },
+    {
+      "table": "FUPARAREF",
+      "fields": [
+        "FUNCNAME",
+        "PARAMETER",
+        "PARAMTYPE",
+        "STRUCTURE",
+        "OPTIONAL",
+        "PPOSITION"
+      ],
+      "where": [
+        "FUNCNAME = 'HU_CREATE_GOODS_MOVEMENT'"
+      ],
+      "rowCount": 14,
+      "rows": [
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "ET_MESSAGES",
+          "PARAMTYPE": "E",
+          "STRUCTURE": "HUITEM_MESSAGES_T",
+          "OPTIONAL": "",
+          "PPOSITION": "3"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "ES_MESSAGE",
+          "PARAMTYPE": "E",
+          "STRUCTURE": "HUITEM_MESSAGES",
+          "OPTIONAL": "",
+          "PPOSITION": "2"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IF_EVENT",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "HUWBEVENT",
+          "OPTIONAL": "X",
+          "PPOSITION": "1"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IS_IMKPF",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "IMKPF",
+          "OPTIONAL": "X",
+          "PPOSITION": "5"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IT_MOVE_TO",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "HUM_DATA_MOVE_TO_T",
+          "OPTIONAL": "X",
+          "PPOSITION": "6"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IT_INTERNAL_ID",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "HUM_VENUM_T",
+          "OPTIONAL": "X",
+          "PPOSITION": "7"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IT_EXTERNAL_ID",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "HUM_EXIDV_T",
+          "OPTIONAL": "X",
+          "PPOSITION": "8"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IT_IMSEG_EWM",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "TY_T_IMSEG",
+          "OPTIONAL": "X",
+          "PPOSITION": "9"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "ES_EMKPF",
+          "PARAMTYPE": "E",
+          "STRUCTURE": "EMKPF",
+          "OPTIONAL": "",
+          "PPOSITION": "4"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "EF_POSTED",
+          "PARAMTYPE": "E",
+          "STRUCTURE": "SYSUBRC",
+          "OPTIONAL": "",
+          "PPOSITION": "1"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "CT_IMSEG",
+          "PARAMTYPE": "C",
+          "STRUCTURE": "VSEP_T_IMSEG",
+          "OPTIONAL": "X",
+          "PPOSITION": "1"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IF_SIMULATE",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "XFELD",
+          "OPTIONAL": "X",
+          "PPOSITION": "2"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IF_COMMIT",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "XFELD",
+          "OPTIONAL": "X",
+          "PPOSITION": "3"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IF_TCODE",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "SYTCODE",
+          "OPTIONAL": "X",
+          "PPOSITION": "4"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUITEM_MESSAGES_T'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "HUITEM_MESSAGES_T",
+          "ROWTYPE": "HUITEM_MESSAGES",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD03L",
+      "fields": [
+        "FIELDNAME",
+        "POSITION",
+        "ROLLNAME",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TABNAME = 'HUITEM_MESSAGES'"
+      ],
+      "rowCount": 11,
+      "rows": [
+        {
+          "FIELDNAME": "EXIDV",
+          "POSITION": "0001",
+          "ROLLNAME": "EXIDV",
+          "DATATYPE": "CHAR",
+          "LENG": "000020"
+        },
+        {
+          "FIELDNAME": "POSNR",
+          "POSITION": "0002",
+          "ROLLNAME": "VV_POSNR",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "HU_ITEM",
+          "POSITION": "0003",
+          "ROLLNAME": "EXIDV",
+          "DATATYPE": "CHAR",
+          "LENG": "000020"
+        },
+        {
+          "FIELDNAME": "ZEILE",
+          "POSITION": "0004",
+          "ROLLNAME": "SYTABIX",
+          "DATATYPE": "INT4",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "MSGID",
+          "POSITION": "0005",
+          "ROLLNAME": "SYMSGID",
+          "DATATYPE": "CHAR",
+          "LENG": "000020"
+        },
+        {
+          "FIELDNAME": "MSGTY",
+          "POSITION": "0006",
+          "ROLLNAME": "SYMSGTY",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "MSGNO",
+          "POSITION": "0007",
+          "ROLLNAME": "SYMSGNO",
+          "DATATYPE": "NUMC",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "MSGV1",
+          "POSITION": "0008",
+          "ROLLNAME": "SYMSGV",
+          "DATATYPE": "CHAR",
+          "LENG": "000050"
+        },
+        {
+          "FIELDNAME": "MSGV2",
+          "POSITION": "0009",
+          "ROLLNAME": "SYMSGV",
+          "DATATYPE": "CHAR",
+          "LENG": "000050"
+        },
+        {
+          "FIELDNAME": "MSGV3",
+          "POSITION": "0010",
+          "ROLLNAME": "SYMSGV",
+          "DATATYPE": "CHAR",
+          "LENG": "000050"
+        },
+        {
+          "FIELDNAME": "MSGV4",
+          "POSITION": "0011",
+          "ROLLNAME": "SYMSGV",
+          "DATATYPE": "CHAR",
+          "LENG": "000050"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUITEM_MESSAGES'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUWBEVENT'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'IMKPF'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUM_DATA_MOVE_TO_T'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "HUM_DATA_MOVE_TO_T",
+          "ROWTYPE": "HUM_DATA_MOVE_TO",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD03L",
+      "fields": [
+        "FIELDNAME",
+        "POSITION",
+        "ROLLNAME",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TABNAME = 'HUM_DATA_MOVE_TO'"
+      ],
+      "rowCount": 18,
+      "rows": [
+        {
+          "FIELDNAME": "HUWBEVENT",
+          "POSITION": "0001",
+          "ROLLNAME": "HUWBEVENT",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "MATNR",
+          "POSITION": "0002",
+          "ROLLNAME": "UMMAT",
+          "DATATYPE": "CHAR",
+          "LENG": "000040"
+        },
+        {
+          "FIELDNAME": "CHARG",
+          "POSITION": "0003",
+          "ROLLNAME": "UMCHA",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "WERKS",
+          "POSITION": "0004",
+          "ROLLNAME": "UMWRK",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "LGORT",
+          "POSITION": "0005",
+          "ROLLNAME": "UMLGO",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "BESTQ",
+          "POSITION": "0006",
+          "ROLLNAME": "BESTQ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SOBKZ",
+          "POSITION": "0007",
+          "ROLLNAME": "SOBKZ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SONUM",
+          "POSITION": "0008",
+          "ROLLNAME": "LVS_SONUM",
+          "DATATYPE": "CHAR",
+          "LENG": "000016"
+        },
+        {
+          "FIELDNAME": "LGNUM",
+          "POSITION": "0009",
+          "ROLLNAME": "LGNUM",
+          "DATATYPE": "CHAR",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "GRUND",
+          "POSITION": "0010",
+          "ROLLNAME": "MB_GRBEW",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "KONTO",
+          "POSITION": "0011",
+          "ROLLNAME": "SAKNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "LIFNR",
+          "POSITION": "0012",
+          "ROLLNAME": "LIFNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "KUNNR",
+          "POSITION": "0013",
+          "ROLLNAME": "KUNNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "GSBER",
+          "POSITION": "0014",
+          "ROLLNAME": "GSBER",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "KOSTL",
+          "POSITION": "0015",
+          "ROLLNAME": "KOSTL",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "BWART",
+          "POSITION": "0016",
+          "ROLLNAME": "BWART",
+          "DATATYPE": "CHAR",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "SGT_SCAT",
+          "POSITION": "0017",
+          "ROLLNAME": "SGT_UMSCAT",
+          "DATATYPE": "CHAR",
+          "LENG": "000040"
+        },
+        {
+          "FIELDNAME": "HU_ITEMS",
+          "POSITION": "0018",
+          "ROLLNAME": "HUM_HUMSEG_T",
+          "DATATYPE": "TTYP",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUM_VENUM_T'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "HUM_VENUM_T",
+          "ROWTYPE": "HUM_VENUM",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD03L",
+      "fields": [
+        "FIELDNAME",
+        "POSITION",
+        "ROLLNAME",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TABNAME = 'HUM_VENUM'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "FIELDNAME": "VENUM",
+          "POSITION": "0001",
+          "ROLLNAME": "VENUM",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUM_EXIDV_T'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "HUM_EXIDV_T",
+          "ROWTYPE": "HUM_EXIDV",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD03L",
+      "fields": [
+        "FIELDNAME",
+        "POSITION",
+        "ROLLNAME",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TABNAME = 'HUM_EXIDV'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "FIELDNAME": "EXIDV",
+          "POSITION": "0001",
+          "ROLLNAME": "EXIDV",
+          "DATATYPE": "CHAR",
+          "LENG": "000020"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'TY_T_IMSEG'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "TY_T_IMSEG",
+          "ROWTYPE": "IMSEG",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD03L",
+      "fields": [
+        "FIELDNAME",
+        "POSITION",
+        "ROLLNAME",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TABNAME = 'IMSEG'"
+      ],
+      "rowCount": 200,
+      "rows": [
+        {
+          "FIELDNAME": "LINE_ID",
+          "POSITION": "0002",
+          "ROLLNAME": "MB_LINE_ID",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "PARENT_ID",
+          "POSITION": "0003",
+          "ROLLNAME": "MB_PARENT_ID",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "LINE_DEPTH",
+          "POSITION": "0004",
+          "ROLLNAME": "MB_LINE_DEPTH",
+          "DATATYPE": "NUMC",
+          "LENG": "000002"
+        },
+        {
+          "FIELDNAME": "MAA_URZEI",
+          "POSITION": "0005",
+          "ROLLNAME": "MAA_URZEI",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "BEAKZ",
+          "POSITION": "0008",
+          "ROLLNAME": "BEAKZ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XNIBU",
+          "POSITION": "0009",
+          "ROLLNAME": "XFELD",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XRERE",
+          "POSITION": "0013",
+          "ROLLNAME": "XRERE",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XMEVO",
+          "POSITION": "0014",
+          "ROLLNAME": "XMEVO",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XWAIT",
+          "POSITION": "0015",
+          "ROLLNAME": "XFELD",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XNOEQ",
+          "POSITION": "0016",
+          "ROLLNAME": "XFELD",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XDELIV",
+          "POSITION": "0017",
+          "ROLLNAME": "XDELIV",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XNOCON",
+          "POSITION": "0018",
+          "ROLLNAME": "XNOCON",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XMENGE",
+          "POSITION": "0019",
+          "ROLLNAME": "XMENGE_PAR",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XSTOB",
+          "POSITION": "0020",
+          "ROLLNAME": "XSTOR",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XSTOR",
+          "POSITION": "0021",
+          "ROLLNAME": "XSTOR",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XAUTO",
+          "POSITION": "0022",
+          "ROLLNAME": "MB_XAUTO",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XWOFF",
+          "POSITION": "0023",
+          "ROLLNAME": "XWOFF",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XLBTYPE",
+          "POSITION": "0024",
+          "ROLLNAME": "MIGO_LBITEM",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XZEROQUANTITY",
+          "POSITION": "0025",
+          "ROLLNAME": "XZEROQUANTITY",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "MATNR",
+          "POSITION": "0027",
+          "ROLLNAME": "MATNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000040"
+        },
+        {
+          "FIELDNAME": "WERKS",
+          "POSITION": "0028",
+          "ROLLNAME": "WERKS_D",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "LGORT",
+          "POSITION": "0029",
+          "ROLLNAME": "LGORT_D",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "CHARG",
+          "POSITION": "0030",
+          "ROLLNAME": "CHARG_D",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "INSMK",
+          "POSITION": "0031",
+          "ROLLNAME": "MB_INSMK",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SOBKZ",
+          "POSITION": "0032",
+          "ROLLNAME": "SOBKZ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "KZBEW",
+          "POSITION": "0033",
+          "ROLLNAME": "KZBEW",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "KUNNR",
+          "POSITION": "0034",
+          "ROLLNAME": "EKUNN",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "BWTAR",
+          "POSITION": "0035",
+          "ROLLNAME": "BWTAR_D",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "MEINS",
+          "POSITION": "0039",
+          "ROLLNAME": "MEINS",
+          "DATATYPE": "UNIT",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "EBELN",
+          "POSITION": "0042",
+          "ROLLNAME": "BSTNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "EBELP",
+          "POSITION": "0043",
+          "ROLLNAME": "EBELP",
+          "DATATYPE": "NUMC",
+          "LENG": "000005"
+        },
+        {
+          "FIELDNAME": "ELIKZ",
+          "POSITION": "0044",
+          "ROLLNAME": "ELIKZ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "MIGO_ELIKZ",
+          "POSITION": "0045",
+          "ROLLNAME": "MIGO_ELIKZ",
+          "DATATYPE": "NUMC",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SGTXT",
+          "POSITION": "0046",
+          "ROLLNAME": "SGTXT",
+          "DATATYPE": "CHAR",
+          "LENG": "000050"
+        },
+        {
+          "FIELDNAME": "WEMPF",
+          "POSITION": "0047",
+          "ROLLNAME": "WEMPF",
+          "DATATYPE": "CHAR",
+          "LENG": "000012"
+        },
+        {
+          "FIELDNAME": "ABLAD",
+          "POSITION": "0048",
+          "ROLLNAME": "ABLAD",
+          "DATATYPE": "CHAR",
+          "LENG": "000025"
+        },
+        {
+          "FIELDNAME": "RSPOS",
+          "POSITION": "0050",
+          "ROLLNAME": "RSPOS",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "RSART",
+          "POSITION": "0051",
+          "ROLLNAME": "RSART",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "KZEAR",
+          "POSITION": "0052",
+          "ROLLNAME": "KZEAR",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "ZEKKN",
+          "POSITION": "0057",
+          "ROLLNAME": "DZEKKN",
+          "DATATYPE": "NUMC",
+          "LENG": "000002"
+        },
+        {
+          "FIELDNAME": "ERFMG_ABD",
+          "POSITION": "0058",
+          "ROLLNAME": "ERFMG_ABD",
+          "DATATYPE": "FLTP",
+          "LENG": "000016"
+        },
+        {
+          "FIELDNAME": "BPMNG_ABD",
+          "POSITION": "0059",
+          "ROLLNAME": "BPMNG_ABD",
+          "DATATYPE": "FLTP",
+          "LENG": "000016"
+        },
+        {
+          "FIELDNAME": "BSTMG_ABD",
+          "POSITION": "0060",
+          "ROLLNAME": "BSTMG_ABD",
+          "DATATYPE": "FLTP",
+          "LENG": "000016"
+        },
+        {
+          "FIELDNAME": "XHISTMA",
+          "POSITION": "0061",
+          "ROLLNAME": "XHISTMA",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "MULKO",
+          "POSITION": "0062",
+          "ROLLNAME": "MULKO",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SGT_SCAT",
+          "POSITION": "0063",
+          "ROLLNAME": "SGT_SCAT",
+          "DATATYPE": "CHAR",
+          "LENG": "000040"
+        },
+        {
+          "FIELDNAME": "SGT_UMSCAT",
+          "POSITION": "0064",
+          "ROLLNAME": "SGT_UMSCAT",
+          "DATATYPE": "CHAR",
+          "LENG": "000040"
+        },
+        {
+          "FIELDNAME": "SGT_UMSSREL",
+          "POSITION": "0065",
+          "ROLLNAME": "SGT_SSREL",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SGT_SSREL",
+          "POSITION": "0066",
+          "ROLLNAME": "SGT_SSREL",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SGT_RCAT",
+          "POSITION": "0067",
+          "ROLLNAME": "SGT_RCAT",
+          "DATATYPE": "CHAR",
+          "LENG": "000040"
+        },
+        {
+          "FIELDNAME": "LGNUM",
+          "POSITION": "0069",
+          "ROLLNAME": "LGNUM",
+          "DATATYPE": "CHAR",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "UMZST",
+          "POSITION": "0076",
+          "ROLLNAME": "UMZST",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "UMZUS",
+          "POSITION": "0077",
+          "ROLLNAME": "UMZUS",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "LFBJA",
+          "POSITION": "0079",
+          "ROLLNAME": "LFBJA",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "LFBNR",
+          "POSITION": "0080",
+          "ROLLNAME": "LFBNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "LFPOS",
+          "POSITION": "0081",
+          "ROLLNAME": "LFPOS",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "VFDAT",
+          "POSITION": "0082",
+          "ROLLNAME": "VFDAT",
+          "DATATYPE": "DATS",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "CLASS",
+          "POSITION": "0083",
+          "ROLLNAME": "KLASSE_D",
+          "DATATYPE": "CHAR",
+          "LENG": "000018"
+        },
+        {
+          "FIELDNAME": "UMCLA",
+          "POSITION": "0084",
+          "ROLLNAME": "KLASSE_D",
+          "DATATYPE": "CHAR",
+          "LENG": "000018"
+        },
+        {
+          "FIELDNAME": "XCLAS",
+          "POSITION": "0085",
+          "ROLLNAME": "XFELD",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "UMXCL",
+          "POSITION": "0086",
+          "ROLLNAME": "XFELD",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "OBJNR",
+          "POSITION": "0087",
+          "ROLLNAME": "J_OBJNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000022"
+        },
+        {
+          "FIELDNAME": "MAT_KDAUF",
+          "POSITION": "0092",
+          "ROLLNAME": "MAT_KDAUF",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "MAT_KDPOS",
+          "POSITION": "0093",
+          "ROLLNAME": "MAT_KDPOS",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "HSDAT",
+          "POSITION": "0095",
+          "ROLLNAME": "HSDAT",
+          "DATATYPE": "DATS",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "LICHA",
+          "POSITION": "0096",
+          "ROLLNAME": "LICHN",
+          "DATATYPE": "CHAR",
+          "LENG": "000015"
+        },
+        {
+          "FIELDNAME": "MWSKZ",
+          "POSITION": "0097",
+          "ROLLNAME": "MWSKZ",
+          "DATATYPE": "CHAR",
+          "LENG": "000002"
+        },
+        {
+          "FIELDNAME": "TXJCD",
+          "POSITION": "0098",
+          "ROLLNAME": "TXJCD",
+          "DATATYPE": "CHAR",
+          "LENG": "000015"
+        },
+        {
+          "FIELDNAME": "VLIEF_AVIS",
+          "POSITION": "0099",
+          "ROLLNAME": "VBELN_VL",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "VBELP_AVIS",
+          "POSITION": "0100",
+          "ROLLNAME": "POSNR_VL",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "VBELN",
+          "POSITION": "0101",
+          "ROLLNAME": "VBELN_VL",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "POSNR",
+          "POSITION": "0102",
+          "ROLLNAME": "POSNR_VL",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "COMPONENT",
+          "POSITION": "0103",
+          "ROLLNAME": "LINCT",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "ETENS",
+          "POSITION": "0104",
+          "ROLLNAME": "ETENS",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "KALSM",
+          "POSITION": "0105",
+          "ROLLNAME": "KALSM_D",
+          "DATATYPE": "CHAR",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "GLOBAL_COUNTER",
+          "POSITION": "0106",
+          "ROLLNAME": "MIGO_GLOBAL_COUNTER",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "ANZSN",
+          "POSITION": "0110",
+          "ROLLNAME": "ANZSER",
+          "DATATYPE": "INT4",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "XSAUT",
+          "POSITION": "0111",
+          "ROLLNAME": "XSAUT",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "REVLV",
+          "POSITION": "0112",
+          "ROLLNAME": "REVLV",
+          "DATATYPE": "CHAR",
+          "LENG": "000002"
+        },
+        {
+          "FIELDNAME": "CUOBJ_CH",
+          "POSITION": "0114",
+          "ROLLNAME": "CUOBJ_CH",
+          "DATATYPE": "NUMC",
+          "LENG": "000018"
+        },
+        {
+          "FIELDNAME": "UMCUOBJ_CH",
+          "POSITION": "0115",
+          "ROLLNAME": "CUOBJ_CH",
+          "DATATYPE": "NUMC",
+          "LENG": "000018"
+        },
+        {
+          "FIELDNAME": "KOSTL",
+          "POSITION": "0118",
+          "ROLLNAME": "KOSTL",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "AUFNR",
+          "POSITION": "0119",
+          "ROLLNAME": "AUFNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000012"
+        },
+        {
+          "FIELDNAME": "PS_PSP_PNR",
+          "POSITION": "0120",
+          "ROLLNAME": "PS_PSP_PNR",
+          "DATATYPE": "NUMC",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "KDPOS",
+          "POSITION": "0122",
+          "ROLLNAME": "KDPOS",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "KDEIN",
+          "POSITION": "0123",
+          "ROLLNAME": "KDEIN",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "VORNR",
+          "POSITION": "0125",
+          "ROLLNAME": "VORNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "ANLN1",
+          "POSITION": "0127",
+          "ROLLNAME": "ANLN1",
+          "DATATYPE": "CHAR",
+          "LENG": "000012"
+        },
+        {
+          "FIELDNAME": "ANLN2",
+          "POSITION": "0128",
+          "ROLLNAME": "ANLN2",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "PAOBJNR",
+          "POSITION": "0129",
+          "ROLLNAME": "RKEOBJNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "IMKEY",
+          "POSITION": "0130",
+          "ROLLNAME": "IMKEY",
+          "DATATYPE": "CHAR",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "GEBER",
+          "POSITION": "0131",
+          "ROLLNAME": "BP_GEBER",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "FISTL",
+          "POSITION": "0132",
+          "ROLLNAME": "FISTL",
+          "DATATYPE": "CHAR",
+          "LENG": "000016"
+        },
+        {
+          "FIELDNAME": "FKBER",
+          "POSITION": "0133",
+          "ROLLNAME": "FKBER",
+          "DATATYPE": "CHAR",
+          "LENG": "000016"
+        },
+        {
+          "FIELDNAME": "GSBER",
+          "POSITION": "0137",
+          "ROLLNAME": "GSBER",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "PRCTR",
+          "POSITION": "0138",
+          "ROLLNAME": "PRCTR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "BUKRS",
+          "POSITION": "0139",
+          "ROLLNAME": "BUKRS",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "GRANT_NBR",
+          "POSITION": "0140",
+          "ROLLNAME": "GM_GRANT_NBR",
+          "DATATYPE": "CHAR",
+          "LENG": "000020"
+        },
+        {
+          "FIELDNAME": "BUDGET_PD",
+          "POSITION": "0142",
+          "ROLLNAME": "FM_BUDGET_PERIOD",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "DUMMY_INCL_EEW_COBL",
+          "POSITION": "0145",
+          "ROLLNAME": "CFD_DUMMY",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "FMFGUS_KEY",
+          "POSITION": "0148",
+          "ROLLNAME": "FMFG_US_KEY",
+          "DATATYPE": "CHAR",
+          "LENG": "000022"
+        },
+        {
+          "FIELDNAME": "CRPCAL",
+          "POSITION": "0151",
+          "ROLLNAME": "JV_CRPCAL",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SERVICE_DOC_TYPE",
+          "POSITION": "0154",
+          "ROLLNAME": "FCO_SRVDOC_TYPE",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "SERVICE_DOC_ID",
+          "POSITION": "0155",
+          "ROLLNAME": "FCO_SRVDOC_ID",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "SERVICE_DOC_ITEM_ID",
+          "POSITION": "0156",
+          "ROLLNAME": "FCO_SRVDOC_ITEM_ID",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "AUFPS",
+          "POSITION": "0158",
+          "ROLLNAME": "CO_POSNR",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "AUFPL",
+          "POSITION": "0159",
+          "ROLLNAME": "CO_AUFPL",
+          "DATATYPE": "NUMC",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "DABRZ",
+          "POSITION": "0161",
+          "ROLLNAME": "DABRBEZ",
+          "DATATYPE": "DATS",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "EAN11_BME",
+          "POSITION": "0162",
+          "ROLLNAME": "EAN11_BME",
+          "DATATYPE": "CHAR",
+          "LENG": "000018"
+        },
+        {
+          "FIELDNAME": "EAN11_KON",
+          "POSITION": "0163",
+          "ROLLNAME": "EAN11_KON",
+          "DATATYPE": "CHAR",
+          "LENG": "000018"
+        },
+        {
+          "FIELDNAME": "WEANZ",
+          "POSITION": "0165",
+          "ROLLNAME": "WEANZ",
+          "DATATYPE": "NUMC",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "WEANZX",
+          "POSITION": "0166",
+          "ROLLNAME": "BAPIUPDATE",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "NROFLABELS",
+          "POSITION": "0167",
+          "ROLLNAME": "NUMBEROFLABELSTOBEPRINTED",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "R_MBLNR",
+          "POSITION": "0168",
+          "ROLLNAME": "MBLNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "R_MJAHR",
+          "POSITION": "0169",
+          "ROLLNAME": "MJAHR",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "DUMMY3",
+          "POSITION": "0171",
+          "ROLLNAME": "XFELD",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "BATCH_TYPE",
+          "POSITION": "0172",
+          "ROLLNAME": "BATCH_TYPE",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "PERNR",
+          "POSITION": "0175",
+          "ROLLNAME": "PERNR_D",
+          "DATATYPE": "NUMC",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "WORK_ITEM_ID",
+          "POSITION": "0178",
+          "ROLLNAME": "/CPD/PFP_WORKITEM_ID",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "FBUDA",
+          "POSITION": "0179",
+          "ROLLNAME": "FBUDA",
+          "DATATYPE": "DATS",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "EWM_LGNUM",
+          "POSITION": "0180",
+          "ROLLNAME": "/SCWM/LGNUM",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "EWM_DIFF_ANA",
+          "POSITION": "0183",
+          "ROLLNAME": "/SCWM/DE_GM_DIFF_ANA",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "EWM_INSPUUID",
+          "POSITION": "0184",
+          "ROLLNAME": "/SCWM/DE_EWM_INSP_GUID",
+          "DATATYPE": "CHAR",
+          "LENG": "000032"
+        },
+        {
+          "FIELDNAME": "EWM_HUIDENT",
+          "POSITION": "0185",
+          "ROLLNAME": "/SCWM/DE_HUIDENT",
+          "DATATYPE": "CHAR",
+          "LENG": "000020"
+        },
+        {
+          "FIELDNAME": "RESOURCENAME_SID",
+          "POSITION": "0186",
+          "ROLLNAME": "NSDM_RESOURCENAME_SID",
+          "DATATYPE": "CHAR",
+          "LENG": "000040"
+        },
+        {
+          "FIELDNAME": "RESOURCENAME_CID",
+          "POSITION": "0187",
+          "ROLLNAME": "NSDM_RESOURCENAME_CID",
+          "DATATYPE": "CHAR",
+          "LENG": "000040"
+        },
+        {
+          "FIELDNAME": "DUMMY_MATDOC_INCL_EEW_PS",
+          "POSITION": "0189",
+          "ROLLNAME": "CFD_DUMMY",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "/CWM/TY2TQ",
+          "POSITION": "0195",
+          "ROLLNAME": "/CWM/TY2TQ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "/CWM/UMTY2TQ",
+          "POSITION": "0196",
+          "ROLLNAME": "/CWM/TY2TQ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "XPCBT",
+          "POSITION": "0198",
+          "ROLLNAME": "MILL_XPCBT",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "UMXPC",
+          "POSITION": "0199",
+          "ROLLNAME": "/SAPMP/UMXPC",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "FSH_SEASON_YEAR",
+          "POSITION": "0201",
+          "ROLLNAME": "FSH_SAISJ",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "FSH_SEASON",
+          "POSITION": "0202",
+          "ROLLNAME": "FSH_SAISO",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "FSH_THEME",
+          "POSITION": "0204",
+          "ROLLNAME": "FSH_THEME",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "FSH_SEALV",
+          "POSITION": "0205",
+          "ROLLNAME": "FSH_SEALV",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "FSH_UMSEA_YR",
+          "POSITION": "0206",
+          "ROLLNAME": "FSH_UMSEA_YR",
+          "DATATYPE": "CHAR",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "FSH_UMSEA",
+          "POSITION": "0207",
+          "ROLLNAME": "FSH_UMSEA",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "FSH_UMTHEME",
+          "POSITION": "0209",
+          "ROLLNAME": "FSH_UMTHEME",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "FSH_SEAIM",
+          "POSITION": "0211",
+          "ROLLNAME": "FSH_SEAIM",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "WRF_CHARSTC1",
+          "POSITION": "0215",
+          "ROLLNAME": "WRF_CHARSTC1",
+          "DATATYPE": "CHAR",
+          "LENG": "000018"
+        },
+        {
+          "FIELDNAME": "WRF_CHARSTC2",
+          "POSITION": "0216",
+          "ROLLNAME": "WRF_CHARSTC2",
+          "DATATYPE": "CHAR",
+          "LENG": "000018"
+        },
+        {
+          "FIELDNAME": "WRF_CHARSTC3",
+          "POSITION": "0217",
+          "ROLLNAME": "WRF_CHARSTC3",
+          "DATATYPE": "CHAR",
+          "LENG": "000018"
+        },
+        {
+          "FIELDNAME": "WTY_IND",
+          "POSITION": "0220",
+          "ROLLNAME": "WTYSC_WTY_INDICATOR",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "KZVBR",
+          "POSITION": "0222",
+          "ROLLNAME": "KZVBR",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "WEUNB",
+          "POSITION": "0223",
+          "ROLLNAME": "WEUNB",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SHKZG",
+          "POSITION": "0224",
+          "ROLLNAME": "SHKZG",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "WAERS",
+          "POSITION": "0225",
+          "ROLLNAME": "WAERS",
+          "DATATYPE": "CUKY",
+          "LENG": "000005"
+        },
+        {
+          "FIELDNAME": "RSHKZ",
+          "POSITION": "0227",
+          "ROLLNAME": "SHKZG",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SJAHR",
+          "POSITION": "0231",
+          "ROLLNAME": "MJAHR",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "SMBLN",
+          "POSITION": "0232",
+          "ROLLNAME": "MBLNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "SMBLP",
+          "POSITION": "0233",
+          "ROLLNAME": "MBLPO",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "QM_ZUSTD",
+          "POSITION": "0234",
+          "ROLLNAME": "QM_ZUSTD",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "QM_UMZST",
+          "POSITION": "0235",
+          "ROLLNAME": "QM_UMZST",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "UMREZ",
+          "POSITION": "0237",
+          "ROLLNAME": "UMREZ",
+          "DATATYPE": "DEC",
+          "LENG": "000005"
+        },
+        {
+          "FIELDNAME": "UMREN",
+          "POSITION": "0238",
+          "ROLLNAME": "UMREN",
+          "DATATYPE": "DEC",
+          "LENG": "000005"
+        },
+        {
+          "FIELDNAME": "BDTER",
+          "POSITION": "0239",
+          "ROLLNAME": "BDTER",
+          "DATATYPE": "DATS",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "TBBEL",
+          "POSITION": "0240",
+          "ROLLNAME": "LVS_TBBEL",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "TBBPO",
+          "POSITION": "0241",
+          "ROLLNAME": "LVS_TBBPO",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "TBBJR",
+          "POSITION": "0242",
+          "ROLLNAME": "LVS_TBBJR",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "AUTYP",
+          "POSITION": "0243",
+          "ROLLNAME": "AUFTYP",
+          "DATATYPE": "NUMC",
+          "LENG": "000002"
+        },
+        {
+          "FIELDNAME": "TBPKZ",
+          "POSITION": "0245",
+          "ROLLNAME": "LVS_TBFKZ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "TAFKZ",
+          "POSITION": "0246",
+          "ROLLNAME": "LVS_TAFKZ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "KZEAR_OLD",
+          "POSITION": "0247",
+          "ROLLNAME": "KZEAR",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "MHDAT",
+          "POSITION": "0250",
+          "ROLLNAME": "TMHHD",
+          "DATATYPE": "DATS",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "EXIDV",
+          "POSITION": "0251",
+          "ROLLNAME": "EXIDV",
+          "DATATYPE": "CHAR",
+          "LENG": "000020"
+        },
+        {
+          "FIELDNAME": "BERKZ",
+          "POSITION": "0252",
+          "ROLLNAME": "BERKZ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "KZECH",
+          "POSITION": "0254",
+          "ROLLNAME": "KZECH",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "REFIX",
+          "POSITION": "0255",
+          "ROLLNAME": "TABIX_D",
+          "DATATYPE": "INT4",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "ILINR",
+          "POSITION": "0256",
+          "ROLLNAME": "ILINR",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "VOLEH",
+          "POSITION": "0258",
+          "ROLLNAME": "VOLEH",
+          "DATATYPE": "UNIT",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "ANZL1",
+          "POSITION": "0259",
+          "ROLLNAME": "LVS_ANZLE",
+          "DATATYPE": "DEC",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "ANZL2",
+          "POSITION": "0260",
+          "ROLLNAME": "LVS_ANZLE",
+          "DATATYPE": "DEC",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "KZKUB",
+          "POSITION": "0265",
+          "ROLLNAME": "LVS_KZKUB",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "MBLNR",
+          "POSITION": "0268",
+          "ROLLNAME": "MBLNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "MBLPO",
+          "POSITION": "0269",
+          "ROLLNAME": "MBLPO",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "MJAHR",
+          "POSITION": "0270",
+          "ROLLNAME": "MJAHR",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "URZEI",
+          "POSITION": "0271",
+          "ROLLNAME": "URZEI",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "KZBWS",
+          "POSITION": "0272",
+          "ROLLNAME": "KZBWS",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "KDAUF_SD",
+          "POSITION": "0273",
+          "ROLLNAME": "KDAUF",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "KDPOS_SD",
+          "POSITION": "0274",
+          "ROLLNAME": "KDPOS",
+          "DATATYPE": "NUMC",
+          "LENG": "000006"
+        },
+        {
+          "FIELDNAME": "GEWEI",
+          "POSITION": "0276",
+          "ROLLNAME": "GEWEI",
+          "DATATYPE": "UNIT",
+          "LENG": "000003"
+        },
+        {
+          "FIELDNAME": "WM_KZBEW",
+          "POSITION": "0277",
+          "ROLLNAME": "KZBEW",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "WENUM",
+          "POSITION": "0278",
+          "ROLLNAME": "LVS_WENUM",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "KANBA",
+          "POSITION": "0279",
+          "ROLLNAME": "KBNKZ",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "LFBJA_INTERNAL",
+          "POSITION": "0280",
+          "ROLLNAME": "LFBJA",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "LFBNR_INTERNAL",
+          "POSITION": "0281",
+          "ROLLNAME": "LFBNR",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "LFPOS_INTERNAL",
+          "POSITION": "0282",
+          "ROLLNAME": "LFPOS",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "UPVOR",
+          "POSITION": "0283",
+          "ROLLNAME": "UPVOR",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "PABPOS",
+          "POSITION": "0285",
+          "ROLLNAME": "PABPOS",
+          "DATATYPE": "NUMC",
+          "LENG": "000004"
+        },
+        {
+          "FIELDNAME": "LIFNR",
+          "POSITION": "0290",
+          "ROLLNAME": "ELIFN",
+          "DATATYPE": "CHAR",
+          "LENG": "000010"
+        },
+        {
+          "FIELDNAME": "WEMPFX",
+          "POSITION": "0295",
+          "ROLLNAME": "BAPIUPDATE",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "ABLADX",
+          "POSITION": "0296",
+          "ROLLNAME": "BAPIUPDATE",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "OBJTYPE",
+          "POSITION": "0297",
+          "ROLLNAME": "OCM_OBJ_TYPE",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SPE_GTS_STOCK_TY",
+          "POSITION": "0298",
+          "ROLLNAME": "/SPE/GTS_STOCK_TYPE",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "SPE_UM_GTS_ST_TY",
+          "POSITION": "0299",
+          "ROLLNAME": "/SPE/GTS_STOCK_TYPE",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "/CWM/NOTOLCHECK",
+          "POSITION": "0303",
+          "ROLLNAME": "XFELD",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "LFDAT",
+          "POSITION": "0309",
+          "ROLLNAME": "LFDAT",
+          "DATATYPE": "DATS",
+          "LENG": "000008"
+        },
+        {
+          "FIELDNAME": "COMPL_MARK",
+          "POSITION": "0312",
+          "ROLLNAME": "COMPL_MARK",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "FZGLS_MARK",
+          "POSITION": "0313",
+          "ROLLNAME": "FZGLS",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        },
+        {
+          "FIELDNAME": "ETANP_MARK",
+          "POSITION": "0314",
+          "ROLLNAME": "ETANP",
+          "DATATYPE": "CHAR",
+          "LENG": "000001"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'EMKPF'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'SYSUBRC'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'VSEP_T_IMSEG'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'XFELD'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'SYTCODE'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    }
+  ],
+  "skippedReads": [],
+  "result": {
+    "exists": true,
+    "fmode": "",
+    "rfcEnabled": false,
+    "parameters": [
+      {
+        "name": "ET_MESSAGES",
+        "kind": "E",
+        "type": "HUITEM_MESSAGES_T",
+        "optional": ""
+      },
+      {
+        "name": "ES_MESSAGE",
+        "kind": "E",
+        "type": "HUITEM_MESSAGES",
+        "optional": ""
+      },
+      {
+        "name": "IF_EVENT",
+        "kind": "I",
+        "type": "HUWBEVENT",
+        "optional": "X"
+      },
+      {
+        "name": "IS_IMKPF",
+        "kind": "I",
+        "type": "IMKPF",
+        "optional": "X"
+      },
+      {
+        "name": "IT_MOVE_TO",
+        "kind": "I",
+        "type": "HUM_DATA_MOVE_TO_T",
+        "optional": "X"
+      },
+      {
+        "name": "IT_INTERNAL_ID",
+        "kind": "I",
+        "type": "HUM_VENUM_T",
+        "optional": "X"
+      },
+      {
+        "name": "IT_EXTERNAL_ID",
+        "kind": "I",
+        "type": "HUM_EXIDV_T",
+        "optional": "X"
+      },
+      {
+        "name": "IT_IMSEG_EWM",
+        "kind": "I",
+        "type": "TY_T_IMSEG",
+        "optional": "X"
+      },
+      {
+        "name": "ES_EMKPF",
+        "kind": "E",
+        "type": "EMKPF",
+        "optional": ""
+      },
+      {
+        "name": "EF_POSTED",
+        "kind": "E",
+        "type": "SYSUBRC",
+        "optional": ""
+      },
+      {
+        "name": "CT_IMSEG",
+        "kind": "C",
+        "type": "VSEP_T_IMSEG",
+        "optional": "X"
+      },
+      {
+        "name": "IF_SIMULATE",
+        "kind": "I",
+        "type": "XFELD",
+        "optional": "X"
+      },
+      {
+        "name": "IF_COMMIT",
+        "kind": "I",
+        "type": "XFELD",
+        "optional": "X"
+      },
+      {
+        "name": "IF_TCODE",
+        "kind": "I",
+        "type": "SYTCODE",
+        "optional": "X"
+      }
+    ],
+    "tableTypes": [
+      {
+        "typeName": "HUITEM_MESSAGES_T",
+        "rowType": "HUITEM_MESSAGES",
+        "rowKind": "S",
+        "found": true,
+        "rowFields": [
+          {
+            "name": "EXIDV",
+            "rollname": "EXIDV",
+            "datatype": "CHAR",
+            "length": "000020"
+          },
+          {
+            "name": "POSNR",
+            "rollname": "VV_POSNR",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "HU_ITEM",
+            "rollname": "EXIDV",
+            "datatype": "CHAR",
+            "length": "000020"
+          },
+          {
+            "name": "ZEILE",
+            "rollname": "SYTABIX",
+            "datatype": "INT4",
+            "length": "000010"
+          },
+          {
+            "name": "MSGID",
+            "rollname": "SYMSGID",
+            "datatype": "CHAR",
+            "length": "000020"
+          },
+          {
+            "name": "MSGTY",
+            "rollname": "SYMSGTY",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "MSGNO",
+            "rollname": "SYMSGNO",
+            "datatype": "NUMC",
+            "length": "000003"
+          },
+          {
+            "name": "MSGV1",
+            "rollname": "SYMSGV",
+            "datatype": "CHAR",
+            "length": "000050"
+          },
+          {
+            "name": "MSGV2",
+            "rollname": "SYMSGV",
+            "datatype": "CHAR",
+            "length": "000050"
+          },
+          {
+            "name": "MSGV3",
+            "rollname": "SYMSGV",
+            "datatype": "CHAR",
+            "length": "000050"
+          },
+          {
+            "name": "MSGV4",
+            "rollname": "SYMSGV",
+            "datatype": "CHAR",
+            "length": "000050"
+          }
+        ]
+      },
+      {
+        "typeName": "HUITEM_MESSAGES",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "HUWBEVENT",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "IMKPF",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "HUM_DATA_MOVE_TO_T",
+        "rowType": "HUM_DATA_MOVE_TO",
+        "rowKind": "S",
+        "found": true,
+        "rowFields": [
+          {
+            "name": "HUWBEVENT",
+            "rollname": "HUWBEVENT",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "MATNR",
+            "rollname": "UMMAT",
+            "datatype": "CHAR",
+            "length": "000040"
+          },
+          {
+            "name": "CHARG",
+            "rollname": "UMCHA",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "WERKS",
+            "rollname": "UMWRK",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "LGORT",
+            "rollname": "UMLGO",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "BESTQ",
+            "rollname": "BESTQ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SOBKZ",
+            "rollname": "SOBKZ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SONUM",
+            "rollname": "LVS_SONUM",
+            "datatype": "CHAR",
+            "length": "000016"
+          },
+          {
+            "name": "LGNUM",
+            "rollname": "LGNUM",
+            "datatype": "CHAR",
+            "length": "000003"
+          },
+          {
+            "name": "GRUND",
+            "rollname": "MB_GRBEW",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "KONTO",
+            "rollname": "SAKNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "LIFNR",
+            "rollname": "LIFNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "KUNNR",
+            "rollname": "KUNNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "GSBER",
+            "rollname": "GSBER",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "KOSTL",
+            "rollname": "KOSTL",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "BWART",
+            "rollname": "BWART",
+            "datatype": "CHAR",
+            "length": "000003"
+          },
+          {
+            "name": "SGT_SCAT",
+            "rollname": "SGT_UMSCAT",
+            "datatype": "CHAR",
+            "length": "000040"
+          },
+          {
+            "name": "HU_ITEMS",
+            "rollname": "HUM_HUMSEG_T",
+            "datatype": "TTYP",
+            "length": "000000"
+          }
+        ]
+      },
+      {
+        "typeName": "HUM_VENUM_T",
+        "rowType": "HUM_VENUM",
+        "rowKind": "S",
+        "found": true,
+        "rowFields": [
+          {
+            "name": "VENUM",
+            "rollname": "VENUM",
+            "datatype": "CHAR",
+            "length": "000010"
+          }
+        ]
+      },
+      {
+        "typeName": "HUM_EXIDV_T",
+        "rowType": "HUM_EXIDV",
+        "rowKind": "S",
+        "found": true,
+        "rowFields": [
+          {
+            "name": "EXIDV",
+            "rollname": "EXIDV",
+            "datatype": "CHAR",
+            "length": "000020"
+          }
+        ]
+      },
+      {
+        "typeName": "TY_T_IMSEG",
+        "rowType": "IMSEG",
+        "rowKind": "S",
+        "found": true,
+        "rowFields": [
+          {
+            "name": "LINE_ID",
+            "rollname": "MB_LINE_ID",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "PARENT_ID",
+            "rollname": "MB_PARENT_ID",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "LINE_DEPTH",
+            "rollname": "MB_LINE_DEPTH",
+            "datatype": "NUMC",
+            "length": "000002"
+          },
+          {
+            "name": "MAA_URZEI",
+            "rollname": "MAA_URZEI",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "BEAKZ",
+            "rollname": "BEAKZ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XNIBU",
+            "rollname": "XFELD",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XRERE",
+            "rollname": "XRERE",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XMEVO",
+            "rollname": "XMEVO",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XWAIT",
+            "rollname": "XFELD",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XNOEQ",
+            "rollname": "XFELD",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XDELIV",
+            "rollname": "XDELIV",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XNOCON",
+            "rollname": "XNOCON",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XMENGE",
+            "rollname": "XMENGE_PAR",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XSTOB",
+            "rollname": "XSTOR",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XSTOR",
+            "rollname": "XSTOR",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XAUTO",
+            "rollname": "MB_XAUTO",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XWOFF",
+            "rollname": "XWOFF",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XLBTYPE",
+            "rollname": "MIGO_LBITEM",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XZEROQUANTITY",
+            "rollname": "XZEROQUANTITY",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "MATNR",
+            "rollname": "MATNR",
+            "datatype": "CHAR",
+            "length": "000040"
+          },
+          {
+            "name": "WERKS",
+            "rollname": "WERKS_D",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "LGORT",
+            "rollname": "LGORT_D",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "CHARG",
+            "rollname": "CHARG_D",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "INSMK",
+            "rollname": "MB_INSMK",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SOBKZ",
+            "rollname": "SOBKZ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "KZBEW",
+            "rollname": "KZBEW",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "KUNNR",
+            "rollname": "EKUNN",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "BWTAR",
+            "rollname": "BWTAR_D",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "MEINS",
+            "rollname": "MEINS",
+            "datatype": "UNIT",
+            "length": "000003"
+          },
+          {
+            "name": "EBELN",
+            "rollname": "BSTNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "EBELP",
+            "rollname": "EBELP",
+            "datatype": "NUMC",
+            "length": "000005"
+          },
+          {
+            "name": "ELIKZ",
+            "rollname": "ELIKZ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "MIGO_ELIKZ",
+            "rollname": "MIGO_ELIKZ",
+            "datatype": "NUMC",
+            "length": "000001"
+          },
+          {
+            "name": "SGTXT",
+            "rollname": "SGTXT",
+            "datatype": "CHAR",
+            "length": "000050"
+          },
+          {
+            "name": "WEMPF",
+            "rollname": "WEMPF",
+            "datatype": "CHAR",
+            "length": "000012"
+          },
+          {
+            "name": "ABLAD",
+            "rollname": "ABLAD",
+            "datatype": "CHAR",
+            "length": "000025"
+          },
+          {
+            "name": "RSPOS",
+            "rollname": "RSPOS",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "RSART",
+            "rollname": "RSART",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "KZEAR",
+            "rollname": "KZEAR",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "ZEKKN",
+            "rollname": "DZEKKN",
+            "datatype": "NUMC",
+            "length": "000002"
+          },
+          {
+            "name": "ERFMG_ABD",
+            "rollname": "ERFMG_ABD",
+            "datatype": "FLTP",
+            "length": "000016"
+          },
+          {
+            "name": "BPMNG_ABD",
+            "rollname": "BPMNG_ABD",
+            "datatype": "FLTP",
+            "length": "000016"
+          },
+          {
+            "name": "BSTMG_ABD",
+            "rollname": "BSTMG_ABD",
+            "datatype": "FLTP",
+            "length": "000016"
+          },
+          {
+            "name": "XHISTMA",
+            "rollname": "XHISTMA",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "MULKO",
+            "rollname": "MULKO",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SGT_SCAT",
+            "rollname": "SGT_SCAT",
+            "datatype": "CHAR",
+            "length": "000040"
+          },
+          {
+            "name": "SGT_UMSCAT",
+            "rollname": "SGT_UMSCAT",
+            "datatype": "CHAR",
+            "length": "000040"
+          },
+          {
+            "name": "SGT_UMSSREL",
+            "rollname": "SGT_SSREL",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SGT_SSREL",
+            "rollname": "SGT_SSREL",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SGT_RCAT",
+            "rollname": "SGT_RCAT",
+            "datatype": "CHAR",
+            "length": "000040"
+          },
+          {
+            "name": "LGNUM",
+            "rollname": "LGNUM",
+            "datatype": "CHAR",
+            "length": "000003"
+          },
+          {
+            "name": "UMZST",
+            "rollname": "UMZST",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "UMZUS",
+            "rollname": "UMZUS",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "LFBJA",
+            "rollname": "LFBJA",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "LFBNR",
+            "rollname": "LFBNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "LFPOS",
+            "rollname": "LFPOS",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "VFDAT",
+            "rollname": "VFDAT",
+            "datatype": "DATS",
+            "length": "000008"
+          },
+          {
+            "name": "CLASS",
+            "rollname": "KLASSE_D",
+            "datatype": "CHAR",
+            "length": "000018"
+          },
+          {
+            "name": "UMCLA",
+            "rollname": "KLASSE_D",
+            "datatype": "CHAR",
+            "length": "000018"
+          },
+          {
+            "name": "XCLAS",
+            "rollname": "XFELD",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "UMXCL",
+            "rollname": "XFELD",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "OBJNR",
+            "rollname": "J_OBJNR",
+            "datatype": "CHAR",
+            "length": "000022"
+          },
+          {
+            "name": "MAT_KDAUF",
+            "rollname": "MAT_KDAUF",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "MAT_KDPOS",
+            "rollname": "MAT_KDPOS",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "HSDAT",
+            "rollname": "HSDAT",
+            "datatype": "DATS",
+            "length": "000008"
+          },
+          {
+            "name": "LICHA",
+            "rollname": "LICHN",
+            "datatype": "CHAR",
+            "length": "000015"
+          },
+          {
+            "name": "MWSKZ",
+            "rollname": "MWSKZ",
+            "datatype": "CHAR",
+            "length": "000002"
+          },
+          {
+            "name": "TXJCD",
+            "rollname": "TXJCD",
+            "datatype": "CHAR",
+            "length": "000015"
+          },
+          {
+            "name": "VLIEF_AVIS",
+            "rollname": "VBELN_VL",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "VBELP_AVIS",
+            "rollname": "POSNR_VL",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "VBELN",
+            "rollname": "VBELN_VL",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "POSNR",
+            "rollname": "POSNR_VL",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "COMPONENT",
+            "rollname": "LINCT",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "ETENS",
+            "rollname": "ETENS",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "KALSM",
+            "rollname": "KALSM_D",
+            "datatype": "CHAR",
+            "length": "000006"
+          },
+          {
+            "name": "GLOBAL_COUNTER",
+            "rollname": "MIGO_GLOBAL_COUNTER",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "ANZSN",
+            "rollname": "ANZSER",
+            "datatype": "INT4",
+            "length": "000010"
+          },
+          {
+            "name": "XSAUT",
+            "rollname": "XSAUT",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "REVLV",
+            "rollname": "REVLV",
+            "datatype": "CHAR",
+            "length": "000002"
+          },
+          {
+            "name": "CUOBJ_CH",
+            "rollname": "CUOBJ_CH",
+            "datatype": "NUMC",
+            "length": "000018"
+          },
+          {
+            "name": "UMCUOBJ_CH",
+            "rollname": "CUOBJ_CH",
+            "datatype": "NUMC",
+            "length": "000018"
+          },
+          {
+            "name": "KOSTL",
+            "rollname": "KOSTL",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "AUFNR",
+            "rollname": "AUFNR",
+            "datatype": "CHAR",
+            "length": "000012"
+          },
+          {
+            "name": "PS_PSP_PNR",
+            "rollname": "PS_PSP_PNR",
+            "datatype": "NUMC",
+            "length": "000008"
+          },
+          {
+            "name": "KDPOS",
+            "rollname": "KDPOS",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "KDEIN",
+            "rollname": "KDEIN",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "VORNR",
+            "rollname": "VORNR",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "ANLN1",
+            "rollname": "ANLN1",
+            "datatype": "CHAR",
+            "length": "000012"
+          },
+          {
+            "name": "ANLN2",
+            "rollname": "ANLN2",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "PAOBJNR",
+            "rollname": "RKEOBJNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "IMKEY",
+            "rollname": "IMKEY",
+            "datatype": "CHAR",
+            "length": "000008"
+          },
+          {
+            "name": "GEBER",
+            "rollname": "BP_GEBER",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "FISTL",
+            "rollname": "FISTL",
+            "datatype": "CHAR",
+            "length": "000016"
+          },
+          {
+            "name": "FKBER",
+            "rollname": "FKBER",
+            "datatype": "CHAR",
+            "length": "000016"
+          },
+          {
+            "name": "GSBER",
+            "rollname": "GSBER",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "PRCTR",
+            "rollname": "PRCTR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "BUKRS",
+            "rollname": "BUKRS",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "GRANT_NBR",
+            "rollname": "GM_GRANT_NBR",
+            "datatype": "CHAR",
+            "length": "000020"
+          },
+          {
+            "name": "BUDGET_PD",
+            "rollname": "FM_BUDGET_PERIOD",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "DUMMY_INCL_EEW_COBL",
+            "rollname": "CFD_DUMMY",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "FMFGUS_KEY",
+            "rollname": "FMFG_US_KEY",
+            "datatype": "CHAR",
+            "length": "000022"
+          },
+          {
+            "name": "CRPCAL",
+            "rollname": "JV_CRPCAL",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SERVICE_DOC_TYPE",
+            "rollname": "FCO_SRVDOC_TYPE",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "SERVICE_DOC_ID",
+            "rollname": "FCO_SRVDOC_ID",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "SERVICE_DOC_ITEM_ID",
+            "rollname": "FCO_SRVDOC_ITEM_ID",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "AUFPS",
+            "rollname": "CO_POSNR",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "AUFPL",
+            "rollname": "CO_AUFPL",
+            "datatype": "NUMC",
+            "length": "000010"
+          },
+          {
+            "name": "DABRZ",
+            "rollname": "DABRBEZ",
+            "datatype": "DATS",
+            "length": "000008"
+          },
+          {
+            "name": "EAN11_BME",
+            "rollname": "EAN11_BME",
+            "datatype": "CHAR",
+            "length": "000018"
+          },
+          {
+            "name": "EAN11_KON",
+            "rollname": "EAN11_KON",
+            "datatype": "CHAR",
+            "length": "000018"
+          },
+          {
+            "name": "WEANZ",
+            "rollname": "WEANZ",
+            "datatype": "NUMC",
+            "length": "000003"
+          },
+          {
+            "name": "WEANZX",
+            "rollname": "BAPIUPDATE",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "NROFLABELS",
+            "rollname": "NUMBEROFLABELSTOBEPRINTED",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "R_MBLNR",
+            "rollname": "MBLNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "R_MJAHR",
+            "rollname": "MJAHR",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "DUMMY3",
+            "rollname": "XFELD",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "BATCH_TYPE",
+            "rollname": "BATCH_TYPE",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "PERNR",
+            "rollname": "PERNR_D",
+            "datatype": "NUMC",
+            "length": "000008"
+          },
+          {
+            "name": "WORK_ITEM_ID",
+            "rollname": "/CPD/PFP_WORKITEM_ID",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "FBUDA",
+            "rollname": "FBUDA",
+            "datatype": "DATS",
+            "length": "000008"
+          },
+          {
+            "name": "EWM_LGNUM",
+            "rollname": "/SCWM/LGNUM",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "EWM_DIFF_ANA",
+            "rollname": "/SCWM/DE_GM_DIFF_ANA",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "EWM_INSPUUID",
+            "rollname": "/SCWM/DE_EWM_INSP_GUID",
+            "datatype": "CHAR",
+            "length": "000032"
+          },
+          {
+            "name": "EWM_HUIDENT",
+            "rollname": "/SCWM/DE_HUIDENT",
+            "datatype": "CHAR",
+            "length": "000020"
+          },
+          {
+            "name": "RESOURCENAME_SID",
+            "rollname": "NSDM_RESOURCENAME_SID",
+            "datatype": "CHAR",
+            "length": "000040"
+          },
+          {
+            "name": "RESOURCENAME_CID",
+            "rollname": "NSDM_RESOURCENAME_CID",
+            "datatype": "CHAR",
+            "length": "000040"
+          },
+          {
+            "name": "DUMMY_MATDOC_INCL_EEW_PS",
+            "rollname": "CFD_DUMMY",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "/CWM/TY2TQ",
+            "rollname": "/CWM/TY2TQ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "/CWM/UMTY2TQ",
+            "rollname": "/CWM/TY2TQ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "XPCBT",
+            "rollname": "MILL_XPCBT",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "UMXPC",
+            "rollname": "/SAPMP/UMXPC",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "FSH_SEASON_YEAR",
+            "rollname": "FSH_SAISJ",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "FSH_SEASON",
+            "rollname": "FSH_SAISO",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "FSH_THEME",
+            "rollname": "FSH_THEME",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "FSH_SEALV",
+            "rollname": "FSH_SEALV",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "FSH_UMSEA_YR",
+            "rollname": "FSH_UMSEA_YR",
+            "datatype": "CHAR",
+            "length": "000004"
+          },
+          {
+            "name": "FSH_UMSEA",
+            "rollname": "FSH_UMSEA",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "FSH_UMTHEME",
+            "rollname": "FSH_UMTHEME",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "FSH_SEAIM",
+            "rollname": "FSH_SEAIM",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "WRF_CHARSTC1",
+            "rollname": "WRF_CHARSTC1",
+            "datatype": "CHAR",
+            "length": "000018"
+          },
+          {
+            "name": "WRF_CHARSTC2",
+            "rollname": "WRF_CHARSTC2",
+            "datatype": "CHAR",
+            "length": "000018"
+          },
+          {
+            "name": "WRF_CHARSTC3",
+            "rollname": "WRF_CHARSTC3",
+            "datatype": "CHAR",
+            "length": "000018"
+          },
+          {
+            "name": "WTY_IND",
+            "rollname": "WTYSC_WTY_INDICATOR",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "KZVBR",
+            "rollname": "KZVBR",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "WEUNB",
+            "rollname": "WEUNB",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SHKZG",
+            "rollname": "SHKZG",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "WAERS",
+            "rollname": "WAERS",
+            "datatype": "CUKY",
+            "length": "000005"
+          },
+          {
+            "name": "RSHKZ",
+            "rollname": "SHKZG",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SJAHR",
+            "rollname": "MJAHR",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "SMBLN",
+            "rollname": "MBLNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "SMBLP",
+            "rollname": "MBLPO",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "QM_ZUSTD",
+            "rollname": "QM_ZUSTD",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "QM_UMZST",
+            "rollname": "QM_UMZST",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "UMREZ",
+            "rollname": "UMREZ",
+            "datatype": "DEC",
+            "length": "000005"
+          },
+          {
+            "name": "UMREN",
+            "rollname": "UMREN",
+            "datatype": "DEC",
+            "length": "000005"
+          },
+          {
+            "name": "BDTER",
+            "rollname": "BDTER",
+            "datatype": "DATS",
+            "length": "000008"
+          },
+          {
+            "name": "TBBEL",
+            "rollname": "LVS_TBBEL",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "TBBPO",
+            "rollname": "LVS_TBBPO",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "TBBJR",
+            "rollname": "LVS_TBBJR",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "AUTYP",
+            "rollname": "AUFTYP",
+            "datatype": "NUMC",
+            "length": "000002"
+          },
+          {
+            "name": "TBPKZ",
+            "rollname": "LVS_TBFKZ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "TAFKZ",
+            "rollname": "LVS_TAFKZ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "KZEAR_OLD",
+            "rollname": "KZEAR",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "MHDAT",
+            "rollname": "TMHHD",
+            "datatype": "DATS",
+            "length": "000008"
+          },
+          {
+            "name": "EXIDV",
+            "rollname": "EXIDV",
+            "datatype": "CHAR",
+            "length": "000020"
+          },
+          {
+            "name": "BERKZ",
+            "rollname": "BERKZ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "KZECH",
+            "rollname": "KZECH",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "REFIX",
+            "rollname": "TABIX_D",
+            "datatype": "INT4",
+            "length": "000010"
+          },
+          {
+            "name": "ILINR",
+            "rollname": "ILINR",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "VOLEH",
+            "rollname": "VOLEH",
+            "datatype": "UNIT",
+            "length": "000003"
+          },
+          {
+            "name": "ANZL1",
+            "rollname": "LVS_ANZLE",
+            "datatype": "DEC",
+            "length": "000003"
+          },
+          {
+            "name": "ANZL2",
+            "rollname": "LVS_ANZLE",
+            "datatype": "DEC",
+            "length": "000003"
+          },
+          {
+            "name": "KZKUB",
+            "rollname": "LVS_KZKUB",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "MBLNR",
+            "rollname": "MBLNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "MBLPO",
+            "rollname": "MBLPO",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "MJAHR",
+            "rollname": "MJAHR",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "URZEI",
+            "rollname": "URZEI",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "KZBWS",
+            "rollname": "KZBWS",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "KDAUF_SD",
+            "rollname": "KDAUF",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "KDPOS_SD",
+            "rollname": "KDPOS",
+            "datatype": "NUMC",
+            "length": "000006"
+          },
+          {
+            "name": "GEWEI",
+            "rollname": "GEWEI",
+            "datatype": "UNIT",
+            "length": "000003"
+          },
+          {
+            "name": "WM_KZBEW",
+            "rollname": "KZBEW",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "WENUM",
+            "rollname": "LVS_WENUM",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "KANBA",
+            "rollname": "KBNKZ",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "LFBJA_INTERNAL",
+            "rollname": "LFBJA",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "LFBNR_INTERNAL",
+            "rollname": "LFBNR",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "LFPOS_INTERNAL",
+            "rollname": "LFPOS",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "UPVOR",
+            "rollname": "UPVOR",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "PABPOS",
+            "rollname": "PABPOS",
+            "datatype": "NUMC",
+            "length": "000004"
+          },
+          {
+            "name": "LIFNR",
+            "rollname": "ELIFN",
+            "datatype": "CHAR",
+            "length": "000010"
+          },
+          {
+            "name": "WEMPFX",
+            "rollname": "BAPIUPDATE",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "ABLADX",
+            "rollname": "BAPIUPDATE",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "OBJTYPE",
+            "rollname": "OCM_OBJ_TYPE",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SPE_GTS_STOCK_TY",
+            "rollname": "/SPE/GTS_STOCK_TYPE",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "SPE_UM_GTS_ST_TY",
+            "rollname": "/SPE/GTS_STOCK_TYPE",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "/CWM/NOTOLCHECK",
+            "rollname": "XFELD",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "LFDAT",
+            "rollname": "LFDAT",
+            "datatype": "DATS",
+            "length": "000008"
+          },
+          {
+            "name": "COMPL_MARK",
+            "rollname": "COMPL_MARK",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "FZGLS_MARK",
+            "rollname": "FZGLS",
+            "datatype": "CHAR",
+            "length": "000001"
+          },
+          {
+            "name": "ETANP_MARK",
+            "rollname": "ETANP",
+            "datatype": "CHAR",
+            "length": "000001"
+          }
+        ]
+      },
+      {
+        "typeName": "EMKPF",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "SYSUBRC",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "VSEP_T_IMSEG",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "XFELD",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "SYTCODE",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      }
+    ]
+  }
+}

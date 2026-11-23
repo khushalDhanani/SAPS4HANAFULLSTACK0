@@ -2,6 +2,32 @@
 
 const cds = require('@sap/cds');
 
+const CREDENTIAL_REGEX = /(?:Bearer\s+[A-Za-z0-9\-._~+/]+=*)|(?:Basic\s+[A-Za-z0-9+/]+=*)|(?:nvapi-[A-Za-z0-9\-_]{20,})|(?:sk-[A-Za-z0-9\-_]{20,})/gi;
+const SENSITIVE_KEY_REGEX = /^(?:password|secret|client_secret|authorization)$/i;
+
+function scrubArg(arg) {
+  if (typeof arg === 'string') {
+    return CREDENTIAL_REGEX.test(arg) ? arg.replace(CREDENTIAL_REGEX, '[REDACTED_CREDENTIAL]') : arg;
+  }
+  if (arg && typeof arg === 'object' && !(arg instanceof Error)) {
+    let modified = false;
+    const sanitized = Array.isArray(arg) ? [] : {};
+    for (const [k, v] of Object.entries(arg)) {
+      if (typeof k === 'string' && SENSITIVE_KEY_REGEX.test(k) && typeof v === 'string') {
+        sanitized[k] = '[REDACTED_CREDENTIAL]';
+        modified = true;
+      } else if (typeof v === 'string' && CREDENTIAL_REGEX.test(v)) {
+        sanitized[k] = v.replace(CREDENTIAL_REGEX, '[REDACTED_CREDENTIAL]');
+        modified = true;
+      } else {
+        sanitized[k] = v;
+      }
+    }
+    return modified ? sanitized : arg;
+  }
+  return arg;
+}
+
 /**
  * Formatter that injects the CAP context correlation ID (cds.context.id)
  * into plain text log outputs, while maintaining full argument compatibility
@@ -11,13 +37,15 @@ function correlationPlainFormat(label, level, ...args) {
   const corrId = cds.context?.id || cds.context?.correlation_id;
   const prefix = corrId ? `[${label}] [${corrId}] - ` : `[${label}] - `;
 
-  if (args.length === 1 && typeof args[0] === 'string') {
-    return [`${prefix}${args[0]}`];
+  const cleanArgs = args.map(scrubArg);
+
+  if (cleanArgs.length === 1 && typeof cleanArgs[0] === 'string') {
+    return [`${prefix}${cleanArgs[0]}`];
   }
-  if (typeof args[0] === 'string') {
-    return [`${prefix}${args[0]}`, ...args.slice(1)];
+  if (typeof cleanArgs[0] === 'string') {
+    return [`${prefix}${cleanArgs[0]}`, ...cleanArgs.slice(1)];
   }
-  return [prefix.trimEnd(), ...args];
+  return [prefix.trimEnd(), ...cleanArgs];
 }
 
 /**

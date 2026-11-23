@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Verify every SAP OData service this project calls, by fetching $metadata.
 # 200 = live | 500 = registered, no system alias | 404 = not there | 401 = bad creds
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,7 +20,7 @@ probe() { # $1 = full path after host
 
 echo "host: $H  client: $C"; echo
 echo "--- V2 /sap/opu/odata/sap ---"
-for s in C_PURCHASEORDER_FS_SRV MM_PUR_PO_MAINT_V2_SRV FAC_GL_JOURNALENTRY_VER_SRV \
+for s in C_PURCHASEORDER_FS_SRV MM_PUR_PO_MAINT_V2_SRV \
          SD_F2370_INQY_WL_SRV SD_F2369_INQY_FS_SRV LORD_ODATA_ORDER_SRV \
          SD_F1873_SO_WL_SRV ZAPI_GETBUPA_SRV MMIM_GR4PO_DL_SRV MMIM_MATERIAL_DATA_SRV \
          LO_BM_BATCH_SRV UI_RESERVATION_ITM_MNG_V2 C_STOCKQUANTITYVALUEBYTYPE_CDS \

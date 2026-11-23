@@ -125,6 +125,7 @@ const MockCustomerReturnService = {
 const MockBaseController = {
     extend: function (name, proto) {
         function Controller() {
+            this.blockSubmitIfNotConfirmed = require('../helpers/realBlockSubmit').realBlockSubmit();
             Object.assign(this, proto);
         }
         Controller.prototype = proto;
@@ -447,12 +448,11 @@ describe("CreateCustomerReturn Controller", () => {
             expect(MockCustomerReturnService.createCustomerReturn).not.toHaveBeenCalled();
         });
 
-        test("onConfirmCreateReturn creates document via service, shows success, and navigates back", async () => {
-            controller.onInit();
-            const createModel = models["createReturnModel"];
-            createModel.setProperty("/SoldToParty", "10082");
+        function fillValidReturn(createModel) {
+            createModel.setProperty("/SoldToParty", " 10082 ");
             createModel.setProperty("/ReturnsOrderReason", "101");
             createModel.setProperty("/ReferenceSDDocument", "31000007");
+            createModel.setProperty("/CustomerReturnDate", "2026-10-29");
             createModel.setProperty("/Items", [
                 {
                     Material: "4000000001",
@@ -462,21 +462,77 @@ describe("CreateCustomerReturn Controller", () => {
                     StorageLocation: "FG01"
                 }
             ]);
+        }
+
+        test("onConfirmCreateReturn sends the form values to the service, trimmed and with item references filled in", () => {
+            controller.onInit();
+            fillValidReturn(models["createReturnModel"]);
 
             controller.onConfirmCreateReturn();
 
-            expect(MockBusyIndicator.show).toHaveBeenCalled();
-            expect(MockCustomerReturnService.createCustomerReturn).toHaveBeenCalled();
+            expect(MockCustomerReturnService.createCustomerReturn).toHaveBeenCalledTimes(1);
+            expect(MockCustomerReturnService.createCustomerReturn).toHaveBeenCalledWith({
+                CustomerReturnType: "ZRET",
+                SoldToParty: "10082",
+                ReturnsOrderReason: "101",
+                ReferenceSDDocument: "31000007",
+                ReferenceSDDocumentCategory: "M",
+                SalesOrganization: "1000",
+                DistributionChannel: "10",
+                OrganizationDivision: "52",
+                CustomerReturnDate: "2026-10-29",
+                PurchaseOrderByCustomer: "",
+                Items: [{
+                    Material: "4000000001",
+                    OrderQuantity: 10,
+                    OrderQuantityUnit: "KG",
+                    ProductionPlant: "1110",
+                    StorageLocation: "FG01",
+                    ReturnReason: "101",
+                    ReferenceSDDocument: "31000007",
+                    ReferenceSDDocumentItem: "000010"
+                }]
+            }, undefined);
+        });
+
+        test("onConfirmCreateReturn shows the SAP return number on success and navigates back when closed", async () => {
+            controller.onInit();
+            fillValidReturn(models["createReturnModel"]);
+
+            controller.onConfirmCreateReturn();
+            expect(MockBusyIndicator.show).toHaveBeenCalledWith(0);
 
             await Promise.resolve();
             await Promise.resolve();
 
-            expect(MockBusyIndicator.hide).toHaveBeenCalled();
-            expect(MockMessageBox.success).toHaveBeenCalled();
+            expect(MockBusyIndicator.hide).toHaveBeenCalledTimes(1);
+            expect(MockMessageBox.success).toHaveBeenCalledWith("msgReturnCreatedSuccess 4500099", expect.any(Object));
             expect(mockRouter.navTo).toHaveBeenCalledWith("customerReturns", {}, true);
         });
 
-        test("onConfirmCreateReturn handles service failure with MessageBox.error", async () => {
+        test("onConfirmCreateReturn turns submit off after a not-confirmed answer, so a second press sends nothing", async () => {
+            controller.onInit();
+            const createModel = models["createReturnModel"];
+            createModel.setProperty("/SoldToParty", "10082");
+            createModel.setProperty("/ReturnsOrderReason", "101");
+            createModel.setProperty("/Items", [{ Material: "4000000001", OrderQuantity: "10" }]);
+            MockCustomerReturnService.createCustomerReturn.mockClear();
+            MockCustomerReturnService.createCustomerReturn.mockRejectedValueOnce(new Error("SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again."));
+
+            controller.onConfirmCreateReturn();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(createModel.getProperty("/submitBlocked")).toBe(true);
+            expect(MockMessageBox.error.mock.calls[0][0]).toContain("SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.");
+            expect(MockMessageBox.error.mock.calls[0][0]).not.toContain("msgCreateReturnFailed");
+
+            controller.onConfirmCreateReturn();
+
+            expect(MockCustomerReturnService.createCustomerReturn).toHaveBeenCalledTimes(1);
+        });
+
+        test("onConfirmCreateReturn shows the backend error text in MessageBox.error and stays on the form", async () => {
             controller.onInit();
             const createModel = models["createReturnModel"];
             createModel.setProperty("/SoldToParty", "10082");
@@ -492,8 +548,9 @@ describe("CreateCustomerReturn Controller", () => {
             await Promise.resolve();
             await Promise.resolve();
 
-            expect(MockBusyIndicator.hide).toHaveBeenCalled();
-            expect(MockMessageBox.error).toHaveBeenCalled();
+            expect(MockBusyIndicator.hide).toHaveBeenCalledTimes(1);
+            expect(MockMessageBox.error).toHaveBeenCalledWith("msgCreateReturnFailed SAP Backend 500 error", expect.any(Object));
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
         });
     });
 });

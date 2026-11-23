@@ -4,6 +4,7 @@
  */
 
 let ControllerClass;
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 class MockJSONModel {
     constructor(data) {
@@ -35,8 +36,10 @@ class MockJSONModel {
 }
 
 class MockFilter {
-    constructor(config) {
+    constructor(config, operator, value) {
         this.config = config;
+        this.operator = operator;
+        this.value = value;
     }
 }
 
@@ -59,6 +62,8 @@ const MockBaseController = {
     },
     extend: function (name, proto) {
         function Controller() {
+            this.getText = (_key, _args, fallback) => fallback;
+            this.blockSubmitIfNotConfirmed = require('../helpers/realBlockSubmit').realBlockSubmit();
             Object.assign(this, proto);
         }
         Controller.prototype = proto;
@@ -69,7 +74,11 @@ const MockBaseController = {
 const MockMessageBox = {
     error: jest.fn(),
     success: jest.fn(),
-    warning: jest.fn()
+    warning: jest.fn(),
+    confirm: jest.fn((msg, opts) => {
+        if (opts && opts.onClose) opts.onClose("OK");
+    }),
+    Action: { OK: "OK", CANCEL: "CANCEL" }
 };
 
 const MockAuthService = {
@@ -87,7 +96,9 @@ const MockOutboundDeliveryService = {
     }),
     createOutboundDelivery: jest.fn().mockResolvedValue("13000526"),
     createDeliveryWithoutRef: jest.fn().mockResolvedValue({ OutboundDelivery: "80000059" }),
+    createBillingDocument: jest.fn().mockResolvedValue({ BillingDocument: "90000001", Messages: [] }),
     getDeliveryStatus: jest.fn().mockResolvedValue({ DeliveryDocument: "13000526", DeliveryDocumentType: "ZLF", SoldToParty: "10082", OverallPickingStatus: "A", OverallGoodsMovementStatus: "A", OverallDelivReltdBillgStatus: "A" }),
+    getPlantContext: jest.fn().mockResolvedValue({ plants: ["1120"], unrestricted: false }),
     getOrdersDueMetrics: jest.fn().mockResolvedValue({
         scheduleLineCount: 0,
         readyToDeliverCount: 0,
@@ -143,11 +154,14 @@ describe("OrdersDueForDelivery Controller", () => {
 
         mockBinding = {
             refresh: jest.fn(),
-            filter: jest.fn()
+            filter: jest.fn(),
+            isSuspended: jest.fn().mockReturnValue(true),
+            resume: jest.fn(() => { mockBinding.isSuspended.mockReturnValue(false); })
         };
 
         mockTable = {
-            getBinding: jest.fn().mockReturnValue(mockBinding)
+            getBinding: jest.fn().mockReturnValue(mockBinding),
+            setGrowingScrollToLoad: jest.fn()
         };
 
         const models = {};
@@ -169,13 +183,28 @@ describe("OrdersDueForDelivery Controller", () => {
         });
     });
 
-    test("onInit sets up view models and attaches route pattern matched", () => {
+    test("onInit attaches _onRouteMatched to the ordersDueForDelivery route", () => {
         controller.onInit();
 
-        expect(mockView.setModel).toHaveBeenCalledWith(expect.any(MockJSONModel), "ordersDueView");
-        expect(mockView.setModel).toHaveBeenCalledWith(expect.any(MockJSONModel), "deliveryDialog");
         expect(mockRouter.getRoute).toHaveBeenCalledWith("ordersDueForDelivery");
-        expect(mockRoute.attachPatternMatched).toHaveBeenCalled();
+        expect(mockRoute.attachPatternMatched).toHaveBeenCalledWith(controller._onRouteMatched, controller);
+    });
+
+    test("onInit starts on the ready tab with every KPI at '-' and no plant", () => {
+        controller.onInit();
+
+        expect(mockView.getModel("ordersDueView").getData()).toMatchObject({
+            totalCount: "-",
+            readyCount: "-",
+            inApprovalCount: "-",
+            shippingPointCount: "-",
+            distinctOrdersCount: "-",
+            readyOrdersCount: "-",
+            inApprovalOrdersCount: "-",
+            displayCount: "-",
+            selectedTab: "ready",
+            plant: ""
+        });
     });
 
     test("_loadServerMetrics takes KPI counts from getOrdersDueMetrics (full set, not the loaded page)", async () => {
@@ -204,13 +233,25 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(viewModel.getProperty("/displayCount")).toBe(42);
     });
 
-    test("_loadServerMetrics shows '-' (never 0) when the server metrics call fails", async () => {
-        MockOutboundDeliveryService.getOrdersDueMetrics.mockRejectedValueOnce(new Error("502"));
+    test("a failed metrics reload replaces the loaded figures with '-' (never stale, never 0)", async () => {
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockResolvedValueOnce({
+            scheduleLineCount: 57,
+            readyToDeliverCount: 42,
+            inApprovalCount: 12,
+            shippingPointCount: 3,
+            distinctOrdersCount: 38,
+            readyOrdersCount: 29,
+            inApprovalOrdersCount: 8
+        });
         controller.onInit();
-        await Promise.resolve();
-        await Promise.resolve();
-
+        await flush();
         const viewModel = mockView.getModel("ordersDueView");
+        expect(viewModel.getProperty("/totalCount")).toBe(57);
+
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockRejectedValueOnce(new Error("502"));
+        controller.onRefresh();
+        await flush();
+
         expect(viewModel.getProperty("/totalCount")).toBe("-");
         expect(viewModel.getProperty("/readyCount")).toBe("-");
         expect(viewModel.getProperty("/inApprovalCount")).toBe("-");
@@ -221,39 +262,69 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(viewModel.getProperty("/displayCount")).toBe("-");
     });
 
-    test("onTabSelect applies IsDeliverable filter for ready tab and updates displayCount", () => {
-        controller.onInit();
-        controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+    const selectTab = (key) => controller.onTabSelect({ getParameter: (p) => (p === "key" ? key : null) });
+    const PLANT_1120 = { config: "Plant", operator: "EQ", value: "1120" };
 
-        controller.onTabSelect({ getParameter: (p) => (p === "key" ? "ready" : null) });
-        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
-        const viewModel = mockView.getModel("ordersDueView");
-        expect(viewModel.getProperty("/selectedTab")).toBe("ready");
+    test("onTabSelect filters the ready tab on the plant and IsDeliverable", async () => {
+        controller.onInit();
+        await flush();
+        mockBinding.filter.mockClear();
+
+        selectTab("ready");
+
+        expect(mockBinding.filter).toHaveBeenCalledTimes(1);
+        expect(mockBinding.filter).toHaveBeenCalledWith(
+            [PLANT_1120, { config: "IsDeliverable", operator: "EQ", value: true }],
+            MockFilterType.Application
+        );
     });
 
-    test("onTabSelect applies SalesDocApprovalStatus filter for inApproval tab", () => {
+    test("onTabSelect filters the inApproval tab on the plant and SalesDocApprovalStatus A", async () => {
         controller.onInit();
-        controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+        await flush();
+        mockBinding.filter.mockClear();
 
-        controller.onTabSelect({ getParameter: (p) => (p === "key" ? "inApproval" : null) });
-        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
-        const viewModel = mockView.getModel("ordersDueView");
-        expect(viewModel.getProperty("/selectedTab")).toBe("inApproval");
+        selectTab("inApproval");
+
+        expect(mockBinding.filter).toHaveBeenCalledWith(
+            [PLANT_1120, { config: "SalesDocApprovalStatus", operator: "EQ", value: "A" }],
+            MockFilterType.Application
+        );
     });
 
-    test("onTabSelect removes approval filter for all tab", () => {
+    test("onTabSelect keeps only the plant filter for the all tab", async () => {
         controller.onInit();
-        controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+        await flush();
+        mockBinding.filter.mockClear();
 
-        controller.onTabSelect({ getParameter: (p) => (p === "key" ? "all" : null) });
-        expect(mockBinding.filter).toHaveBeenCalledWith([], MockFilterType.Application);
-        const viewModel = mockView.getModel("ordersDueView");
-        expect(viewModel.getProperty("/selectedTab")).toBe("all");
+        selectTab("all");
+
+        expect(mockBinding.filter).toHaveBeenCalledWith([PLANT_1120], MockFilterType.Application);
     });
 
-    test("onSearch applies filter on table items combining tab filter and search query", () => {
+    test.each([["ready", 42], ["inApproval", 12], ["all", 57]])("onTabSelect shows the %s figure (%s) as displayCount", async (key, expected) => {
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockResolvedValueOnce({
+            scheduleLineCount: 57,
+            readyToDeliverCount: 42,
+            inApprovalCount: 12,
+            shippingPointCount: 3
+        });
         controller.onInit();
-        const mockSearchField = { getValue: () => "1120" };
+        await flush();
+        const viewModel = mockView.getModel("ordersDueView");
+        viewModel.setProperty("/displayCount", "stale");
+
+        selectTab(key);
+
+        expect(viewModel.getProperty("/selectedTab")).toBe(key);
+        expect(viewModel.getProperty("/displayCount")).toBe(expected);
+    });
+
+    test("onSearch adds an OR group over SalesOrder, ShipToParty and ShippingPoint to the tab filter", async () => {
+        controller.onInit();
+        await flush();
+        mockBinding.filter.mockClear();
+        const mockSearchField = { getValue: () => " 5000 " };
         controller.byId = jest.fn((id) => {
             if (id === "ordersDueTable") return mockTable;
             if (id === "searchOrdersDue") return mockSearchField;
@@ -261,11 +332,29 @@ describe("OrdersDueForDelivery Controller", () => {
         });
 
         controller.onSearch();
-        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
+
+        expect(mockBinding.filter).toHaveBeenCalledWith(
+            [
+                PLANT_1120,
+                { config: "IsDeliverable", operator: "EQ", value: true },
+                {
+                    config: {
+                        filters: [
+                            { config: "SalesOrder", operator: "Contains", value: "5000" },
+                            { config: "ShipToParty", operator: "Contains", value: "5000" },
+                            { config: "ShippingPoint", operator: "Contains", value: "5000" }
+                        ],
+                        and: false
+                    }
+                }
+            ],
+            MockFilterType.Application
+        );
     });
 
-    test("onRefresh refreshes table items binding and reloads server metrics", () => {
+    test("onRefresh refreshes table items binding and reloads server metrics", async () => {
         controller.onInit();
+        await flush();
         MockOutboundDeliveryService.getOrdersDueMetrics.mockClear();
         controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
         controller.onRefresh();
@@ -436,7 +525,7 @@ describe("OrdersDueForDelivery Controller", () => {
         });
     });
 
-    test("onConfirmCreateDelivery validates required fields and creates delivery", async () => {
+    test("onConfirmCreateDelivery sends the dialog values, closes the dialog and shows the delivery number returned", async () => {
         controller.onInit();
         const dialogModel = mockView.getModel("deliveryDialog");
         dialogModel.setProperty("/salesOrder", "5000104");
@@ -459,6 +548,96 @@ describe("OrdersDueForDelivery Controller", () => {
             expect.stringContaining("13000526"),
             expect.any(Object)
         );
+    });
+
+    describe("after a not-confirmed answer", () => {
+        const notConfirmed = "SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again.";
+        const openFor = (order) => {
+            const dialogModel = mockView.getModel("deliveryDialog");
+            dialogModel.setProperty("/salesOrder", order);
+            dialogModel.setProperty("/shippingPoint", "1120");
+            dialogModel.setProperty("/deliveryDate", "2026-09-20");
+            return dialogModel;
+        };
+        const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+        beforeEach(() => {
+            controller.onInit();
+            controller._setDialogBusy = jest.fn();
+            MockOutboundDeliveryService.createOutboundDelivery.mockClear();
+            MockMessageBox.error.mockClear();
+            MockMessageBox.warning.mockClear();
+            MockOutboundDeliveryService.createOutboundDelivery.mockRejectedValueOnce(new Error(notConfirmed));
+            openFor("5000104");
+        });
+
+        test("refuses a second create for that order, even if the dialog is reopened, and sends nothing", async () => {
+            controller.onConfirmCreateDelivery();
+            await flush();
+            expect(MockMessageBox.error.mock.calls[0][0]).toContain("Create is turned off");
+
+            openFor("5000104");
+            controller.onConfirmCreateDelivery();
+            await flush();
+
+            expect(MockOutboundDeliveryService.createOutboundDelivery).toHaveBeenCalledTimes(1);
+            expect(MockMessageBox.warning.mock.calls[0][0]).toContain(notConfirmed);
+        });
+
+        test("still allows another order", async () => {
+            controller.onConfirmCreateDelivery();
+            await flush();
+            controller.onCancelCreateDelivery = jest.fn();
+            controller.onRefresh = jest.fn();
+
+            openFor("5000105");
+            controller.onConfirmCreateDelivery();
+            await flush();
+
+            expect(MockOutboundDeliveryService.createOutboundDelivery).toHaveBeenCalledTimes(2);
+        });
+
+        test("allows that order again after a refresh, which re-reads SAP", async () => {
+            controller.onConfirmCreateDelivery();
+            await flush();
+            controller._getPlant = () => "";
+            controller._loadForPlant = jest.fn();
+            controller.onRefresh();
+            controller.onCancelCreateDelivery = jest.fn();
+
+            openFor("5000104");
+            controller.onConfirmCreateDelivery();
+            await flush();
+
+            expect(MockOutboundDeliveryService.createOutboundDelivery).toHaveBeenCalledTimes(2);
+        });
+
+        test("delivery without reference: turns submit off and sends nothing more, until the dialog is reopened", async () => {
+            MockOutboundDeliveryService.createOutboundDelivery.mockReset();
+            const model = mockView.getModel("deliveryNoRefDialog");
+            model.setProperty("/submitBlocked", true);
+
+            controller.onConfirmCreateDeliveryNoRef();
+            await flush();
+            expect(MockOutboundDeliveryService.createDeliveryWithoutRef).not.toHaveBeenCalled();
+
+            controller._pCreateDeliveryNoRefDialog = Promise.resolve({ open: jest.fn() });
+            controller.onOpenCreateDeliveryNoRefDialog();
+            expect(model.getProperty("/submitBlocked")).toBe(false);
+        });
+    });
+
+    test.each([[""], ["   "]])("onConfirmCreateDelivery rejects a blank shipping point (%j) without calling the service", (shippingPoint) => {
+        controller.onInit();
+        const dialogModel = mockView.getModel("deliveryDialog");
+        dialogModel.setProperty("/salesOrder", "5000104");
+        dialogModel.setProperty("/shippingPoint", shippingPoint);
+
+        controller.onConfirmCreateDelivery();
+
+        expect(dialogModel.getProperty("/shippingPointValueState")).toBe("Error");
+        expect(MockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining("Shipping Point is required"));
+        expect(MockOutboundDeliveryService.createOutboundDelivery).not.toHaveBeenCalled();
     });
 
     test("onConfirmCreateDelivery rejects when sales order is missing", () => {
@@ -493,19 +672,23 @@ describe("OrdersDueForDelivery Controller", () => {
     });
 
     describe("Delivery Without Reference Dialog & Actions", () => {
-        test("onOpenCreateDeliveryNoRefDialog resets model to defaults", () => {
+        test("onOpenCreateDeliveryNoRefDialog clears values left over from the last use", () => {
             controller.onInit();
             const dialogModel = mockView.getModel("deliveryNoRefDialog");
-            dialogModel.setProperty("/shippingPoint", "9999");
+            dialogModel.setProperty("/salesOrg", "1000");
+            dialogModel.setProperty("/distChannel", "14");
+            dialogModel.setProperty("/division", "00");
+            dialogModel.setProperty("/busy", true);
+            dialogModel.setProperty("/items", [{ itemNo: "000010" }, { itemNo: "000020" }, { itemNo: "000030" }]);
             controller._pCreateDeliveryNoRefDialog = Promise.resolve({ open: jest.fn() });
 
             controller.onOpenCreateDeliveryNoRefDialog();
 
-            expect(dialogModel.getProperty("/shippingPoint")).toBe("1104");
-            expect(dialogModel.getProperty("/deliveryType")).toBe("LO2");
-            expect(dialogModel.getProperty("/plant")).toBe("1110");
-            expect(dialogModel.getProperty("/storageLocation")).toBe("FG01");
-            expect(dialogModel.getProperty("/shipToParty")).toBe("10135");
+            // No guessed sales area: the server posts these values as typed.
+            expect(dialogModel.getProperty("/salesOrg")).toBe("");
+            expect(dialogModel.getProperty("/distChannel")).toBe("");
+            expect(dialogModel.getProperty("/division")).toBe("");
+            expect(dialogModel.getProperty("/busy")).toBe(false);
             expect(dialogModel.getProperty("/items")).toHaveLength(1);
         });
 
@@ -519,10 +702,9 @@ describe("OrdersDueForDelivery Controller", () => {
             const items = dialogModel.getProperty("/items");
             expect(items).toHaveLength(2);
             expect(items[1].itemNo).toBe("000020");
-            expect(items[1].material).toBe("4000000187");
         });
 
-        test("onDeleteDeliveryNoRefItem deletes line item when more than one exists", () => {
+        test("onDeleteDeliveryNoRefItem deletes the line item of the pressed row", () => {
             controller.onInit();
             controller.onAddDeliveryNoRefItem();
             const dialogModel = mockView.getModel("deliveryNoRefDialog");
@@ -531,13 +713,13 @@ describe("OrdersDueForDelivery Controller", () => {
             const mockEvent = {
                 getSource: () => ({
                     getBindingContext: () => ({
-                        getPath: () => "/items/1"
+                        getPath: () => "/items/0"
                     })
                 })
             };
 
             controller.onDeleteDeliveryNoRefItem(mockEvent);
-            expect(dialogModel.getProperty("/items")).toHaveLength(1);
+            expect(dialogModel.getProperty("/items").map((item) => item.itemNo)).toEqual(["000020"]);
         });
 
         test("onDeleteDeliveryNoRefItem warns and prevents deletion if only one item remains", () => {
@@ -565,6 +747,23 @@ describe("OrdersDueForDelivery Controller", () => {
             expect(MockOutboundDeliveryService.createDeliveryWithoutRef).not.toHaveBeenCalled();
         });
 
+        test("onConfirmCreateDeliveryNoRef turns submit off after a not-confirmed answer", async () => {
+            controller.onInit();
+            MockMessageBox.error.mockClear();
+            MockOutboundDeliveryService.createDeliveryWithoutRef.mockClear();
+            MockOutboundDeliveryService.createDeliveryWithoutRef.mockRejectedValueOnce(new Error("SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again."));
+
+            controller.onConfirmCreateDeliveryNoRef();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(mockView.getModel("deliveryNoRefDialog").getProperty("/submitBlocked")).toBe(true);
+            expect(MockMessageBox.error.mock.calls[0][0]).toContain("Create is turned off");
+
+            controller.onConfirmCreateDeliveryNoRef();
+
+            expect(MockOutboundDeliveryService.createDeliveryWithoutRef).toHaveBeenCalledTimes(1);
+        });
+
         test("onConfirmCreateDeliveryNoRef creates delivery and updates follow-up panel", async () => {
             controller.onInit();
             controller.onCancelCreateDeliveryNoRef = jest.fn();
@@ -589,6 +788,205 @@ describe("OrdersDueForDelivery Controller", () => {
                 expect.stringContaining("80000059"),
                 expect.any(Object)
             );
+        });
+    });
+
+    describe("plant selector (the server fails closed without a plant)", () => {
+        const plantFilter = () => {
+            const aFilters = mockBinding.filter.mock.calls.length ? mockBinding.filter.mock.calls.slice(-1)[0][0] : [];
+            return aFilters.find((f) => f.config === "Plant");
+        };
+
+        test("pre-selects the user's plant, filters by it, then resumes the table and loads metrics for it", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: ["1120"], unrestricted: false });
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            expect(vm.getProperty("/plant")).toBe("1120");
+            expect(plantFilter()).toMatchObject({ operator: "EQ", value: "1120" });
+            expect(mockTable.setGrowingScrollToLoad).toHaveBeenCalledWith(true);
+            expect(mockBinding.resume.mock.invocationCallOrder[0]).toBeLessThan(mockTable.setGrowingScrollToLoad.mock.invocationCallOrder[0]);
+            expect(mockBinding.resume).toHaveBeenCalledTimes(1);
+            expect(mockBinding.filter.mock.invocationCallOrder[0]).toBeLessThan(mockBinding.resume.mock.invocationCallOrder[0]);
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalledWith("1120");
+            expect(vm.getProperty("/plantValueState")).toBe("None");
+        });
+
+        test("without a Plant attribute the plant is required and nothing is requested", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: [], unrestricted: true });
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            expect(vm.getProperty("/plantValueState")).toBe("Error");
+            expect(vm.getProperty("/plantValueStateText")).toMatch(/plant/i);
+            expect(mockBinding.resume).not.toHaveBeenCalled();
+            expect(mockTable.setGrowingScrollToLoad).not.toHaveBeenCalled();
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
+        });
+
+        test("an entered plant is normalized, filtered on, and loads the worklist", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: [], unrestricted: true });
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            vm.setProperty("/plant", " 1110 ");
+            controller.onPlantChange();
+            expect(vm.getProperty("/plant")).toBe("1110");
+            expect(plantFilter()).toMatchObject({ value: "1110" });
+            expect(mockBinding.resume).toHaveBeenCalledTimes(1);
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalledWith("1110");
+            expect(vm.getProperty("/plantValueState")).toBe("None");
+        });
+
+        test("clearing the plant again shows the required state and requests nothing new", async () => {
+            controller.onInit();
+            await flush();
+            MockOutboundDeliveryService.getOrdersDueMetrics.mockClear();
+            const vm = mockView.getModel("ordersDueView");
+            vm.setProperty("/plant", "");
+            controller.onPlantChange();
+            expect(vm.getProperty("/plantValueState")).toBe("Error");
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
+        });
+
+        test("a failed plant lookup leaves the table suspended and shows why", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockRejectedValueOnce(new Error("HTTP 403"));
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            expect(vm.getProperty("/plantValueState")).toBe("Error");
+            expect(vm.getProperty("/plantValueStateText")).toContain("HTTP 403");
+            expect(mockBinding.resume).not.toHaveBeenCalled();
+        });
+
+        test("a plant outside a restricted user's scope is refused without a request and the loaded plant is kept", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: ["1120"], unrestricted: false });
+            controller.onInit();
+            await flush();
+            mockBinding.filter.mockClear();
+            MockOutboundDeliveryService.getOrdersDueMetrics.mockClear();
+            const vm = mockView.getModel("ordersDueView");
+            vm.setProperty("/plant", "1110");
+            controller.onPlantChange();
+            expect(vm.getProperty("/plant")).toBe("1120");
+            expect(vm.getProperty("/plantValueState")).toBe("Error");
+            expect(vm.getProperty("/plantValueStateText")).toContain("1110");
+            expect(mockBinding.filter).not.toHaveBeenCalled();
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
+        });
+
+        test("an unrestricted user may choose any plant (the server decides)", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: [], unrestricted: true });
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            vm.setProperty("/plant", "1110");
+            controller.onPlantChange();
+            expect(vm.getProperty("/plant")).toBe("1110");
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalledWith("1110");
+        });
+
+        test("onRefresh without a plant asks for one instead of refreshing", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: [], unrestricted: true });
+            controller.onInit();
+            await flush();
+            controller.onRefresh();
+            expect(mockBinding.refresh).not.toHaveBeenCalled();
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("_text fills message arguments", () => {
+        test("uses the default text with {0} replaced when no i18n bundle is available", () => {
+            expect(controller._text("missingKey", "Sales Order {0} has a delivery block ({1}).", ["5000287", "Z1"]))
+                .toBe("Sales Order 5000287 has a delivery block (Z1).");
+        });
+
+        test("passes the arguments to the i18n bundle", () => {
+            const getText = jest.fn().mockReturnValue("from bundle");
+            controller.getOwnerComponent = () => ({ getModel: () => ({ getResourceBundle: () => ({ hasText: () => true, getText }) }) });
+            expect(controller._text("msgOrderRejected", "x", ["5000287"])).toBe("from bundle");
+            expect(getText).toHaveBeenCalledWith("msgOrderRejected", ["5000287"]);
+        });
+    });
+
+    describe("billing is offered only for billing status A or B", () => {
+        test.each([["A", true], ["B", true], ["C", false], ["", false]])("billing status '%s' -> canBill %s", async (status, expected) => {
+            controller.onInit();
+            await flush();
+            MockOutboundDeliveryService.getDeliveryStatus.mockResolvedValueOnce({
+                DeliveryDocument: "80000085", DeliveryDocumentType: "ZLF", SoldToParty: "10135",
+                OverallPickingStatus: "C", OverallGoodsMovementStatus: "C", OverallDelivReltdBillgStatus: status
+            });
+            const fu = mockView.getModel("deliveryFollowUp");
+            fu.setProperty("/delivery", "80000085");
+            controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+            await controller.onLoadDeliveryStatus();
+            await flush();
+            expect(fu.getProperty("/canBill")).toBe(expected);
+        });
+    });
+
+    describe("Optimistic concurrency and ETag handling (Phase 4)", () => {
+        // Controller behaviour only: the real status response has no ETag today (OutboundDeliveryAdapter.js:564-575,
+        // service.cds getDeliveryStatus), so this path is not reachable from a real read. See the audit ask file.
+        test("onLoadDeliveryStatus keeps an @odata.etag if the status response carries one", async () => {
+            controller.onInit();
+            await flush();
+            MockOutboundDeliveryService.getDeliveryStatus.mockResolvedValueOnce({
+                DeliveryDocument: "80000085",
+                DeliveryDocumentType: "ZLF",
+                SoldToParty: "10135",
+                OverallPickingStatus: "C",
+                OverallGoodsMovementStatus: "A",
+                OverallDelivReltdBillgStatus: "A",
+                "@odata.etag": 'W/"20261028120000"'
+            });
+            const fu = mockView.getModel("deliveryFollowUp");
+            fu.setProperty("/delivery", "80000085");
+            controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+            await controller.onLoadDeliveryStatus();
+            await flush();
+
+            expect(fu.getProperty("/etag")).toBe('W/"20261028120000"');
+        });
+
+        test("onCreateBillingDocument passes ETag to service and catches 409 STALE_DATA with reload guidance", async () => {
+            controller.onInit();
+            await flush();
+            const fu = mockView.getModel("deliveryFollowUp");
+            fu.setProperty("/delivery", "80000085");
+            fu.setProperty("/billingType", "F2");
+            fu.setProperty("/etag", 'W/"20261028120000"');
+
+            const staleErr = new Error("Precondition failed in S/4HANA");
+            staleErr.status = 409;
+            staleErr.code = "STALE_DATA";
+            MockOutboundDeliveryService.createBillingDocument.mockRejectedValueOnce(staleErr);
+
+            let onCloseAction;
+            MockMessageBox.confirm.mockImplementationOnce((msg, opts) => {
+                opts.onClose(MockMessageBox.Action.OK);
+            });
+            MockMessageBox.error.mockImplementationOnce((msg, opts) => {
+                if (opts && opts.onClose) onCloseAction = opts.onClose;
+            });
+
+            controller.onCreateBillingDocument();
+            await flush();
+
+            expect(MockOutboundDeliveryService.createBillingDocument).toHaveBeenCalledWith(
+                expect.objectContaining({ delivery: "80000085", billingType: "F2" }),
+                { etag: 'W/"20261028120000"' }
+            );
+            expect(MockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringContaining("reload the latest delivery data from SAP"),
+                expect.objectContaining({ title: expect.any(String) })
+            );
+
+            jest.spyOn(controller, "onLoadDeliveryStatus");
+            if (onCloseAction) onCloseAction();
+            expect(controller.onLoadDeliveryStatus).toHaveBeenCalled();
         });
     });
 });

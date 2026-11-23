@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 'use strict';
 
 /**

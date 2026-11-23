@@ -1,0 +1,90 @@
+{
+  "query": "RESB",
+  "fields": [
+    "RSNUM",
+    "RSPOS",
+    "MATNR",
+    "WERKS",
+    "LGORT",
+    "UMLGO",
+    "BWART",
+    "BDMNG",
+    "ENMNG",
+    "MEINS",
+    "BDTER",
+    "KZEAR",
+    "XLOEK",
+    "XWAOK"
+  ],
+  "filters": [
+    "BWART = '311' AND LGORT = 'CS02' AND WERKS = '1150' AND XLOEK = '' AND KZEAR = ''"
+  ],
+  "timestamp": "2026-10-23T10:18:01.606Z",
+  "rowCount": 4,
+  "rows": [
+    {
+      "RSNUM": "0000520235",
+      "RSPOS": "0001",
+      "MATNR": "000000008000009802",
+      "WERKS": "1150",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BWART": "311",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "BDTER": "20260930",
+      "KZEAR": "",
+      "XLOEK": "",
+      "XWAOK": "X"
+    },
+    {
+      "RSNUM": "0000520235",
+      "RSPOS": "0002",
+      "MATNR": "000000008000009803",
+      "WERKS": "1150",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BWART": "311",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "BDTER": "20260930",
+      "KZEAR": "",
+      "XLOEK": "",
+      "XWAOK": "X"
+    },
+    {
+      "RSNUM": "0000520236",
+      "RSPOS": "0001",
+      "MATNR": "000000008000009802",
+      "WERKS": "1150",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BWART": "311",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "BDTER": "20260930",
+      "KZEAR": "",
+      "XLOEK": "",
+      "XWAOK": "X"
+    },
+    {
+      "RSNUM": "0000520236",
+      "RSPOS": "0002",
+      "MATNR": "000000008000009803",
+      "WERKS": "1150",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BWART": "311",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "BDTER": "20260930",
+      "KZEAR": "",
+      "XLOEK": "",
+      "XWAOK": "X"
+    }
+  ]
+}

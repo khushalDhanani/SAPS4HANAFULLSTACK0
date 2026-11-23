@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { throwIfTextMustShow } = require('../../common/visibleError');
 const HandlingUnitAdapter = require('../../integration/s4hana/wm/HandlingUnitAdapter');
 const plantScope = require('./plantScope');
 
@@ -12,6 +13,7 @@ module.exports = class HandlingUnitService extends cds.ApplicationService {
       try {
         return await fn(req.data || {}, req);
       } catch (err) {
+        throwIfTextMustShow(err);
         return req.error(err.status || 500, err.message || 'SAP S/4HANA request failed');
       }
     };

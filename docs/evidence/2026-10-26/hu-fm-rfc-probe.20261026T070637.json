@@ -1,0 +1,562 @@
+{
+  "capturedAt": "2026-10-26T07:06:33.229Z",
+  "readOnly": true,
+  "functionName": "HU_CREATE_GOODS_MOVEMENT",
+  "queries": [
+    {
+      "table": "TFDIR",
+      "fields": [
+        "FUNCNAME",
+        "FMODE",
+        "PNAME"
+      ],
+      "where": [
+        "FUNCNAME = 'HU_CREATE_GOODS_MOVEMENT'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "FMODE": "",
+          "PNAME": "SAPLHU_GOODS_MOVEMENT"
+        }
+      ]
+    },
+    {
+      "table": "FUPARAREF",
+      "fields": [
+        "FUNCNAME",
+        "PARAMETER",
+        "PARAMTYPE",
+        "STRUCTURE",
+        "OPTIONAL",
+        "PPOSITION"
+      ],
+      "where": [
+        "FUNCNAME = 'HU_CREATE_GOODS_MOVEMENT'"
+      ],
+      "rowCount": 14,
+      "rows": [
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "ET_MESSAGES",
+          "PARAMTYPE": "E",
+          "STRUCTURE": "HUITEM_MESSAGES_T",
+          "OPTIONAL": "",
+          "PPOSITION": "3"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "ES_MESSAGE",
+          "PARAMTYPE": "E",
+          "STRUCTURE": "HUITEM_MESSAGES",
+          "OPTIONAL": "",
+          "PPOSITION": "2"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IF_EVENT",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "HUWBEVENT",
+          "OPTIONAL": "X",
+          "PPOSITION": "1"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IS_IMKPF",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "IMKPF",
+          "OPTIONAL": "X",
+          "PPOSITION": "5"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IT_MOVE_TO",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "HUM_DATA_MOVE_TO_T",
+          "OPTIONAL": "X",
+          "PPOSITION": "6"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IT_INTERNAL_ID",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "HUM_VENUM_T",
+          "OPTIONAL": "X",
+          "PPOSITION": "7"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IT_EXTERNAL_ID",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "HUM_EXIDV_T",
+          "OPTIONAL": "X",
+          "PPOSITION": "8"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IT_IMSEG_EWM",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "TY_T_IMSEG",
+          "OPTIONAL": "X",
+          "PPOSITION": "9"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "ES_EMKPF",
+          "PARAMTYPE": "E",
+          "STRUCTURE": "EMKPF",
+          "OPTIONAL": "",
+          "PPOSITION": "4"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "EF_POSTED",
+          "PARAMTYPE": "E",
+          "STRUCTURE": "SYSUBRC",
+          "OPTIONAL": "",
+          "PPOSITION": "1"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "CT_IMSEG",
+          "PARAMTYPE": "C",
+          "STRUCTURE": "VSEP_T_IMSEG",
+          "OPTIONAL": "X",
+          "PPOSITION": "1"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IF_SIMULATE",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "XFELD",
+          "OPTIONAL": "X",
+          "PPOSITION": "2"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IF_COMMIT",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "XFELD",
+          "OPTIONAL": "X",
+          "PPOSITION": "3"
+        },
+        {
+          "FUNCNAME": "HU_CREATE_GOODS_MOVEMENT",
+          "PARAMETER": "IF_TCODE",
+          "PARAMTYPE": "I",
+          "STRUCTURE": "SYTCODE",
+          "OPTIONAL": "X",
+          "PPOSITION": "4"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUITEM_MESSAGES_T'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "HUITEM_MESSAGES_T",
+          "ROWTYPE": "HUITEM_MESSAGES",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUITEM_MESSAGES'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUWBEVENT'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'IMKPF'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUM_DATA_MOVE_TO_T'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "HUM_DATA_MOVE_TO_T",
+          "ROWTYPE": "HUM_DATA_MOVE_TO",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUM_VENUM_T'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "HUM_VENUM_T",
+          "ROWTYPE": "HUM_VENUM",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'HUM_EXIDV_T'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "HUM_EXIDV_T",
+          "ROWTYPE": "HUM_EXIDV",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'TY_T_IMSEG'"
+      ],
+      "rowCount": 1,
+      "rows": [
+        {
+          "TYPENAME": "TY_T_IMSEG",
+          "ROWTYPE": "IMSEG",
+          "ROWKIND": "S",
+          "DATATYPE": "STRU",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'EMKPF'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'SYSUBRC'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'VSEP_T_IMSEG'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'XFELD'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "table": "DD40L",
+      "fields": [
+        "TYPENAME",
+        "ROWTYPE",
+        "ROWKIND",
+        "DATATYPE",
+        "LENG"
+      ],
+      "where": [
+        "TYPENAME = 'SYTCODE'"
+      ],
+      "rowCount": 0,
+      "rows": []
+    }
+  ],
+  "skippedReads": [],
+  "result": {
+    "exists": true,
+    "fmode": "",
+    "rfcEnabled": false,
+    "parameters": [
+      {
+        "name": "ET_MESSAGES",
+        "kind": "E",
+        "type": "HUITEM_MESSAGES_T",
+        "optional": ""
+      },
+      {
+        "name": "ES_MESSAGE",
+        "kind": "E",
+        "type": "HUITEM_MESSAGES",
+        "optional": ""
+      },
+      {
+        "name": "IF_EVENT",
+        "kind": "I",
+        "type": "HUWBEVENT",
+        "optional": "X"
+      },
+      {
+        "name": "IS_IMKPF",
+        "kind": "I",
+        "type": "IMKPF",
+        "optional": "X"
+      },
+      {
+        "name": "IT_MOVE_TO",
+        "kind": "I",
+        "type": "HUM_DATA_MOVE_TO_T",
+        "optional": "X"
+      },
+      {
+        "name": "IT_INTERNAL_ID",
+        "kind": "I",
+        "type": "HUM_VENUM_T",
+        "optional": "X"
+      },
+      {
+        "name": "IT_EXTERNAL_ID",
+        "kind": "I",
+        "type": "HUM_EXIDV_T",
+        "optional": "X"
+      },
+      {
+        "name": "IT_IMSEG_EWM",
+        "kind": "I",
+        "type": "TY_T_IMSEG",
+        "optional": "X"
+      },
+      {
+        "name": "ES_EMKPF",
+        "kind": "E",
+        "type": "EMKPF",
+        "optional": ""
+      },
+      {
+        "name": "EF_POSTED",
+        "kind": "E",
+        "type": "SYSUBRC",
+        "optional": ""
+      },
+      {
+        "name": "CT_IMSEG",
+        "kind": "C",
+        "type": "VSEP_T_IMSEG",
+        "optional": "X"
+      },
+      {
+        "name": "IF_SIMULATE",
+        "kind": "I",
+        "type": "XFELD",
+        "optional": "X"
+      },
+      {
+        "name": "IF_COMMIT",
+        "kind": "I",
+        "type": "XFELD",
+        "optional": "X"
+      },
+      {
+        "name": "IF_TCODE",
+        "kind": "I",
+        "type": "SYTCODE",
+        "optional": "X"
+      }
+    ],
+    "tableTypes": [
+      {
+        "typeName": "HUITEM_MESSAGES_T",
+        "rowType": "HUITEM_MESSAGES",
+        "rowKind": "S",
+        "found": true
+      },
+      {
+        "typeName": "HUITEM_MESSAGES",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "HUWBEVENT",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "IMKPF",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "HUM_DATA_MOVE_TO_T",
+        "rowType": "HUM_DATA_MOVE_TO",
+        "rowKind": "S",
+        "found": true
+      },
+      {
+        "typeName": "HUM_VENUM_T",
+        "rowType": "HUM_VENUM",
+        "rowKind": "S",
+        "found": true
+      },
+      {
+        "typeName": "HUM_EXIDV_T",
+        "rowType": "HUM_EXIDV",
+        "rowKind": "S",
+        "found": true
+      },
+      {
+        "typeName": "TY_T_IMSEG",
+        "rowType": "IMSEG",
+        "rowKind": "S",
+        "found": true
+      },
+      {
+        "typeName": "EMKPF",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "SYSUBRC",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "VSEP_T_IMSEG",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "XFELD",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      },
+      {
+        "typeName": "SYTCODE",
+        "rowType": null,
+        "rowKind": null,
+        "found": false
+      }
+    ]
+  }
+}

@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Re-pull the Gateway service catalog. Verifies before overwriting the baseline.
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

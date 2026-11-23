@@ -167,10 +167,14 @@
                                     <Select id="fbStatus" selectedKey="" width="100%">
                                         <items>
                                             <core:Item key="" text="{i18n>filterAll}" />
-                                            <core:Item key="Approved" text="{i18n>statusApproved}" />
-                                            <core:Item key="Draft" text="{i18n>statusDraft}" />
-                                            <core:Item key="In Approval" text="{i18n>statusInApproval}" />
-                                            <core:Item key="Rejected" text="{i18n>statusRejected}" />
+                                            <core:Item key="01" text="{i18n>statusDraft}" />
+                                            <core:Item key="02" text="{i18n>statusInApproval}" />
+                                            <core:Item key="03" text="{i18n>statusNotYetSent}" />
+                                            <core:Item key="04" text="{i18n>statusSent}" />
+                                            <core:Item key="05" text="{i18n>statusFollowOnDocuments}" />
+                                            <core:Item key="08" text="{i18n>statusReleased}" />
+                                            <core:Item key="38" text="{i18n>statusRejected}" />
+                                            <core:Item key="Deleted" text="{i18n>statusDeleted}" />
                                         </items>
                                     </Select>
                                 </fb:control>

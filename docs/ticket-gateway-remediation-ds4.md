@@ -1,6 +1,6 @@
 # Gateway Service Remediation Request — DS4 client 220
 
-**Raised by:** Dipak Rathod, CIO — Aether Industries Limited
+**Raised by:** SAP_USER_05, CIO — Aether Industries Limited
 **Date:** 18 September 2026
 **System:** DS4, client 220 (`<S4_HOST>:8000`)
 **Evidence:** `catalog-audit.csv` — all 1345 catalogued services probed live on 18-Sep-2026
@@ -254,6 +254,8 @@ Client 220 has 52 sales contracts today, all of type `ZGCQ` (the only unlocked c
 ## Business impact
 
 Goods issue and stock transfer movements cannot be synchronously posted to SAP S/4HANA from the warehouse application. Currently, all goods issue postings fall back to the Outbox Dispatch Queue (internal queue UUID) because `API_MATERIAL_DOCUMENT_SRV` is uncatalogued.
+
+*(Note: Goods Issue functionality has been completely decommissioned and removed from the application codebase; stock transfer items 5 and 6 remain relevant for MM).*
 
 **Features directly blocked by missing `API_MATERIAL_DOCUMENT_SRV`:**
 1. **Movement 201 Planned:** Goods Issue to Cost Center via Reservation.

@@ -3,14 +3,12 @@ jest.mock('../../../srv/integration/s4hana/le/outbound-delivery/OutboundDelivery
   getShippingPoints: jest.fn(),
   createDeliveryFromOrder: jest.fn(),
   getDeliveryStatus: jest.fn(),
-  postGoodsIssue: jest.fn(),
   getBillingDocumentTypes: jest.fn(),
   createBillingDocument: jest.fn()
 }));
 
 const outboundDeliveryAdapter = require('../../../srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const registerOutboundDeliveryHandlers = require('../../../srv/le/outbound-delivery/handlers/outboundDelivery.handler');
-const s4Config = require('../../../srv/common/s4Config');
 
 function createMockService() {
   const handlers = {};
@@ -26,6 +24,9 @@ function createMockService() {
   registerOutboundDeliveryHandlers(mockSrv);
   return handlers;
 }
+
+// Plant scope of these writes is covered in test/integration/outboundDeliveryPlantScope.test.js.
+const admin = { is: (role) => role === 'Admin' };
 
 describe('Unit: OutboundDeliveryService Handlers', () => {
   let handlers;
@@ -58,7 +59,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       expect(result[0].SalesOrder).toBe('5000104');
     });
 
-    test('filters by IsDeliverable when requested in query', async () => {
+    test('filters by the IsDeliverable $filter the worklist sends', async () => {
       const mockOrders = [
         { SalesOrder: '5000104', IsDeliverable: true, SalesDocApprovalStatus: 'B' },
         { SalesOrder: '5000461', IsDeliverable: false, SalesDocApprovalStatus: 'A' }
@@ -66,8 +67,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(mockOrders);
 
       const req = {
-        data: { IsDeliverable: 'true' },
-        query: {}
+        query: { SELECT: { where: [{ ref: ['Plant'] }, '=', { val: '1120' }, 'and', { ref: ['IsDeliverable'] }, '=', { val: true }] } }
       };
 
       const result = await handlers['READ_OrdersDueForDelivery'](req);
@@ -76,7 +76,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       expect(result[0].IsDeliverable).toBe(true);
     });
 
-    test('filters by SalesDocApprovalStatus when requested in query', async () => {
+    test('filters by the SalesDocApprovalStatus $filter the worklist sends', async () => {
       const mockOrders = [
         { SalesOrder: '5000104', IsDeliverable: true, SalesDocApprovalStatus: 'B' },
         { SalesOrder: '5000461', IsDeliverable: false, SalesDocApprovalStatus: 'A' }
@@ -84,8 +84,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(mockOrders);
 
       const req = {
-        data: { SalesDocApprovalStatus: 'A' },
-        query: {}
+        query: { SELECT: { where: [{ ref: ['Plant'] }, '=', { val: '1120' }, 'and', { ref: ['SalesDocApprovalStatus'] }, '=', { val: 'A' }] } }
       };
 
       const result = await handlers['READ_OrdersDueForDelivery'](req);
@@ -111,17 +110,21 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
   });
 
   describe('READ ShippingPointVH', () => {
-    test('delegates to adapter and returns shipping points', async () => {
-      const mockSPs = [
-        { ShippingPoint: '1120', ShippingPointName: '1130-FG Loading Area' }
-      ];
-      outboundDeliveryAdapter.getShippingPoints.mockResolvedValue(mockSPs);
+    test('hands the request to the adapter, so the adapter can scope the points by the user plant', async () => {
+      outboundDeliveryAdapter.getShippingPoints.mockResolvedValue([]);
 
       const req = { query: {} };
-      const result = await handlers['READ_ShippingPointVH'](req);
+      await handlers['READ_ShippingPointVH'](req);
 
-      expect(outboundDeliveryAdapter.getShippingPoints).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(mockSPs);
+      expect(outboundDeliveryAdapter.getShippingPoints).toHaveBeenCalledWith({ req });
+    });
+
+    test('applies paging to the shipping points', async () => {
+      outboundDeliveryAdapter.getShippingPoints.mockResolvedValue([{ ShippingPoint: '1120' }, { ShippingPoint: '1112' }]);
+
+      const result = await handlers['READ_ShippingPointVH']({ query: { SELECT: { limit: { rows: { val: 1 } } } } });
+
+      expect(result).toEqual([{ ShippingPoint: '1120' }]);
     });
 
     test('calls req.error when adapter fails', async () => {
@@ -166,6 +169,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
           ShippingPoint: '1120',
           DeliveryDate: '2025-08-14'
         },
+        user: admin,
         error: jest.fn()
       };
 
@@ -180,11 +184,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       expect(req.error).not.toHaveBeenCalled();
     });
 
-    test('defaults shipping point from s4Config when none provided in payload', async () => {
-      outboundDeliveryAdapter.createDeliveryFromOrder.mockResolvedValue({
-        OutboundDelivery: '13000526'
-      });
-
+    test('rejects with 400 when ShippingPoint is missing and never defaults to first list entry', async () => {
       const req = {
         data: {
           SalesOrder: '5000104'
@@ -194,12 +194,8 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
 
       await handlers['createOutboundDelivery'](req);
 
-      const configuredDefaultSP = s4Config.getShippingPoints()[0];
-      expect(outboundDeliveryAdapter.createDeliveryFromOrder).toHaveBeenCalledWith({
-        salesOrder: '5000104',
-        shippingPoint: configuredDefaultSP,
-        deliveryDate: undefined
-      });
+      expect(req.error).toHaveBeenCalledWith(400, 'ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
+      expect(outboundDeliveryAdapter.createDeliveryFromOrder).not.toHaveBeenCalled();
     });
 
     test('propagates mapped adapter error to req.error', async () => {
@@ -212,6 +208,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
           SalesOrder: '5000461',
           ShippingPoint: 'WAVG'
         },
+        user: admin,
         error: jest.fn()
       };
 
@@ -222,16 +219,22 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
         'Subsequent documents not possible due to approval status of the document.'
       );
     });
+
+    test('returns an empty string, never a made-up number, when the adapter got no delivery number', async () => {
+      outboundDeliveryAdapter.createDeliveryFromOrder.mockResolvedValue({ OutboundDelivery: '', ReferenceSDDocument: '5000104', ShippingPoint: '1120' });
+      const req = { data: { SalesOrder: '5000104', ShippingPoint: '1120' }, user: admin, error: jest.fn() };
+
+      await expect(handlers['createOutboundDelivery'](req)).resolves.toBe('');
+    });
   });
 
   describe('getDefaultShippingPoint function', () => {
-    test('returns primary shipping point and configured list from s4Config', async () => {
+    test('does not default shipping point to first list entry', async () => {
       const result = await handlers['getDefaultShippingPoint']();
 
-      const expectedSPs = s4Config.getShippingPoints();
       expect(result).toEqual({
-        ShippingPoint: expectedSPs[0],
-        ShippingPoints: expectedSPs
+        ShippingPoint: '',
+        ShippingPoints: []
       });
     });
   });
@@ -255,7 +258,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
         readyOrdersCount: 1,
         inApprovalOrdersCount: 1
       });
-      expect(outboundDeliveryAdapter.getOrdersDueForDelivery).toHaveBeenCalledWith({});
+      expect(outboundDeliveryAdapter.getOrdersDueForDelivery).toHaveBeenCalledWith(req);
       expect(req.error).not.toHaveBeenCalled();
     });
 
@@ -269,7 +272,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
     });
   });
 
-  describe('postGoodsIssue / getBillingDocumentTypes / createBillingDocument actions', () => {
+  describe('getBillingDocumentTypes / createBillingDocument actions', () => {
     test('getDeliveryStatus returns SAP statuses and 404 when the delivery does not exist', async () => {
       outboundDeliveryAdapter.getDeliveryStatus.mockResolvedValueOnce({ DeliveryDocument: '13000515', OverallPickingStatus: 'C' });
       expect(await handlers['getDeliveryStatus']({ data: { DeliveryDocument: '13000515' }, error: jest.fn() })).toEqual({ DeliveryDocument: '13000515', OverallPickingStatus: 'C' });
@@ -280,22 +283,101 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
     });
 
     test('delegate to the adapter and return SAP results unchanged', async () => {
-      outboundDeliveryAdapter.postGoodsIssue.mockResolvedValue({ DeliveryDocument: '13000526', Done: true, ErrorFlags: [] });
       outboundDeliveryAdapter.getBillingDocumentTypes.mockResolvedValue([{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }]);
       outboundDeliveryAdapter.createBillingDocument.mockResolvedValue({ BillingDocument: '90000123', Messages: [] });
-      const req = (data) => ({ data, error: jest.fn() });
-      expect(await handlers['postGoodsIssue'](req({ DeliveryDocument: '13000526' }))).toEqual({ DeliveryDocument: '13000526', Done: true, ErrorFlags: [] });
+      const req = (data) => ({ data, user: admin, error: jest.fn() });
       expect(await handlers['getBillingDocumentTypes'](req({ DeliveryDocument: '13000526' }))).toEqual([{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }]);
       expect(await handlers['createBillingDocument'](req({ DeliveryDocument: '13000526', BillingDocumentType: 'F2', BillingDocumentDate: '2026-09-22' }))).toEqual({ BillingDocument: '90000123', Messages: [] });
       expect(outboundDeliveryAdapter.createBillingDocument).toHaveBeenCalledWith({ deliveryDocument: '13000526', billingDocumentType: 'F2', billingDocumentDate: '2026-09-22' });
     });
 
-    test('map adapter errors to req.error with the SAP status and message', async () => {
-      const err = new Error('S/4HANA did not post goods issue for delivery 1 (ErrorInGoodsIssue).'); err.status = 422;
-      outboundDeliveryAdapter.postGoodsIssue.mockRejectedValue(err);
-      const req = { data: { DeliveryDocument: '1' }, error: jest.fn() };
-      await handlers['postGoodsIssue'](req);
-      expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('ErrorInGoodsIssue'));
+    test('forwards ETag property in data to createBillingDocument adapter call', async () => {
+      outboundDeliveryAdapter.createBillingDocument.mockResolvedValue({ BillingDocument: '90000123', Messages: [] });
+      const req = {
+        data: { DeliveryDocument: '13000526', BillingDocumentType: 'F2', ETag: 'W/"etag-val-456"' },
+        user: admin,
+        error: jest.fn()
+      };
+      await handlers['createBillingDocument'](req);
+      expect(outboundDeliveryAdapter.createBillingDocument).toHaveBeenCalledWith(
+        { deliveryDocument: '13000526', billingDocumentType: 'F2', billingDocumentDate: undefined },
+        { ifMatch: 'W/"etag-val-456"' }
+      );
+    });
+  });
+
+  describe('getPlantContext', () => {
+    test('Admin without a Plant attribute: unrestricted, no plant to pre-select', () => {
+      const req = { user: { is: (r) => r === 'Admin', attr: {} } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: [], unrestricted: true });
+    });
+
+    test('Admin with a Plant attribute: unrestricted, plant pre-selected', () => {
+      const req = { user: { is: (r) => r === 'Admin', attr: { Plant: [' 1120 '] } } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: ['1120'], unrestricted: true });
+    });
+
+    test('non-Admin: exactly the authorized plants', () => {
+      const req = { user: { is: () => false, attr: { Plant: ['1120', 'x1'] } } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: ['1120', 'X1'], unrestricted: false });
+    });
+
+    test('non-Admin without plants: none (the worklist read then fails closed with 403)', () => {
+      const req = { user: { is: () => false, attr: {} } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: [], unrestricted: false });
+    });
+  });
+
+  describe('getOrdersDueMetrics', () => {
+    test('passes the adapter 400 (no plant) through as 400', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockRejectedValue(Object.assign(new Error('No plant resolved'), { status: 400 }));
+      const req = { data: {}, error: jest.fn() };
+      await handlers['getOrdersDueMetrics'](req);
+      expect(req.error).toHaveBeenCalledWith(400, 'No plant resolved');
+    });
+  });
+
+  describe('READ OrdersDueForDelivery text search (computed rows: the handler applies contains itself)', () => {
+    const rows = [
+      { SalesOrder: '5000287', ShipToParty: '10135', ShippingPoint: '1112' },
+      { SalesOrder: '6000028', ShipToParty: '20077', ShippingPoint: '1104' }
+    ];
+    const contains = (field, val) => ({ func: 'contains', args: [{ ref: [field] }, { val }] });
+
+    test('keeps rows matching any searched field (OR group)', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(rows);
+      const where = [{ ref: ['Plant'] }, '=', { val: '1120' }, 'and', { xpr: [contains('SalesOrder', '0135'), 'or', contains('ShipToParty', '0135'), 'or', contains('ShippingPoint', '0135')] }];
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: { where } } });
+      expect(result.map(r => r.SalesOrder)).toEqual(['5000287']);
+    });
+
+    test.each([
+      ['a lower-case term on an upper-case value', 'wavg', 'WAVG'],
+      ['an upper-case term on a lower-case value', 'WAVG', 'wavg']
+    ])('search ignores case: %s', async (_label, term, value) => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue([
+        { SalesOrder: '5000287', ShippingPoint: value },
+        { SalesOrder: '6000028', ShippingPoint: '1104' }
+      ]);
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: { where: [contains('ShippingPoint', term)] } } });
+      expect(result.map(r => r.SalesOrder)).toEqual(['5000287']);
+    });
+
+    test('matches the sales order number', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(rows);
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: { where: [contains('SalesOrder', '6000028')] } } });
+      expect(result.map(r => r.SalesOrder)).toEqual(['6000028']);
+    });
+
+    test('without a search returns all rows', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(rows);
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: {} } });
+      expect(result).toHaveLength(2);
+    });
+
+    test('searchTerms ignores fields the rows do not carry', () => {
+      const { searchTerms } = require('../../../srv/le/outbound-delivery/handlers/outboundDelivery.handler');
+      expect(searchTerms([contains('Material', 'X'), 'or', contains('SalesOrder', 'ab')])).toEqual([{ field: 'SalesOrder', term: 'AB' }]);
     });
   });
 });

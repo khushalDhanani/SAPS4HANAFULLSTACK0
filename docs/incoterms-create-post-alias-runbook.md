@@ -24,7 +24,7 @@ Assign System Alias `LOCAL` to service `ZAPI_SALES_ORDER_SRV_0001` in `/IWFND/MA
 Re-run the read-only probe and confirm the service is now routable **and** the Incoterms fields are creatable:
 
 ```bash
-python3 tools/find-creatable.py            # catalog-wide (GET only); API_SALES_ORDER_SRV should flip 500 -> 200
+ALLOW_LIVE_SAP_TOOLS=1 python3 tools/find-creatable.py --allow-live-sap  # catalog-wide (GET only); API_SALES_ORDER_SRV should flip 500 -> 200
 ```
 
 Then GET the service's `$metadata` directly (read-only, same Basic-auth + `sap-client` as `tools/find-creatable.py`

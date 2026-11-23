@@ -2,20 +2,13 @@ const { formatDateToODataV2 } = require('../../../srv/integration/s4hana/mm/purc
 
 describe('Unit: Date Conversion', () => {
 
-    it('should convert standard ISO date string (YYYY-MM-DD) to /Date(epoch)/', () => {
-        const input = '2026-09-05';
-        const expectedEpoch = new Date(input).getTime();
-        const result = formatDateToODataV2(input);
-
-        expect(result).toBe(`/Date(${expectedEpoch})/`);
+    it('should convert a YYYY-MM-DD string to /Date(epoch)/ at UTC midnight of that day', () => {
+        expect(formatDateToODataV2('2026-09-05')).toBe('/Date(1788566400000)/');
     });
 
-    it('should convert full ISO datetime string to /Date(epoch)/', () => {
-        const input = '2026-09-05T12:30:00.000Z';
-        const expectedEpoch = new Date(input).getTime();
-        const result = formatDateToODataV2(input);
-
-        expect(result).toBe(`/Date(${expectedEpoch})/`);
+    it('should convert a full ISO datetime string to /Date(epoch)/ of that instant', () => {
+        // 2026-09-05T00:00Z is 1788566400000; 12h30m later adds 45000000 ms
+        expect(formatDateToODataV2('2026-09-05T12:30:00.000Z')).toBe('/Date(1788611400000)/');
     });
 
     it('should convert Date instance to /Date(epoch)/', () => {

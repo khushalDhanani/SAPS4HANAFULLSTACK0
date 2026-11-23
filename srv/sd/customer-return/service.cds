@@ -2,7 +2,7 @@
 service CustomerReturnService @(path: '/odata/v4/customer-return') {
 
     @readonly
-    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'FinanceViewer', 'Admin'])
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     entity CustomerReturns {
         key CustomerReturn                     : String(10);
             CustomerReturnType                 : String(4);
@@ -32,7 +32,7 @@ service CustomerReturnService @(path: '/odata/v4/customer-return') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'FinanceViewer', 'Admin'])
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     entity CustomerReturnItems {
         key CustomerReturn         : String(10);
         key CustomerReturnItem     : String(6);
@@ -59,7 +59,7 @@ service CustomerReturnService @(path: '/odata/v4/customer-return') {
             GoodsMovementType      : String(3);
     };
 
-    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'FinanceViewer', 'Admin'])
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     function getReturnMetrics() returns {
         totalReturns        : Integer;
         totalNetValue       : Decimal(15, 2);

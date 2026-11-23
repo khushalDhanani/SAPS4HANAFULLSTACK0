@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Verify every service/entity-set path the code calls actually exists in that
 # service's $metadata. Catches renamed or invented entity sets and function imports.
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

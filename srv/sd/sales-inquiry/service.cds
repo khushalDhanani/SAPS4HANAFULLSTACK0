@@ -21,6 +21,8 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         null as SalesAreaDesc : String(64),
         null as ContactPersonName : String(80),
         null as SalesEmployeeName : String(80),
+        // Set when the line items could not be read from SAP, so no items is not mistaken for an empty inquiry.
+        null as itemsUnavailable : Boolean,
         OverallSDProcessStatus,
         OverallSDDocumentRejectionSts,
         SalesDocumentRjcnReason,
@@ -138,7 +140,7 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         TransactionCurrency: String;
         TotalNetAmount: Decimal;
         // Commercial & logistics extension fields required by SAP (procedure Z1 / partner ZP).
-        // Transmitted only when the SAP inquiry service exposes the field; see getInquiryCreationCapabilities.
+        // Sent or refused by the creation route; see getInquiryCreationCapabilities.
         CustomerGroup2: String;
         PortOfLoading: String;
         PortOfDischarge: String;

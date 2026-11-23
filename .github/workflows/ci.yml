@@ -5,22 +5,40 @@ on:
     branches:
       - main
       - 'feature/**'
+      - feature01
   pull_request:
     branches:
       - main
+      - feature01
   workflow_dispatch:
+    inputs:
+      run_sap_validation:
+        description: 'Run non-production SAP validation stage (strictly read-only)'
+        required: false
+        type: boolean
+        default: false
+      run_browser_e2e:
+        description: 'Run the full Playwright browser E2E (test/e2e/runAllE2E.js) against a CAP server bound to the dev sandbox: SAP reads only, every write guarded or mocked'
+        required: false
+        type: boolean
+        default: false
+      e2e_runner:
+        description: 'Runner label for the browser E2E job. The runner must reach the SAP host and have the SAP NW RFC SDK (node-rfc); GitHub-hosted ubuntu-24.04 has neither'
+        required: false
+        type: string
+        default: 'ubuntu-24.04'
 
 jobs:
   ci:
     name: Build, Test & Validate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: 'npm'
@@ -36,6 +54,12 @@ jobs:
           cd app/fiori-app
           npm ci
 
+      - name: Secret Scan (Credential & Key Leak Prevention)
+        run: npm run scan:secrets
+
+      - name: Dependency Vulnerability Audit
+        run: npm run scan:dependencies
+
       - name: Run root ESLint
         run: npm run lint
 
@@ -44,13 +68,210 @@ jobs:
           cd app/fiori-app
           npm run lint
 
-      - name: Run automated test suite
-        run: npm test
+      - name: Run automated test suite with coverage thresholds
+        run: |
+          mkdir -p test-results
+          npx jest --runInBand --ci --coverage --json --outputFile=test-results/jest-results.json
+
+      - name: Run performance & scalability benchmarks
+        run: npm run test:performance
+
+      - name: Run Fiori accessibility (a11y) tests
+        run: npm run test:a11y
+
+      - name: Run monitoring & alerting assurance tests
+        run: npm run test:monitoring
+
+      - name: Run post-deployment smoke tests against server
+        # Test profile: this job has no SAP; any other profile fails closed in srv/common/productionGuard.js (S4 config missing).
+        run: |
+          NODE_ENV=test npx cds-serve &
+          PID=$!
+          node tools/smoke-test-deployment.js --wait=30
+          kill $PID || true
+
+      - name: Publish test results & coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results
+          path: |
+            test-results/
+            coverage/
+          if-no-files-found: ignore
 
       - name: Build UI5 application
         run: |
           cd app/fiori-app
           npm run build
 
+      - name: Publish UI5 build artifact
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: fiori-app-dist
+          path: app/fiori-app/dist/
+          if-no-files-found: ignore
+
       - name: Validate MTA deployment descriptor
         run: npm run validate:mta
+
+      - name: Build MTA archive and check its modules
+        run: |
+          npm run build:mta
+          mtar="$(ls mta_archives/*.mtar)"
+          unzip -l "$mtar" > mtar-contents.txt
+          for module in saps4hana-srv saps4hana-approuter saps4hana-app-deployer saps4hana-db-deployer; do
+            grep -q "$module/" mtar-contents.txt || { echo "MTA archive is missing module $module"; exit 1; }
+          done
+          # The HTML5 app has no module folder of its own: it ships inside the deployer's content
+          grep -q "saps4hana-app-deployer/app/data.zip" mtar-contents.txt || { echo "MTA archive is missing the HTML5 application"; exit 1; }
+
+  sap-nonprod-validation:
+    name: Non-Production SAP Validation (Separately Controlled)
+    needs: ci
+    if: ${{ github.event.inputs.run_sap_validation == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: dev-sandbox
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Execute controlled read-only SAP sandbox validation
+        env:
+          ALLOW_LIVE_SAP_TOOLS: '1'
+          RUN_LIVE_SAP: '1'
+          SAP_SYSTEM_TYPE: 'dev'
+          S4_DESTINATION_URL: ${{ secrets.S4_DEV_URL }}
+          S4_RFC_SYSNR: ${{ secrets.S4_DEV_SYSNR }}
+          S4_CLIENT: ${{ secrets.S4_DEV_CLIENT }}
+          S4_USERNAME: ${{ secrets.S4_DEV_USERNAME }}
+          S4_PASSWORD: ${{ secrets.S4_DEV_PASSWORD }}
+        run: npm run validate:sap:sandbox
+
+  browser-e2e-sap-free:
+    # PR gate: runs on every push/PR. No environment, no secrets, no SAP; the runner starts its own test-profile server.
+    name: Browser E2E, SAP-free suites (PR gate)
+    needs: ci
+    # Pin the image supported by installed Playwright; review deliberately before upgrading.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            app/fiori-app/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install UI5 application dependencies
+        run: |
+          cd app/fiori-app
+          npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Run SAP-free browser E2E (isolated test-profile server, SAP unreachable, writes mocked)
+        run: npm run test:e2e:sap-free
+
+      - name: Upload browser E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-e2e-sap-free-evidence
+          path: |
+            test-results/e2e-summary.json
+            test-results/e2e-evidence/
+          if-no-files-found: warn
+
+  browser-e2e:
+    name: Browser E2E, full suite (Separately Controlled)
+    needs: ci
+    if: ${{ github.event.inputs.run_browser_e2e == 'true' }}
+    runs-on: ${{ github.event.inputs.e2e_runner || 'ubuntu-24.04' }}
+    environment: dev-sandbox
+    timeout-minutes: 90
+    env:
+      # Same shape as a local dev run: dev profile (mocked users), local token issuer, S/4 reads from the sandbox.
+      NODE_ENV: development
+      PORT: '4004'
+      TARGET_URL: http://localhost:4004
+      ENABLE_DEV_TOKEN_ISSUER: 'true'
+      LOCAL_AUTH_SECRET: ${{ secrets.E2E_LOCAL_AUTH_SECRET }}
+      LOCAL_DEV_PASSWORD: ${{ secrets.E2E_LOCAL_DEV_PASSWORD }}
+      S4_DESTINATION_URL: ${{ secrets.S4_DEV_URL }}
+      S4_RFC_SYSNR: ${{ secrets.S4_DEV_SYSNR }}
+      S4_CLIENT: ${{ secrets.S4_DEV_CLIENT }}
+      S4_USERNAME: ${{ secrets.S4_DEV_USERNAME }}
+      S4_PASSWORD: ${{ secrets.S4_DEV_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            app/fiori-app/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install UI5 application dependencies
+        run: |
+          cd app/fiori-app
+          npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: RFC preflight (READ-ONLY T000 read; fails fast with the broken layer)
+        env:
+          ALLOW_LIVE_SAP_TOOLS: '1'
+        run: npm run preflight:rfc -- --allow-live-sap
+
+      - name: Start CAP server and wait for database readiness (/health/ready)
+        run: |
+          mkdir -p test-results
+          CDS_CONFIG="$(node -p "require('./test/testUsers').cdsConfig")" npx cds-serve > test-results/cap-server.log 2>&1 &
+          echo "CAP_PID=$!" >> "$GITHUB_ENV"
+          node tools/smoke-test-deployment.js --wait=60
+
+      - name: Run browser E2E (write guard on, writes mocked, no SAP write)
+        run: npm run test:e2e
+
+      - name: Stop CAP server
+        if: always()
+        run: kill "$CAP_PID" || true
+
+      - name: Upload browser E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-e2e-evidence
+          path: |
+            test-results/e2e-summary.json
+            test-results/e2e-evidence/
+            test-results/cap-server.log
+          if-no-files-found: warn

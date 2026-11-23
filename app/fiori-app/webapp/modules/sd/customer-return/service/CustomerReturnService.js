@@ -10,38 +10,20 @@ sap.ui.define([
 
     var _oModel = null;
 
+    /** Rows of a function that returns `array of`: OData V4 delivers them as { value: [...] }, not as an array. */
+    function _rows(oResult) {
+        if (Array.isArray(oResult)) {
+            return oResult;
+        }
+        return oResult && Array.isArray(oResult.value) ? oResult.value : [];
+    }
+
     /**
      * Read entity set via OData V4 list binding or ODataClient fallback.
      */
     function _readEntitySet(oModel, sEntitySet, aFilters, mParameters) {
-        var oTargetModel = oModel || _oModel;
-        if (!oTargetModel || typeof oTargetModel.bindList !== "function") {
-            var sUrl = SERVICE_BASE + sEntitySet;
-            var aParts = [];
-            if (aFilters && aFilters.length > 0) {
-                var aFilterParts = aFilters.map(function (f) {
-                    var sVal = f.oValue1 !== undefined ? f.oValue1 : (f.getValue1 ? f.getValue1() : "");
-                    var sPath = f.sPath || (f.getPath ? f.getPath() : "");
-                    return sPath + " eq '" + encodeURIComponent(sVal) + "'";
-                });
-                aParts.push("$filter=" + aFilterParts.join(" and "));
-            }
-            if (mParameters && mParameters.$top) {
-                aParts.push("$top=" + mParameters.$top);
-            }
-            if (aParts.length > 0) {
-                sUrl += "?" + aParts.join("&");
-            }
-            return ODataClient.get(sUrl).then(function (result) {
-                if (!result) return [];
-                return result.value || (result.d && result.d.results) || [];
-            });
-        }
-
-        var oListBinding = oTargetModel.bindList(sEntitySet, undefined, undefined, aFilters, mParameters);
-        return oListBinding.requestContexts(0, Infinity).then(function (aContexts) {
-            return aContexts.map(function (oCtx) { return oCtx.getObject(); });
-        });
+        return ODataClient.readEntitySet(SERVICE_BASE, oModel || _oModel, sEntitySet, aFilters, mParameters,
+            { useFilterGetters: true });
     }
 
     return {
@@ -82,7 +64,7 @@ sap.ui.define([
                 var oContextBinding = oTargetModel.bindContext("/getReturnReasons(...)");
                 return oContextBinding.execute().then(function () {
                     var oCtx = oContextBinding.getBoundContext();
-                    return oCtx ? oCtx.getObject() : [];
+                    return _rows(oCtx && oCtx.getObject());
                 });
             }
             return ODataClient.get(SERVICE_BASE + "/getReturnReasons()").then(function (res) {
@@ -133,7 +115,7 @@ sap.ui.define([
                 oContextBinding.setParameter("top", iTopVal);
                 return oContextBinding.execute().then(function () {
                     var oCtx = oContextBinding.getBoundContext();
-                    return oCtx ? oCtx.getObject() : [];
+                    return _rows(oCtx && oCtx.getObject());
                 });
             }
 

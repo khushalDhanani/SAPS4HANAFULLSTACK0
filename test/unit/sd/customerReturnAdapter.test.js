@@ -9,13 +9,21 @@ const {
 describe('Unit: CustomerReturnAdapter', () => {
   let adapter;
   let mockHttpClient;
+  let mockRfc;
 
   beforeEach(() => {
     mockHttpClient = {
       get: jest.fn(),
       post: jest.fn()
     };
-    adapter = new CustomerReturnAdapter({ client: mockHttpClient });
+    mockRfc = {
+      readTable: jest.fn(async (table, fields, where) => {
+        if (table === 'KNVV') return [{ VKORG: '1000', VTWEG: '14', SPART: '00', LOEVM: '' }, { VKORG: '1000', VTWEG: '10', SPART: '52', LOEVM: '' }];
+        if (table === 'T001W') return String(where).includes("'1110'") ? [{ WERKS: '1110' }] : [];
+        return [];
+      })
+    };
+    adapter = new CustomerReturnAdapter({ client: mockHttpClient, rfcClient: mockRfc });
   });
 
   afterEach(() => {
@@ -120,8 +128,26 @@ describe('Unit: CustomerReturnAdapter', () => {
     });
   });
 
+  // Query parameters of the URL the adapter requested, decoded
+  const requestedParams = () => new URL(mockHttpClient.get.mock.calls[0][0], 'http://sap.mock').searchParams;
+
+  // Entity and field names in the value-help and list tests below are hand-written: no metadata for
+  // SD_F2651_CRT_CREATE_SRV is in the repo, so the SAP shape is not proven. Only OUR URL and mapping are checked.
   describe('getCustomerReturns', () => {
-    test('calls SAP Gateway with pagination and filters', async () => {
+    test('requests the given paging and filter, newest first, with the inline count', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { results: [] } } });
+
+      await adapter.getCustomerReturns({ top: 10, skip: 0, filter: "SoldToParty eq '10082'" });
+
+      const params = requestedParams();
+      expect(params.get('$top')).toBe('10');
+      expect(params.get('$skip')).toBe('0');
+      expect(params.get('$filter')).toBe("SoldToParty eq '10082'");
+      expect(params.get('$orderby')).toBe('CustomerReturn desc');
+      expect(params.get('$inlinecount')).toBe('allpages');
+    });
+
+    test('reads the worklist entity and returns mapped rows with the count', async () => {
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
@@ -257,7 +283,7 @@ describe('Unit: CustomerReturnAdapter', () => {
   });
 
   describe('getCustomers', () => {
-    test('fetches customers from C_SoldToValueHelp with filter and top', async () => {
+    test('fetches customers from C_SoldToValueHelp and maps the rows', async () => {
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
@@ -277,10 +303,20 @@ describe('Unit: CustomerReturnAdapter', () => {
       expect(res[0].Customer).toBe('10082');
       expect(res[0].OrganizationBPName1).toBe('Bajaj Healthcare Limited');
     });
+
+    test('searches number and name with the given top', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { results: [] } } });
+
+      await adapter.getCustomers({ search: ' Bajaj ', top: 10 });
+
+      const params = requestedParams();
+      expect(params.get('$top')).toBe('10');
+      expect(params.get('$filter')).toBe("substringof('Bajaj', Customer) or substringof('Bajaj', OrganizationBPName1)");
+    });
   });
 
   describe('getMaterials', () => {
-    test('fetches materials from I_MaterialStdVH with filter and top', async () => {
+    test('fetches materials from I_MaterialStdVH and maps the rows', async () => {
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
@@ -298,6 +334,16 @@ describe('Unit: CustomerReturnAdapter', () => {
       );
       expect(res.length).toBe(1);
       expect(res[0].Material).toBe('4000000001');
+    });
+
+    test('searches number and text with the given top', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { results: [] } } });
+
+      await adapter.getMaterials({ search: '40000', top: 5 });
+
+      const params = requestedParams();
+      expect(params.get('$top')).toBe('5');
+      expect(params.get('$filter')).toBe("substringof('40000', Material) or substringof('40000', Material_Text)");
     });
   });
 
@@ -349,7 +395,18 @@ describe('Unit: CustomerReturnAdapter', () => {
   });
 
   describe('getReferenceDocuments', () => {
-    test('fetches eligible reference documents with search', async () => {
+    test('searches document number and sold-to with the given top, newest first', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { results: [] } } });
+
+      await adapter.getReferenceDocuments({ search: '31000007', top: 5 });
+
+      const params = requestedParams();
+      expect(params.get('$top')).toBe('5');
+      expect(params.get('$orderby')).toBe('DocumentDate desc');
+      expect(params.get('$filter')).toBe("substringof('31000007', ReferenceSDDocument) or substringof('31000007', SoldToParty)");
+    });
+
+    test('maps the eligible reference documents', async () => {
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
@@ -378,6 +435,39 @@ describe('Unit: CustomerReturnAdapter', () => {
       await expect(adapter.createCustomerReturn({ ReturnsOrderReason: '101' })).rejects.toThrow(
         'SoldToParty is mandatory for Customer Return creation'
       );
+    });
+
+    test.each([
+      ['Plant', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG' }] }, 'Plant for item M1'],
+      ['OrderQuantity', { Items: [{ Material: 'M1', OrderQuantityUnit: 'KG', ProductionPlant: '1110' }] }, 'Order quantity for item M1'],
+      ['OrderQuantityUnit', { Items: [{ Material: 'M1', OrderQuantity: 1, ProductionPlant: '1110' }] }, 'Order quantity unit for item M1'],
+      ['Currency with a price', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110', UnitPrice: '5' }] }, 'Currency for the unit price of item M1'],
+      ['SalesOrganization (partial sales area)', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], DistributionChannel: '10', OrganizationDivision: '52' }, 'given together'],
+      ['DistributionChannel (partial sales area)', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], SalesOrganization: '1000', OrganizationDivision: '52' }, 'given together'],
+      ['Division (partial sales area)', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], SalesOrganization: '1000', DistributionChannel: '10' }, 'given together']
+    ])('rejects a missing %s with 400 instead of assuming a default; nothing is posted', async (_what, extra, text) => {
+      await expect(adapter.createCustomerReturn({ SoldToParty: '10082', ReturnsOrderReason: '101', ...extra })).rejects.toMatchObject({ code: 400, message: expect.stringContaining(text) });
+      expect(mockHttpClient.post).not.toHaveBeenCalled();
+    });
+
+    test('sales area comes from KNVV: a single maintained area is used without any request values', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => (table === 'KNVV' ? [{ VKORG: '1000', VTWEG: '14', SPART: '00', LOEVM: '' }] : table === 'T001W' ? [{ WERKS: '1110' }] : []));
+      mockHttpClient.post.mockResolvedValueOnce({ data: { d: { SalesOrderID: '4500100', SalesOrderTypeCode: 'ZRET', DocumentCurrency: 'INR' } } });
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { CustomerReturn: '4500100', TransactionCurrency: 'INR' } } });
+      await adapter.createCustomerReturn({ SoldToParty: '1120', ReturnsOrderReason: '101', Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }] });
+      expect(mockHttpClient.post.mock.calls[0][1].data).toMatchObject({ SalesOrganization: '1000', DistributionChannel: '14', Division: '00' });
+    });
+
+    test('a requested sales area that KNVV does not hold for the customer is rejected with 400; nothing is posted', async () => {
+      await expect(adapter.createCustomerReturn({ SoldToParty: '10082', ReturnsOrderReason: '101', SalesOrganization: '2000', DistributionChannel: '10', OrganizationDivision: '52', Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }] }))
+        .rejects.toMatchObject({ code: 400, message: expect.stringContaining('not maintained for customer 10082') });
+      expect(mockHttpClient.post).not.toHaveBeenCalled();
+    });
+
+    test('a plant unknown to SAP (T001W) is rejected with 400; nothing is posted', async () => {
+      await expect(adapter.createCustomerReturn({ SoldToParty: '10082', ReturnsOrderReason: '101', Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '9999' }] }))
+        .rejects.toMatchObject({ code: 400, message: expect.stringContaining('Plant 9999 does not exist in SAP (T001W)') });
+      expect(mockHttpClient.post).not.toHaveBeenCalled();
     });
 
     test('rejects missing ReturnsOrderReason with 400', async () => {
@@ -418,11 +508,15 @@ describe('Unit: CustomerReturnAdapter', () => {
         ReturnsOrderReason: '101',
         ReferenceSDDocument: '31000007',
         ReferenceSDDocumentCategory: 'M',
+        SalesOrganization: '1000',
+        DistributionChannel: '10',
+        OrganizationDivision: '52',
         Items: [
           {
             Material: '4000000001',
             OrderQuantity: 10,
-            OrderQuantityUnit: 'KG'
+            OrderQuantityUnit: 'KG',
+            ProductionPlant: '1110'
           }
         ]
       };
@@ -450,6 +544,65 @@ describe('Unit: CustomerReturnAdapter', () => {
       expect(res.Message).toContain('4500099 successfully created and verified');
     });
 
+    describe('read-back of the created return', () => {
+      const payload = {
+        SoldToParty: '10082',
+        ReturnsOrderReason: '101',
+        SalesOrganization: '1000',
+        DistributionChannel: '10',
+        OrganizationDivision: '52',
+        Items: [{ Material: '4000000001', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }]
+      };
+      const notConfirmed = {
+        status: 502,
+        code: 502,
+        CustomerReturn: '4500099',
+        name: 'PartialCustomerReturnError',
+        $sanitize: false,
+        message: 'SAP created customer return 4500099, but it could not be read back from SAP, so it is NOT confirmed. Check it in SAP before creating it again.'
+      };
+      const readBack = (CustomerReturn) => ({ data: { d: { CustomerReturn, TransactionCurrency: 'INR' } } });
+
+      beforeEach(() => {
+        mockHttpClient.post.mockResolvedValueOnce({ data: { d: { SalesOrderID: '4500099', DocumentCurrency: 'INR' } } });
+      });
+
+      test('answers not confirmed, naming the number, when every read-back failed, and posts once', async () => {
+        mockHttpClient.get.mockRejectedValue(new Error('read-back unavailable'));
+
+        await expect(adapter.createCustomerReturn(payload)).rejects.toMatchObject(notConfirmed);
+        expect(mockHttpClient.get).toHaveBeenCalledTimes(3);
+        expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+      });
+
+      test('answers not confirmed when SAP does not find the return', async () => {
+        mockHttpClient.get.mockRejectedValue(Object.assign(new Error('not found'), { response: { status: 404 } }));
+
+        await expect(adapter.createCustomerReturn(payload)).rejects.toMatchObject(notConfirmed);
+      });
+
+      test('answers not confirmed when the read-back is a different return', async () => {
+        mockHttpClient.get.mockResolvedValue(readBack('4500100'));
+
+        await expect(adapter.createCustomerReturn(payload)).rejects.toMatchObject(notConfirmed);
+      });
+
+      test('accepts the same number with leading zeros', async () => {
+        mockHttpClient.get.mockResolvedValue(readBack('0004500099'));
+
+        const res = await adapter.createCustomerReturn(payload);
+
+        expect(res).toMatchObject({ CustomerReturn: '4500099', Success: true });
+        expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
+      });
+
+      test('accepts a read-back on a later attempt', async () => {
+        mockHttpClient.get.mockRejectedValueOnce(new Error('not yet')).mockResolvedValueOnce(readBack('4500099'));
+
+        await expect(adapter.createCustomerReturn(payload)).resolves.toMatchObject({ Success: true });
+      });
+    });
+
     test('rejects when no items with material are provided', async () => {
       await expect(
         adapter.createCustomerReturn({ SoldToParty: '10082', ReturnsOrderReason: '101', Items: [] })
@@ -468,7 +621,10 @@ describe('Unit: CustomerReturnAdapter', () => {
         adapter.createCustomerReturn({
           SoldToParty: '10082',
           ReturnsOrderReason: '101',
-          Items: [{ Material: '4000000001' }]
+          SalesOrganization: '1000',
+          DistributionChannel: '10',
+          OrganizationDivision: '52',
+          Items: [{ Material: '4000000001', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }]
         })
       ).rejects.toMatchObject({
         code: 502,

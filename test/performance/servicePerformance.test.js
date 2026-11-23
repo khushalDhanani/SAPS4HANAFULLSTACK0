@@ -1,0 +1,88 @@
+'use strict';
+
+/**
+ * test/performance/servicePerformance.test.js
+ *
+ * Performance and Scalability Benchmark Suite for Release Automation.
+ * Validates OData endpoint response time SLAs, concurrency throughput,
+ * and heap memory stability.
+ */
+
+const cds = require('@sap/cds');
+const path = require('path');
+const v8 = require('v8');
+const vm = require('vm');
+
+// Real GC without a --expose-gc CLI flag: without it the heap delta is uncollected garbage, not retained memory.
+v8.setFlagsFromString('--expose-gc');
+const gc = vm.runInNewContext('gc');
+
+const cdsTest = cds.test(path.resolve(__dirname, '../..'));
+cdsTest.defaults.auth = { username: 'khushal', password: '' };
+const { GET } = cdsTest;
+
+describe('Release Automation: Performance & Scalability Benchmarks', () => {
+  // 1. OData Service Response Time SLA
+  it('meets latency SLA (< 120ms average) across sequential OData read requests', async () => {
+    const ITERATIONS = 15;
+    const latencies = [];
+
+    // Warm-up request
+    await GET('/odata/v4/auth/getUserInfo()');
+
+    for (let i = 0; i < ITERATIONS; i++) {
+      const start = process.hrtime.bigint();
+      const res = await GET('/odata/v4/auth/getUserInfo()');
+      const end = process.hrtime.bigint();
+
+      expect(res.status).toBe(200);
+      const latencyMs = Number(end - start) / 1e6;
+      latencies.push(latencyMs);
+    }
+
+    const avgLatency = latencies.reduce((a, b) => a + b, 0) / latencies.length;
+    const maxLatency = Math.max(...latencies);
+
+    // Assert SLA: Average latency must be < 120ms, max < 350ms
+    expect(avgLatency).toBeLessThan(120);
+    expect(maxLatency).toBeLessThan(350);
+  });
+
+  // 2. High-Throughput Concurrency & Zero-Drop Guard
+  it('handles concurrent batch requests (25 parallel queries) under 2500ms with zero dropped connections', async () => {
+    const CONCURRENCY = 25;
+    const start = Date.now();
+
+    const promises = Array.from({ length: CONCURRENCY }, () =>
+      GET('/odata/v4/auth/getUserInfo()')
+    );
+
+    const results = await Promise.all(promises);
+    const totalTimeMs = Date.now() - start;
+
+    expect(results).toHaveLength(CONCURRENCY);
+    results.forEach((res) => {
+      expect(res.status).toBe(200);
+    });
+
+    expect(totalTimeMs).toBeLessThan(2500);
+  });
+
+  // 3. Memory Leak / Heap Stability Guard
+  it('maintains bounded heap memory usage (delta < 25MB) across 50 sequential operations', async () => {
+    gc();
+    const initialHeap = process.memoryUsage().heapUsed;
+
+    for (let i = 0; i < 50; i++) {
+      const res = await GET('/odata/v4/auth/getUserInfo()');
+      expect(res.status).toBe(200);
+    }
+
+    gc();
+    const finalHeap = process.memoryUsage().heapUsed;
+    const deltaMb = (finalHeap - initialHeap) / (1024 * 1024);
+
+    // Delta should remain small and bounded
+    expect(deltaMb).toBeLessThan(25);
+  });
+});

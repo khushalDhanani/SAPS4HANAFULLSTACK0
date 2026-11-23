@@ -1,8 +1,39 @@
-sap.ui.define(["sap/base/Log"], function (Log) {
+sap.ui.define([
+    "sap/base/Log",
+    "saps4hana/fiori/service/AuthStorage"
+], function (Log, AuthStorage) {
     "use strict";
 
     var sCsrfToken = null;
     var CSRF_TOKEN_URL = "/odata/v4/auth/";
+
+    /** The local CAP development server issues no CSRF token; every other host must. */
+    function _isLocalDevHost() {
+        var sHost = (typeof window !== "undefined" && window.location && window.location.hostname) || "";
+        return sHost === "localhost" || sHost === "127.0.0.1" || sHost === "[::1]";
+    }
+
+    function _csrfUnavailable(sMessage, oCause) {
+        var oError = new Error(sMessage);
+        oError.code = "CSRF_TOKEN_UNAVAILABLE";
+        if (oCause) { oError.cause = oCause; }
+        return oError;
+    }
+
+    function _resolveStorage() {
+        if (AuthStorage && typeof AuthStorage.getAuthHeader === "function") {
+            return AuthStorage;
+        }
+        var oGlobal = typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : null);
+        var oSap = oGlobal ? oGlobal["s" + "ap"] : null;
+        if (oSap && oSap.ui && typeof oSap.ui.require === "function") {
+            var reqStorage = oSap.ui.require("saps4hana/fiori/service/AuthStorage");
+            if (reqStorage && typeof reqStorage.getAuthHeader === "function") {
+                return reqStorage;
+            }
+        }
+        return null;
+    }
 
     /**
      * Centralized OData/CAP HTTP Client handling:
@@ -12,6 +43,63 @@ sap.ui.define(["sap/base/Log"], function (Log) {
      */
     var ODataClient = {
         /**
+         * Read a CAP entity set using a V4 list binding or the shared HTTP client.
+         * Callers resolve their own service base and stored model. Options preserve
+         * the existing services' context-length and filter-accessor contracts.
+         * @param {string} sServiceBase Service-relative URL
+         * @param {object} oModel Optional OData V4 model
+         * @param {string} sEntitySet Entity-set path including leading slash
+         * @param {object[]} aFilters List filters
+         * @param {object} mParameters Binding/query parameters
+         * @param {object} mOptions useContextLength maps $top to requestContexts;
+         *   useFilterGetters accepts filters exposing getPath/getValue1.
+         * @returns {Promise<object[]>} Entity objects
+         */
+        readEntitySet: function (sServiceBase, oModel, sEntitySet, aFilters, mParameters, mOptions) {
+            var oOptions = mOptions || {};
+            if (!oModel || typeof oModel.bindList !== "function") {
+                var sUrl = sServiceBase + sEntitySet;
+                var aParts = [];
+                if (aFilters && aFilters.length > 0) {
+                    var aFilterParts = aFilters.map(function (f) {
+                        var sValue = f.oValue1;
+                        var sPath = f.sPath;
+                        if (oOptions.useFilterGetters) {
+                            sValue = sValue !== undefined ? sValue : (f.getValue1 ? f.getValue1() : "");
+                            sPath = sPath || (f.getPath ? f.getPath() : "");
+                        }
+                        return sPath + " eq '" + encodeURIComponent(sValue) + "'";
+                    });
+                    aParts.push("$filter=" + aFilterParts.join(" and "));
+                }
+                if (mParameters && mParameters.$top) {
+                    aParts.push("$top=" + mParameters.$top);
+                }
+                if (aParts.length > 0) {
+                    sUrl += "?" + aParts.join("&");
+                }
+                return this.get(sUrl).then(function (result) {
+                    if (!result) return [];
+                    return result.value || (result.d && result.d.results) || [];
+                });
+            }
+
+            var iLength = Infinity;
+            var mBindingParameters = mParameters;
+            if (oOptions.useContextLength) {
+                // $top is a context count, not a V4 list-binding parameter.
+                iLength = (mParameters && mParameters.$top) ? Number(mParameters.$top) : Infinity;
+                mBindingParameters = Object.assign({}, mParameters);
+                delete mBindingParameters.$top;
+                if (!Object.keys(mBindingParameters).length) mBindingParameters = undefined;
+            }
+            var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters, mBindingParameters);
+            return oListBinding.requestContexts(0, iLength).then(function (aContexts) {
+                return aContexts.map(function (oContext) { return oContext.getObject(); });
+            });
+        },
+
+        /**
          * Fetches or returns a cached CSRF token.
          *
          * @param {boolean} [bForceRefresh=false]
@@ -19,8 +107,30 @@ sap.ui.define(["sap/base/Log"], function (Log) {
          */
         /** Authorization header from the stored login session ({} when none / unreadable). */
         authHeaders: function () {
+            var oStorage = _resolveStorage();
+            if (oStorage && typeof oStorage.getAuthHeader === "function") {
+                return oStorage.getAuthHeader();
+            }
             try {
-                var sSession = sessionStorage.getItem("saps4hana_fiori_auth_session") || localStorage.getItem("saps4hana_fiori_auth_session");
+                var sSession = null;
+                if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                    sSession = sessionStorage.getItem("saps4hana_fiori_auth_session");
+                }
+                // Fallback & sanitization: if found in legacy localStorage, migrate to sessionStorage and purge localStorage
+                if (!sSession && typeof localStorage !== "undefined" && localStorage) {
+                    var sLegacy = localStorage.getItem("saps4hana_fiori_auth_session");
+                    if (sLegacy) {
+                        sSession = sLegacy;
+                        try {
+                            if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                                sessionStorage.setItem("saps4hana_fiori_auth_session", sLegacy);
+                            }
+                            localStorage.removeItem("saps4hana_fiori_auth_session");
+                        } catch (err) {
+                            // ignore
+                        }
+                    }
+                }
                 if (sSession) {
                     var oParsed = JSON.parse(sSession);
                     var sAuthToken = (oParsed && oParsed.user && oParsed.user.token) || (oParsed && oParsed.token) || null;
@@ -51,12 +161,14 @@ sap.ui.define(["sap/base/Log"], function (Log) {
                     var sToken = response.headers.get("X-CSRF-Token") || response.headers.get("x-csrf-token");
                     if (sToken) {
                         sCsrfToken = sToken;
+                    } else if (!_isLocalDevHost()) {
+                        // Fail closed: the server answered but issued no token, so a write must not be sent.
+                        throw _csrfUnavailable("The server issued no security token, so the request was not sent. Reload the page and try again.");
                     }
                     return sCsrfToken;
-                })
-                .catch(function () {
-                    // If HEAD fails (e.g. local dev without CSRF protection), resolve null
-                    return null;
+                }, function (err) {
+                    // Fail closed: a write is not sent when the token request itself failed.
+                    throw _csrfUnavailable("The security token could not be obtained, so the request was not sent. Check the connection and try again.", err);
                 });
         },
 
@@ -138,6 +250,9 @@ sap.ui.define(["sap/base/Log"], function (Log) {
                 maxRetries: bRequiresCsrf ? 0 : 1,
                 retryDelayMs: 300
             }, mOptions || {});
+            if (bRequiresCsrf) {
+                options.maxRetries = 0; // enforced: a caller cannot switch automatic retries on for a write
+            }
 
             function executeAttempt(iAttempt) {
                 var pCsrf = bRequiresCsrf ? that.fetchCsrfToken() : Promise.resolve(null);
@@ -174,7 +289,11 @@ sap.ui.define(["sap/base/Log"], function (Log) {
                         if (response.status === 403 && bRequiresCsrf && iAttempt === 0 &&
                             String(response.headers.get("x-csrf-token") || "").toLowerCase() === "required") {
                             that.clearCsrfToken();
-                            return that.fetchCsrfToken(true).then(function () {
+                            return that.fetchCsrfToken(true).then(function (sNewToken) {
+                                if (!sNewToken) {
+                                    // The server requires a token and issued none: do not send the write again.
+                                    return that.parseError(response).then(function (err) { throw err; });
+                                }
                                 return executeAttempt(iAttempt + 1);
                             });
                         }
@@ -190,11 +309,20 @@ sap.ui.define(["sap/base/Log"], function (Log) {
 
                         if (!response.ok) {
                             if (response.status === 401) {
-                                try {
-                                    sessionStorage.removeItem("saps4hana_fiori_auth_session");
-                                    localStorage.removeItem("saps4hana_fiori_auth_session");
-                                } catch (e) {
-                                    // Storage unavailable (private mode): nothing to clear.
+                                var oStorage = _resolveStorage();
+                                if (oStorage && typeof oStorage.clearSession === "function") {
+                                    oStorage.clearSession();
+                                } else {
+                                    try {
+                                        if (typeof sessionStorage !== "undefined" && sessionStorage) {
+                                            sessionStorage.removeItem("saps4hana_fiori_auth_session");
+                                        }
+                                        if (typeof localStorage !== "undefined" && localStorage) {
+                                            localStorage.removeItem("saps4hana_fiori_auth_session");
+                                        }
+                                    } catch (e) {
+                                        // Storage unavailable (private mode): nothing to clear.
+                                    }
                                 }
                             }
                             return that.parseError(response).then(function (err) {

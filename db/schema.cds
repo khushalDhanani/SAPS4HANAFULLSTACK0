@@ -12,12 +12,14 @@
  *
  * Consequently, no business documents are stored locally.
  *
- * NOTE: All Goods Issue transactions post directly to SAP S/4HANA via API_MATERIAL_DOCUMENT_SRV.
- * No dispatch queue is persisted; S/4HANA remains the authoritative system of record.
+ * NOTE: All warehouse transactions post directly to SAP S/4HANA via standard OData/RFC APIs.
+ * No local queue is persisted; S/4HANA remains the authoritative system of record.
  */
 
 namespace saps4hana.fullstack;
 
-// Warehouse Management Persistence (Tracking & Logging)
-using from './wm/goods-issue-attempt';
-using from './wm/reservation-track';
+// Lock notifications (dedupe and last seen lock state), until an SAP table replaces them
+using from './admin/user-lock';
+
+// Password expiry monitoring (snapshots, milestone tracking, health monitor)
+using from './admin/password-expiry';

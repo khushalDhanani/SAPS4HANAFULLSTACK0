@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Read-only SAP metadata export (Step 0). Uses RFC_GET_FUNCTION_INTERFACE and RFC_READ_TABLE only.
 // Prints markdown for docs/abap/system-metadata.md; a failed read prints "NOT READ" with the SAP message.
 // Usage: node tools/read-system-metadata.js > /tmp/meta.md

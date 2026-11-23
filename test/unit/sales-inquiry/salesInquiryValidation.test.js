@@ -105,7 +105,13 @@ describe('Unit: Sales Inquiry Validation', () => {
             items: validItems
         });
         expect(result.isValid).toBe(false);
-        expect(result.errors.length).toBeGreaterThanOrEqual(4);
+        expect(result.errors.map(e => e.field).sort()).toEqual([
+            'DistributionChannel',
+            'OrganizationDivision',
+            'SalesInquiryType',
+            'SalesOrganization',
+            'SoldToParty'
+        ]);
     });
 
     test('should reject invalid currency codes', () => {

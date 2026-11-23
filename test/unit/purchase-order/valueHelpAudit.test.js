@@ -122,6 +122,46 @@ describe('Unit: Value Help Deduplication and Context Scoping', () => {
         });
     });
 
+    describe('1b. Projection where is forwarded to the remote read (CAP does not forward it itself)', () => {
+        const register = (read) => {
+            const handlers = {};
+            registerValueHelpHandlers({ on: (event, entities, handler) => entities.forEach((e) => { handlers[e] = handler; }) }, [{ entities: ['ItemCategoryVH', 'DocumentTypeVH'], read }]);
+            return handlers;
+        };
+        const target = (name, where, elements) => ({ name: `PurchaseOrderService.${name}`, projection: { where }, elements });
+        const EN = [{ ref: ['Language'] }, '=', { val: 'EN' }];
+
+        it('adds the projection where when the client sends none', async () => {
+            const read = jest.fn().mockResolvedValue([]);
+            const query = { SELECT: {} };
+            await register(read).ItemCategoryVH({ target: target('ItemCategoryVH', EN, { Language: {}, PurchasingDocumentItemCategory: {} }), query });
+            expect(read.mock.calls[0][0].SELECT.where).toEqual(EN);
+        });
+
+        it('ANDs the projection where with the client filter', async () => {
+            const read = jest.fn().mockResolvedValue([]);
+            const client = [{ ref: ['PurchasingDocumentItemCategory'] }, '=', { val: '0' }];
+            const query = { SELECT: { where: client } };
+            await register(read).ItemCategoryVH({ target: target('ItemCategoryVH', EN, { Language: {}, PurchasingDocumentItemCategory: {} }), query });
+            expect(read.mock.calls[0][0].SELECT.where).toEqual([{ xpr: client }, 'and', { xpr: EN }]);
+        });
+
+        it('restricts DocumentTypeVH to category F from its own projection (no hard-coded special case)', async () => {
+            const F = [{ ref: ['PurchasingDocumentCategory'] }, '=', { val: 'F' }];
+            const read = jest.fn().mockResolvedValue([{ PurchasingDocumentType: 'ZDOM', PurchasingDocumentCategory: 'F' }]);
+            const query = { SELECT: {} };
+            await register(read).DocumentTypeVH({ target: target('DocumentTypeVH', F, { PurchasingDocumentCategory: {}, PurchasingDocumentType: {} }), query });
+            expect(read.mock.calls[0][0].SELECT.where).toEqual(F);
+        });
+
+        it('leaves the query alone when the projection where names a field the entity does not have', async () => {
+            const read = jest.fn().mockResolvedValue([]);
+            const query = { SELECT: {} };
+            await register(read).ItemCategoryVH({ target: target('ItemCategoryVH', [{ ref: ['Lang'] }, '=', { val: 'EN' }], { Language: {} }), query });
+            expect(read.mock.calls[0][0].SELECT.where).toBeUndefined();
+        });
+    });
+
     describe('2. poValueHelpConfig and sdValueHelpConfig Registration', () => {
         it('poValueHelpConfig should configure deduplication for CurrencyVH, TaxCodeVH, and PaymentTermsVH', () => {
             expect(poValueHelpConfig).toBeDefined();
@@ -216,5 +256,40 @@ describe('Unit: Value Help Deduplication and Context Scoping', () => {
             expect(aPaths).toEqual(['SalesOrderType', 'SalesOrderTypeName']);
             expect(aPaths).not.toContain('Language key');
         });
+    });
+});
+
+describe('1c. One remote field exposed under two names (MaterialVH: MaterialName, MaterialName as Material_Text)', () => {
+    const target = { name: 'PurchaseOrderService.MaterialVH', projection: { columns: [{ ref: ['Material'] }, { ref: ['MaterialName'] }, { ref: ['MaterialName'], as: 'Material_Text' }] } };
+    const run = async (rows, columns) => {
+        const handlers = {};
+        registerValueHelpHandlers({ on: (event, entities, handler) => entities.forEach((e) => { handlers[e] = handler; }) }, [{ entities: ['MaterialVH'], read: async () => rows }]);
+        return handlers.MaterialVH({ target, query: { SELECT: columns ? { columns } : {} }, req: undefined });
+    };
+
+    it('fills MaterialName when the remote read returned only Material_Text', async () => {
+        const out = await run([{ Material: '1', Material_Text: 'Resin' }]);
+        expect(out[0]).toMatchObject({ MaterialName: 'Resin', Material_Text: 'Resin' });
+    });
+
+    it('fills Material_Text when only MaterialName came back', async () => {
+        const out = await run([{ Material: '1', MaterialName: 'Resin' }]);
+        expect(out[0].Material_Text).toBe('Resin');
+    });
+
+    it('keeps both values when both are present, and leaves a row with neither untouched', async () => {
+        const out = await run([{ Material: '1', MaterialName: 'A', Material_Text: 'B' }, { Material: '2' }]);
+        expect(out[0]).toMatchObject({ MaterialName: 'A', Material_Text: 'B' });
+        expect(out[1]).toEqual({ Material: '2' });
+    });
+
+    it('fills only the names the client selected', async () => {
+        const out = await run([{ Material: '1', MaterialName: 'Resin' }], [{ ref: ['Material'] }, { ref: ['MaterialName'] }]);
+        expect(out[0]).toEqual({ Material: '1', MaterialName: 'Resin' });
+    });
+
+    it('does nothing for an entity without aliased columns', () => {
+        const rows = [{ A: 1 }];
+        expect(registerValueHelpHandlers.fillAliasColumns({ projection: { columns: [{ ref: ['A'] }] } }, rows)).toEqual([{ A: 1 }]);
     });
 });

@@ -115,10 +115,6 @@ function _extractErrorCode(error) {
 /** SAP rejects a posting whose date lies outside the open periods (materials or FI period). */
 const POSTING_PERIOD_CLOSED_REGEX = /Posting only possible in periods?\s+(.+?)\s+in company code\s+(\w+)/i;
 
-function isPostingPeriodClosed(message) {
-    return POSTING_PERIOD_CLOSED_REGEX.test(String(message || ''));
-}
-
 /**
  * Maps an S/4HANA or Cloud SDK error into a semantic SAP error object:
  * - 400: Invalid user/business input format
@@ -142,9 +138,10 @@ function mapS4Error(error) {
             details: []
         };
     }
+    if (error.$sanitize === false) return error; // already says what the user must know: see srv/common/visibleError.js
 
     const message = extractS4ErrorMessage(error);
-    const code = _extractErrorCode(error);
+    let code = _extractErrorCode(error);
 
     // Closed posting period: a user-facing 400 with the fix, the SAP text kept in details.
     // The posting date is never changed automatically.
@@ -157,6 +154,17 @@ function mapS4Error(error) {
             details: [{ code, message: period[0], severity: 'error' }]
         };
     }
+    // A client error the adapter raised itself (explicit 4xx status, no S/4 response) keeps its status,
+    // e.g. a fail-closed authorization or missing-parameter check; only S/4 responses are classified below.
+    if (!error.response && Number.isInteger(error.status) && error.status >= 400 && error.status < 500) {
+        return {
+            status: error.status,
+            message: error.message || message,
+            code: error.code || code,
+            details: Array.isArray(error.details) ? error.details : []
+        };
+    }
+
     const sMessageLower = message.toLowerCase();
     const sCodeUpper = String(code).toUpperCase();
     const httpStatus = error.response?.status;
@@ -205,13 +213,37 @@ function mapS4Error(error) {
         sMessageLower.includes('does not exist in system')) {
         status = 404;
     }
-    // 5. Business Conflict / Lock (409)
+    // 5. Business Conflict / Lock / Optimistic Concurrency (409)
     else if (httpStatus === 409 ||
+        httpStatus === 412 ||
+        sCodeUpper.includes('PRECONDITION_FAILED') ||
+        sCodeUpper.includes('ETAG_CHECK_FAILED') ||
+        sCodeUpper.includes('CONCURRENCY') ||
         sMessageLower.includes('locked by') ||
         sMessageLower.includes('being processed by') ||
         sMessageLower.includes('foreign lock') ||
-        sMessageLower.includes('enqueue')) {
+        sMessageLower.includes('enqueue') ||
+        sMessageLower.includes('precondition failed') ||
+        sMessageLower.includes('etag mismatch') ||
+        sMessageLower.includes('changed by another user') ||
+        sMessageLower.includes('modified by another user') ||
+        sMessageLower.includes('stale data')) {
         status = 409;
+        if (httpStatus === 412 || sCodeUpper.includes('PRECONDITION') || sCodeUpper.includes('ETAG') ||
+            sMessageLower.includes('precondition failed') || sMessageLower.includes('etag') ||
+            sMessageLower.includes('changed by another user') || sMessageLower.includes('modified by another user') ||
+            sMessageLower.includes('stale data')) {
+            if (!code || code === 'UNKNOWN') {
+                code = 'STALE_DATA';
+            }
+        }
+    }
+    // 5b. Precondition Required (428)
+    else if (httpStatus === 428 || sMessageLower.includes('precondition required')) {
+        status = 428;
+        if (!code || code === 'UNKNOWN') {
+            code = 'PRECONDITION_REQUIRED';
+        }
     }
     // 6. Business Validation (422)
     // Matches S/4 Gateway CX_MGW_BUSI_EXCEPTION or standard SAP message classes (ME, M3, MM, AM, 06, BAPI)
@@ -242,7 +274,15 @@ function mapS4Error(error) {
     }
 
     let finalMessage = message;
-    if (sCodeUpper === 'OBJECTS_OBJREF_NOT_ASSIGNED_NO' || sMessageLower.includes('objects_objref_not_assigned_no') || sMessageLower.includes('cx_sy_ref_is_initial')) {
+    if (status === 409 && (httpStatus === 412 || sCodeUpper.includes('PRECONDITION') || sCodeUpper.includes('ETAG') || sMessageLower.includes('precondition failed') || sMessageLower.includes('etag'))) {
+        if (!finalMessage || sMessageLower === 'precondition failed' || sMessageLower.includes('etag check failed') || sMessageLower === 'etag condition check failed') {
+            finalMessage = 'The document was changed by another user. Please refresh and review latest changes before retrying.';
+        }
+    } else if (status === 428) {
+        if (!finalMessage || sMessageLower === 'precondition required') {
+            finalMessage = 'Optimistic concurrency check failed: Precondition (If-Match) is required for this operation.';
+        }
+    } else if (sCodeUpper === 'OBJECTS_OBJREF_NOT_ASSIGNED_NO' || sMessageLower.includes('objects_objref_not_assigned_no') || sMessageLower.includes('cx_sy_ref_is_initial')) {
         finalMessage = "SAP S/4HANA Backend Runtime Error: 'OBJECTS_OBJREF_NOT_ASSIGNED_NO' (CX_SY_REF_IS_INITIAL). The backend OData service API_WAREHOUSE_ORDER_TASK terminated abnormally during task creation. In this SAP S/4HANA instance, the service release status is DEPRECATED and transactional creation is not supported on this software stack.";
     } else if (sCodeUpper === 'CX_SADL_ENTITY_CUD_DISABLED' || sMessageLower.includes('cx_sadl_entity_cud_disabled')) {
         finalMessage = "SAP S/4HANA Backend Operation Disabled: Creating operations are disabled for this entity in the backend software stack (CX_SADL_ENTITY_CUD_DISABLED).";
@@ -262,6 +302,5 @@ function mapS4Error(error) {
 
 module.exports = {
     extractS4ErrorMessage,
-    mapS4Error,
-    isPostingPeriodClosed
+    mapS4Error
 };

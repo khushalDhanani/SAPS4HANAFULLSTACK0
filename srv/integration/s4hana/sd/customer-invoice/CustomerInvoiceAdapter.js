@@ -73,7 +73,16 @@ function _cleanOptions(options = {}) {
   if (!options) return {};
   if (typeof options.reject === 'function' || options.data !== undefined) {
     const userJwt = S4HttpClient.extractUserJwt(options);
-    return userJwt ? { userJwt } : {};
+    const ifMatch = options.headers?.['if-match'] || options.headers?.['If-Match'] ||
+      options.req?.headers?.['if-match'] || options.req?.headers?.['If-Match'] ||
+      options._?.req?.headers?.['if-match'] || options._?.req?.headers?.['If-Match'] ||
+      options.data?.ETag || options.data?.etag;
+    const res = userJwt ? { userJwt } : {};
+    if (ifMatch) {
+      res.ifMatch = ifMatch;
+      res.headers = { 'If-Match': ifMatch };
+    }
+    return res;
   }
   const clean = { ...options };
   if (clean.headers) {
@@ -85,6 +94,12 @@ function _cleanOptions(options = {}) {
     delete headers.cookie;
     delete headers.Cookie;
     clean.headers = headers;
+  }
+  const ifMatch = clean.ifMatch || clean.etag || clean.headers?.['if-match'] || clean.headers?.['If-Match'];
+  if (ifMatch) {
+    clean.ifMatch = ifMatch;
+    clean.headers = { ...(clean.headers || {}), 'If-Match': ifMatch };
+    delete clean.headers['if-match'];
   }
   return clean;
 }
@@ -324,7 +339,7 @@ class CustomerInvoiceAdapter {
     // Direct readback from SAP: two-way communication waiting for SAP's actual cancellation status
     const MAX_CANCEL_ATTEMPTS = 3;
     const CANCEL_DELAYS = [0, 800, 1500];
-    let updated = null;
+    let confirmed = null;
 
     for (let attempt = 0; attempt < MAX_CANCEL_ATTEMPTS; attempt++) {
       if (CANCEL_DELAYS[attempt] > 0) {
@@ -332,8 +347,9 @@ class CustomerInvoiceAdapter {
         await new Promise(resolve => setTimeout(resolve, CANCEL_DELAYS[attempt]));
       }
       try {
-        updated = await this.getBillingDocument(doc, transportOptions);
+        const updated = await this.getBillingDocument(doc, transportOptions);
         if (updated && (updated.BillingDocumentIsCancelled || updated.AccountingTransferStatus === 'E')) {
+          confirmed = updated;
           break;
         }
       } catch (readErr) {
@@ -341,15 +357,21 @@ class CustomerInvoiceAdapter {
       }
     }
 
-    const isCancelled = updated ? updated.BillingDocumentIsCancelled : true;
-    const finalStatus = updated?.AccountingTransferStatus || 'E';
-    const reversalDoc = cancelDoc || updated?.CancelledBillingDocument || '';
+    if (!confirmed) {
+      const reversal = cancelDoc ? ` (reversal document ${cancelDoc})` : '';
+      const err = new Error(`SAP accepted the cancellation of billing document ${doc}${reversal}, but reading it back did not show it as cancelled, so it is NOT confirmed. Check it in SAP before trying again.`);
+      err.status = 502;
+      err.$sanitize = false; // CAP hides 5xx text in production; the user needs this text to avoid acting on a wrong result
+      throw err;
+    }
+
+    const reversalDoc = cancelDoc || confirmed.CancelledBillingDocument || '';
 
     return {
       BillingDocument: doc,
       CancellationDocument: reversalDoc,
-      BillingDocumentIsCancelled: isCancelled,
-      AccountingTransferStatus: finalStatus,
+      BillingDocumentIsCancelled: true,
+      AccountingTransferStatus: confirmed.AccountingTransferStatus || 'E',
       Success: true,
       Message: reversalDoc
         ? `Billing document ${doc} successfully cancelled in SAP S/4HANA. Reversal document: ${reversalDoc}.`

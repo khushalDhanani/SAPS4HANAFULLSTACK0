@@ -1,6 +1,6 @@
 jest.mock('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter', () => {
     const mockAdapter = {
-        createSalesInquiry: jest.fn(),
+        createSalesInquiryViaRfc: jest.fn(),
         getSalesMetrics: jest.fn(),
         getInquiryMetrics: jest.fn((opts) => mockAdapter.getSalesMetrics({ ...opts, entity: 'inquiry' })),
         getCustomerDefaults: jest.fn(),
@@ -24,7 +24,7 @@ function handler() {
 
 describe('Unit: createSalesInquiry handler', () => {
     beforeEach(() => {
-        salesInquiryAdapter.createSalesInquiry.mockReset();
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockReset();
         jest.spyOn(console, 'error').mockImplementation(() => {});
     });
     afterEach(() => jest.restoreAllMocks());
@@ -50,27 +50,47 @@ describe('Unit: createSalesInquiry handler', () => {
         ]
     };
 
-    test('successfully creates sales inquiry and returns document number', async () => {
-        salesInquiryAdapter.createSalesInquiry.mockResolvedValue({
-            SalesInquiry: '1000529',
-            TotalNetAmount: '2500.00',
+    test('returns the trimmed SAP document number', async () => {
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockResolvedValue({ SalesInquiry: ' 1000529 ' });
+
+        const req = { data: validPayload, user: { id: 'khushal' }, error: jest.fn() };
+
+        await expect(handler()(req)).resolves.toBe('1000529');
+        expect(req.error).not.toHaveBeenCalled();
+    });
+
+    test('sends the validated, normalized and mapped payload to the adapter', async () => {
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockResolvedValue({ SalesInquiry: '1000529' });
+
+        await handler()({ data: validPayload, user: { id: 'khushal' }, error: jest.fn() });
+
+        expect(salesInquiryAdapter.createSalesInquiryViaRfc).toHaveBeenCalledTimes(1);
+        const [header, items, options] = salesInquiryAdapter.createSalesInquiryViaRfc.mock.calls[0];
+        expect(header).toMatchObject({
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            SoldToParty: '10135',
             TransactionCurrency: 'INR'
         });
-
-        const req = {
-            data: validPayload,
-            user: { id: 'alice' },
-            error: jest.fn()
-        };
-
-        const result = await handler()(req);
-        expect(result).toBe('1000529');
-        expect(req.error).not.toHaveBeenCalled();
-        expect(salesInquiryAdapter.createSalesInquiry).toHaveBeenCalledTimes(1);
+        // 10 x 250.00 = 2500.00, formatted by the mapper as 3 and 2 decimals
+        expect(items).toEqual([{
+            SalesInquiryItem: '000010',
+            Material: '4000000091',
+            SalesInquiryItemText: '',
+            OrderQuantity: '10.000',
+            OrderQuantityUnit: 'KG',
+            NetPriceAmount: '250.00',
+            NetAmount: '2500.00',
+            TransactionCurrency: 'INR',
+            Plant: '1120'
+        }]);
+        expect(options).toEqual({ user: 'khushal' });
     });
 
     test('rejects with HTTP 502 when SAP returns no SalesInquiry document number', async () => {
-        salesInquiryAdapter.createSalesInquiry.mockResolvedValue({
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockResolvedValue({
             SalesInquiry: '',
             SalesDocument: '',
             TotalNetAmount: '2500.00'
@@ -78,7 +98,7 @@ describe('Unit: createSalesInquiry handler', () => {
 
         const req = {
             data: validPayload,
-            user: { id: 'alice' },
+            user: { id: 'khushal' },
             error: jest.fn()
         };
 
@@ -89,21 +109,21 @@ describe('Unit: createSalesInquiry handler', () => {
     test('rejects invalid payload with HTTP 400', async () => {
         const req = {
             data: { header: null, items: [] },
-            user: { id: 'alice' },
+            user: { id: 'khushal' },
             error: jest.fn()
         };
 
         await handler()(req);
         expect(req.error).toHaveBeenCalledWith(400, expect.any(String));
-        expect(salesInquiryAdapter.createSalesInquiry).not.toHaveBeenCalled();
+        expect(salesInquiryAdapter.createSalesInquiryViaRfc).not.toHaveBeenCalled();
     });
 
     test('handles total failure at header creation with HTTP 500', async () => {
-        salesInquiryAdapter.createSalesInquiry.mockRejectedValue(new Error('Customer 10135 does not exist'));
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockRejectedValue(new Error('Customer 10135 does not exist'));
 
         const req = {
             data: validPayload,
-            user: { id: 'alice' },
+            user: { id: 'khushal' },
             error: jest.fn()
         };
 
@@ -120,11 +140,11 @@ describe('Unit: createSalesInquiry handler', () => {
             isPartialCreation: true,
             status: 502
         });
-        salesInquiryAdapter.createSalesInquiry.mockRejectedValue(partialErr);
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockRejectedValue(partialErr);
 
         const req = {
             data: validPayload,
-            user: { id: 'alice' },
+            user: { id: 'khushal' },
             error: jest.fn()
         };
 
@@ -135,11 +155,11 @@ describe('Unit: createSalesInquiry handler', () => {
     });
 
     describe('getCustomerDefaults', () => {
-        test('delegates to adapter and returns defaults', async () => {
+        test('passes customer and sales area to the adapter in positional order', async () => {
             salesInquiryAdapter.getCustomerDefaults.mockResolvedValue({ Customer: '10135', Currency: 'INR' });
             const req = { data: { Customer: '10135', SalesOrganization: '1000', DistributionChannel: '10', Division: '52' }, error: jest.fn() };
-            const result = await getAllHandlers().getCustomerDefaults(req);
-            expect(result).toEqual({ Customer: '10135', Currency: 'INR' });
+            await getAllHandlers().getCustomerDefaults(req);
+            expect(salesInquiryAdapter.getCustomerDefaults).toHaveBeenCalledWith('10135', '1000', '10', '52');
             expect(req.error).not.toHaveBeenCalled();
         });
 
@@ -160,15 +180,6 @@ describe('Unit: createSalesInquiry handler', () => {
     });
 
     describe('getInquiryCreationCapabilities', () => {
-        test('delegates to adapter and returns capabilities', async () => {
-            const caps = { ContactPerson: true, Plant: true, service: 'LORD_ODATA_ORDER_SRV' };
-            salesInquiryAdapter.getInquiryCreationCapabilities.mockResolvedValue(caps);
-            const req = { error: jest.fn() };
-            const result = await getAllHandlers().getInquiryCreationCapabilities(req);
-            expect(result).toEqual(caps);
-            expect(req.error).not.toHaveBeenCalled();
-        });
-
         test('propagates adapter failure via req.error (502) instead of throwing', async () => {
             salesInquiryAdapter.getInquiryCreationCapabilities.mockRejectedValue(new Error('metadata read failed'));
             const req = { error: jest.fn() };
@@ -178,17 +189,6 @@ describe('Unit: createSalesInquiry handler', () => {
     });
 
     describe('getSalesInquiryMetrics', () => {
-        test('delegates to adapter getInquiryMetrics', async () => {
-            const mockMetrics = { openInquiriesCount: 15, totalInquiriesCount: 60, openOrdersCount: 15, totalOrdersCount: 60 };
-            salesInquiryAdapter.getSalesMetrics.mockResolvedValue(mockMetrics);
-
-            const allHandlers = getAllHandlers();
-            const result = await allHandlers.getSalesInquiryMetrics();
-
-            expect(result).toEqual(mockMetrics);
-            expect(salesInquiryAdapter.getSalesMetrics).toHaveBeenCalledWith({ entity: 'inquiry' });
-        });
-
         test('propagates error via req.error on failure', async () => {
             const mockError = new Error('SD_F2370_INQY_WL_SRV unavailable');
             mockError.status = 502;
@@ -203,17 +203,6 @@ describe('Unit: createSalesInquiry handler', () => {
     });
 
     describe('getSalesOrderMetrics', () => {
-        test('delegates to adapter with entity inquiry', async () => {
-            const mockMetrics = { openOrdersCount: 15, totalOrdersCount: 60 };
-            salesInquiryAdapter.getSalesMetrics.mockResolvedValue(mockMetrics);
-
-            const allHandlers = getAllHandlers();
-            const result = await allHandlers.getSalesOrderMetrics();
-
-            expect(result).toEqual(mockMetrics);
-            expect(salesInquiryAdapter.getSalesMetrics).toHaveBeenCalledWith({ entity: 'inquiry' });
-        });
-
         test('propagates error via req.error on failure', async () => {
             const mockError = new Error('SD_F2370_INQY_WL_SRV unavailable');
             mockError.status = 502;

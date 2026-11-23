@@ -47,37 +47,8 @@ sap.ui.define([
      * @returns {Promise<Array>}
      */
     function _readEntitySet(oModel, sEntitySet, aFilters, mParameters) {
-        if (!oModel || typeof oModel.bindList !== "function") {
-            var sUrl = SERVICE_BASE + sEntitySet;
-            var aParts = [];
-            if (aFilters && aFilters.length > 0) {
-                var aFilterParts = aFilters.map(function (f) {
-                    return f.sPath + " eq '" + encodeURIComponent(f.oValue1) + "'";
-                });
-                aParts.push("$filter=" + aFilterParts.join(" and "));
-            }
-            if (mParameters && mParameters.$top) {
-                aParts.push("$top=" + mParameters.$top);
-            }
-            if (aParts.length > 0) {
-                sUrl += "?" + aParts.join("&");
-            }
-            return ODataClient.get(sUrl).then(function (result) {
-                if (!result) return [];
-                return result.value || (result.d && result.d.results) || [];
-            });
-        }
-
-        // $top is not a V4 list-binding parameter (UI5 throws "System query option $top is not supported");
-        // it is the number of contexts requested instead.
-        var iLength = (mParameters && mParameters.$top) ? Number(mParameters.$top) : Infinity;
-        var mBindingParameters = Object.assign({}, mParameters);
-        delete mBindingParameters.$top;
-        var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters,
-            Object.keys(mBindingParameters).length ? mBindingParameters : undefined);
-        return oListBinding.requestContexts(0, iLength).then(function (aContexts) {
-            return aContexts.map(function (oCtx) { return oCtx.getObject(); });
-        });
+        return ODataClient.readEntitySet(SERVICE_BASE, oModel, sEntitySet, aFilters, mParameters,
+            { useContextLength: true });
     }
 
     /**
@@ -153,10 +124,17 @@ sap.ui.define([
                 }
             });
 
+            // Decimal fields of the CAP action: an empty string is not a valid Decimal (HTTP 400 ASSERT_DATA_TYPE), so a blank optional
+            // value (e.g. no net price entered) is left out instead of being sent as "".
+            var DECIMAL_ITEM_FIELDS = ["OrderQuantity", "NetPriceAmount", "NetAmount"];
+
             var cleanItems = rawItems.map(function (item) {
                 var cleanItem = {};
                 ALLOWED_ITEM_FIELDS.forEach(function (field) {
                     if (item[field] !== undefined && item[field] !== null) {
+                        if (DECIMAL_ITEM_FIELDS.indexOf(field) !== -1 && String(item[field]).trim() === "") {
+                            return;
+                        }
                         cleanItem[field] = item[field];
                     }
                 });
@@ -181,47 +159,15 @@ sap.ui.define([
             var sUrl = SERVICE_BASE + "/createPurchaseOrder";
             var oCleanPayload = this._sanitizePayload(oPayload);
             return ODataClient.post(sUrl, oCleanPayload).then(function (result) {
-                if (!result) return "";
-                return result.value || result.PurchaseOrder || result;
+                // Action returns String: never report success without an SAP-generated PO number
+                var sPO = result && (result.value || result.PurchaseOrder);
+                if (typeof sPO !== "string" || !sPO.trim()) {
+                    var oErr = new Error("Purchase Order creation returned no Purchase Order number from SAP.");
+                    oErr.status = 502;
+                    throw oErr;
+                }
+                return sPO.trim();
             });
-        },
-
-        /**
-         * Queries Purchase Orders list from CAP OData service.
-         *
-         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrQuery]
-         * @param {string} [sQuery] Optional OData query string (e.g. "?$top=10")
-         * @returns {Promise<Array<Object>>}
-         */
-        getPurchaseOrders: function (oModelOrQuery, sQuery) {
-            var oModel = _isModel(oModelOrQuery) ? oModelOrQuery : _oModel;
-            var sQueryVal = _isModel(oModelOrQuery) ? sQuery : oModelOrQuery;
-            if (oModel) {
-                return _readEntitySet(oModel, "/PurchaseOrders");
-            }
-            var sUrl = SERVICE_BASE + "/PurchaseOrders" + (sQueryVal || "");
-            return ODataClient.get(sUrl).then(function (result) {
-                if (!result) return [];
-                return result.value || (result.d && result.d.results) || [];
-            });
-        },
-
-        /**
-         * Queries a single Purchase Order by key.
-         *
-         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrPo]
-         * @param {string} [sPoNumber]
-         * @returns {Promise<Object>}
-         */
-        getPurchaseOrder: function (oModelOrPo, sPoNumber) {
-            var oModel = _isModel(oModelOrPo) ? oModelOrPo : _oModel;
-            var sPoVal = _isModel(oModelOrPo) ? sPoNumber : oModelOrPo;
-            if (oModel && typeof oModel.bindContext === "function") {
-                var oContextBinding = oModel.bindContext("/PurchaseOrders('" + encodeURIComponent(sPoVal) + "')");
-                return oContextBinding.requestObject();
-            }
-            var sUrl = SERVICE_BASE + "/PurchaseOrders('" + encodeURIComponent(sPoVal) + "')";
-            return ODataClient.get(sUrl);
         },
 
         /**
@@ -235,10 +181,10 @@ sap.ui.define([
             var m = _isModel(oModel) ? oModel : _oModel;
             if (m) {
                 return Promise.all([
-                    _readEntitySet(m, "/DocumentTypeVH"),
-                    _readEntitySet(m, "/CompanyCodeVH"),
-                    _readEntitySet(m, "/PurchasingOrgVH"),
-                    _readEntitySet(m, "/PurchasingGroupVH")
+                    _readEntitySet(m, "/DocumentTypeVH", undefined, { $top: 100 }),
+                    _readEntitySet(m, "/CompanyCodeVH", undefined, { $top: 100 }),
+                    _readEntitySet(m, "/PurchasingOrgVH", undefined, { $top: 100 }),
+                    _readEntitySet(m, "/PurchasingGroupVH", undefined, { $top: 100 })
                 ]).then(function (aResults) {
                     return {
                         documentTypes: aResults[0] || [],
@@ -258,10 +204,10 @@ sap.ui.define([
             }
 
             return Promise.all([
-                ODataClient.get(SERVICE_BASE + "/DocumentTypeVH").then(function (res) { return (res && res.value) || []; }),
-                ODataClient.get(SERVICE_BASE + "/CompanyCodeVH").then(function (res) { return (res && res.value) || []; }),
-                ODataClient.get(SERVICE_BASE + "/PurchasingOrgVH").then(function (res) { return (res && res.value) || []; }),
-                ODataClient.get(SERVICE_BASE + "/PurchasingGroupVH").then(function (res) { return (res && res.value) || []; })
+                ODataClient.get(SERVICE_BASE + "/DocumentTypeVH?$top=100").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/CompanyCodeVH?$top=100").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/PurchasingOrgVH?$top=100").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/PurchasingGroupVH?$top=100").then(function (res) { return (res && res.value) || []; })
             ]).then(function (aResults) {
                 return {
                     documentTypes: aResults[0] || [],

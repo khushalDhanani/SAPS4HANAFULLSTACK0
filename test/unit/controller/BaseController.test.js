@@ -179,12 +179,26 @@ describe('BaseController Unit Tests', () => {
             expect(res).toBe(controller);
         });
 
-        it('getModel should return model from view or owner component', () => {
-            const mockModel = { id: 1 };
-            const mockView = { getModel: jest.fn(name => name === 'viewModel' ? mockModel : null) };
-            controller.getView = jest.fn(() => mockView);
+        it('getModel returns the view model when the view has it', () => {
+            const viewModel = { id: 'view' };
+            controller.getView = jest.fn(() => ({ getModel: () => viewModel }));
+            mockOwnerComponent.getModel.mockReturnValue({ id: 'owner' });
 
-            expect(controller.getModel('viewModel')).toBe(mockModel);
+            expect(controller.getModel('anyName')).toBe(viewModel);
+        });
+
+        it('getModel falls back to the owner component model when the view has none', () => {
+            const ownerModel = { id: 'owner' };
+            controller.getView = jest.fn(() => ({ getModel: () => undefined }));
+            mockOwnerComponent.getModel.mockImplementation((name) => (name === 'shared' ? ownerModel : undefined));
+
+            expect(controller.getModel('shared')).toBe(ownerModel);
+        });
+
+        it('getModel returns null when neither the view nor the owner component has the model', () => {
+            controller.getView = jest.fn(() => ({ getModel: () => undefined }));
+            mockOwnerComponent.getModel.mockReturnValue(undefined);
+
             expect(controller.getModel('unknown')).toBeNull();
         });
     });

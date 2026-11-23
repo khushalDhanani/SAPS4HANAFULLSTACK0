@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 const LOG = require('../../../common/logger')('purchase-order');
 const purchaseOrderAdapter = require('../../../integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const { validateCreatePurchaseOrderPayload } = require('../validation/purchaseOrder.validation');
@@ -64,6 +65,7 @@ function registerPurchaseOrderHandlers(srv) {
             }
             return String(poNumber).trim();
         } catch (error) {
+            throwIfTextMustShow(error);
             const sapError = mapS4Error(error);
             LOG.error(`Error creating PO (${sapError.status}):`, sapError.message);
             req.error(sapError.status, `Failed to create Purchase Order: ${sapError.message}`);

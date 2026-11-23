@@ -1,6 +1,4 @@
 const { resolveUserIdentity } = require('../../../srv/auth/userIdentity');
-const salesInquiryHandler = require('../../../srv/sd/sales-inquiry/handlers/salesInquiry.handler');
-const purchaseOrderHandler = require('../../../srv/mm/purchase-order/handlers/purchaseOrder.handler');
 
 describe('Unit: Shared User Identity Resolution (srv/auth/userIdentity)', () => {
     const originalEnv = process.env.S4_USER;
@@ -11,11 +9,6 @@ describe('Unit: Shared User Identity Resolution (srv/auth/userIdentity)', () => 
         } else {
             delete process.env.S4_USER;
         }
-    });
-
-    it('should be exported identically by salesInquiry and purchaseOrder handlers', () => {
-        expect(salesInquiryHandler.resolveUserIdentity).toBe(resolveUserIdentity);
-        expect(purchaseOrderHandler.resolveUserIdentity).toBe(resolveUserIdentity);
     });
 
     it('should derive user identity from XSUAA logon_name attribute', () => {

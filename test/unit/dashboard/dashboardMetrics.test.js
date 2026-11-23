@@ -97,6 +97,7 @@ describe('Unit: Dashboard Controller live figures', () => {
     let DashboardControllerClass;
     let mockODataClient;
     const mockMessageToast = { show: jest.fn() };
+    const mockAuthService = { hasAnyRole: jest.fn(() => false) };
 
     class MockJSONModel {
         constructor(data) {
@@ -124,6 +125,7 @@ describe('Unit: Dashboard Controller live figures', () => {
 
     const mockRouter = {
         getRoute: jest.fn().mockReturnValue({ attachPatternMatched: jest.fn() }),
+        attachRouteMatched: jest.fn(),
         navTo: jest.fn()
     };
 
@@ -148,7 +150,7 @@ describe('Unit: Dashboard Controller live figures', () => {
         global.sap = {
             ui: {
                 define: jest.fn((deps, factory) => {
-                    DashboardControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast);
+                    DashboardControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast, mockAuthService, undefined, undefined, undefined, { SortOrder: {} }, { emptyFilters: () => ({ search: '' }) });
                 })
             }
         };
@@ -168,29 +170,15 @@ describe('Unit: Dashboard Controller live figures', () => {
         controller.onInit();
 
         expect(data.selectedTab).toBe('overview');
-        expect(data.connectionState).toBe('None');
-        expect(data.connectionText).toMatch(/Checking/);
         controller.METRIC_KEYS.forEach((key) => expect(data).not.toHaveProperty(key));
         ['systemHealth', 'totalSpend', 'completeRate', 'carLoanActiveCount', 'hcmHeadcount', 'tmRouteCount', 'ppCapacityUtilization']
             .forEach((key) => expect(data).not.toHaveProperty(key));
     });
 
-    test('shows when the figures were read from SAP (asOf) so cached answers are not mistaken for live ones', async () => {
+    test('populates every figure SAP returned', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
-        const payload = fullPayload({ totalCount: 1 });
-        mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: [], asOf: '2026-09-22T08:22:00.000Z' }));
-
-        await controller._loadMetrics();
-
-        expect(oViewModel.getProperty('/connectionState')).toBe('Success');
-        expect(oViewModel.getProperty('/connectionText')).toMatch(/figures as of \d/);
-    });
-
-    test('populates every figure SAP returned and reports S/4HANA connected', async () => {
-        const oViewModel = new MockJSONModel({});
-        const controller = makeController(oViewModel);
-        const payload = fullPayload({ totalCount: 2729, openSalesOrderCount: 498, gatewayCatalogCount: 1345 });
+        const payload = fullPayload({ totalCount: 2729, openSalesOrderCount: 498, customerCount: 952 });
         mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: [] }));
 
         await controller._loadMetrics();
@@ -198,50 +186,45 @@ describe('Unit: Dashboard Controller live figures', () => {
         expect(mockODataClient.get).toHaveBeenCalledTimes(1);
         expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/purchase-order/getDashboardMetrics()');
         controller.METRIC_KEYS.forEach((key) => expect(oViewModel.getProperty('/' + key)).toBe(payload[key]));
-        expect(oViewModel.getProperty('/connectionState')).toBe('Success');
-        expect(oViewModel.getProperty('/connectionText')).toBe('S/4HANA connected');
         expect(oViewModel.getProperty('/metricsError')).toBe('');
     });
 
     test('accepts the OData { value: "<json>" } envelope', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
-        mockODataClient.get.mockResolvedValue({ value: JSON.stringify(fullPayload({ fiDocCount: 173386 })) });
+        mockODataClient.get.mockResolvedValue({ value: JSON.stringify(fullPayload({ warehouseCount: 173386 })) });
 
         await controller._loadMetrics();
 
-        expect(oViewModel.getProperty('/fiDocCount')).toBe(173386);
-        expect(oViewModel.getProperty('/connectionState')).toBe('Success');
+        expect(oViewModel.getProperty('/warehouseCount')).toBe(173386);
     });
 
-    test('keeps a figure SAP did not return as null (never 0) and reports partial availability', async () => {
+    test('keeps a figure SAP did not return as null (never 0)', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
-        const payload = fullPayload({ bpCount: null, warehouseCount: null });
-        delete payload.gatewayCatalogCount; // missing entirely
-        mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: ['bpCount', 'warehouseCount'] }));
+        const payload = fullPayload({ customerCount: null, warehouseCount: null });
+        delete payload.ordersDueCount; // missing entirely
+        mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: ['customerCount', 'warehouseCount'] }));
 
         await controller._loadMetrics();
 
-        expect(oViewModel.getProperty('/bpCount')).toBeNull();
+        expect(oViewModel.getProperty('/customerCount')).toBeNull();
         expect(oViewModel.getProperty('/warehouseCount')).toBeNull();
-        expect(oViewModel.getProperty('/gatewayCatalogCount')).toBeNull();
+        expect(oViewModel.getProperty('/ordersDueCount')).toBeNull();
         expect(oViewModel.getProperty('/totalCount')).toBe(payload.totalCount);
-        expect(oViewModel.getProperty('/connectionState')).toBe('Warning');
-        expect(oViewModel.getProperty('/connectionText')).toBe(`S/4HANA partially available (${controller.METRIC_KEYS.length - 3} of ${controller.METRIC_KEYS.length} figures)`);
     });
 
     test('rejects non-count values from the payload instead of displaying them', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
-        mockODataClient.get.mockResolvedValue(fullPayload({ totalCount: 'abc', supplierCount: -1, productCount: 3.5, fiDocCount: '42' }));
+        mockODataClient.get.mockResolvedValue(fullPayload({ totalCount: 'abc', supplierCount: -1, salesInquiryCount: 3.5, customerReturnCount: '42' }));
 
         await controller._loadMetrics();
 
         expect(oViewModel.getProperty('/totalCount')).toBeNull();
         expect(oViewModel.getProperty('/supplierCount')).toBeNull();
-        expect(oViewModel.getProperty('/productCount')).toBeNull();
-        expect(oViewModel.getProperty('/fiDocCount')).toBe(42);
+        expect(oViewModel.getProperty('/salesInquiryCount')).toBeNull();
+        expect(oViewModel.getProperty('/customerReturnCount')).toBe(42);
     });
 
     test('when the metrics call fails, marks every figure unavailable, shows the error and makes no fallback calls', async () => {
@@ -253,8 +236,6 @@ describe('Unit: Dashboard Controller live figures', () => {
 
         expect(mockODataClient.get).toHaveBeenCalledTimes(1);
         controller.METRIC_KEYS.forEach((key) => expect(oViewModel.getProperty('/' + key)).toBeNull());
-        expect(oViewModel.getProperty('/connectionState')).toBe('Error');
-        expect(oViewModel.getProperty('/connectionText')).toBe('S/4HANA not reachable');
         expect(oViewModel.getProperty('/metricsError')).toContain('destination not found');
     });
 
@@ -269,9 +250,6 @@ describe('Unit: Dashboard Controller live figures', () => {
         mockODataClient.get.mockResolvedValue(JSON.stringify(payload));
 
         await controller._loadMetrics();
-
-        expect(oViewModel.getProperty('/connectionState')).toBe('Error');
-        expect(oViewModel.getProperty('/connectionText')).toBe('S/4HANA not reachable');
         expect(oViewModel.getProperty('/metricsError')).toContain('HTTP 401 Unauthorized');
     });
 
@@ -317,23 +295,28 @@ describe('Unit: Dashboard Controller live figures', () => {
             const controller = makeController(new MockJSONModel({}));
             controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: (n) => (n === 'auth' ? oAuthModel : null) });
             controller._loadMetrics = jest.fn();
-            controller._loadGiKpis = jest.fn();
             return controller;
         };
 
-        test('onInit loads on both routes that show the dashboard ("dashboard" and the empty-hash "default")', () => {
+        test('onInit attaches _onDashboardMatched to both routes that show the dashboard ("dashboard" and the empty-hash "default")', () => {
+            const attached = {};
+            const router = {
+                getRoute: (name) => ({ attachPatternMatched: (handler) => { attached[name] = handler; } }),
+                attachRouteMatched: jest.fn()
+            };
             const controller = new DashboardControllerClass();
             controller.getView = () => ({ setModel: jest.fn() });
-            controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
+            controller.getOwnerComponent = () => ({ getRouter: () => router, getModel: () => null });
+
             controller.onInit();
-            expect(mockRouter.getRoute.mock.calls.map((c) => c[0])).toEqual(['dashboard', 'default']);
+
+            expect(attached).toEqual({ dashboard: controller._onDashboardMatched, default: controller._onDashboardMatched });
         });
 
         test('already signed in: loads immediately', () => {
             const controller = setup(makeAuthModel(true));
             controller._onDashboardMatched();
             expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
-            expect(controller._loadGiKpis).toHaveBeenCalledTimes(1);
         });
 
         test('route matched before the session check finished: loads once it authenticates, exactly once', () => {
@@ -347,7 +330,84 @@ describe('Unit: Dashboard Controller live figures', () => {
             oAuth.set(true);
             oAuth.set(true);
             expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
-            expect(controller._loadGiKpis).toHaveBeenCalledTimes(1);
+        });
+
+        describe('sidebar sections', () => {
+            const matched = (section) => ({ getParameter: () => ({ section }) });
+            const routeMatched = (name) => ({ getParameter: () => name });
+
+            test('the route selects the section, and an unknown section shows the overview', () => {
+                const controller = setup(makeAuthModel(true));
+                const oViewModel = controller.getView().getModel('dashboardView');
+
+                controller._onDashboardMatched(matched('sd'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('sd');
+                controller._onDashboardMatched(matched('bogus'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
+                controller._onDashboardMatched(matched(undefined));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
+            });
+
+            test('the Administrator section opens only for the Admin role', () => {
+                const controller = setup(makeAuthModel(true));
+                const oViewModel = controller.getView().getModel('dashboardView');
+
+                mockAuthService.hasAnyRole.mockReturnValueOnce(false);
+                controller._watchLockMonitor = jest.fn(); // polls the server; has its own tests
+                controller._onDashboardMatched(matched('user-master'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
+                expect(mockAuthService.hasAnyRole).toHaveBeenLastCalledWith(['Admin']);
+
+                mockAuthService.hasAnyRole.mockReturnValueOnce(true);
+                controller._onDashboardMatched(matched('user-master'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('user-master');
+            });
+
+            test('navigating directly to the Administrator section does not load overview metrics (performance optimization)', () => {
+                const controller = setup(makeAuthModel(true));
+                mockAuthService.hasAnyRole.mockReturnValueOnce(true);
+                controller._watchLockMonitor = jest.fn();
+                controller._loadAdminUsers = jest.fn();
+
+                controller._onDashboardMatched(matched('user-master'));
+
+                expect(controller._loadMetrics).not.toHaveBeenCalled();
+                expect(controller._loadAdminUsers).toHaveBeenCalledTimes(1);
+            });
+
+            test('switching section does not reload the figures; returning from another screen does', () => {
+                const controller = setup(makeAuthModel(true));
+
+                controller._onDashboardMatched(matched(undefined));
+                controller._onAnyRouteMatched(routeMatched('dashboard'));
+                controller._onDashboardMatched(matched('mm'));
+                controller._onDashboardMatched(matched('ewm'));
+                expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
+
+                controller._onAnyRouteMatched(routeMatched('purchaseOrders'));
+                controller._onDashboardMatched(matched('ewm'));
+                expect(controller._loadMetrics).toHaveBeenCalledTimes(2);
+            });
+
+            test('a section switch before the session check finished still loads once it authenticates', () => {
+                const oAuth = makeAuthModel(false);
+                const controller = setup(oAuth);
+
+                controller._onDashboardMatched(matched('mm'));
+                controller._onDashboardMatched(matched('sd'));
+                expect(controller._loadMetrics).not.toHaveBeenCalled();
+
+                oAuth.set(true);
+                expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
+            });
+
+            test('Overview tiles open their section through the route', () => {
+                const controller = setup(makeAuthModel(true));
+                controller.onSelectTabSD();
+                expect(mockRouter.navTo).toHaveBeenLastCalledWith('dashboard', { section: 'sd' });
+                controller.onSelectTabEWM();
+                expect(mockRouter.navTo).toHaveBeenLastCalledWith('dashboard', { section: 'ewm' });
+            });
         });
 
         test('never authenticated (redirect to login): nothing is requested', () => {
@@ -365,37 +425,9 @@ describe('Unit: Dashboard Controller live figures', () => {
             await controller._loadMetrics();
             controller.METRIC_KEYS.forEach((key) => expect(controller.formatTileState(oViewModel.getProperty('/' + key))).toBe('Failed'));
             expect(oViewModel.getProperty('/metricsError')).toContain('HTTP 502');
-            expect(oViewModel.getProperty('/connectionState')).toBe('Error');
         });
     });
 
-    test('exposes no simulator, info-dialog or placeholder-tab handlers', () => {
-        const controller = new DashboardControllerClass();
-        ['onSimulateCarLoan', 'onNewCarLoanApp', 'onShowMasterDataInfo', '_loadIndividualMetrics',
-            'onSelectTabCO', 'onSelectTabPP', 'onSelectTabQM', 'onSelectTabEAM', 'onSelectTabPS',
-            'onSelectTabTM', 'onSelectTabService', 'onSelectTabHCM', 'onSelectTabAnalytics', 'onSelectTabAdmin']
-            .forEach((fn) => expect(controller[fn]).toBeUndefined());
-    });
-
-    test('routes movement type tile presses to their dedicated pending pages (201/301/311)', () => {
-        const controller = new DashboardControllerClass();
-        controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
-
-        expect(controller.mRoutes).toEqual({
-            "201": "wmGoodsIssue201Pending",
-            "301": "wmGoodsIssue301Pending",
-            "311": "wmGoodsIssue311Pending"
-        });
-
-        controller.onMvt201TilePress();
-        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue201Pending');
-
-        controller.onMvt301TilePress();
-        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue301Pending');
-
-        controller.onMvt311TilePress();
-        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending');
-    });
 });
 
 describe('Unit: Dashboard view binds only live figures', () => {
@@ -403,12 +435,7 @@ describe('Unit: Dashboard view binds only live figures', () => {
     const controllerSource = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/controller/Dashboard.controller.js'), 'utf8');
     const metricKeys = [...controllerSource.match(/var METRIC_KEYS = \[([\s\S]*?)\];/)[1].matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1]);
     const nonMetricModelKeys = [
-        'selectedTab', 'connectionText', 'connectionState', 'metricsError',
-        // Movement-type KPI card model keys (loaded from GoodsIssueService.getDashboardData)
-        'giKpiError',
-        'mvt201Total', 'mvt201Today',
-        'mvt301Total', 'mvt301Today',
-        'mvt311Total', 'mvt311Today'
+        'selectedTab', 'metricsError'
     ];
 
     test('every dashboardView binding is a live SAP metric or a status field', () => {
@@ -417,20 +444,51 @@ describe('Unit: Dashboard view binds only live figures', () => {
         expect(unknown).toEqual([]);
     });
 
-    test('every metric tile shows Loading / Failed states through the formatter', () => {
+    test('every NumericContent value is bound through formatMetricValue', () => {
         const numericValues = [...viewXml.matchAll(/<NumericContent[^>]*value="([^"]*)"/g)].map((m) => m[1]);
         expect(numericValues.length).toBeGreaterThan(0);
         numericValues.forEach((binding) => expect(binding).toMatch(/formatter: '\.formatMetricValue'/));
-        const tilesWithValue = [...viewXml.matchAll(/<GenericTile[^>]*>\s*<TileContent[^>]*>\s*<NumericContent[^>]*value=/g)].map((m) => m[0]);
-        tilesWithValue.forEach((tile) => expect(tile).toMatch(/state="\{path: 'dashboardView>\/[A-Za-z]+', formatter: '\.formatTileState'\}"/));
     });
 
-    test('contains no simulators, info dialogs, hard-coded status or placeholder tabs', () => {
-        expect(viewXml).not.toMatch(/onSimulateCarLoan|onNewCarLoanApp|onShowMasterDataInfo/);
+    test('every tile showing a figure takes its Loading / Failed state from that same figure', () => {
+        const attrs = '(?:[^>"]|"[^"]*")*'; // bindings contain ">", so match attributes up to the tag end
+        // Action tiles (create order, handling units, ...) have an icon-only NumericContent and no figure.
+        const tiles = [...viewXml.matchAll(new RegExp(`<GenericTile\\b(${attrs})>\\s*<TileContent\\b${attrs}>\\s*<NumericContent\\b(${attrs})>`, 'g'))]
+            .filter(([, , numeric]) => /\svalue="/.test(numeric));
+        const figureCount = [...viewXml.matchAll(/<NumericContent[^>]*value="/g)].length;
+        expect(figureCount).toBeGreaterThan(0);
+        expect(tiles.length).toBe(figureCount);
+
+        const mismatched = tiles.filter(([, tile, numeric]) => {
+            const state = tile.match(/\sstate="\{path: '(?:dashboardView>\/|adminView>\/kpis\/)(\w+)', formatter: '\.formatTileState'\}"/);
+            const value = numeric.match(/\svalue="\{path: '(?:dashboardView>\/|adminView>\/kpis\/)(\w+)'/);
+            return !state || !value || state[1] !== value[1];
+        }).map(([, tile]) => tile.match(/\sid="(\w+)"/)[1]);
+        expect(mismatched).toEqual([]);
+    });
+
+    test('the old header card is gone, and Create PO and Manage Orders stay in the Procurement section', () => {
+        const webapp = path.join(__dirname, '../../../app/fiori-app/webapp');
+        ['dashboardHero', 'dashboardSubtitle', 'dashboardConnectionStatus', 'btnRefreshDashboard'].forEach((text) => {
+            expect(viewXml).not.toContain(text);
+        });
+        expect(fs.readFileSync(path.join(webapp, 'css/style.css'), 'utf8')).not.toContain('dashboardHero');
+        expect(fs.readFileSync(path.join(webapp, 'i18n/i18n.properties'), 'utf8')).not.toContain('Integrated S/4HANA business');
+        expect(fs.readFileSync(path.join(webapp, 'i18n/i18n_en.properties'), 'utf8')).not.toContain('Integrated S/4HANA business');
+        expect(viewXml).toContain('id="btnMMCreatePO"');
+        expect(viewXml).toContain('id="btnMMManagePOs"');
+    });
+
+    test('the view shows no hard-coded "Client 220" status', () => {
         expect(viewXml).not.toMatch(/Client 220/);
-        expect(viewXml).not.toMatch(/systemHealth|totalSpend|completeRate/);
-        const tabKeys = [...viewXml.matchAll(/<IconTabFilter[\s\S]*?key="([a-zA-Z]+)"/g)].map((m) => m[1]);
-        expect(tabKeys).toEqual(['overview', 'masterData', 'fi', 'mm', 'sd', 'ewm']);
+    });
+
+    test('the sidebar items and the dashboard sections offer the same keys, in order', () => {
+        const appViewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/App.view.xml'), 'utf8');
+        const navKeys = [...appViewXml.matchAll(/<tnt:NavigationListItem[^>]*?key="([a-zA-Z-]+)"/g)].map((m) => m[1]);
+        const sectionKeys = [...viewXml.matchAll(/dashboardView>\/selectedTab\} === '([a-zA-Z-]+)'/g)].map((m) => m[1]);
+        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm', 'user-master', 'sap-logs']);
+        expect(sectionKeys).toEqual(navKeys);
     });
 
     test('every press handler used by the view exists on the controller', () => {
@@ -439,14 +497,13 @@ describe('Unit: Dashboard view binds only live figures', () => {
     });
 });
 
-describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCount', () => {
+describe('Unit: PurchaseOrderAdapter getDashboardMetrics', () => {
     const poAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 
     const COUNTS = {
         'C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs': '2729',
         'C_MM_SupplierValueHelp': '4376',
         'C_MM_MaterialValueHelp': '151976',
-        'FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified': '173386',
         'SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370': '618',
         'SD_F2370_INQY_WL_SRV/I_Customer_VH': '891',
         'I_GLAccountStdVH': '33784',
@@ -464,7 +521,6 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         'C_PurchasingGroupValueHelp': '44',
         'API_WAREHOUSE/Warehouse': '1',
         'UI_RESERVATION_ITM_MNG_V2': '54',
-        'MMIM_GR4PO_DL_SRV': '12',
         'LE_SHP_QC_DLVREF_SRV/C_DelivWthRefQuickCreate': '1078',
         'SD_CUSTOMER_INVOICES_MANAGE/C_BillingDocument_F0797': '508',
         'SD_F2651_CRT_CREATE_SRV/C_CustomerReturnOPg': '183'
@@ -492,56 +548,23 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         jest.restoreAllMocks();
     });
 
-    test('getBusinessPartnerCount queries ZAPI_GETBUPA_SRV/$count', async () => {
-        const mockExecute = jest.fn().mockResolvedValue({ data: '6677' });
-        const count = await poAdapter.getBusinessPartnerCount({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
-        expect(count).toBe(6677);
-        expect(mockExecute.mock.calls[0][1].url).toContain('ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count');
-    });
-
-    test('getBusinessPartnerCount returns null, not 0, when SAP cannot be read', async () => {
-        const count = await poAdapter.getBusinessPartnerCount({
-            destination: { url: 'https://mock.s4hana' },
-            executeHttpRequest: jest.fn().mockRejectedValue(new Error('403'))
-        });
-        expect(count).toBeNull();
-    });
-
-    test('getDashboardMetrics reads all 29 counts live from SAP and reports none unavailable', async () => {
+    test('getDashboardMetrics reads all 11 counts live from SAP and reports none unavailable', async () => {
         const mockExecute = liveSap();
         const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
 
-        expect(mockExecute).toHaveBeenCalledTimes(29);
+        expect(mockExecute).toHaveBeenCalledTimes(11);
         expect(typeof metrics.asOf).toBe('string');
         expect(new Date(metrics.asOf).getTime()).not.toBeNaN();
         delete metrics.asOf; // read time, asserted above
         expect(metrics).toEqual({
             totalCount: 2729,
             supplierCount: 4376,
-            productCount: 151976,
-            fiDocCount: 173386,
             salesInquiryCount: 618,
             customerCount: 891,
             openSalesOrderCount: 498,
             totalSalesOrderCount: 880,
-            bpCount: 6677,
-            glAccountCount: 33784,
-            costCenterCount: 952,
-            profitCenterCount: 103,
-            fixedAssetCount: 304,
-            wbsElementCount: 489,
-            internalOrderCount: 141,
-            purchaseContractCount: 24,
-            companyCodeCount: 69,
-            plantCount: 76,
-            storageLocationCount: 689,
-            materialGroupCount: 258,
-            purchasingOrgCount: 9,
-            purchasingGroupCount: 44,
             warehouseCount: 1,
             openReservationCount: 54,
-            inboundDeliveryCount: 12,
-            gatewayCatalogCount: 1345,
             ordersDueCount: 1078,
             customerInvoiceCount: 508,
             customerReturnCount: 183,
@@ -563,33 +586,33 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
     test('a failed service call yields null for that count only, never 0, and lists it as unavailable', async () => {
         const mockExecute = liveSap({
             'API_WAREHOUSE/Warehouse': () => Promise.reject(new Error('404 service not activated')),
-            'ZAPI_GETBUPA_SRV': () => Promise.reject(new Error('403 not authorized'))
+            'SD_F2370_INQY_WL_SRV/I_Customer_VH': () => Promise.reject(new Error('403 not authorized'))
         });
         const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
 
         expect(metrics.warehouseCount).toBeNull();
-        expect(metrics.bpCount).toBeNull();
+        expect(metrics.customerCount).toBeNull();
         expect(metrics.totalCount).toBe(2729);
-        expect(metrics.unavailable.sort()).toEqual(['bpCount', 'warehouseCount']);
+        expect(metrics.unavailable.sort()).toEqual(['customerCount', 'warehouseCount']);
     });
 
     test('a response without a count yields null instead of the number of rows returned', async () => {
         const mockExecute = liveSap({
             'C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs': { data: { d: { results: [{ PurchaseOrder: '4500000001' }] } } },
-            'CATALOGSERVICE': { data: '<html>not a count</html>' }
+            'SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370': { data: '<html>not a count</html>' }
         });
         const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
 
         expect(metrics.totalCount).toBeNull();
-        expect(metrics.gatewayCatalogCount).toBeNull();
-        expect(metrics.unavailable).toEqual(expect.arrayContaining(['totalCount', 'gatewayCatalogCount']));
+        expect(metrics.salesInquiryCount).toBeNull();
+        expect(metrics.unavailable).toEqual(expect.arrayContaining(['totalCount', 'salesInquiryCount']));
     });
 
     test('a genuine zero from SAP is kept as 0', async () => {
-        const mockExecute = liveSap({ 'MMIM_GR4PO_DL_SRV': { data: { d: { __count: '0' } } } });
+        const mockExecute = liveSap({ 'LE_SHP_QC_DLVREF_SRV/C_DelivWthRefQuickCreate': { data: { d: { __count: '0' } } } });
         const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
-        expect(metrics.inboundDeliveryCount).toBe(0);
-        expect(metrics.unavailable).not.toContain('inboundDeliveryCount');
+        expect(metrics.ordersDueCount).toBe(0);
+        expect(metrics.unavailable).not.toContain('ordersDueCount');
     });
 
     test('propagates an unresolvable destination instead of returning empty figures', async () => {
@@ -603,26 +626,24 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
 
         const metrics1 = await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(29);
+        expect(mockExecute).toHaveBeenCalledTimes(11);
 
         // Second call should return cached object without invoking executeHttpRequest
         const metrics2 = await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(29); // No new calls
+        expect(mockExecute).toHaveBeenCalledTimes(11); // No new calls
         expect(metrics2).toEqual(metrics1);
     });
 
-    test('bypasses cache and refetches live figures when forceRefresh is true', async () => {
+    test('forceRefresh re-reads all 11 counts, master data counts included', async () => {
         poAdapter.clearMetricsCache();
         const mockExecute = liveSap();
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
 
         await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(29);
+        expect(mockExecute).toHaveBeenCalledTimes(11);
 
-        // With forceRefresh: true, executes calls again
         await poAdapter.getDashboardMetrics({ ...opts, forceRefresh: true });
-        // The transactional counts are executed again; master data counts may hit masterDataCountCache
-        expect(mockExecute.mock.calls.length).toBeGreaterThan(29);
+        expect(mockExecute).toHaveBeenCalledTimes(22);
     });
 
     test('clearMetricsCache invalidates cached metrics', async () => {
@@ -631,14 +652,14 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
 
         await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(29);
+        expect(mockExecute).toHaveBeenCalledTimes(11);
 
         poAdapter.clearMetricsCache();
         await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(58);
+        expect(mockExecute).toHaveBeenCalledTimes(22);
     });
 
-    test('coalesces concurrent in-flight getDashboardMetrics calls into a single batch of 29 requests', async () => {
+    test('coalesces concurrent in-flight getDashboardMetrics calls into a single batch of 11 requests', async () => {
         poAdapter.clearMetricsCache();
         let resolveExecute;
         const delayedExecution = new Promise((resolve) => { resolveExecute = resolve; });
@@ -656,8 +677,8 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         resolveExecute();
         const [m1, m2, m3] = await Promise.all([p1, p2, p3]);
 
-        // Only 29 calls executed total (1 single pass), not 3 * 29 = 87
-        expect(mockExecute).toHaveBeenCalledTimes(29);
+        // Only 11 calls executed total (1 single pass), not 3 * 11 = 33
+        expect(mockExecute).toHaveBeenCalledTimes(11);
         expect(m1).toEqual(m2);
         expect(m2).toEqual(m3);
         expect(m1.totalCount).toBe(2729);
@@ -669,26 +690,26 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: failMock, useCache: true, negativeTtlMs: 2000 };
 
         const metrics1 = await poAdapter.getDashboardMetrics(opts);
-        expect(failMock).toHaveBeenCalledTimes(29);
-        expect(metrics1.unavailable.length).toBe(29);
+        expect(failMock).toHaveBeenCalledTimes(11);
+        expect(metrics1.unavailable.length).toBe(11);
         expect(metrics1.error).toContain('500 Internal Server Error');
 
-        // Subsequent call within negative TTL should return cached failure without re-executing 29 calls
+        // Subsequent call within negative TTL should return cached failure without re-executing 11 calls
         const metrics2 = await poAdapter.getDashboardMetrics(opts);
-        expect(failMock).toHaveBeenCalledTimes(29); // No new calls!
+        expect(failMock).toHaveBeenCalledTimes(11); // No new calls!
         expect(metrics2).toEqual(metrics1);
     });
 
-    test('fast-fails on 401 Unauthorized probe and halts remaining 28 calls to avoid SU01 lockouts', async () => {
+    test('fast-fails on 401 Unauthorized probe and halts remaining 11 calls to avoid SU01 lockouts', async () => {
         poAdapter.clearMetricsCache();
         const authFailMock = jest.fn().mockRejectedValue(new Error('HTTP 401 Unauthorized: logon rejected'));
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: authFailMock, useCache: true };
 
         const metrics = await poAdapter.getDashboardMetrics(opts);
 
-        // Crucial: Only the 1st probe call executed, avoiding 28 more 401 errors
+        // Crucial: Only the 1st probe call executed, avoiding 11 more 401 errors
         expect(authFailMock).toHaveBeenCalledTimes(1);
-        expect(metrics.unavailable.length).toBe(29);
+        expect(metrics.unavailable.length).toBe(11);
         expect(metrics.error).toContain('HTTP 401 Unauthorized');
         expect(metrics.totalCount).toBeNull();
         expect(metrics.supplierCount).toBeNull();

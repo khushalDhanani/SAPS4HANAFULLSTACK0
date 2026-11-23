@@ -129,7 +129,8 @@ service HandlingUnitService @(path: '/odata/v4/handling-unit') {
         packagingMaterial      : String(40),
         handlingUnitExternalID : String(20),
         status                 : String(1),
-        shippingPoint          : String(4)
+        shippingPoint          : String(4),
+        limit                  : Integer   // optional row cap, 1..1000; default 1000
     ) returns HandlingUnitListResult;
 
     // Read-only: header, weights, dimensions and packed items of one handling unit.

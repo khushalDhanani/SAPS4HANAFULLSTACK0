@@ -1,0 +1,309 @@
+{
+  "capturedAt": "2026-10-27T04:03:01.347Z",
+  "mode": "READ-ONLY",
+  "method": "RFC_READ_TABLE via srv/integration/s4hana/RfcClient.readTable",
+  "note": "No user, host or client values stored. FIRSTUSER/LASTUSER deliberately not read. RSTR fields (layout/context/interface XML) are not readable via RFC_READ_TABLE.",
+  "dd03lFieldTypes": {
+    "FPCONTEXT": {
+      "CONTEXT": "RSTR(0)",
+      "NAME": "CHAR(30)",
+      "TYPE": "CHAR(1)",
+      "GUID": "CHAR(32)",
+      "STATE": "CHAR(1)",
+      "ABAP_LANGUAGE_VERSION": "CHAR(1)",
+      "INTERFACE": "CHAR(30)",
+      "FRTYPE": "CHAR(1)",
+      "FONTEMBPDF": "CHAR(1)",
+      "FDPOPTIMIZE": "CHAR(1)",
+      "MIRRORING": "CHAR(1)",
+      "FIRSTDATE": "DATS(8)",
+      "LASTDATE": "DATS(8)",
+      "DATAPROVIDER": "CHAR(40)",
+      "OFFLINE_HANDLER": "CHAR(30)",
+      "FIRSTTIME": "TIMS(6)",
+      "LASTTIME": "TIMS(6)",
+      "SOURCE_GUID": "CHAR(32)",
+      "CNTSET": "CHAR(256)"
+    },
+    "FPLAYOUT": {
+      "LAYOUT": "RSTR(0)",
+      "NAME": "CHAR(30)",
+      "TYPE": "CHAR(1)",
+      "STATE": "CHAR(1)",
+      "FORMTECH": "CHAR(1)",
+      "LASTDATE": "DATS(8)",
+      "FIRSTDATE": "DATS(8)",
+      "LASTTIME": "TIMS(6)",
+      "FIRSTTIME": "TIMS(6)"
+    },
+    "FPLAYOUTT": {
+      "LAYOUT": "RSTR(0)",
+      "LAYOUTM": "RSTR(0)",
+      "LANGUAGE": "LANG(1)",
+      "ID": "CHAR(32)",
+      "STATE": "CHAR(1)",
+      "DIRTY": "CHAR(1)",
+      "NAME": "CHAR(30)"
+    },
+    "FPINTERFACE": {
+      "INTERFACE": "RSTR(0)",
+      "NAME": "CHAR(30)",
+      "STATE": "CHAR(1)",
+      "FIRSTDATE": "DATS(8)",
+      "LASTDATE": "DATS(8)",
+      "FIRSTTIME": "TIMS(6)",
+      "LASTTIME": "TIMS(6)",
+      "INTERFACE_TYPE": "CHAR(1)"
+    },
+    "DD40L": {
+      "DECIMALS": "NUMC(6)",
+      "DATATYPE": "CHAR(4)",
+      "LENG": "NUMC(6)",
+      "AS4LOCAL": "CHAR(1)",
+      "AS4DATE": "DATS(8)",
+      "AS4TIME": "TIMS(6)",
+      "ABAP_LANGUAGE_VERSION": "CHAR(1)",
+      "TYPENAME": "CHAR(30)",
+      "ACTFLAG": "CHAR(4)",
+      "REFTYPE": "CHAR(1)",
+      "ROWKIND": "CHAR(1)",
+      "ACCESSMODE": "CHAR(1)",
+      "KEYDEF": "CHAR(1)",
+      "KEYKIND": "CHAR(1)",
+      "GENERIC": "CHAR(1)",
+      "TTYPKIND": "CHAR(1)",
+      "PROXYTYPE": "CHAR(1)",
+      "FURTHERSECKEY": "CHAR(1)",
+      "KEYFDCOUNT": "NUMC(4)",
+      "RANGE_CTYP": "CHAR(30)",
+      "ALIAS": "CHAR(30)",
+      "TYPELEN": "NUMC(6)",
+      "OCCURS": "NUMC(5)",
+      "ROWTYPE": "CHAR(30)",
+      ".INCLUDE": "(0)"
+    }
+  },
+  "fpcontext": [
+    {
+      "NAME": "ZMM_AF_017",
+      "STATE": "A",
+      "TYPE": "",
+      "INTERFACE": "ZMM_FI_017",
+      "FRTYPE": "",
+      "FONTEMBPDF": "",
+      "LASTDATE": "20260928"
+    }
+  ],
+  "fplayout": [
+    {
+      "NAME": "ZMM_AF_017",
+      "STATE": "A",
+      "FORMTECH": "",
+      "TYPE": "S",
+      "LASTDATE": "20260928"
+    }
+  ],
+  "fplayoutt": [
+    {
+      "NAME": "ZMM_AF_017",
+      "STATE": "A",
+      "LANGUAGE": "E",
+      "ID": ""
+    }
+  ],
+  "fpinterface": [
+    {
+      "NAME": "ZMM_FI_017",
+      "STATE": "A",
+      "INTERFACE_TYPE": "",
+      "LASTDATE": "20250905"
+    }
+  ],
+  "dd40l": [
+    {
+      "TYPENAME": "ZMM_TT_026",
+      "AS4LOCAL": "A",
+      "ROWTYPE": "ZMM_S_013",
+      "ROWKIND": "S",
+      "ACCESSMODE": "T"
+    }
+  ],
+  "zmm_s_013": [
+    {
+      "FIELDNAME": "MANDT",
+      "POSITION": "0001",
+      "ROLLNAME": "MANDT",
+      "DATATYPE": "CLNT",
+      "LENG": "000003",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "MAKTX",
+      "POSITION": "0002",
+      "ROLLNAME": "MAKTX",
+      "DATATYPE": "CHAR",
+      "LENG": "000040",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "MBLNR",
+      "POSITION": "0003",
+      "ROLLNAME": "MBLNR",
+      "DATATYPE": "CHAR",
+      "LENG": "000010",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "BUDAT_MKPF",
+      "POSITION": "0004",
+      "ROLLNAME": "BUDAT",
+      "DATATYPE": "DATS",
+      "LENG": "000008",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "ZZCUST_BATCH",
+      "POSITION": "0005",
+      "ROLLNAME": "ZMM_DE_001",
+      "DATATYPE": "CHAR",
+      "LENG": "000020",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "MENGE",
+      "POSITION": "0006",
+      "ROLLNAME": "MENGE_D",
+      "DATATYPE": "QUAN",
+      "LENG": "000013",
+      "DECIMALS": "000003"
+    },
+    {
+      "FIELDNAME": "ATWRT",
+      "POSITION": "0007",
+      "ROLLNAME": "ATWRT",
+      "DATATYPE": "CHAR",
+      "LENG": "000070",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "LIFNR",
+      "POSITION": "0008",
+      "ROLLNAME": "LIFNR",
+      "DATATYPE": "CHAR",
+      "LENG": "000010",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "NAME1",
+      "POSITION": "0009",
+      "ROLLNAME": "ARKTX",
+      "DATATYPE": "CHAR",
+      "LENG": "000040",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "HSDAT",
+      "POSITION": "0010",
+      "ROLLNAME": "HSDAT",
+      "DATATYPE": "DATS",
+      "LENG": "000008",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "LICHA",
+      "POSITION": "0011",
+      "ROLLNAME": "LICHN",
+      "DATATYPE": "CHAR",
+      "LENG": "000015",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "VEMNG",
+      "POSITION": "0012",
+      "ROLLNAME": "VEMNG",
+      "DATATYPE": "QUAN",
+      "LENG": "000015",
+      "DECIMALS": "000003"
+    },
+    {
+      "FIELDNAME": "LV_TEXT",
+      "POSITION": "0013",
+      "ROLLNAME": "ZDQTY",
+      "DATATYPE": "QUAN",
+      "LENG": "000013",
+      "DECIMALS": "000002"
+    },
+    {
+      "FIELDNAME": "MEINS",
+      "POSITION": "0014",
+      "ROLLNAME": "MEINS",
+      "DATATYPE": "UNIT",
+      "LENG": "000003",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "VSOLM",
+      "POSITION": "0015",
+      "ROLLNAME": "LTAP_VSOLM",
+      "DATATYPE": "QUAN",
+      "LENG": "000013",
+      "DECIMALS": "000003"
+    },
+    {
+      "FIELDNAME": "CONT",
+      "POSITION": "0016",
+      "ROLLNAME": "CHAR20",
+      "DATATYPE": "CHAR",
+      "LENG": "000020",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "TEXT",
+      "POSITION": "0017",
+      "ROLLNAME": "CHAR50",
+      "DATATYPE": "CHAR",
+      "LENG": "000050",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "NLENR",
+      "POSITION": "0018",
+      "ROLLNAME": "LTAP_NLENR",
+      "DATATYPE": "CHAR",
+      "LENG": "000020",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "DATE_FROM",
+      "POSITION": "0019",
+      "ROLLNAME": "AUSPEXT_DATE_FROM",
+      "DATATYPE": "DATS",
+      "LENG": "000008",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "QTY_R",
+      "POSITION": "0020",
+      "ROLLNAME": "CHAR100",
+      "DATATYPE": "CHAR",
+      "LENG": "000100",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "ZDATE",
+      "POSITION": "0021",
+      "ROLLNAME": "CHAR20",
+      "DATATYPE": "CHAR",
+      "LENG": "000020",
+      "DECIMALS": "000000"
+    },
+    {
+      "FIELDNAME": "ERFME",
+      "POSITION": "0022",
+      "ROLLNAME": "ERFME",
+      "DATATYPE": "UNIT",
+      "LENG": "000003",
+      "DECIMALS": "000000"
+    }
+  ]
+}

@@ -127,6 +127,7 @@ class PackingInstructionAdapter {
       return res.data?.d || res.data || {};
     } catch (e) {
       LOG.error(`${context}: ${e.message}`);
+      if (e.$sanitize === false) throw e;
       throw httpError(e.status || 502, `${context}: ${e.message}`);
     }
   }
@@ -175,9 +176,19 @@ class PackingInstructionAdapter {
 
     const created = await this._post(HEADER, body, `Create packing instruction '${externalName}'`);
     const uuid = created.PackingInstructionSystemUUID;
-    if (!uuid) throw httpError(502, 'SAP did not return a packing instruction id; nothing was created');
+    // SAP accepted the POST, so it may hold the document: a failure from here on must not read as "nothing happened".
+    const notConfirmed = (found) => Object.assign(
+      httpError(502, `SAP accepted packing instruction '${externalName}'${found}, but it could not be read back, so it is NOT confirmed. Check it in SAP before creating it again.`),
+      { $sanitize: false } // see srv/common/visibleError.js
+    );
+    if (!uuid) throw notConfirmed('');
     // Read the persisted document back so the caller shows SAP's result, not the POST echo.
-    return this.get({ systemUUID: uuid });
+    try {
+      return await this.get({ systemUUID: uuid });
+    } catch (e) {
+      LOG.error(`Read-back of created packing instruction ${uuid} failed: ${e.message}`);
+      throw notConfirmed(` (${created.PackingInstructionNumber || uuid})`);
+    }
   }
 }
 

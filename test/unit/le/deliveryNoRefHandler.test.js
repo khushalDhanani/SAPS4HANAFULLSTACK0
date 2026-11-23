@@ -8,6 +8,9 @@ jest.mock('../../../srv/integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapt
 const deliveryNoRefAdapter = require('../../../srv/integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
 const registerOutboundDeliveryHandlers = require('../../../srv/le/outbound-delivery/handlers/outboundDelivery.handler');
 
+const ADMIN = { is: (r) => r === 'Admin', attr: {} };
+const clerkOf = (plant) => ({ is: () => false, attr: { Plant: [plant] } });
+
 function createMockService() {
   const handlers = {};
   const mockSrv = {
@@ -122,6 +125,7 @@ describe('Unit: OutboundDeliveryService DeliveryWithoutRef Handlers', () => {
           PlannedGoodsIssueDate: '2026-10-01',
           Items: [{ Material: '4000000186', ActualDeliveryQuantity: 1, DeliveryQuantityUnit: 'KG' }]
         },
+        user: clerkOf('1110'),
         error: jest.fn()
       };
 
@@ -138,8 +142,24 @@ describe('Unit: OutboundDeliveryService DeliveryWithoutRef Handlers', () => {
         storageLocation: 'FG01',
         plannedGoodsIssueDate: '2026-10-01',
         items: [{ Material: '4000000186', ActualDeliveryQuantity: 1, DeliveryQuantityUnit: 'KG' }]
-      });
+      }, { isTrusted: true });
       expect(req.error).not.toHaveBeenCalled();
+    });
+
+    test('refuses a partly typed sales area before calling SAP', async () => {
+      const req = { data: { Plant: '1110', SalesOrganization: '1000', DistributionChannel: ' ' }, user: clerkOf('1110'), error: jest.fn() };
+      await handlers['createDeliveryWithoutRef'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('together'));
+      expect(deliveryNoRefAdapter.createDeliveryWithoutRef).not.toHaveBeenCalled();
+    });
+
+    test('an empty sales area goes on, so SAP customizing can supply it', async () => {
+      deliveryNoRefAdapter.createDeliveryWithoutRef.mockClear();
+      deliveryNoRefAdapter.createDeliveryWithoutRef.mockResolvedValue({ OutboundDelivery: '80000059' });
+      const req = { data: { Plant: '1110', SalesOrganization: '', DistributionChannel: '', Division: '' }, user: clerkOf('1110'), error: jest.fn() };
+      await handlers['createDeliveryWithoutRef'](req);
+      expect(req.error).not.toHaveBeenCalled();
+      expect(deliveryNoRefAdapter.createDeliveryWithoutRef).toHaveBeenCalledTimes(1);
     });
 
     test('handles adapter errors via req.error', async () => {
@@ -149,11 +169,30 @@ describe('Unit: OutboundDeliveryService DeliveryWithoutRef Handlers', () => {
 
       const req = {
         data: { ShippingPoint: '1104' },
+        user: ADMIN,
         error: jest.fn()
       };
 
       await handlers['createDeliveryWithoutRef'](req);
       expect(req.error).toHaveBeenCalledWith(400, 'Document incomplete');
+    });
+
+    test.each([
+      ['a clerk of another plant', clerkOf('1130')],
+      ['a user without plants', { is: () => false, attr: {} }],
+      ['a request without user context', undefined]
+    ])('refuses %s with 403 before calling SAP', async (_label, user) => {
+      const req = { data: { ShippingPoint: '1104', Plant: '1120' }, user, error: jest.fn() };
+      await handlers['createDeliveryWithoutRef'](req);
+      expect(req.error).toHaveBeenCalledWith(403, "Plant 1120 is outside the authenticated user's plant scope");
+      expect(deliveryNoRefAdapter.createDeliveryWithoutRef).not.toHaveBeenCalled();
+    });
+
+    test('lets a clerk create for their own plant, ignoring case and surrounding spaces', async () => {
+      deliveryNoRefAdapter.createDeliveryWithoutRef.mockResolvedValue({ OutboundDelivery: '80000060' });
+      const req = { data: { ShippingPoint: '1104', Plant: 'ab12' }, user: clerkOf(' AB12 '), error: jest.fn() };
+      await expect(handlers['createDeliveryWithoutRef'](req)).resolves.toMatchObject({ OutboundDelivery: '80000060' });
+      expect(req.error).not.toHaveBeenCalled();
     });
   });
 

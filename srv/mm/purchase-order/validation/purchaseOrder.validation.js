@@ -101,6 +101,11 @@ function validateCreatePurchaseOrderPayload(data) {
         const sDocType = header.PurchaseOrderType ? String(header.PurchaseOrderType).trim().toUpperCase() : '';
         const poRule = RULES.poTypes && RULES.poTypes[sDocType];
 
+        const docTypePrefix = RULES.header.PurchaseOrderType.prefix;
+        if (sDocType && docTypePrefix && !sDocType.startsWith(docTypePrefix)) {
+            addError('header.PurchaseOrderType', `Document Type '${sDocType}' must start with '${docTypePrefix}'`);
+        }
+
         if (poRule) {
             if (header.CompanyCode && poRule.allowedCompanyCodes && !poRule.allowedCompanyCodes.includes(String(header.CompanyCode).trim())) {
                 addError('header.CompanyCode', `CompanyCode '${header.CompanyCode}' is not permitted for Document Type '${sDocType}'. Permitted: ${poRule.allowedCompanyCodes.join(', ')}`);
@@ -190,6 +195,11 @@ function validateCreatePurchaseOrderPayload(data) {
             const maxAcctLen = (RULES.item.AccountAssignmentCategory && RULES.item.AccountAssignmentCategory.maxLen) || 1;
             if (item.AccountAssignmentCategory && String(item.AccountAssignmentCategory).trim().length > maxAcctLen) {
                 addError(`${prefix}.AccountAssignmentCategory`, `Item ${itemNumber}: AccountAssignmentCategory exceeds maximum length of ${maxAcctLen} character`);
+            }
+
+            // Plant prefix validation against PO type rules
+            if (poRule && poRule.allowedPlantPrefix && item.Plant && !String(item.Plant).trim().startsWith(poRule.allowedPlantPrefix)) {
+                addError(`${prefix}.Plant`, `Item ${itemNumber}: Plant '${item.Plant}' must start with '${poRule.allowedPlantPrefix}' for Document Type '${sDocType}'`);
             }
 
             // Item Category validation against PO type rules

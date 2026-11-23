@@ -152,21 +152,6 @@ sap.ui.define([
             return "";
         },
 
-        completenessState: function (bComplete) {
-            var bIsComplete = bComplete === true || bComplete === "true";
-            return bIsComplete ? "Success" : "Information";
-        },
-
-        completenessIcon: function (bComplete) {
-            var bIsComplete = bComplete === true || bComplete === "true";
-            return bIsComplete ? "sap-icon://accept" : "sap-icon://edit";
-        },
-
-        completenessText: function (bComplete) {
-            var bIsComplete = bComplete === true || bComplete === "true";
-            return bIsComplete ? "Complete" : "Incomplete";
-        },
-
         docTypeDisplay: function (sDocType) {
             return sDocType || "-";
         },

@@ -1,5 +1,6 @@
 const cds = require('@sap/cds');
 const PackingInstructionAdapter = require('../../integration/s4hana/wm/PackingInstructionAdapter');
+const { throwIfTextMustShow } = require('../../common/visibleError');
 
 /** Thin CAP binding; validation and the SAP calls live in PackingInstructionAdapter. */
 module.exports = class PackingInstructionService extends cds.ApplicationService {
@@ -9,6 +10,7 @@ module.exports = class PackingInstructionService extends cds.ApplicationService 
       try {
         return await fn(req.data || {});
       } catch (err) {
+        throwIfTextMustShow(err);
         return req.error(err.status || 500, err.message || 'SAP S/4HANA request failed');
       }
     };

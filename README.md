@@ -11,15 +11,14 @@ MM, WM, LE, SD, FI, and AI service areas, automated tests, and SAP BTP deploymen
 | Fiori application | `app/fiori-app/` | SAPUI5 views, controllers, routing, and user experience |
 | CAP services | `srv/` | HTTP/OData APIs, authorization, validation, and orchestration |
 | S/4HANA integration | `srv/integration/s4hana/` | Technical clients, adapters, and SAP payload mappings |
-| Persistence | `db/` | CAP data model; the MTA provisions HANA for the goods-issue dispatch queue |
+| Persistence | `db/` | CAP data model for administrator monitoring state only (user lock and password expiry); the MTA provisions HANA for it |
 | Configuration | `config/`, `mta/`, `mta.yaml`, `xs-security.json` | Destination/Connectivity templates, deployment topology, and XSUAA roles |
 | Tests | `test/` | Unit, integration, and end-to-end tests with controlled fixtures |
 
 ## Business areas
 
 - **Materials Management:** Purchase order worklist, value helps, draft creation, and activation.
-- **Warehouse Management:** Goods issue and receipt, reservations, TR/TO flows, movement 261,
-  handling units, packing instructions, and reservation tracking.
+- **Warehouse Management:** Handling units, packing instructions, quarantine labels, and MIB labels.
 - **Logistics Execution:** Outbound delivery workflows.
 - **Sales and Distribution:** Sales inquiries, sales orders, customer invoices, and returns.
 - **Financial Accounting:** Journal entry verification.
@@ -37,7 +36,7 @@ flowchart LR
     CAP --> ADAPTER["S/4HANA adapters<br/>srv/integration/s4hana/"]
     ADAPTER --> DEST["BTP Destination and Connectivity"]
     DEST --> SAP["SAP S/4HANA"]
-    CAP --> DB["CAP persistence<br/>db/ and HANA HDI queue"]
+    CAP --> DB["CAP persistence<br/>db/ and HANA HDI monitoring state"]
     CAP --> AI["AI provider client<br/>SAP AI Core or configured provider"]
 ```
 
@@ -73,7 +72,7 @@ npm run watch
 ```
 
 The local Fiori app is served at `http://localhost:4004/fiori-app/webapp/index.html`. The health
-endpoint is `http://localhost:4004/health`. SAP-backed operations require working connection
+endpoint is `http://localhost:4004/health` (also `/health/live`, `/health/ready` and `/health/dependencies`). SAP-backed operations require working connection
 configuration and appropriate authorization.
 
 To run the UI5 development server separately:
@@ -91,7 +90,7 @@ Use the scripts defined in `package.json` and `app/fiori-app/package.json`:
 | `npm test` | Full Jest suite |
 | `npm run test:unit` | Unit tests |
 | `npm run test:integration` | Integration tests |
-| `npm run test:e2e` | End-to-end tests |
+| `npm run test:e2e` | Playwright browser E2E suites (needs a running server; coverage in `docs/e2e-coverage-matrix.md`) |
 | `npm run lint` | Root ESLint |
 | `npm --prefix app/fiori-app run lint` | UI5 lint |
 | `npm --prefix app/fiori-app run build` | UI5 production build |
@@ -131,7 +130,7 @@ does not verify live SAP connectivity, destination credentials, or backend trans
 | --- | --- |
 | `srv/mm/`, `srv/wm/`, `srv/le/`, `srv/sd/`, `srv/fi/`, `srv/ai/` | CAP domain services and handlers |
 | `srv/integration/s4hana/` | S/4HANA clients and adapters |
-| `db/` | CDS persistence model and seed data |
+| `db/` | CDS persistence model for administrator monitoring state |
 | `app/fiori-app/webapp/modules/` | Fiori business-area modules |
 | `test/unit/`, `test/integration/`, `test/e2e/` | Automated test suites |
 | `docs/` | Architecture, SAP discovery evidence, decisions, and runbooks |

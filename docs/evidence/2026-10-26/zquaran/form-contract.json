@@ -1,0 +1,27 @@
+{
+  "context": [
+    {
+      "NAME": "ZMM_AF_017",
+      "STATE": "A",
+      "INTERFACE": "ZMM_FI_017",
+      "TYPE": "",
+      "DATAPROVIDER": "",
+      "OFFLINE_HANDLER": ""
+    }
+  ],
+  "layout": [
+    {
+      "NAME": "ZMM_AF_017",
+      "STATE": "A",
+      "FORMTECH": "",
+      "LASTDATE": "20260928"
+    }
+  ],
+  "interface": [
+    {
+      "NAME": "ZMM_FI_017",
+      "STATE": "A",
+      "INTERFACE_TYPE": ""
+    }
+  ]
+}

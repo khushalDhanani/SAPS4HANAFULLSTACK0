@@ -96,44 +96,34 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     }
 
     const sEnvDevUser = (process.env.S4_USERNAME || "").trim().toLowerCase();
-    // Local mock passwords exist only when LOCAL_DEV_PASSWORD is set; a username is never a password.
+    // A local password exists only when LOCAL_DEV_PASSWORD is set; a username is never a password.
     const sLocalDevPass = (process.env.LOCAL_DEV_PASSWORD || "").trim();
 
     let authResult;
-    const isMockOnlyUser = sUserLower === "alice" || sUserLower === "bob";
     const isKhushalUser = sUserLower === "khushal";
 
-    if (isMockOnlyUser) {
-      if (!sLocalDevPass) {
+    if (process.env.APP_ROLE === "cap-local") {
+      // The isolated Docker profile has no SAP connectivity or SAP credentials.
+      if (!isKhushalUser || !sLocalDevPass || !localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
         return {
           authenticated: false,
-          message: "Local mock users are disabled: set LOCAL_DEV_PASSWORD to enable them."
+          message: "Invalid local credentials. Use khushal and the configured LOCAL_DEV_PASSWORD."
         };
       }
-      const isMatch = localTokenUtil.timingSafeEqual(sPass.toLowerCase(), sLocalDevPass.toLowerCase());
-      if (isMatch) {
-        authResult = {
-          authenticated: true,
-          message: "Authentication successful (Local Development User).",
-          system: s4Config.getSystemLabel()
-        };
-      } else {
-        authResult = {
-          authenticated: false,
-          message: "Invalid username or password."
-        };
-      }
+      authResult = {
+        authenticated: true,
+        message: "Authentication successful (local development).",
+        system: s4Config.getSystemLabel()
+      };
     } else if (isKhushalUser) {
       // Allow 'khushal' with the local mock password (LOCAL_DEV_PASSWORD, if set),
-      // or with real S/4 credentials (S4_PASSWORD or S/4 Gateway)
+      // real S/4 credentials (S4_PASSWORD), or S/4 Gateway
       const sEnvDevPass = (process.env.S4_PASSWORD || "").trim();
-      if (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass.toLowerCase(), sLocalDevPass.toLowerCase())) {
-        authResult = {
-          authenticated: true,
-          message: "Authentication successful (Local Development User).",
-          system: s4Config.getSystemLabel()
-        };
-      } else if (sEnvDevPass && localTokenUtil.timingSafeEqual(sPass, sEnvDevPass)) {
+      const isKnownPass =
+        (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) ||
+        (sEnvDevPass && localTokenUtil.timingSafeEqual(sPass, sEnvDevPass));
+
+      if (isKnownPass) {
         authResult = {
           authenticated: true,
           message: "Authentication successful (S/4 Development User).",

@@ -15,6 +15,9 @@ if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
 }
 
 require('./srv/common/wmMismatchOverrideGuard').assertMismatchOverrideAllowed();
+require('./srv/common/productionGuard').assertDevFlagsOff(process.env, cds.env.requires && cds.env.requires.auth);
+require('./srv/common/productionGuard').assertS4ConnectionConfig(process.env);
+
 
 // Register local development S4_USERNAME in mock auth users if running in development
 if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
@@ -22,7 +25,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
     cds.env.requires = cds.env.requires || {};
     cds.env.requires.auth = cds.env.requires.auth || {};
     cds.env.requires.auth.users = cds.env.requires.auth.users || {};
-    const devRoles = ['Admin', 'Viewer', 'PurchasingManager', 'FinanceViewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'];
+    const devRoles = ['Admin', 'Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'SapLogsReader'];
     cds.env.requires.auth.users[s4User] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toLowerCase()] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toUpperCase()] = { roles: devRoles };
@@ -36,69 +39,17 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
     const client = s4Config.getClient();
     const headers = { 'sap-client': client };
 
-    const credsFS = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
-    const credsMaint = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
-    const credsFI = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
-    const credsSDWL = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
-    const credsSDFS = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F2369_INQY_FS_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
-    const credsSDSO = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F1873_SO_WL_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
     cds.env.requires = cds.env.requires || {};
-    cds.env.requires.C_PURCHASEORDER_FS_SRV = Object.assign(cds.env.requires.C_PURCHASEORDER_FS_SRV || { kind: 'odata-v2', model: 'srv/external/C_PURCHASEORDER_FS_SRV' }, { credentials: credsFS });
-    cds.env.requires.MM_PUR_PO_MAINT_V2_SRV = Object.assign(cds.env.requires.MM_PUR_PO_MAINT_V2_SRV || { kind: 'odata-v2', model: 'srv/external/MM_PUR_PO_MAINT_V2_SRV' }, { credentials: credsMaint });
-    cds.env.requires.FAC_GL_JOURNALENTRY_VER_SRV = Object.assign(cds.env.requires.FAC_GL_JOURNALENTRY_VER_SRV || { kind: 'odata-v2', model: 'srv/external/FAC_GL_JOURNALENTRY_VER_SRV' }, { credentials: credsFI });
-    cds.env.requires.SD_F2370_INQY_WL_SRV = Object.assign(cds.env.requires.SD_F2370_INQY_WL_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2370_INQY_WL_SRV' }, { credentials: credsSDWL });
-    cds.env.requires.SD_F2369_INQY_FS_SRV = Object.assign(cds.env.requires.SD_F2369_INQY_FS_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2369_INQY_FS_SRV' }, { credentials: credsSDFS });
-    cds.env.requires.SD_F1873_SO_WL_SRV = Object.assign(cds.env.requires.SD_F1873_SO_WL_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F1873_SO_WL_SRV' }, { credentials: credsSDSO });
-
-    if (cds.requires) {
-        if (cds.requires.C_PURCHASEORDER_FS_SRV) cds.requires.C_PURCHASEORDER_FS_SRV.credentials = credsFS;
-        if (cds.requires.MM_PUR_PO_MAINT_V2_SRV) cds.requires.MM_PUR_PO_MAINT_V2_SRV.credentials = credsMaint;
-        if (cds.requires.FAC_GL_JOURNALENTRY_VER_SRV) cds.requires.FAC_GL_JOURNALENTRY_VER_SRV.credentials = credsFI;
-        if (cds.requires.SD_F2370_INQY_WL_SRV) cds.requires.SD_F2370_INQY_WL_SRV.credentials = credsSDWL;
-        if (cds.requires.SD_F2369_INQY_FS_SRV) cds.requires.SD_F2369_INQY_FS_SRV.credentials = credsSDFS;
-        if (cds.requires.SD_F1873_SO_WL_SRV) cds.requires.SD_F1873_SO_WL_SRV.credentials = credsSDSO;
+    for (const service of ['C_PURCHASEORDER_FS_SRV', 'MM_PUR_PO_MAINT_V2_SRV', 'SD_F2370_INQY_WL_SRV', 'SD_F2369_INQY_FS_SRV', 'SD_F1873_SO_WL_SRV']) {
+        const credentials = {
+            url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/${service}`,
+            authentication: 'BasicAuthentication',
+            username: process.env.S4_USERNAME,
+            password: process.env.S4_PASSWORD,
+            headers: headers
+        };
+        cds.env.requires[service] = Object.assign(cds.env.requires[service] || { kind: 'odata-v2', model: `srv/external/${service}` }, { credentials });
+        if (cds.requires && cds.requires[service]) cds.requires[service].credentials = credentials;
     }
 
     registerDestination({
@@ -115,12 +66,14 @@ const localTokenUtil = require('./srv/auth/localTokenUtil');
 
 // Local development bootstrap handlers
 cds.on('bootstrap', (app) => {
-    // Readiness endpoint for the Cloud Foundry HTTP health check declared in mta.yaml
-    // (readiness-health-check-http-endpoint: /health). Registered before CAP mounts its
+    // Plain "the process answers" endpoint, used by Docker, CI and the smoke test. The Cloud Foundry readiness
+    // check declared in mta.yaml uses /health/ready (srv/common/health.js). Registered before CAP mounts its
     // protocol adapters and auth middleware, so it needs no credentials and never touches S/4HANA.
     app.get('/health', (req, res) => {
         res.set('Cache-Control', 'no-store').status(200).json({ status: 'UP' });
     });
+    // /health/live, /health/ready and /health/dependencies; /health above stays as the process-level check.
+    require('./srv/common/health').registerHealth(app);
 
     // Set Permissions-Policy header to eliminate Chromium 'unload is not allowed' violation warnings
     app.use((req, res, next) => {
@@ -139,20 +92,13 @@ cds.on('bootstrap', (app) => {
         next();
     });
 
-    // In local development, verify Bearer tokens (JWT with standard XSUAA claims) when dev issuer is explicitly enabled
-    app.use((req, res, next) => {
-        if (process.env.NODE_ENV !== 'production' && localTokenUtil.isDevTokenIssuerEnabled()) {
-            const auth = req.headers.authorization;
-            if (auth && auth.match(/^bearer\s+/i)) {
-                const token = auth.replace(/^bearer\s+/i, '').trim();
-                const u = localTokenUtil.verifyToken(token);
-                if (u) {
-                    req.user = u;
-                }
-            }
-        }
-        next();
-    });
+    // Finding DEBT-02 (Boundary 1 - Express Bootstrap Layer):
+    // Verifies Bearer tokens for all root Express endpoints mounted outside the CAP OData dispatcher
+    // (such as /ai/chat/stream, /admin/diagnostics/sap, and /health/diagnostic).
+    // applyBearerToken caches the verified token on req._verifiedBearerToken to eliminate duplicate
+    // HMAC computations when requests later proceed into the CAP OData middleware chain.
+    // Full specification: docs/architecture/authentication-middleware-ordering.md
+    app.use(localTokenUtil.applyBearerToken);
 
     // AI assistant streaming endpoint (SSE). Runs behind the CAP auth middlewares so cds.context.user is set.
     const express = require('express');
@@ -203,23 +149,12 @@ cds.on('serving', (srv) => {
     }
 });
 
-// Register local development Bearer token verification into CAP OData middleware chain when dev issuer is enabled
-cds.middlewares.add((req, res, next) => {
-    if (process.env.NODE_ENV !== 'production' && localTokenUtil.isDevTokenIssuerEnabled()) {
-        const auth = req.headers.authorization;
-        if (auth && auth.match(/^bearer\s+/i)) {
-            const token = auth.replace(/^bearer\s+/i, '').trim();
-            const u = localTokenUtil.verifyToken(token);
-            if (u) {
-                req.user = u;
-                if (cds.context) {
-                    cds.context.user = u;
-                }
-            }
-        }
-    }
-    next();
-}, { before: 'auth' });
+// Finding DEBT-02 (Boundary 2 - CAP Protocol Middleware Chain):
+// Ensures that all CAP OData V4 services receive the verified user before CAP's built-in auth middleware
+// ({ before: 'auth' }) evaluates declarative authorization annotations (@(requires: ...)).
+// Reuses req._verifiedBearerToken from Boundary 1 in O(1) time without redundant HMAC SHA-256 calculation.
+// Full specification: docs/architecture/authentication-middleware-ordering.md
+cds.middlewares.add(localTokenUtil.applyBearerToken, { before: 'auth' });
 
 // Delegate to default CAP server bootstrap
 module.exports = cds.server;

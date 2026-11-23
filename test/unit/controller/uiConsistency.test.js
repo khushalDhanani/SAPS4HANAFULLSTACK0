@@ -16,22 +16,21 @@ const views = walk(WEBAPP).filter((f) => /\.(view|fragment)\.xml$/.test(f)).map(
 const css = fs.readFileSync(path.join(WEBAPP, 'css/style.css'), 'utf8');
 const i18n = fs.readFileSync(path.join(WEBAPP, 'i18n/i18n.properties'), 'utf8');
 const i18nEn = fs.readFileSync(path.join(WEBAPP, 'i18n/i18n_en.properties'), 'utf8');
-const appController = fs.readFileSync(path.join(WEBAPP, 'controller/App.controller.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(WEBAPP, 'manifest.json'), 'utf8'));
 /** Opening tags of the given control, attributes included (bindings contain ">" so match up to the tag end). */
 const tags = (xml, control) => xml.match(new RegExp(`<(?:\\w+:)?${control}\\b(?:[^>"]|"[^"]*")*>`, 'g')) || [];
 
 test('there are views to check', () => expect(views.length).toBeGreaterThan(30));
 
-test('no page renders its own title or back button (the ShellBar owns both)', () => {
+test('no sap.m.Page renders its own title or back button (the ShellBar owns both)', () => {
   views.forEach(({ name, xml }) => tags(xml, 'Page').forEach((tag) => {
     expect(`${name}: ${/\s(title|showNavButton|navButtonPress)=/.test(tag)}`).toBe(`${name}: false`);
   }));
 });
 
-test('every route except login has a ShellBar title', () => {
-  const routes = manifest['sap.ui5'].routing.routes.map((r) => r.name).filter((n) => !['login', 'default'].includes(n));
-  routes.forEach((route) => expect(`${route}: ${new RegExp(`case "${route}":`).test(appController)}`).toBe(`${route}: true`));
+test('no DynamicPage renders its own heading title (the ShellBar owns it)', () => {
+  const withOwnTitle = views.filter(({ xml }) => /<(?:\w+:)?heading>\s*<(?:\w+:)?Title\b/.test(xml)).map(({ name }) => name);
+  expect(withOwnTitle).toEqual([]);
 });
 
 test('every table has an empty-state text', () => {
@@ -59,7 +58,21 @@ test('UI texts come from i18n, and every referenced key exists in both bundles',
   views.forEach(({ name, xml }) => {
     const literal = [...xml.matchAll(/\s(?:text|title|header|subheader|headerText|placeholder|tooltip|noDataText)="([^"{]*[A-Za-z]{3}[^"{]*)"/g)].map((m) => m[1]);
     expect(`${name}: ${literal.join(' | ')}`).toBe(`${name}: `);
-    const missing = [...new Set([...xml.matchAll(/\{i18n>([\w.]+)\}/g)].map((m) => m[1]))].filter((key) => !k.has(key) || !kEn.has(key));
+    const missing = [...new Set([...xml.matchAll(/i18n>([\w.]+)/g)].map((m) => m[1]))].filter((key) => !k.has(key) || !kEn.has(key));
     expect(`${name}: ${missing.join(',')}`).toBe(`${name}: `);
   });
+  // Literal keys only: a key built at runtime (prefix + code) is followed by "+" and does not match.
+  const scripts = walk(WEBAPP).filter((f) => f.endsWith('.js') && !f.includes('thirdparty'));
+  const missing = scripts.flatMap((f) => [...fs.readFileSync(f, 'utf8').matchAll(/\b_?(?:getText|text)\(\s*["']([\w.]+)["']\s*[,)]/g)]
+    .map((m) => m[1]).filter((key) => !k.has(key) || !kEn.has(key)).map((key) => `${path.relative(WEBAPP, f)}: ${key}`));
+  expect([...new Set(missing)]).toEqual([]);
+});
+
+test('i18n bundles declare supportedLocales/fallbackLocale (browser audit: 6x 404 for i18n_en_GB.properties per page load)', () => {
+  const expected = { supportedLocales: ['', 'en'], fallbackLocale: 'en' };
+  expect(manifest['sap.app'].i18n).toMatchObject({ bundleUrl: 'i18n/i18n.properties', ...expected });
+  expect(manifest['sap.ui5'].models.i18n.settings).toMatchObject({ bundleName: 'saps4hana.fiori.i18n.i18n', ...expected });
+  for (const l of expected.supportedLocales) {
+    expect(fs.existsSync(path.join(WEBAPP, 'i18n', `i18n${l ? '_' + l : ''}.properties`))).toBe(true);
+  }
 });

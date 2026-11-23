@@ -16,10 +16,6 @@
       "description": "Create and manage purchase orders"
     },
     {
-      "name": "$XSAPPNAME.FinanceViewer",
-      "description": "View financial accounting journal entry data"
-    },
-    {
       "name": "$XSAPPNAME.SalesRepresentative",
       "description": "Create and manage sales inquiries"
     },
@@ -29,17 +25,27 @@
     },
     {
       "name": "$XSAPPNAME.WarehouseClerk",
-      "description": "Post goods issue and goods receipt, confirm and create warehouse tasks"
+      "description": "Manage handling units and packing instructions, print warehouse labels, create outbound deliveries"
     },
     {
       "name": "$XSAPPNAME.WarehouseManager",
       "description": "Manage warehouse operations, tasks and resources"
+    },
+    {
+      "name": "$XSAPPNAME.SapLogsReader",
+      "description": "Read access to SAP SM21 system logs and SM20 security audit logs"
     }
   ],
   "attributes": [
     {
       "name": "Plant",
       "description": "Plants (WERKS) the user may access; empty for a non-Admin means no handling-unit data",
+      "valueType": "string",
+      "valueRequired": false
+    },
+    {
+      "name": "WarehouseNumber",
+      "description": "Warehouse numbers (LGNUM) the user may access; empty for a non-Admin resolves via plant mapping",
       "valueType": "string",
       "valueRequired": false
     }
@@ -62,11 +68,11 @@
         "$XSAPPNAME.Viewer",
         "$XSAPPNAME.Admin",
         "$XSAPPNAME.PurchasingManager",
-        "$XSAPPNAME.FinanceViewer",
         "$XSAPPNAME.SalesRepresentative",
         "$XSAPPNAME.SalesManager",
         "$XSAPPNAME.WarehouseClerk",
-        "$XSAPPNAME.WarehouseManager"
+        "$XSAPPNAME.WarehouseManager",
+        "$XSAPPNAME.SapLogsReader"
       ]
     },
     {
@@ -75,14 +81,6 @@
       "scope-references": [
         "$XSAPPNAME.Viewer",
         "$XSAPPNAME.PurchasingManager"
-      ]
-    },
-    {
-      "name": "FinanceViewer",
-      "description": "Financial accounting viewer",
-      "scope-references": [
-        "$XSAPPNAME.Viewer",
-        "$XSAPPNAME.FinanceViewer"
       ]
     },
     {
@@ -110,7 +108,8 @@
         "$XSAPPNAME.WarehouseClerk"
       ],
       "attribute-references": [
-        "Plant"
+        "Plant",
+        "WarehouseNumber"
       ]
     },
     {
@@ -122,7 +121,15 @@
         "$XSAPPNAME.WarehouseManager"
       ],
       "attribute-references": [
-        "Plant"
+        "Plant",
+        "WarehouseNumber"
+      ]
+    },
+    {
+      "name": "SapLogsReader",
+      "description": "Read SAP system and security audit logs",
+      "scope-references": [
+        "$XSAPPNAME.SapLogsReader"
       ]
     }
   ],
@@ -149,13 +156,6 @@
       ]
     },
     {
-      "name": "SAPS4HANA_FinanceViewer",
-      "description": "SAP S/4HANA Full-Stack: journal entry viewing",
-      "role-template-references": [
-        "$XSAPPNAME.FinanceViewer"
-      ]
-    },
-    {
       "name": "SAPS4HANA_SalesRepresentative",
       "description": "SAP S/4HANA Full-Stack: sales inquiry processing",
       "role-template-references": [
@@ -171,7 +171,7 @@
     },
     {
       "name": "SAPS4HANA_WarehouseClerk",
-      "description": "SAP S/4HANA Full-Stack: goods issue, goods receipt and warehouse task execution",
+      "description": "SAP S/4HANA Full-Stack: handling units, packing instructions, warehouse labels and delivery creation",
       "role-template-references": [
         "$XSAPPNAME.WarehouseClerk"
       ]
@@ -181,6 +181,13 @@
       "description": "SAP S/4HANA Full-Stack: warehouse management",
       "role-template-references": [
         "$XSAPPNAME.WarehouseManager"
+      ]
+    },
+    {
+      "name": "SAPS4HANA_LogAuditor",
+      "description": "SAP S/4HANA Full-Stack: read access to SM21 and SM20 logs",
+      "role-template-references": [
+        "$XSAPPNAME.SapLogsReader"
       ]
     }
   ],

@@ -9,6 +9,13 @@ describe('Frontend OutboundDeliveryService Unit Tests', () => {
       get: jest.fn(),
       post: jest.fn()
     };
+    // Exercise the shared reader with mocked transport, rather than duplicating its logic.
+    require('vm').runInNewContext(require('fs').readFileSync(
+        require('path').resolve(__dirname, '../../../app/fiori-app/webapp/service/ODataClient.js'), 'utf8'), {
+        sap: { ui: { define: (_deps, factory) => {
+            mockODataClient.readEntitySet = factory({}).readEntitySet;
+        } } }
+    });
     const origSap = global.sap;
     global.sap = {
       ui: {
@@ -41,29 +48,6 @@ describe('Frontend OutboundDeliveryService Unit Tests', () => {
     expect(FrontendOutboundDeliveryService.getModel()).toBeNull();
   });
 
-  it('queries orders due for delivery via V4 model binding', async () => {
-    FrontendOutboundDeliveryService.setModel(mockModel);
-    const res = await FrontendOutboundDeliveryService.getOrdersDueForDelivery();
-    expect(mockModel.bindList).toHaveBeenCalledWith(
-      '/OrdersDueForDelivery',
-      undefined,
-      undefined,
-      undefined,
-      undefined
-    );
-    expect(mockBinding.requestContexts).toHaveBeenCalledWith(0, Infinity);
-    expect(res).toEqual([{ SalesOrder: '5000104', ShippingPoint: '1120', ShipToParty: '10082' }]);
-    expect(mockODataClient.get).not.toHaveBeenCalled();
-  });
-
-  it('falls back to ODataClient.get when no model is set', async () => {
-    FrontendOutboundDeliveryService.setModel(null);
-    mockODataClient.get.mockResolvedValueOnce({ value: [{ SalesOrder: '5000104' }] });
-    const res = await FrontendOutboundDeliveryService.getOrdersDueForDelivery();
-    expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/outbound-delivery/OrdersDueForDelivery');
-    expect(res).toEqual([{ SalesOrder: '5000104' }]);
-  });
-
   it('queries shipping points via V4 model binding', async () => {
     FrontendOutboundDeliveryService.setModel(mockModel);
     mockBinding.requestContexts.mockResolvedValueOnce([
@@ -78,26 +62,6 @@ describe('Frontend OutboundDeliveryService Unit Tests', () => {
       undefined
     );
     expect(res).toEqual([{ ShippingPoint: '1120', ShippingPointName: '1130-FG Loading Area' }]);
-  });
-
-  it('fetches default shipping point information via function call', async () => {
-    mockODataClient.get.mockResolvedValueOnce({
-      value: { ShippingPoint: '1120', ShippingPoints: ['1120', '1112', '1108', '1109'] }
-    });
-    const res = await FrontendOutboundDeliveryService.getDefaultShippingPoint();
-    expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/outbound-delivery/getDefaultShippingPoint()');
-    expect(res.ShippingPoint).toBe('1120');
-    expect(res.ShippingPoints).toContain('1120');
-  });
-
-  it('returns empty shipping point and points array when backend returns null or rejects', async () => {
-    mockODataClient.get.mockResolvedValueOnce(null);
-    const res = await FrontendOutboundDeliveryService.getDefaultShippingPoint();
-    expect(res).toEqual({ ShippingPoint: '', ShippingPoints: [] });
-
-    mockODataClient.get.mockRejectedValueOnce(new Error('Network error'));
-    const resCatch = await FrontendOutboundDeliveryService.getDefaultShippingPoint();
-    expect(resCatch).toEqual({ ShippingPoint: '', ShippingPoints: [] });
   });
 
   it('rejects createOutboundDelivery when salesOrder is missing', async () => {
@@ -130,5 +94,37 @@ describe('Frontend OutboundDeliveryService Unit Tests', () => {
       shippingPoint: '1120'
     });
     expect(res).toBe('13000527');
+  });
+
+  it('getOrdersDueMetrics sends the plant as the function parameter', async () => {
+    mockODataClient.get.mockResolvedValueOnce({ scheduleLineCount: 3, shippingPointCount: 1 });
+    await FrontendOutboundDeliveryService.getOrdersDueMetrics('1120');
+    expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/outbound-delivery/getOrdersDueMetrics(Plant='1120')");
+  });
+
+  it('getOrdersDueMetrics escapes quotes in the plant', async () => {
+    mockODataClient.get.mockResolvedValueOnce({ scheduleLineCount: 0, shippingPointCount: 0 });
+    await FrontendOutboundDeliveryService.getOrdersDueMetrics("1'2");
+    expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/outbound-delivery/getOrdersDueMetrics(Plant='1''2')");
+  });
+
+  it('getPlantContext returns plants and unrestricted, defaulting safely', async () => {
+    mockODataClient.get.mockResolvedValueOnce({ plants: ['1120'], unrestricted: false });
+    await expect(FrontendOutboundDeliveryService.getPlantContext()).resolves.toEqual({ plants: ['1120'], unrestricted: false });
+    mockODataClient.get.mockResolvedValueOnce({});
+    await expect(FrontendOutboundDeliveryService.getPlantContext()).resolves.toEqual({ plants: [], unrestricted: false });
+  });
+
+  it('createBillingDocument passes If-Match header when mOptions.etag is supplied', async () => {
+    mockODataClient.post.mockResolvedValueOnce({ value: { BillingDocument: '90000001' } });
+    await FrontendOutboundDeliveryService.createBillingDocument(
+      { delivery: '80000001', billingType: 'F2' },
+      { etag: 'W/"67890"' }
+    );
+    expect(mockODataClient.post).toHaveBeenCalledWith(
+      '/odata/v4/outbound-delivery/createBillingDocument',
+      { DeliveryDocument: '80000001', BillingDocumentType: 'F2', BillingDocumentDate: null },
+      { 'If-Match': 'W/"67890"' }
+    );
   });
 });

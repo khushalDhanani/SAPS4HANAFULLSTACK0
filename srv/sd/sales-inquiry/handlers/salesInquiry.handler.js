@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 const LOG = require('../../../common/logger')('sales-inquiry');
 const salesInquiryAdapter = require('../../../integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
 const { validateCreateSalesInquiryPayload } = require('../validation/salesInquiry.validation');
@@ -22,6 +23,8 @@ function registerSalesInquiryHandlers(srv) {
                 if (doc) {
                     const header = { ...(doc.header || doc) };
                     header.to_Items = doc.items || [];
+                    // The reason stays in the log: it can hold SAP paths, and the screen has its own text.
+                    header.itemsUnavailable = Boolean(doc.itemsUnavailable);
                     return header;
                 }
                 return req.error(404, `Sales Inquiry ${sKey} not found`);
@@ -65,7 +68,7 @@ function registerSalesInquiryHandlers(srv) {
         }
 
         try {
-            const result = await salesInquiryAdapter.createSalesInquiry(s4Payload.header, s4Payload.items, { user: authenticatedUser });
+            const result = await salesInquiryAdapter.createSalesInquiryViaRfc(s4Payload.header, s4Payload.items, { user: authenticatedUser });
             const inquiryId = result && (result.SalesInquiry || result.SalesDocument || result.SalesOrderID);
             if (!inquiryId || String(inquiryId).trim() === '') {
                 LOG.error('S/4HANA Sales Inquiry creation succeeded but no Sales Inquiry document number was returned by SAP.');
@@ -75,11 +78,12 @@ function registerSalesInquiryHandlers(srv) {
             return String(inquiryId).trim();
         } catch (error) {
             LOG.error('Error creating Sales Inquiry:', error.message);
+            throwIfTextMustShow(error);
             if (error.SalesInquiry || error.documentNumber || error.name === 'PartialSalesInquiryError') {
                 req.error(error.status || 502, error.message);
                 return;
             }
-            req.error(500, `Failed to create Sales Inquiry: ${error.message}`);
+            req.error(error.status || 500, `Failed to create Sales Inquiry: ${error.message}`);
         }
     });
 

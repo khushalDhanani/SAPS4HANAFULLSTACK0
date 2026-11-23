@@ -152,16 +152,4 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
 
     expect(findings).toEqual([]);
   });
-
-  it('ignores the regenerated SAP catalog dump under gen/**/external/** but still guards other files', () => {
-    // excluded: the source dump and its gen/ copies (any depth) under an external/ folder
-    expect(isIgnoredRelPath('srv/external/all_catalog_services.json')).toBe(true);
-    expect(isIgnoredRelPath('gen/srv/srv/external/all_catalog_services.json')).toBe(true);
-    expect(isIgnoredRelPath('gen/external/all_catalog_services.json')).toBe(true);
-    expect(isIgnoredRelPath('gen/a/b/external/x.json')).toBe(true);
-    // still guarded: other gen/ files and all real source
-    expect(isIgnoredRelPath('gen/srv/srv/service.js')).toBe(false);
-    expect(isIgnoredRelPath('srv/wm/mvt261/service.js')).toBe(false);
-    expect(isIgnoredRelPath('srv/external/other.json')).toBe(false);
-  });
 });

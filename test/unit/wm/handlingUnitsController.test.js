@@ -219,3 +219,51 @@ describe('_loadKpis (status KPI loading and busy toggle)', () => {
         expect(s._model.getProperty('/kpiBusy')).toBe(false);
     });
 });
+
+describe('list size (first page, then Load more)', () => {
+    const result = (truncated) => ({ Items: [{ HandlingUnitExternalID: '1' }], TotalCount: 1, SapCount: 900, Truncated: truncated });
+
+    it('onGo reads 200 rows and offers Load more when SAP holds more', async () => {
+        ODataClient.get.mockResolvedValueOnce(result(true));
+        const s = subject();
+        s._model._d['/plant'] = '';
+        s._model.getData = () => ({ plant: '', storageLocation: '', packagingMaterial: '', handlingUnitExternalID: '', status: '', shippingPoint: '' });
+        s.onGo();
+        await new Promise(setImmediate);
+        expect(ODataClient.get.mock.calls[0][0]).toContain(',limit=200)');
+        expect(s._model.getProperty('/canLoadMore')).toBe(true);
+    });
+
+    it('onLoadMore reads up to the 1000 cap and then hides Load more', async () => {
+        ODataClient.get.mockResolvedValueOnce(result(true));
+        const s = subject();
+        s._model.getData = () => ({ plant: '', storageLocation: '', packagingMaterial: '', handlingUnitExternalID: '', status: '', shippingPoint: '' });
+        s.onLoadMore();
+        await new Promise(setImmediate);
+        expect(ODataClient.get.mock.calls[0][0]).toContain(',limit=1000)');
+        expect(s._model.getProperty('/canLoadMore')).toBe(false);
+    });
+});
+
+describe('onSubmitCreate after a not-confirmed answer', () => {
+    const notConfirmed = 'Create handling unit: SAP may have saved this change to handling unit 2000020166, but it could not be read back, so it is NOT confirmed. Check it in SAP before trying again.';
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it('shows the warning, turns submit off, and a second press sends nothing', async () => {
+        const c = subject({ blockSubmitIfNotConfirmed: require('../helpers/realBlockSubmit').realBlockSubmit(), getText: (_k, _a, fallback) => fallback || _k });
+        c._model.getData = () => c._model._d;
+        ODataClient.post.mockReset();
+        ODataClient.post.mockRejectedValueOnce(new Error(notConfirmed));
+
+        c.onSubmitCreate();
+        await flush();
+
+        expect(c._model.getProperty('/submitBlocked')).toBe(true);
+        expect(c._model.getProperty('/error')).toContain('Create is turned off');
+
+        c._model._d.submitBlocked = true;
+        c.onSubmitCreate();
+
+        expect(ODataClient.post).toHaveBeenCalledTimes(1);
+    });
+});

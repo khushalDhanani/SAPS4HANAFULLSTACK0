@@ -284,6 +284,49 @@ describe('PO Type-Wise Dynamic Business Rules - 16 Types Matrix', () => {
             const errors = PurchaseOrderValidator.validateUI(data);
             expect(errors.some(e => e.includes("must start with '1'"))).toBe(true);
         });
+
+        describe('ZSER without a storage location (storageLocationRequired: false in the schema)', () => {
+            const zserNoStorageLocation = () => ({
+                header: {
+                    PurchaseOrderType: 'ZSER',
+                    CompanyCode: '1000',
+                    PurchasingOrganization: 'AE01',
+                    PurchasingGroup: '101',
+                    Supplier: '10300001',
+                    Currency: 'INR',
+                    DocumentDate: '2026-09-24'
+                },
+                items: [{
+                    PurchaseOrderItem: '10',
+                    Material: '',
+                    PurchaseOrderItemText: 'Consulting & Maintenance Services',
+                    Plant: '1000',
+                    UnitOfMeasure: 'AU',
+                    OrderQuantity: '1',
+                    PurchaseOrderItemCategory: '9',
+                    AccountAssignmentCategory: 'K'
+                }]
+            });
+
+            it('validateUI should report no error', () => {
+                expect(PurchaseOrderValidator.validateUI(zserNoStorageLocation())).toEqual([]);
+            });
+
+            it('the server validation should accept it', () => {
+                expect(validateCreatePurchaseOrderPayload(zserNoStorageLocation()).isValid).toBe(true);
+            });
+
+            it('validateForm should report no error, so Create is not blocked', () => {
+                expect(PurchaseOrderValidator.validateForm(zserNoStorageLocation()).errorList).toEqual([]);
+            });
+
+            it('validateForm should still require a storage location on a type that needs one', () => {
+                const payload = zserNoStorageLocation();
+                payload.header.PurchaseOrderType = 'ZDOM';
+                const { errorList } = PurchaseOrderValidator.validateForm(payload);
+                expect(errorList.map((e) => e.field)).toContain('10 / Storage Location');
+            });
+        });
     });
 
     describe('4. Backend Business Validation for All 16 PO Types', () => {

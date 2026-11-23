@@ -3,110 +3,113 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
     "sap/m/MessageToast",
-    "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssueService",
-    "sap/ui/core/Fragment"
+    "saps4hana/fiori/service/AuthService",
+    "sap/m/MessageBox",
+    "sap/ui/model/Filter",
+    "sap/ui/model/Sorter",
+    "sap/ui/core/library",
+    "saps4hana/fiori/modules/admin/user-management/util/UserListLogic",
+    "sap/ui/core/util/File",
+    "sap/base/util/uid",
+    "saps4hana/fiori/modules/admin/sap-logs/util/SapLogsLogic",
+    "saps4hana/fiori/modules/admin/dashboard/AdminLogsSection",
+    "saps4hana/fiori/modules/admin/dashboard/AdminUserFormatters",
+    "saps4hana/fiori/modules/admin/dashboard/AdminUserListSection",
+    "saps4hana/fiori/modules/admin/dashboard/AdminUserFilterSection",
+    "saps4hana/fiori/modules/admin/dashboard/AdminUserBulkSection",
+    "saps4hana/fiori/modules/admin/dashboard/AdminLockMonitorSection",
+    "saps4hana/fiori/modules/admin/dashboard/AdminUserDetailSection",
+    "saps4hana/fiori/modules/admin/dashboard/DashboardMetricsSection"
 ], function (
     BaseController,
     JSONModel,
     ODataClient,
     MessageToast,
-    GoodsIssueService,
-    Fragment
+    AuthService,
+    MessageBox,
+    Filter,
+    Sorter,
+    coreLibrary,
+    UserListLogic,
+    FileUtil,
+    uid,
+    SapLogsLogic,
+    _AdminLogsSection,
+    _AdminUserFormatters,
+    _AdminUserListSection,
+    _AdminUserFilterSection,
+    _AdminUserBulkSection,
+    _AdminLockMonitorSection,
+    _AdminUserDetailSection,
+    _DashboardMetricsSection
 ) {
     "use strict";
 
-    /**
-     * Counts returned by PurchaseOrderService.getDashboardMetrics(). Each is read live from SAP S/4HANA.
-     * In the view model a metric is:
-     *   undefined  while it is loading,
-     *   null       when SAP did not return it (the tile shows "Failed"),
-     *   a number   when SAP returned it.
-     * Nothing is ever defaulted to 0, sampled, extrapolated or simulated.
-     */
+    var isNode = typeof module !== "undefined" && module.exports;
+    function req(mod, path) { return mod || (isNode ? require(path) : {}); }
+    var AdminLogsSection = req(_AdminLogsSection, "../modules/admin/dashboard/AdminLogsSection");
+    var AdminUserFormatters = req(_AdminUserFormatters, "../modules/admin/dashboard/AdminUserFormatters");
+    var AdminUserListSection = req(_AdminUserListSection, "../modules/admin/dashboard/AdminUserListSection");
+    var AdminUserFilterSection = req(_AdminUserFilterSection, "../modules/admin/dashboard/AdminUserFilterSection");
+    var AdminUserBulkSection = req(_AdminUserBulkSection, "../modules/admin/dashboard/AdminUserBulkSection");
+    var AdminLockMonitorSection = req(_AdminLockMonitorSection, "../modules/admin/dashboard/AdminLockMonitorSection");
+    var AdminUserDetailSection = req(_AdminUserDetailSection, "../modules/admin/dashboard/AdminUserDetailSection");
+    var DashboardMetricsSection = req(_DashboardMetricsSection, "../modules/admin/dashboard/DashboardMetricsSection");
+
+    var SortOrder = coreLibrary.SortOrder;
+
     var METRIC_KEYS = [
         "totalCount",
         "supplierCount",
-        "productCount",
-        "fiDocCount",
         "salesInquiryCount",
         "customerCount",
         "openSalesOrderCount",
         "totalSalesOrderCount",
-        "bpCount",
-        "glAccountCount",
-        "costCenterCount",
-        "profitCenterCount",
-        "fixedAssetCount",
-        "wbsElementCount",
-        "internalOrderCount",
-        "purchaseContractCount",
-        "companyCodeCount",
-        "plantCount",
-        "storageLocationCount",
-        "materialGroupCount",
-        "purchasingOrgCount",
-        "purchasingGroupCount",
         "warehouseCount",
         "openReservationCount",
-        "inboundDeliveryCount",
-        "gatewayCatalogCount",
         "ordersDueCount",
         "customerInvoiceCount",
         "customerReturnCount"
     ];
 
-    // Movement-type KPI model property keys (loaded from GoodsIssueService.getDashboardData)
-    var GI_KPI_KEYS = [
-        "mvt201Total", "mvt201Today",
-        "mvt301Total", "mvt301Today",
-        "mvt311Total", "mvt311Today"
-    ];
+    var SECTIONS = ["mm", "sd", "ewm"];
 
-    var mRoutes = {
-        "201": "wmGoodsIssue201Pending",
-        "301": "wmGoodsIssue301Pending",
-        "311": "wmGoodsIssue311Pending"
-    };
-
-    function toCount(vValue) {
-        if (vValue === null || vValue === undefined || String(vValue).trim() === "") {
-            return null;
-        }
-        var n = Number(vValue);
-        return (isFinite(n) && Math.floor(n) === n && n >= 0) ? n : null;
-    }
-
-    return BaseController.extend("saps4hana.fiori.controller.Dashboard", {
+    var DashboardController = BaseController.extend("saps4hana.fiori.controller.Dashboard", {
         METRIC_KEYS: METRIC_KEYS,
-        mRoutes: mRoutes,
 
         onInit: function () {
-            var oViewModel = new JSONModel({
-                selectedTab: "overview",
-                connectionState: "None",
-                connectionText: this._text("dashboardConnectionChecking", "Checking S/4HANA connection…"),
-                metricsError: ""
-            });
-            this.getView().setModel(oViewModel, "dashboardView");
+            var oSaved = this._readAdminState();
+            this._oAdminSort = oSaved.sort;
+            this.getView().setModel(new JSONModel({
+                users: [], userCount: 0, busy: false, filters: oSaved.filters, searchInput: oSaved.filters.search,
+                kpis: {}, kpiSelected: { total: "false", active: "false", locked: "false", changedToday: "false", changedLast7: "false", expiringSoon: "false", expired: "false" },
+                chips: [], changedByOptions: [], showingText: "", listLimitText: "",
+                selection: { count: 0, canLock: false, canUnlock: false, all: false, partial: false, text: "", hint: "" },
+                bulk: { results: [], failed: 0, percent: 0, cancelling: false }, undo: { text: "" },
+                lockMonitor: { text: "", state: "None" }, noDataText: this._text("adminNoUsers", "No SAP users found."),
+                selectedUser: null, detailBusy: false, detailError: ""
+            }), "adminView");
+            this.getView().setModel(new JSONModel({ selectedTab: "overview", metricsError: "" }), "dashboardView");
+
+            if (SapLogsLogic && typeof SapLogsLogic.createModel === "function") {
+                this._oSapLogsModel = SapLogsLogic.createModel();
+                this.getView().setModel(this._oSapLogsModel, "sapLogsView");
+            }
+            this._bSapLogsLoaded = false;
 
             var oOwnerComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
             var oRouter = oOwnerComp ? oOwnerComp.getRouter() : null;
             if (oRouter) {
-                // "default" (empty hash) shows this view too, so it must load the figures as well.
                 ["dashboard", "default"].forEach(function (sRoute) {
                     var oRoute = oRouter.getRoute(sRoute);
                     if (oRoute) {
                         oRoute.attachPatternMatched(this._onDashboardMatched, this);
                     }
                 }, this);
+                oRouter.attachRouteMatched(this._onAnyRouteMatched, this);
             }
         },
 
-        /**
-         * Resolves an i18n text, falling back to the given default when no resource bundle is available.
-         *
-         * @private
-         */
         _text: function (sKey, sDefault, aArgs) {
             try {
                 var oComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
@@ -115,21 +118,56 @@ sap.ui.define([
                 if (oBundle && oBundle.hasText && oBundle.hasText(sKey)) {
                     return oBundle.getText(sKey, aArgs);
                 }
-            } catch (e) {
-                // fall through to the default text
-            }
+            } catch (e) {}
             var sText = sDefault;
-            (aArgs || []).forEach(function (vArg, i) {
-                sText = sText.replace("{" + i + "}", vArg);
-            });
+            (aArgs || []).forEach(function (vArg, i) { sText = sText.replace("{" + i + "}", vArg); });
             return sText;
         },
 
-        _onDashboardMatched: function () {
+        _onAnyRouteMatched: function (oEvent) {
+            var sRoute = oEvent.getParameter("name");
+            if (sRoute !== "dashboard" && sRoute !== "default") {
+                this._bFiguresLoaded = false;
+            }
+        },
+
+        _onDashboardMatched: function (oEvent) {
+            var sSection = oEvent ? oEvent.getParameter("arguments").section : "";
+            var bAllowed = sSection === "user-master" ? AuthService.hasAnyRole(["Admin"]) :
+                sSection === "sap-logs" ? AuthService.hasAnyRole(["Admin", "SapLogsReader"]) :
+                SECTIONS.indexOf(sSection) !== -1;
+            this.getView().getModel("dashboardView").setProperty("/selectedTab", bAllowed ? sSection : "overview");
+            if (sSection === "user-master" && bAllowed && !this._bAdminUsersLoaded) {
+                this._loadAdminUsers();
+            }
+            if (sSection === "sap-logs" && bAllowed && !this._bSapLogsLoaded) {
+                this._bSapLogsLoaded = true;
+                this._loadActiveSapLogsTab();
+            }
+            if (sSection === "user-master" && bAllowed) {
+                this._watchLockMonitor();
+                var oQuery = oEvent.getParameter("arguments")["?query"];
+                if (oQuery && oQuery.search) {
+                    this._mergeAdminFilters({ search: String(oQuery.search) });
+                }
+                if (oQuery && oQuery.filter) {
+                    var sFilter = String(oQuery.filter);
+                    if (sFilter === "expiring" || sFilter === "expiring_soon") {
+                        this._mergeAdminFilters({ pwdStatus: "expiring_soon" });
+                    } else if (sFilter === "expired") {
+                        this._mergeAdminFilters({ pwdStatus: "expired" });
+                    }
+                }
+                if (oQuery && oQuery.action === "unlock" && oQuery.search) {
+                    this._confirmUnlockUser(String(oQuery.search).trim().toUpperCase());
+                }
+                return;
+            }
+            if (this._bFiguresLoaded) {
+                return;
+            }
             var oAuthModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("auth") : null;
             if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
-                // The session check (SSO / getUserInfo) may still be running when the route matches.
-                // Load as soon as it authenticates; otherwise the tiles would stay in "Loading" forever.
                 this._bLoadPending = true;
                 if (!this._oAuthBinding && typeof oAuthModel.bindProperty === "function") {
                     this._oAuthBinding = oAuthModel.bindProperty("/isAuthenticated");
@@ -147,349 +185,89 @@ sap.ui.define([
             }
         },
 
-        _loadDashboard: function () {
-            this._bLoadPending = false;
-            this._loadMetrics();
-            this._loadGiKpis();
-        },
-
-        /**
-         * Loads all dashboard counts from SAP in one call. A count SAP did not return stays null, and the
-         * header status reports whether S/4HANA answered fully, partially or not at all.
-         *
-         * @returns {Promise<void>}
-         */
-        _loadMetrics: function () {
-            var oViewModel = this.getView().getModel("dashboardView");
-            if (!oViewModel) {
-                return Promise.resolve();
-            }
-
-            var that = this;
-            METRIC_KEYS.forEach(function (sKey) {
-                oViewModel.setProperty("/" + sKey, undefined);
-            });
-            oViewModel.setProperty("/metricsError", "");
-            oViewModel.setProperty("/connectionState", "None");
-            oViewModel.setProperty("/connectionText", this._text("dashboardConnectionChecking", "Checking S/4HANA connection…"));
-
-            return ODataClient.get("/odata/v4/purchase-order/getDashboardMetrics()")
-                .then(function (res) {
-                    var oMetrics = res;
-                    if (typeof oMetrics === "string") {
-                        oMetrics = JSON.parse(oMetrics);
-                    }
-                    if (oMetrics && typeof oMetrics.value === "string") {
-                        oMetrics = JSON.parse(oMetrics.value);
-                    }
-                    if (!oMetrics || typeof oMetrics !== "object") {
-                        throw new Error(that._text("dashboardMetricsInvalid", "The metrics service returned no data."));
-                    }
-
-                    var iAvailable = 0;
-                    METRIC_KEYS.forEach(function (sKey) {
-                        var iCount = toCount(oMetrics[sKey]);
-                        oViewModel.setProperty("/" + sKey, iCount);
-                        if (iCount !== null) {
-                            iAvailable++;
-                        }
-                    });
-                    if (iAvailable === 0 && oMetrics.error) {
-                        oViewModel.setProperty("/metricsError", oMetrics.error);
-                    }
-                    that._setConnectionStatus(iAvailable, METRIC_KEYS.length, oMetrics.asOf);
-                })
-                .catch(function (err) {
-                    METRIC_KEYS.forEach(function (sKey) {
-                        oViewModel.setProperty("/" + sKey, null);
-                    });
-                    oViewModel.setProperty("/metricsError", that._text(
-                        "dashboardMetricsUnavailable",
-                        "Live figures could not be loaded from SAP S/4HANA: {0}",
-                        [(err && err.message) || String(err || "")]
-                    ));
-                    that._setConnectionStatus(0, METRIC_KEYS.length);
-                });
-        },
-
-        /**
-         * @private
-         */
-        _setConnectionStatus: function (iAvailable, iTotal, sAsOf) {
-            var oViewModel = this.getView().getModel("dashboardView");
-            // Figures may come from the server cache (30 s transactional / 5 min master data): show when SAP was actually read.
-            var dAsOf = sAsOf ? new Date(sAsOf) : null;
-            var sAsOfText = (dAsOf && !isNaN(dAsOf.getTime())) ? dAsOf.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-            if (iAvailable === iTotal) {
-                oViewModel.setProperty("/connectionState", "Success");
-                oViewModel.setProperty("/connectionText", sAsOfText
-                    ? this._text("dashboardConnectionOkAsOf", "S/4HANA connected \u00b7 figures as of {0}", [sAsOfText])
-                    : this._text("dashboardConnectionOk", "S/4HANA connected"));
-            } else if (iAvailable === 0) {
-                oViewModel.setProperty("/connectionState", "Error");
-                oViewModel.setProperty("/connectionText", this._text("dashboardConnectionDown", "S/4HANA not reachable"));
-            } else {
-                oViewModel.setProperty("/connectionState", "Warning");
-                oViewModel.setProperty("/connectionText", this._text(
-                    "dashboardConnectionPartial",
-                    "S/4HANA partially available ({0} of {1} figures)",
-                    [String(iAvailable), String(iTotal)]
-                ));
-            }
-        },
-
-        /**
-         * Tile value: the SAP count as text, or nothing while loading / unavailable.
-         */
         formatMetricValue: function (vCount) {
             return (typeof vCount === "number") ? String(vCount) : "";
         },
 
-        /**
-         * Tile state: Loading until the count arrives, Failed when SAP did not return it.
-         */
         formatTileState: function (vCount) {
-            if (vCount === undefined) {
-                return "Loading";
-            }
+            if (vCount === undefined) { return "Loading"; }
             return vCount === null ? "Failed" : "Loaded";
         },
 
-        onTabSelect: function (oEvent) {
-            var sKey = oEvent.getParameter("key");
-            if (!sKey && oEvent.getParameter("item")) {
-                sKey = oEvent.getParameter("item").getKey();
-            }
-            if (sKey) {
-                var oViewModel = this.getView().getModel("dashboardView");
-                if (oViewModel) {
-                    oViewModel.setProperty("/selectedTab", sKey);
-                }
-            }
-        },
-
-        onRefresh: function () {
-            var that = this;
-            this._loadGiKpis(true);
-            this._loadMetrics().then(function () {
-                MessageToast.show(that._text("dashboardActionRefreshDesc", "Fetch latest changes from SAP Gateway"));
-            });
-        },
-
-        onNavigateToPurchaseOrders: function () {
-            this.getOwnerComponent().getRouter().navTo("purchaseOrders");
-        },
-
-        onNavigateToCreatePO: function () {
-            this.getOwnerComponent().getRouter().navTo("createPurchaseOrder");
-        },
-
-        onNavigateToJournalEntries: function () {
-            this.getOwnerComponent().getRouter().navTo("journalEntries");
-        },
-
-        onNavigateToSalesInquiries: function () {
-            this.getOwnerComponent().getRouter().navTo("salesInquiries");
-        },
-
-        onNavigateToCreateSalesInquiry: function () {
-            this.getOwnerComponent().getRouter().navTo("createSalesInquiry");
-        },
-
-        onNavigateToSalesOrders: function () {
-            this.getOwnerComponent().getRouter().navTo("salesOrders");
-        },
-
-        onNavigateToCreateSalesOrder: function () {
-            this.getOwnerComponent().getRouter().navTo("createSalesOrder");
-        },
-
-        onNavigateToGoodsReceipt: function () {
-            this.getOwnerComponent().getRouter().navTo("wmGoodsReceipt");
-        },
-
-        onNavigateToTrTo: function () {
-            this.getOwnerComponent().getRouter().navTo("wmTrTo");
-        },
-
-        onNavigateToOpen261: function () {
-            this.getOwnerComponent().getRouter().navTo("wmOpen261");
-        },
-
-        onNavigateToMvt261: function () {
-            this.getOwnerComponent().getRouter().navTo("wmMvt261");
-        },
-
-        onNavigateToHandlingUnits: function () {
-            this.getOwnerComponent().getRouter().navTo("wmHandlingUnits");
-        },
-
-        onNavigateToPackingInstructions: function () {
-            this.getOwnerComponent().getRouter().navTo("wmPackingInstructions");
-        },
-
-        onNavigateToReservationEntry: function () {
-            this.getOwnerComponent().getRouter().navTo("wmReservationEntryList");
-        },
-
-        onNavigateToWarehouseScanTo: function () {
-            this.getOwnerComponent().getRouter().navTo("wmWarehouseScanTo");
-        },
-
-        onNavigateToOrdersDueForDelivery: function () {
-            this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
-        },
-
-        onNavigateToCustomerInvoices: function () {
-            this.getOwnerComponent().getRouter().navTo("customerInvoices");
-        },
-
-        onNavigateToCustomerReturns: function () {
-            this.getOwnerComponent().getRouter().navTo("customerReturns");
-        },
+        onNavigateToPurchaseOrders: function () { this.getOwnerComponent().getRouter().navTo("purchaseOrders"); },
+        onNavigateToCreatePO: function () { this.getOwnerComponent().getRouter().navTo("createPurchaseOrder"); },
+        onNavigateToSalesInquiries: function () { this.getOwnerComponent().getRouter().navTo("salesInquiries"); },
+        onNavigateToCreateSalesInquiry: function () { this.getOwnerComponent().getRouter().navTo("createSalesInquiry"); },
+        onNavigateToSalesOrders: function () { this.getOwnerComponent().getRouter().navTo("salesOrders"); },
+        onNavigateToCreateSalesOrder: function () { this.getOwnerComponent().getRouter().navTo("createSalesOrder"); },
+        onNavigateToHandlingUnits: function () { this.getOwnerComponent().getRouter().navTo("wmHandlingUnits"); },
+        onNavigateToPackingInstructions: function () { this.getOwnerComponent().getRouter().navTo("wmPackingInstructions"); },
+        onNavigateToQuarantineLabels: function () { this.getOwnerComponent().getRouter().navTo("wmQuarantineLabels"); },
+        onNavigateToMibLabel: function () { this.getOwnerComponent().getRouter().navTo("wmMibLabel"); },
+        onNavigateToOrdersDueForDelivery: function () { this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery"); },
+        onNavigateToCustomerInvoices: function () { this.getOwnerComponent().getRouter().navTo("customerInvoices"); },
+        onNavigateToCustomerReturns: function () { this.getOwnerComponent().getRouter().navTo("customerReturns"); },
 
         switchToTab: function (sKey) {
-            if (sKey) {
-                var oTabBar = this.byId("dashboardTabBar");
-                var oViewModel = this.getView().getModel("dashboardView");
-                if (oTabBar) {
-                    oTabBar.setSelectedKey(sKey);
-                }
-                if (oViewModel) {
-                    oViewModel.setProperty("/selectedTab", sKey);
-                }
-            }
+            this.getOwnerComponent().getRouter().navTo("dashboard", { section: sKey });
         },
 
-        onSelectTabFI: function () { this.switchToTab("fi"); },
-        onSelectTabMM: function () { this.switchToTab("mm"); },
         onSelectTabSD: function () { this.switchToTab("sd"); },
         onSelectTabEWM: function () { this.switchToTab("ewm"); },
-        onSelectTabMasterData: function () { this.switchToTab("masterData"); },
-
-        // ─── Movement-Type KPI Cards (EWM Tab) ───────────────────────────
-
-        /**
-         * Loads Goods Issue KPI data (movement types 201/301/311) from
-         * GoodsIssueService.getDashboardData. The server uses a 60 s cache.
-         *
-         * Model properties set:
-         *   /mvt{201|301|311}Total  — all-time posting count (number|null|undefined)
-         *   /mvt{201|301|311}Today  — today's posting count (number|null|undefined)
-         *   /giKpiError                 — error string (empty when OK)
-         *
-         * @param {boolean} [bForceRefresh] - bypass server cache
-         * @returns {Promise<void>}
-         */
-        _loadGiKpis: function (bForceRefresh) {
-            var oViewModel = this.getView().getModel("dashboardView");
-            if (!oViewModel) {
-                return Promise.resolve();
-            }
-
-            var that = this;
-
-            // Set loading (undefined = Loading tile state)
-            GI_KPI_KEYS.forEach(function (sKey) {
-                oViewModel.setProperty("/" + sKey, undefined);
-            });
-            oViewModel.setProperty("/giKpiError", "");
-
-            // Reuse the shared GoodsIssueService (same call the WM dashboard uses) rather than
-            // re-building the getDashboardData URL inline.
-            return GoodsIssueService.getDashboardData(30, "", Boolean(bForceRefresh))
-                .then(function (oData) {
-                    if (!oData || !oData.Kpis) {
-                        throw new Error(that._text("dashboardMvtNoData", "No movement data"));
-                    }
-                    var oKpis = oData.Kpis;
-
-                    var mMapping = {
-                        "Mvt201": { total: "mvt201Total", today: "mvt201Today" },
-                        "Mvt301": { total: "mvt301Total", today: "mvt301Today" },
-                        "Mvt311": { total: "mvt311Total", today: "mvt311Today" }
-                    };
-
-                    Object.keys(mMapping).forEach(function (sKpiKey) {
-                        var oItem = oKpis[sKpiKey];
-                        var mTarget = mMapping[sKpiKey];
-                        if (oItem && typeof oItem.TotalCount === "number") {
-                            oViewModel.setProperty("/" + mTarget.total, oItem.TotalCount);
-                        } else {
-                            oViewModel.setProperty("/" + mTarget.total, null);
-                        }
-                        if (oItem && typeof oItem.TodayPostingsCount === "number") {
-                            oViewModel.setProperty("/" + mTarget.today, oItem.TodayPostingsCount);
-                        } else {
-                            oViewModel.setProperty("/" + mTarget.today, null);
-                        }
-                    });
-                })
-                .catch(function (err) {
-                    GI_KPI_KEYS.forEach(function (sKey) {
-                        oViewModel.setProperty("/" + sKey, null);
-                    });
-                    oViewModel.setProperty("/giKpiError", that._text(
-                        "dashboardMvtLoadError",
-                        "Movement type KPIs could not be loaded from SAP S/4HANA: {0}",
-                        [(err && err.message) || String(err || "")]
-                    ));
-                });
+        onOpenNotifySettings: function (oEvent) { return this._openNotifySettings(oEvent); },
+        onKpiPress: function (oEvent) {
+            var oFilters = this.getView().getModel("adminView").getProperty("/filters");
+            this._setAdminFilters(UserListLogic.toggleKpi(oEvent.getSource().data("kpi"), oFilters, this._adminToday()));
         },
-
-        /**
-         * Formats today's count into the tile unit text, e.g. "Today: 5".
-         * @param {*} vToday
-         * @returns {string}
-         */
-        formatMvtTodayUnit: function (vToday) {
-            if (typeof vToday === "number") {
-                return this._text("dashboardMvtTodayUnit", "Today: {0}", [String(vToday)]);
-            }
-            return this._text("dashboardMvtTotalUnit", "Total Postings");
+        onUndoBulk: function () { return this._undoBulk(); },
+        onClearAdminFilters: function () { this._setAdminFilters(UserListLogic.emptyFilters()); },
+        onExportUsers: function () { return this._exportUsers(); },
+        onRefreshUsers: function () { return this._loadAdminUsers(true); },
+        onBulkLock: function () { return this._openBulkConfirm("lock"); },
+        onBulkUnlock: function () { return this._openBulkConfirm("unlock"); },
+        onClearUserSelection: function () {
+            var aUsers = this.getView().getModel("adminView").getProperty("/users") || [];
+            aUsers.forEach(function (oUser) { oUser.selected = false; });
+            this._updateUserSelectionState(aUsers, this._visibleAdminUsers());
+            this.getView().getModel("adminView").refresh();
         },
-
-        /**
-         * Opens the Goods Issue dashboard, which shows a dedicated recent-postings section per
-         * movement type. No client filter is applied (the dashboard has none); the toast only
-         * confirms which movement type the user opened.
-         * @param {string} sMvtType - "201", "301", or "311"
-         * @private
-         */
-        _navigateToGiFiltered: function (sMvtType) {
-            // Direct navigation to each movement type's own dedicated page (no filter toggle).
-            // 201, 301, and 311 open their Open Reservations/Transfers list (a reservation-to-complete workflow).
-            var mRoutes = {
-                "201": "wmGoodsIssue201Pending",
-                "301": "wmGoodsIssue301Pending",
-                "311": "wmGoodsIssue311Pending"
-            };
-            var sRoute = mRoutes[sMvtType] || "dashboard";
-            this.getOwnerComponent().getRouter().navTo(sRoute);
-            MessageToast.show(this._text(
-                "dashboardMvtOpenPostings",
-                "Opening movement {0} page",
-                [sMvtType]
-            ));
+        onSelectAllUsers: function (oEvent) {
+            var bSelected = oEvent.getParameter("selected");
+            var aVisible = this._visibleAdminUsers();
+            aVisible.filter(UserListLogic.isSelectable).forEach(function (oUser) { oUser.selected = bSelected; });
+            this._updateUserSelectionState(this.getView().getModel("adminView").getProperty("/users") || [], aVisible);
+            this.getView().getModel("adminView").refresh();
         },
-
-        onMvt201TilePress: function () {
-            this._navigateToGiFiltered("201");
+        onSortUsers: function (oEvent) { return this._sortUsers(oEvent); },
+        onSelectUser: function (oEvent) { return this._selectUser(oEvent); },
+        onUserSelectionChange: function () {
+            this._updateUserSelectionState(this.getView().getModel("adminView").getProperty("/users") || [], this._visibleAdminUsers());
         },
-
-        onMvt301TilePress: function () {
-            this._navigateToGiFiltered("301");
-        },
-
-        onMvt311TilePress: function () {
-            this._navigateToGiFiltered("311");
-        },
+        onLockUser: function (oEvent) { return this._lockUser(oEvent); },
+        onUnlockUser: function (oEvent) { return this._unlockUser(oEvent); },
 
         onExit: function () {
+            clearTimeout(this._iAdminSearchTimer);
+            clearTimeout(this._iUndoTimer);
+            clearTimeout(this._iBulkEmailTimer);
+            clearInterval(this._iLockMonitorTimer);
             if (this._oAuthBinding) {
                 this._oAuthBinding.detachChange(this._onAuthChanged, this);
                 this._oAuthBinding = null;
             }
         }
     });
+
+    var mLogs = AdminLogsSection.createAdminLogsSection ? AdminLogsSection.createAdminLogsSection({ SapLogsLogic: SapLogsLogic }) : {};
+    var mFormatters = AdminUserFormatters.createAdminUserFormatters ? AdminUserFormatters.createAdminUserFormatters({ UserListLogic: UserListLogic }) : {};
+    var mList = AdminUserListSection.createAdminUserListSection ? AdminUserListSection.createAdminUserListSection({ UserListLogic: UserListLogic, ODataClient: ODataClient, MessageToast: MessageToast, Filter: Filter, Sorter: Sorter, SortOrder: SortOrder, FileUtil: FileUtil }) : {};
+    var mFilter = AdminUserFilterSection.createAdminUserFilterSection ? AdminUserFilterSection.createAdminUserFilterSection({ UserListLogic: UserListLogic }) : {};
+    var mBulk = AdminUserBulkSection.createAdminUserBulkSection ? AdminUserBulkSection.createAdminUserBulkSection({ UserListLogic: UserListLogic, ODataClient: ODataClient, FileUtil: FileUtil, uid: uid }) : {};
+    var mLockMonitor = AdminLockMonitorSection.createAdminLockMonitorSection ? AdminLockMonitorSection.createAdminLockMonitorSection({ ODataClient: ODataClient }) : {};
+    var mDetail = AdminUserDetailSection.createAdminUserDetailSection ? AdminUserDetailSection.createAdminUserDetailSection({ ODataClient: ODataClient, MessageToast: MessageToast, MessageBox: MessageBox }) : {};
+    var mMetrics = DashboardMetricsSection.createDashboardMetricsSection ? DashboardMetricsSection.createDashboardMetricsSection({ ODataClient: ODataClient, METRIC_KEYS: METRIC_KEYS }) : {};
+
+    Object.assign(DashboardController.prototype, mLogs, mFormatters, mList, mFilter, mBulk, mLockMonitor, mDetail, mMetrics);
+
+    return DashboardController;
 });

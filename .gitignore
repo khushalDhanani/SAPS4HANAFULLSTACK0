@@ -10,9 +10,20 @@ yarn-error.log*
 # Environment & Secrets
 .env
 .env.*
+.env.local
+.env.docker.local
 !.env.example
+!.env.docker.local.example
 default-env.json
 default-services.json
+secrets/*
+!secrets/README.md
+!secrets/.gitkeep
+certs/*
+!certs/README.md
+sdk/
+nwrfcsdk/
+sapnwrfcsdk/
 
 # CAP & Node Runtime Artifacts
 gen/
@@ -43,6 +54,8 @@ dist/
 coverage/
 .nyc_output/
 test-results/
+# Tier C live E2E test data is environment-specific (DEV master data); commit only testData.example.json
+/test/e2e/live/testData.json
 .jest/
 
 # Code Quality & Linters
@@ -114,3 +127,4 @@ ehthumbs.db
 
 # Agent skill eval / scratch workspaces (see skills/README.md)
 *-workspace/
+db.sqlite-*

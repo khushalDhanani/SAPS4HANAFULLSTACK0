@@ -3,6 +3,20 @@
   "authenticationMethod": "route",
   "routes": [
     {
+      "source": "^/ai/chat/stream$",
+      "target": "/ai/chat/stream",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": true
+    },
+    {
+      "source": "^/health(/.*)?$",
+      "target": "/health$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/odata/v4/(.*)$",
       "target": "/odata/v4/$1",
       "destination": "srv-api",

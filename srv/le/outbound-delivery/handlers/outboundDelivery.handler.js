@@ -1,8 +1,31 @@
 const LOG = require('../../../common/logger')('outbound-delivery');
 const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
-const s4Config = require('../../../common/s4Config');
-const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
+const { applyPaging, extractFilterParam, extractIfMatch } = require('../../../common/filterUtils');
+const { plantScope, isPlantAllowed, assertPlantsInScope } = require('../../../wm/readScope');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
+
+/** SAP posts by delivery number, so the plants on the delivery decide. */
+const assertDeliveryInScope = (req) => assertPlantsInScope(
+  req.user,
+  () => outboundDeliveryAdapter.readDeliveryPlants(req.data?.DeliveryDocument),
+  `delivery ${req.data?.DeliveryDocument}`
+);
+
+// Fields of the computed worklist rows a text search may match (OrdersDueForDelivery has no SoldToParty/Material).
+const SEARCH_FIELDS = ['SalesOrder', 'ShipToParty', 'ShippingPoint'];
+
+/** contains(field, 'term') clauses on SEARCH_FIELDS anywhere in the CQN where (the UI sends them as one OR group). */
+function searchTerms(where, out = []) {
+  for (const t of where || []) {
+    if (t && t.func === 'contains' && t.args && t.args[0] && t.args[0].ref && SEARCH_FIELDS.includes(t.args[0].ref[0]) && t.args[1] && t.args[1].val != null) {
+      out.push({ field: t.args[0].ref[0], term: String(t.args[1].val).toUpperCase() });
+    } else if (t && Array.isArray(t.xpr)) {
+      searchTerms(t.xpr, out);
+    }
+  }
+  return out;
+}
 
 /**
  * Registers Outbound Delivery business handlers on the CAP service.
@@ -25,10 +48,16 @@ function registerOutboundDeliveryHandlers(srv) {
       if (approvalStatusParam !== null) {
         filtered = filtered.filter(o => String(o.SalesDocApprovalStatus || '') === String(approvalStatusParam));
       }
+      // The rows are computed here, so CAP does not apply $filter to them: apply the text search ourselves
+      const terms = searchTerms(req.query && req.query.SELECT && req.query.SELECT.where);
+      if (terms.length) {
+        filtered = filtered.filter(o => terms.some(({ field, term }) => String(o[field] || '').toUpperCase().includes(term)));
+      }
 
       return applyPaging(filtered, req);
     } catch (err) {
       LOG.error(`Failed to read due orders: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 500, err.message);
     }
   });
@@ -36,7 +65,7 @@ function registerOutboundDeliveryHandlers(srv) {
   // 2. READ ShippingPointVH
   srv.on('READ', 'ShippingPointVH', async (req) => {
     try {
-      const shippingPoints = await outboundDeliveryAdapter.getShippingPoints();
+      const shippingPoints = await outboundDeliveryAdapter.getShippingPoints({ req });
       return applyPaging(shippingPoints, req);
     } catch (err) {
       LOG.error(`Failed to read shipping points: ${err.message}`);
@@ -52,34 +81,42 @@ function registerOutboundDeliveryHandlers(srv) {
       return req.error(400, 'SalesOrder is required to create an outbound delivery.');
     }
 
-    const configuredSPs = s4Config.getShippingPoints();
-    const resolvedSP = ShippingPoint && String(ShippingPoint).trim() !== ''
-      ? String(ShippingPoint).trim()
-      : configuredSPs[0];
+    if (!ShippingPoint || String(ShippingPoint).trim() === '') {
+      return req.error(400, 'ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
+    }
+
+    const resolvedSP = String(ShippingPoint).trim();
 
     try {
-      const result = await outboundDeliveryAdapter.createDeliveryFromOrder({
+      // shortcut: the order's own plant has no proven read here, so its shipping point decides; read VBAP-WERKS once verified.
+      const allowedPlants = plantScope(req.user);
+      if (allowedPlants !== null) await outboundDeliveryAdapter.assertShippingPointInPlants(resolvedSP, allowedPlants);
+      const ifMatch = extractIfMatch(req);
+      const payload = {
         salesOrder: SalesOrder,
         shippingPoint: resolvedSP,
         deliveryDate: DeliveryDate
-      });
+      };
+      const result = ifMatch
+        ? await outboundDeliveryAdapter.createDeliveryFromOrder(payload, { ifMatch })
+        : await outboundDeliveryAdapter.createDeliveryFromOrder(payload);
       return result.OutboundDelivery || '';
     } catch (err) {
       LOG.error(`Error in createOutboundDelivery (${err.status || 500}): ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 500, err.message);
     }
   });
 
   // 4. Function getDefaultShippingPoint
   srv.on('getDefaultShippingPoint', async () => {
-    const configuredSPs = s4Config.getShippingPoints();
     return {
-      ShippingPoint: configuredSPs[0],
-      ShippingPoints: configuredSPs
+      ShippingPoint: '',
+      ShippingPoints: []
     };
   });
 
-  // 5. PGI / billing on an existing delivery — SAP's result only, never a synthesized number
+  // 5. Follow-up / billing on an existing delivery — SAP's result only, never a synthesized number
   srv.on('getDeliveryStatus', async (req) => {
     try {
       const status = await outboundDeliveryAdapter.getDeliveryStatus(req.data?.DeliveryDocument);
@@ -87,15 +124,6 @@ function registerOutboundDeliveryHandlers(srv) {
       return status;
     } catch (err) {
       LOG.error(`getDeliveryStatus failed: ${err.message}`);
-      return req.error(err.status || 502, err.message);
-    }
-  });
-
-  srv.on('postGoodsIssue', async (req) => {
-    try {
-      return await outboundDeliveryAdapter.postGoodsIssue(req.data?.DeliveryDocument);
-    } catch (err) {
-      LOG.error(`postGoodsIssue failed: ${err.message}`);
       return req.error(err.status || 502, err.message);
     }
   });
@@ -112,17 +140,31 @@ function registerOutboundDeliveryHandlers(srv) {
   srv.on('createBillingDocument', async (req) => {
     const { DeliveryDocument, BillingDocumentType, BillingDocumentDate } = req.data || {};
     try {
-      return await outboundDeliveryAdapter.createBillingDocument({ deliveryDocument: DeliveryDocument, billingDocumentType: BillingDocumentType, billingDocumentDate: BillingDocumentDate });
+      await assertDeliveryInScope(req);
+      const ifMatch = extractIfMatch(req);
+      const payload = { deliveryDocument: DeliveryDocument, billingDocumentType: BillingDocumentType, billingDocumentDate: BillingDocumentDate };
+      return ifMatch
+        ? await outboundDeliveryAdapter.createBillingDocument(payload, { ifMatch })
+        : await outboundDeliveryAdapter.createBillingDocument(payload);
     } catch (err) {
       LOG.error(`createBillingDocument failed: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 502, err.message);
     }
+  });
+
+  // Function getPlantContext: the user's plants for the worklist plant selector. Same scope the adapter enforces;
+  // an Admin (unrestricted) may still have a Plant attribute, which pre-selects it.
+  srv.on('getPlantContext', (req) => {
+    const scope = plantScope(req.user);
+    const own = [].concat(req.user?.attr?.Plant || []).map((p) => String(p).trim().toUpperCase()).filter(Boolean);
+    return { plants: scope === null ? own : scope, unrestricted: scope === null };
   });
 
   // 6. Function getOrdersDueMetrics: counts over the full due set (same SAP read as the worklist, unpaged)
   srv.on('getOrdersDueMetrics', async (req) => {
     try {
-      const rows = await outboundDeliveryAdapter.getOrdersDueForDelivery({});
+      const rows = await outboundDeliveryAdapter.getOrdersDueForDelivery(req);
       if (!Array.isArray(rows)) {
         throw new Error('Orders due for delivery could not be read from S/4HANA');
       }
@@ -154,6 +196,7 @@ function registerOutboundDeliveryHandlers(srv) {
       };
     } catch (err) {
       LOG.error(`Failed to compute orders-due metrics: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 502, err.message);
     }
   });
@@ -181,8 +224,18 @@ function registerOutboundDeliveryHandlers(srv) {
 
   srv.on('createDeliveryWithoutRef', async (req) => {
     const data = req.data || {};
+    // Server-side plant scope: only plants the user is authorized for (Admin: unrestricted)
+    if (!isPlantAllowed(data.Plant, plantScope(req.user))) {
+      return req.error(403, `Plant ${data.Plant || '(none)'} is outside the authenticated user's plant scope`);
+    }
+    // A partly typed sales area could mix with another one read from SAP.
+    const salesArea = [data.SalesOrganization, data.DistributionChannel, data.Division].map((v) => String(v || '').trim());
+    if (salesArea.some(Boolean) && !salesArea.every(Boolean)) {
+      return req.error(400, 'Enter Sales Organization, Distribution Channel and Division together, or leave all three empty.');
+    }
     try {
-      const result = await deliveryNoRefAdapter.createDeliveryWithoutRef({
+      const ifMatch = extractIfMatch(req);
+      const payload = {
         shippingPoint: data.ShippingPoint,
         deliveryType: data.DeliveryDocumentType,
         salesOrg: data.SalesOrganization,
@@ -193,10 +246,15 @@ function registerOutboundDeliveryHandlers(srv) {
         storageLocation: data.StorageLocation,
         plannedGoodsIssueDate: data.PlannedGoodsIssueDate,
         items: data.Items
-      });
+      };
+      // The user types the sales area in this dialog; SAP validates it and the plant scope is checked above.
+      const result = ifMatch
+        ? await deliveryNoRefAdapter.createDeliveryWithoutRef(payload, { ifMatch, isTrusted: true })
+        : await deliveryNoRefAdapter.createDeliveryWithoutRef(payload, { isTrusted: true });
       return result;
     } catch (err) {
       LOG.error(`Error in createDeliveryWithoutRef (${err.status || 500}): ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 500, err.message);
     }
   });
@@ -214,3 +272,4 @@ function registerOutboundDeliveryHandlers(srv) {
 }
 
 module.exports = registerOutboundDeliveryHandlers;
+module.exports.searchTerms = searchTerms;

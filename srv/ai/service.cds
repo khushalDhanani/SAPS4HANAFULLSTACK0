@@ -1,4 +1,4 @@
-@(requires: 'authenticated-user')
+@(requires: ['Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
 @path: '/odata/v4/ai'
 @cds.server.body_parser.limit: '4mb'   // chat context (up to 300 POs + aggregates + history) exceeds the 100kb default
 service AIService {
@@ -14,9 +14,11 @@ service AIService {
         content : String;
     }
 
-    /** Single question to the configured LLM (NVIDIA NIM). */
+    /** Single question to the LLM chosen by AI_PROVIDER. */
+    @(requires: ['Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     action askAI(question : String not null, system : String, model : String) returns AIAnswer;
 
     /** Multi-turn chat; client sends the conversation so far (last message must be from user). */
+    @(requires: ['Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     action chat(messages : many ChatMessage not null, system : String, model : String) returns AIAnswer;
 }

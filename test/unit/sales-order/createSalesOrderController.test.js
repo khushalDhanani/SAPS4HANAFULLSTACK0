@@ -119,6 +119,8 @@ const MockBaseController = {
     },
     extend: (name, proto) => {
         function Controller() {
+            this.getText = (_key, _args, fallback) => fallback;
+            this.blockSubmitIfNotConfirmed = require('../helpers/realBlockSubmit').realBlockSubmit();
             this.onNavBack = jest.fn();
             if (proto) {
                 Object.assign(this, proto);
@@ -139,7 +141,7 @@ beforeAll(() => {
     global.sap = {
         ui: {
             define: jest.fn((deps, factory) => {
-                if (deps.length === 1 && deps[0] === "sap/ui/model/json/JSONModel") {
+                if (deps[0] === "sap/ui/model/json/JSONModel" && deps.indexOf("saps4hana/fiori/controller/BaseController") === -1) {
                     SalesOrderModel = factory(MockJSONModel);
                 } else {
                     ControllerClass = factory(
@@ -195,10 +197,17 @@ describe("CreateSalesOrder Controller", () => {
         controller.byId = jest.fn().mockReturnValue(null);
     });
 
-    test("onInit sets up initial newOrder model and attaches route matched", () => {
+    test("onInit binds the newOrder model to the view", () => {
         controller.onInit();
         expect(mockView.setModel).toHaveBeenCalledWith(expect.any(MockJSONModel), "newOrder");
+        expect(mockView.getModel("newOrder").getProperty("/items")).toHaveLength(1);
+    });
+
+    test("onInit attaches _onRouteMatched to the createSalesOrder route", () => {
+        controller.onInit();
         expect(mockRouter.getRoute).toHaveBeenCalledWith("createSalesOrder");
+        const oRoute = mockRouter.getRoute.mock.results[0].value;
+        expect(oRoute.attachPatternMatched).toHaveBeenCalledWith(controller._onRouteMatched, controller);
     });
 
     test("onAddItem appends a new item to the order items array", () => {
@@ -236,9 +245,7 @@ describe("CreateSalesOrder Controller", () => {
         expect(oModel.getProperty("/items")).toHaveLength(1);
     });
 
-    test("onSave submits valid order and displays success dialog", async () => {
-        controller.onInit();
-        const oModel = mockView.getModel("newOrder");
+    function fillValidOrder(oModel) {
         oModel.setProperty("/header/SalesOrderType", "ZDOM");
         oModel.setProperty("/header/SalesOrganization", "1000");
         oModel.setProperty("/header/DistributionChannel", "10");
@@ -252,18 +259,76 @@ describe("CreateSalesOrder Controller", () => {
         oModel.setProperty("/items/0/Plant", "1120");
         oModel.setProperty("/items/0/OrderQuantity", "5.000");
         oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+    }
+
+    test("onSave sends the form values to the service once", async () => {
+        controller.onInit();
+        fillValidOrder(mockView.getModel("newOrder"));
 
         controller.onSave();
-
-        // Allow promise microtask to resolve
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(mockSalesOrderService.createSalesOrder).toHaveBeenCalled();
+        expect(mockSalesOrderService.createSalesOrder).toHaveBeenCalledTimes(1);
+        const oPayload = mockSalesOrderService.createSalesOrder.mock.calls[0][0];
+        expect(oPayload.header).toMatchObject({
+            SalesOrderType: "ZDOM",
+            SalesOrganization: "1000",
+            DistributionChannel: "10",
+            OrganizationDivision: "52",
+            TransactionCurrency: "INR",
+            SoldToParty: "10135",
+            PurchaseOrderNumber: "PO-AUTO-01",
+            PaymentTerms: "0001",
+            PaymentTermCode: "0001",
+            ContactPerson: "25116"
+        });
+        expect(oPayload.items).toHaveLength(1);
+        expect(oPayload.items[0]).toMatchObject({
+            SalesOrderItem: "10",
+            Material: "4000000001",
+            Plant: "1120",
+            OrderQuantity: 5,
+            OrderQuantityUnit: "KG"
+        });
+    });
+
+    test("onSave shows the SAP order number in a success dialog", async () => {
+        controller.onInit();
+        fillValidOrder(mockView.getModel("newOrder"));
+
+        controller.onSave();
+        await Promise.resolve();
+        await Promise.resolve();
+
         expect(mockMessageBox.success).toHaveBeenCalledWith(
             expect.stringContaining("5000465"),
             expect.objectContaining({ title: "Sales Order Created" })
         );
+    });
+
+    test("onSave does not call the service when a required header field is empty", () => {
+        controller.onInit();
+        const oModel = mockView.getModel("newOrder");
+        fillValidOrder(oModel);
+        oModel.setProperty("/header/SoldToParty", "");
+
+        controller.onSave();
+
+        expect(mockSalesOrderService.createSalesOrder).not.toHaveBeenCalled();
+        expect(oModel.getProperty("/errors/SoldToParty/state")).toBe("Error");
+    });
+
+    test("onSave does not call the service when an item has no plant", () => {
+        controller.onInit();
+        const oModel = mockView.getModel("newOrder");
+        fillValidOrder(oModel);
+        oModel.setProperty("/items/0/Plant", "");
+
+        controller.onSave();
+
+        expect(mockSalesOrderService.createSalesOrder).not.toHaveBeenCalled();
+        expect(oModel.getProperty("/items/0/errors/Plant/state")).toBe("Error");
     });
 
     test("onSave treats a read-back mismatch as created: warns with the order number and resets the form", async () => {
@@ -301,6 +366,37 @@ describe("CreateSalesOrder Controller", () => {
         oOptions.onClose("Close");
         expect(mockView.getModel("newOrder").getProperty("/header/SoldToParty")).toBe("");
         expect(mockRouter.navTo).not.toHaveBeenCalled();
+    });
+
+    it("onSave turns submit off after a not-confirmed answer, so a second press sends nothing", async () => {
+        controller.onInit();
+        const oModel = mockView.getModel("newOrder");
+        oModel.setProperty("/header/SalesOrderType", "ZDOM");
+        oModel.setProperty("/header/SalesOrganization", "1000");
+        oModel.setProperty("/header/DistributionChannel", "10");
+        oModel.setProperty("/header/OrganizationDivision", "52");
+        oModel.setProperty("/header/TransactionCurrency", "INR");
+        oModel.setProperty("/header/SoldToParty", "10135");
+        oModel.setProperty("/header/PaymentTerms", "PT11");
+        oModel.setProperty("/header/ContactPerson", "25116");
+        oModel.setProperty("/items/0/Material", "4000000001");
+        oModel.setProperty("/items/0/Plant", "1120");
+        oModel.setProperty("/items/0/OrderQuantity", "5.000");
+        oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+
+        mockSalesOrderService.createSalesOrder.mockClear();
+        mockSalesOrderService.createSalesOrder.mockRejectedValueOnce(new Error("SAP did not answer this request, so the result is NOT confirmed: it may have been saved. Check it in SAP before trying again."));
+
+        controller.onSave();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(oModel.getProperty("/submitBlocked")).toBe(true);
+        expect(mockMessageBox.error.mock.calls[0][0]).toContain("Create is turned off");
+        expect(mockMessageBox.error.mock.calls[0][0]).not.toContain("Failed to create");
+
+        controller.onSave();
+
+        expect(mockSalesOrderService.createSalesOrder).toHaveBeenCalledTimes(1);
     });
 
     test("_loadConfigurationAndDefaults loads server defaults and applies to empty fields", async () => {

@@ -1,4 +1,5 @@
 const LOG = require('../../../common/logger')('customer-invoice');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 const customerInvoiceAdapter = require('../../../integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter');
 const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
 
@@ -157,6 +158,7 @@ function registerCustomerInvoiceHandlers(srv) {
       return await customerInvoiceAdapter.postBillingDocumentToAccounting({ billingDocument: doc }, req);
     } catch (err) {
       LOG.error(`releaseInvoiceToAccounting failed for ${doc}: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 500, err.message);
     }
   });
@@ -179,6 +181,7 @@ function registerCustomerInvoiceHandlers(srv) {
       return await customerInvoiceAdapter.cancelBillingDocument({ billingDocument: doc }, req);
     } catch (err) {
       LOG.error(`cancelBillingDocument failed for ${doc}: ${err.message}`);
+      throwIfTextMustShow(err);
       return req.error(err.status || 500, err.message);
     }
   });

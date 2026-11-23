@@ -1,6 +1,6 @@
 const cds = require('@sap/cds');
 const cdsTest = cds.test(__dirname + '/../../../');
-cdsTest.defaults.auth = { username: 'alice', password: '' };
+cdsTest.defaults.auth = { username: 'khushal', password: '' };
 const { GET } = cdsTest;
 
 describe('Integration: Metadata', () => {

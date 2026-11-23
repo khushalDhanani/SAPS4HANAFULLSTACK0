@@ -58,7 +58,5 @@ const poValueHelpConfig = [
 ];
 
 module.exports = {
-    poValueHelpConfig,
-    FS_VALUE_HELP_ENTITIES,
-    MAINT_VALUE_HELP_ENTITIES
+    poValueHelpConfig
 };

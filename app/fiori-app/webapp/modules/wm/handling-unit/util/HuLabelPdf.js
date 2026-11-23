@@ -7,6 +7,9 @@ sap.ui.define([
     var PT2MM = 25.4 / 72; // jsPDF text y is the baseline; CSS top is the box top. Convert per font size.
     function ascentMm(pt) { return pt * PT2MM * 0.8; } // ~cap/ascent fraction for Helvetica
 
+    var BORDER_MM = 0.5 * 25.4 / 96; // 0.5 CSS px, solid black
+    var BORDER_INSET_MM = 1; // printers and viewers drop a line on the page edge; label padding is >= 1.5 mm
+
     var _pJsPdf = null;
 
     /** Lazily load the locally bundled jsPDF (UMD global `jspdf.jsPDF`) on first use; never on app startup. */
@@ -29,6 +32,11 @@ sap.ui.define([
     function drawLabel(doc, d, L) {
         var f = L.fonts;
         doc.setTextColor(0, 0, 0);
+
+        // 0.5px solid border, 1 mm inside the page edge
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(BORDER_MM);
+        doc.rect(BORDER_INSET_MM, BORDER_INSET_MM, L.page.wMm - 2 * BORDER_INSET_MM, L.page.hMm - 2 * BORDER_INSET_MM, "S");
 
         // MATERIAL NAME (caption where shown) + bold lines from the shared wrap (identical breaks to the HTML)
         if (d.materialName) {

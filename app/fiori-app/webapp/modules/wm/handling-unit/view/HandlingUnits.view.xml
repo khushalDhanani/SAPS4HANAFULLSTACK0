@@ -77,6 +77,7 @@
                         <OverflowToolbar>
                             <Title id="huCount" text="{= ${i18n>huListTitle} + ' (' + ${huView>/items}.length + ')' }" level="H2" />
                             <ToolbarSpacer />
+                            <Button id="huLoadMore" icon="sap-icon://download" text="{i18n>huLoadMore}" visible="{huView>/canLoadMore}" press=".onLoadMore" enabled="{= !${huView>/busy} }" />
                             <Button id="huCreateBtn" icon="sap-icon://add" text="{i18n>huCreate}" type="Emphasized" press=".onOpenCreate" enabled="{= !${huView>/busy} }" />
                             <Button id="huExport" icon="sap-icon://excel-attachment" text="{i18n>huExport}" press=".onExport" enabled="{= ${huView>/items}.length > 0 }" />
                             <Button id="huPrintAll" icon="sap-icon://print" text="{i18n>huPrintAll}" tooltip="{i18n>huPrintAllTip}" type="Emphasized" press=".onPrintAll" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/items}.length > 0 }">
@@ -91,6 +92,12 @@
                             <Button id="huDownloadSelected" icon="sap-icon://download" text="{= ${i18n>huDownloadSelected} + (${huView>/selectedCount} > 0 ? ' (' + ${huView>/selectedCount} + ')' : '') }" tooltip="{i18n>huDownloadSelectedTip}" press=".onDownloadSelected" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/selectedCount} > 0 }">
                                 <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
                             </Button>
+                            <Button id="huQrDownloadSelected" icon="sap-icon://qr-code" text="{= ${i18n>huQrDownloadSelected} + (${huView>/selectedCount} > 0 ? ' (' + ${huView>/selectedCount} + ')' : '') }" tooltip="{i18n>huQrDownloadSelectedTip}" press=".onDownloadQrSelected" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/selectedCount} > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
+                            </Button>
+                            <Button id="huQrDownloadAll" icon="sap-icon://qr-code" text="{i18n>huQrDownloadAll}" tooltip="{i18n>huQrDownloadAllTip}" press=".onDownloadQrAll" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/items}.length > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
+                            </Button>
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
@@ -101,7 +108,7 @@
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huColStatus}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColReference}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColCreated}" /></Column>
-                        <Column width="6rem" hAlign="Center"><Text text="{i18n>huColActions}" /></Column>
+                        <Column width="8rem" hAlign="Center"><Text text="{i18n>huColActions}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem type="Navigation" press=".onOpenDetail">
@@ -115,7 +122,8 @@
                                 <Text text="{= ${huView>CreatedByUser} + ' · ' + ${huView>CreationDateTime} }" />
                                 <HBox justifyContent="Center" renderType="Bare">
                                     <Button icon="sap-icon://print" type="Transparent" tooltip="{i18n>huRowPrintTip}" press=".onRowPrint" enabled="{= !${huView>/printing} }" class="sapUiTinyMarginEnd" />
-                                    <Button icon="sap-icon://download" type="Transparent" tooltip="{i18n>huRowDownloadTip}" press=".onRowDownload" enabled="{= !${huView>/printing} }" />
+                                    <Button icon="sap-icon://download" type="Transparent" tooltip="{i18n>huRowDownloadTip}" press=".onRowDownload" enabled="{= !${huView>/printing} }" class="sapUiTinyMarginEnd" />
+                                    <Button icon="sap-icon://qr-code" type="Transparent" tooltip="{i18n>huRowQrTip}" press=".onRowQr" />
                                 </HBox>
                             </cells>
                         </ColumnListItem>

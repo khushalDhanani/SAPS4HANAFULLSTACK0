@@ -3,7 +3,6 @@
  */
 
 let mmFormatter;
-let fiFormatter;
 
 const mockDateFormat = {
     getDateInstance: jest.fn(_options => ({
@@ -22,43 +21,15 @@ const originalSap = global.sap;
 global.sap = {
     ui: {
         define: function (deps, factory) {
-            const hasNumberFormat = deps.some(d => d && d.includes("NumberFormat"));
-            if (hasNumberFormat) {
-                // FI Formatter
-                const mockNumberFormat = {
-                    getCurrencyInstance: jest.fn(() => ({
-                        format: jest.fn(v => Number(v).toFixed(2))
-                    }))
-                };
-                fiFormatter = factory(mockNumberFormat, mockDateFormat);
-            } else {
-                // MM / Common Formatter
-                mmFormatter = factory(mockDateFormat);
-            }
+            mmFormatter = factory(mockDateFormat);
         }
     }
 };
 
 require('../../../app/fiori-app/webapp/model/formatter');
-require('../../../app/fiori-app/webapp/modules/fi/journal-entry/model/formatter');
 
 describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
     describe('Common / MM Formatter (webapp/model/formatter.js)', () => {
-        let oContext;
-        const mockResourceBundle = {
-            getText: jest.fn(k => k === "statusComplete" ? "Complete" : "Incomplete")
-        };
-
-        beforeEach(() => {
-            oContext = {
-                getOwnerComponent: () => ({
-                    getModel: () => ({
-                        getResourceBundle: () => mockResourceBundle
-                    })
-                })
-            };
-        });
-
         it('should return empty string for falsy date values', () => {
             expect(mmFormatter.formatDate(null)).toBe("");
             expect(mmFormatter.formatDate(undefined)).toBe("");
@@ -88,17 +59,6 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
 
         it('should return raw value for invalid date strings', () => {
             expect(mmFormatter.formatDate("not-a-date")).toBe("not-a-date");
-        });
-
-        it('should correctly format completeness status, icon, and text without document type', () => {
-            expect(mmFormatter.completenessState(true)).toBe("Success");
-            expect(mmFormatter.completenessState(false)).toBe("Information");
-
-            expect(mmFormatter.completenessIcon(true)).toBe("sap-icon://accept");
-            expect(mmFormatter.completenessIcon(false)).toBe("sap-icon://edit");
-
-            expect(mmFormatter.completenessText.call(oContext, true)).toBe("Complete");
-            expect(mmFormatter.completenessText.call(oContext, false)).toBe("Incomplete");
         });
 
         it('should correctly format authentic Display Status, state, and icon across S/4HANA status fields', () => {
@@ -193,28 +153,10 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
             expect(mmFormatter.purchasingOrgDisplay("AE01", "101")).toBe("AE01 / 101");
             expect(mmFormatter.purchasingOrgDisplay("", "")).toBe("-");
 
-            expect(mmFormatter.createdByDisplay("Shriram Andhale", "SANDHLE")).toBe("Shriram Andhale (SANDHLE)");
-            expect(mmFormatter.createdByDisplay("", "SANDHLE")).toBe("SANDHLE");
+            expect(mmFormatter.createdByDisplay("Shriram Andhale", "SAP_USER_23")).toBe("Shriram Andhale (SAP_USER_23)");
+            expect(mmFormatter.createdByDisplay("", "SAP_USER_23")).toBe("SAP_USER_23");
             expect(mmFormatter.createdByDisplay("Shriram Andhale", "")).toBe("Shriram Andhale");
             expect(mmFormatter.createdByDisplay("", "")).toBe("-");
-        });
-    });
-
-    describe('FI Formatter (modules/fi/journal-entry/model/formatter.js)', () => {
-        it('should return empty string for falsy date values', () => {
-            expect(fiFormatter.formatDate(null)).toBe("");
-            expect(fiFormatter.formatDate(undefined)).toBe("");
-            expect(fiFormatter.formatDate("")).toBe("");
-        });
-
-        it('should format ISO YYYY-MM-DD string to DD-MM-YYYY', () => {
-            expect(fiFormatter.formatDate("2026-09-05")).toBe("05-09-2026");
-            expect(fiFormatter.formatDate("2025-07-15")).toBe("15-07-2025");
-        });
-
-        it('should format Date instance to DD-MM-YYYY', () => {
-            const oDate = new Date(2026, 8, 5);
-            expect(fiFormatter.formatDate(oDate)).toBe("05-09-2026");
         });
     });
 

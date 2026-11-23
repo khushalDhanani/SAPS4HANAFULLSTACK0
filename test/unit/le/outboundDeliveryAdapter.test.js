@@ -1,5 +1,4 @@
 const { OutboundDeliveryAdapter, _formatODataV2Date, _parseODataV2Date } = require('../../../srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
-const s4Config = require('../../../srv/common/s4Config');
 
 describe('Unit: OutboundDeliveryAdapter', () => {
   let adapter;
@@ -62,7 +61,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
         }
       });
 
-      const orders = await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
+      const orders = await adapter.getOrdersDueForDelivery({ shippingPoint: '1120', plant: '1120' });
 
       expect(mockClient.get).toHaveBeenCalledTimes(2);
       const url = mockClient.get.mock.calls[0][0];
@@ -103,7 +102,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
         data: { d: { results: [] } }
       });
 
-      const orders = await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
+      const orders = await adapter.getOrdersDueForDelivery({ shippingPoint: '1120', plant: '1120' });
       expect(orders).toHaveLength(1);
       expect(orders[0].SalesOrder).toBe('5000999');
       expect(orders[0].DelivBlockReasonForSchedLine).toBe('01');
@@ -142,7 +141,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
         }
       });
 
-      const orders = await adapter.getOrdersDueForDelivery({ salesOrder: '5000461' });
+       const orders = await adapter.getOrdersDueForDelivery({ salesOrder: '5000461', plant: '1120' });
       expect(orders).toHaveLength(1);
       expect(orders[0].SalesOrder).toBe('5000461');
       expect(orders[0].SalesDocApprovalStatus).toBe('A');
@@ -176,7 +175,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
         }
       });
 
-      const orders = await adapter.getOrdersDueForDelivery({ salesOrder: '5000104' });
+      const orders = await adapter.getOrdersDueForDelivery({ salesOrder: '5000104', plant: '1120' });
       expect(orders).toHaveLength(1);
       expect(orders[0].SalesOrder).toBe('5000104');
       expect(orders[0].SalesDocApprovalStatus).toBe('B');
@@ -196,43 +195,244 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       });
 
       // First call - queries C_SalesOrderDueForDeliveryVH and _fetchApprovalStatusMap
-      await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
+      await adapter.getOrdersDueForDelivery({ shippingPoint: '1120', plant: '1120' });
       expect(mockClient.get).toHaveBeenCalledTimes(2);
 
       // Second call immediately after - uses cached approval map, queries only C_SalesOrderDueForDeliveryVH
-      await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
+      await adapter.getOrdersDueForDelivery({ shippingPoint: '1120', plant: '1120' });
       expect(mockClient.get).toHaveBeenCalledTimes(3); // 2 + 1 = 3 (approval map was not queried again)
 
       // Third call with forceRefresh - bypasses cache and queries approval map again
-      await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' }, { forceRefresh: true });
+      await adapter.getOrdersDueForDelivery({ shippingPoint: '1120', plant: '1120' }, { forceRefresh: true });
       expect(mockClient.get).toHaveBeenCalledTimes(5); // 3 + 2 = 5
     });
 
     test('escapes embedded quotes in filters using odataString', async () => {
       mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
 
-      await adapter.getOrdersDueForDelivery({ shippingPoint: "11'2" });
+      await adapter.getOrdersDueForDelivery({ shippingPoint: "11'2", plant: '1120' });
       const url = mockClient.get.mock.calls[0][0];
       expect(url).toContain("ShippingPoint eq '11''2'");
     });
 
-    test('defaults to configured shipping points when no shipping point filter is provided', async () => {
+    test('fails closed (HTTP 400) when no plant resolves from query, options, or user context', async () => {
       mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
 
-      await adapter.getOrdersDueForDelivery({});
+      await expect(adapter.getOrdersDueForDelivery({})).rejects.toMatchObject({
+        status: 400,
+        message: 'No plant resolved for orders due for delivery. Query failed closed.'
+      });
+      expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    test('fails closed (HTTP 400) for an Admin without a Plant attribute and without a Plant filter', async () => {
+      const user = { attr: {}, is: (r) => r === 'Admin' };
+      await expect(adapter.getOrdersDueForDelivery({ query: { SELECT: {} } }, { user })).rejects.toMatchObject({ status: 400 });
+      expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    /** RFC double: TVSTZ rows of plant 1120 only, so the shipping point filter proves which plant was used. */
+    const tvstzOf1120 = {
+      readTable: async (_table, _fields, where) => (where[0] === "WERKS = '1120'" ? [{ WERKS: '1120', VSTEL: 'WAVG' }] : [])
+    };
+
+    test('an Admin without a Plant attribute selects the shipping points of the $filter Plant', async () => {
+      const scoped = new OutboundDeliveryAdapter({ client: mockClient, rfc: tvstzOf1120 });
+      const user = { attr: {}, is: (r) => r === 'Admin' };
+      const req = { query: { SELECT: { where: [{ ref: ['Plant'] }, '=', { val: '1120' }] } } };
+
+      await scoped.getOrdersDueForDelivery(req, { user });
+
+      expect(mockClient.get.mock.calls[0][0]).toContain("$filter=ShippingPoint eq 'WAVG'");
+    });
+
+    test('the metrics function parameter Plant in req.data selects the shipping points of that plant', async () => {
+      const scoped = new OutboundDeliveryAdapter({ client: mockClient, rfc: tvstzOf1120 });
+      const user = { attr: {}, is: (r) => r === 'Admin' };
+
+      await scoped.getOrdersDueForDelivery({ data: { Plant: '1120' } }, { user });
+
+      expect(mockClient.get.mock.calls[0][0]).toContain("$filter=ShippingPoint eq 'WAVG'");
+    });
+
+    test('fails closed (HTTP 403) when authenticated non-admin user has no authorized plants', async () => {
+      const user = { attr: { Plant: [] }, is: () => false };
+      await expect(adapter.getOrdersDueForDelivery({}, { user })).rejects.toMatchObject({ status: 403, message: 'User has no authorized plants. Access denied.' });
+      expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    test('tamper test: rejects query.plant outside authenticated non-admin user authorized plants with HTTP 403', async () => {
+      const user = { attr: { Plant: ['1120'] }, is: () => false };
+      await expect(adapter.getOrdersDueForDelivery({ plant: '1130' }, { user })).rejects.toMatchObject({
+        status: 403,
+        message: "Plant '1130' is outside user's authorized plants: [1120]. Access denied."
+      });
+      expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    test('tamper test: rejects CAP request $filter Plant outside authenticated user authorized plants with HTTP 403', async () => {
+      const capReq = {
+        user: { attr: { Plant: ['1120'] }, is: () => false },
+        query: {
+          SELECT: {
+            where: [{ ref: ['Plant'] }, '=', { val: '1130' }]
+          }
+        }
+      };
+      await expect(adapter.getOrdersDueForDelivery(capReq)).rejects.toMatchObject({
+        status: 403,
+        message: "Plant '1130' is outside user's authorized plants: [1120]. Access denied."
+      });
+      expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    describe('plant scope on the shipping point filter', () => {
+      const clerk1120 = { attr: { Plant: ['1120'] }, is: () => false };
+      const dueReads = () => mockClient.get.mock.calls.map(([url]) => url).filter((url) => url.includes('C_SalesOrderDueForDeliveryVH'));
+      const capFilter = (user, point) => ({ user, query: { SELECT: { where: [{ ref: ['ShippingPoint'] }, '=', { val: point }] } } });
+      const tvstz = (byPlant) => ({ readTable: async (_t, _f, where) => (byPlant[where[0].slice(9, 13)] || []).map((VSTEL) => ({ VSTEL })) });
+      // Without this the adapter falls back to the shared resolver, which is not what these cases are about.
+      const scopedAdapter = (rfc) => { const a = new OutboundDeliveryAdapter({ client: mockClient, rfc }); a.businessConfigResolver = null; return a; };
+
+      test('refuses with 503 and reads no orders when the shipping points of the plant cannot be read', async () => {
+        const scoped = scopedAdapter({ readTable: async () => { throw new Error('RFC down'); } });
+        await expect(scoped.getOrdersDueForDelivery({}, { user: clerk1120 })).rejects.toMatchObject({
+          status: 503,
+          message: 'The shipping points of plant 1120 could not be read from SAP, so nothing was read or posted. Try again.'
+        });
+        expect(dueReads()).toEqual([]);
+      });
+
+      test('reads again once SAP recovers: the failed lookup is not cached', async () => {
+        let up = false;
+        const scoped = scopedAdapter({ readTable: async () => { if (!up) throw new Error('RFC down'); return [{ VSTEL: 'WAVG' }]; } });
+        await expect(scoped.getOrdersDueForDelivery({}, { user: clerk1120, skipApprovalCheck: true })).rejects.toMatchObject({ status: 503 });
+        up = true;
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        await expect(scoped.getOrdersDueForDelivery({}, { user: clerk1120, skipApprovalCheck: true })).resolves.toEqual(expect.any(Array));
+        expect(dueReads()[0]).toContain("$filter=ShippingPoint eq 'WAVG'");
+      });
+
+      test('refuses with 403 and reads no orders for a shipping point of another plant', async () => {
+        const scoped = scopedAdapter(tvstz({ 1120: ['WAVG'] }));
+        await expect(scoped.getOrdersDueForDelivery(capFilter(clerk1120, '9999'))).rejects.toMatchObject({
+          status: 403,
+          message: "Shipping point '9999' is outside user's authorized plants: [1120]. Access denied."
+        });
+        expect(dueReads()).toEqual([]);
+      });
+
+      test('refuses with 503 and reads no orders when a named shipping point cannot be checked', async () => {
+        const scoped = scopedAdapter({ readTable: async () => { throw new Error('RFC down'); } });
+        await expect(scoped.getOrdersDueForDelivery(capFilter(clerk1120, 'WAVG'))).rejects.toMatchObject({ status: 503 });
+        expect(dueReads()).toEqual([]);
+      });
+
+      test('allows a shipping point of the user\'s plant, in any case', async () => {
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        const scoped = scopedAdapter(tvstz({ 1120: ['WAVG'] }));
+        await scoped.getOrdersDueForDelivery(capFilter(clerk1120, 'wavg'), { skipApprovalCheck: true });
+        expect(dueReads()[0]).toContain("ShippingPoint eq 'wavg'");
+      });
+
+      test('a user with two plants reaches a shipping point of the second plant', async () => {
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        const scoped = scopedAdapter(tvstz({ 1120: ['WAVG'], 1130: ['WBBB'] }));
+        const twoPlants = { attr: { Plant: ['1120', '1130'] }, is: () => false };
+        await scoped.getOrdersDueForDelivery(capFilter(twoPlants, 'WBBB'), { skipApprovalCheck: true });
+        expect(dueReads()[0]).toContain("ShippingPoint eq 'WBBB'");
+      });
+
+      test('with a Plant filter, a shipping point of the user\'s other plant is refused', async () => {
+        const scoped = scopedAdapter(tvstz({ 1120: ['WAVG'], 1130: ['WBBB'] }));
+        const twoPlants = { attr: { Plant: ['1120', '1130'] }, is: () => false };
+        const req = { user: twoPlants, query: { SELECT: { where: [{ ref: ['Plant'] }, '=', { val: '1120' }, 'and', { ref: ['ShippingPoint'] }, '=', { val: 'WBBB' }] } } };
+        await expect(scoped.getOrdersDueForDelivery(req)).rejects.toMatchObject({ status: 403 });
+        expect(dueReads()).toEqual([]);
+      });
+
+      test('an Admin is not limited: another plant\'s shipping point is read, and no lookup is needed', async () => {
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        const lookup = jest.fn(async () => { throw new Error('must not be read'); });
+        const scoped = scopedAdapter({ readTable: lookup });
+        const admin = { attr: { Plant: ['1120'] }, is: (r) => r === 'Admin' };
+        await scoped.getOrdersDueForDelivery(capFilter(admin, '9999'), { skipApprovalCheck: true });
+        expect(dueReads()[0]).toContain("ShippingPoint eq '9999'");
+        expect(lookup).not.toHaveBeenCalled();
+      });
+
+      test('an Admin still reads when the lookup is empty', async () => {
+        mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+        const scoped = scopedAdapter(tvstz({}));
+        const admin = { attr: { Plant: ['1120'] }, is: (r) => r === 'Admin' };
+        await scoped.getOrdersDueForDelivery({}, { user: admin, skipApprovalCheck: true });
+        expect(dueReads()).toHaveLength(1);
+      });
+    });
+
+    test('takes plant strictly from authenticated user attribute when query specifies no plant', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+      const spyTvstz = jest.spyOn(adapter, 'getShippingPointsForPlant').mockResolvedValue(['1112', 'WAVG']);
+
+      const user = { attr: { Plant: ['1120'] }, is: () => false };
+      await adapter.getOrdersDueForDelivery({}, { user });
+
+      expect(spyTvstz).toHaveBeenCalledWith('1120', expect.any(Object));
       const url = mockClient.get.mock.calls[0][0];
-      const configuredSPs = s4Config.getShippingPoints();
-      if (configuredSPs.length > 1) {
-        configuredSPs.forEach(sp => expect(url).toContain(`ShippingPoint eq '${sp}'`));
-      } else {
-        expect(url).toContain(`ShippingPoint eq '${configuredSPs[0]}'`);
-      }
+      expect(url).toContain("(ShippingPoint eq '1112' or ShippingPoint eq 'WAVG')");
+
+      spyTvstz.mockRestore();
+    });
+
+    test('restores shipping point filter in getOrdersDueForDelivery using user plant and TVSTZ points with no config default', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+      const spyTvstz = jest.spyOn(adapter, 'getShippingPointsForPlant').mockResolvedValue(['1112', 'WAVG']);
+
+      await adapter.getOrdersDueForDelivery({ plant: '1120' });
+
+      expect(spyTvstz).toHaveBeenCalledWith('1120', expect.any(Object));
+      const url = mockClient.get.mock.calls[0][0];
+      expect(url).toContain("(ShippingPoint eq '1112' or ShippingPoint eq 'WAVG')");
+
+      spyTvstz.mockRestore();
+    });
+
+    test('filters by single TVSTZ point when plant has exactly one valid shipping point', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+      const spyTvstz = jest.spyOn(adapter, 'getShippingPointsForPlant').mockResolvedValue(['WAVG']);
+
+      await adapter.getOrdersDueForDelivery({ plant: '1120' });
+
+      const url = mockClient.get.mock.calls[0][0];
+      expect(url).toContain("ShippingPoint eq 'WAVG'");
+      expect(url).not.toContain(' or ');
+
+      spyTvstz.mockRestore();
+    });
+
+    test('derives plant from CAP request user attributes and applies TVSTZ points', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+      const spyTvstz = jest.spyOn(adapter, 'getShippingPointsForPlant').mockResolvedValue(['1112', 'WAVG']);
+
+      const capReq = {
+        user: { attr: { Plant: ['1120'] } },
+        query: { SELECT: { from: { ref: ['OrdersDueForDelivery'] } } }
+      };
+
+      await adapter.getOrdersDueForDelivery(capReq);
+
+      expect(spyTvstz).toHaveBeenCalledWith('1120', expect.any(Object));
+      const url = mockClient.get.mock.calls[0][0];
+      expect(url).toContain("(ShippingPoint eq '1112' or ShippingPoint eq 'WAVG')");
+
+      spyTvstz.mockRestore();
     });
 
     test('does not append $top or $skip for CAP requests so applyPaging manages pagination', async () => {
       mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
 
       const capReq = {
+        user: { attr: { Plant: ['1120'] } },
         query: {
           SELECT: {
             limit: { rows: { val: 50 }, offset: { val: 50 } },
@@ -241,7 +441,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
         }
       };
 
-      await adapter.getOrdersDueForDelivery(capReq);
+      await adapter.getOrdersDueForDelivery(capReq, { shippingPoints: ['1120'] });
       const url = mockClient.get.mock.calls[0][0];
       expect(url).not.toContain('$top=');
       expect(url).not.toContain('$skip=');
@@ -267,7 +467,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
         }
       });
 
-      await expect(adapter.getOrdersDueForDelivery({ shippingPoint: '1120' })).rejects.toThrow('Database query timeout');
+      await expect(adapter.getOrdersDueForDelivery({ shippingPoint: '1120', plant: '1120' })).rejects.toThrow('Database query timeout');
     });
 
     test('marks SalesDocApprovalStatus as unknown and invalidates cache when approval lookup fails', async () => {
@@ -294,7 +494,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
         }
       }).mockRejectedValueOnce(new Error('Gateway timeout on approval status'));
 
-      const orders = await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
+      const orders = await adapter.getOrdersDueForDelivery({ shippingPoint: '1120', plant: '1120' });
       expect(orders).toHaveLength(1);
       expect(orders[0].SalesOrder).toBe('5000104');
       expect(orders[0].SalesDocApprovalStatus).toBe('unknown');
@@ -337,12 +537,140 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       expect(sps[0].ShippingPoint).toBe('1120');
       expect(sps[0].ShippingPointName).toBe('1130-FG Loading Area');
     });
+
+    test('filters shipping points list to TVSTZ valid points when user plant is present', async () => {
+      mockClient.get.mockResolvedValue({
+        status: 200,
+        data: {
+          d: {
+            results: [
+              { ShippingPoint: '1104', ShippingPointName: 'Shipping Point 1104' },
+              { ShippingPoint: '1112', ShippingPointName: 'Shipping Point 1112' },
+              { ShippingPoint: 'WAVG', ShippingPointName: 'Shipping Point WAVG' },
+              { ShippingPoint: '1000', ShippingPointName: 'Shipping Point 1000' }
+            ]
+          }
+        }
+      });
+      const spyTvstz = jest.spyOn(adapter, 'getShippingPointsForPlant').mockResolvedValue(['1112', 'WAVG']);
+
+      const points = await adapter.getShippingPoints({ plant: '1120' });
+
+      expect(spyTvstz).toHaveBeenCalledWith('1120', expect.any(Object));
+      expect(points).toHaveLength(2);
+      expect(points.map(p => p.ShippingPoint)).toEqual(['1112', 'WAVG']);
+
+      spyTvstz.mockRestore();
+    });
+  });
+
+  describe('getShippingPointsForPlant (TVSTZ TTL Cache)', () => {
+    let mockRfc;
+
+    beforeEach(() => {
+      mockRfc = {
+        readTable: jest.fn().mockResolvedValue([
+          { WERKS: '1120', VSTEL: '1112' },
+          { WERKS: '1120', VSTEL: 'WAVG' }
+        ])
+      };
+      adapter.clearTvstzCache();
+    });
+
+    test('reads TVSTZ via RFC on first call and caches entries in-memory', async () => {
+      const points = await adapter.getShippingPointsForPlant('1120', { rfc: mockRfc });
+      expect(points).toEqual(['1112', 'WAVG']);
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
+      expect(mockRfc.readTable).toHaveBeenCalledWith('TVSTZ', ['WERKS', 'VSTEL'], ["WERKS = '1120'"]);
+
+      // Verify cache entry structure
+      const entry = adapter.getTvstzCacheEntry('1120');
+      expect(entry).toBeDefined();
+      expect(entry.points).toEqual(['1112', 'WAVG']);
+      expect(entry.expiresAt).toBeGreaterThan(Date.now());
+    });
+
+    test('confirms second read uses TTL cache without re-querying RFC', async () => {
+      // First read: populates cache
+      await adapter.getShippingPointsForPlant('1120', { rfc: mockRfc });
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
+
+      // Second read immediately after: served from TTL cache
+      const cachedPoints = await adapter.getShippingPointsForPlant('1120', { rfc: mockRfc });
+      expect(cachedPoints).toEqual(['1112', 'WAVG']);
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1); // Not called again!
+    });
+
+    test('re-queries TVSTZ when cached entry has expired', async () => {
+      // Seed cache with expired entry
+      adapter._tvstzCache.set('1120', {
+        points: ['1112'],
+        expiresAt: Date.now() - 500 // expired
+      });
+
+      const points = await adapter.getShippingPointsForPlant('1120', { rfc: mockRfc });
+      expect(points).toEqual(['1112', 'WAVG']);
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
+    });
+
+    test('bypasses cache when forceRefresh: true is passed', async () => {
+      // Seed cache with valid entry
+      adapter._tvstzCache.set('1120', {
+        points: ['1112'],
+        expiresAt: Date.now() + 60000
+      });
+
+      const points = await adapter.getShippingPointsForPlant('1120', { rfc: mockRfc, forceRefresh: true });
+      expect(points).toEqual(['1112', 'WAVG']);
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
+    });
+
+    test('re-queries TVSTZ after clearTvstzCache()', async () => {
+      await adapter.getShippingPointsForPlant('1120', { rfc: mockRfc });
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
+
+      adapter.clearTvstzCache();
+      expect(adapter.getTvstzCacheEntry('1120')).toBeNull();
+
+      await adapter.getShippingPointsForPlant('1120', { rfc: mockRfc });
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(2);
+    });
+
+    test('confirms getOrdersDueForDelivery uses the TVSTZ TTL cache for repeated plant queries', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+
+      // First call to getOrdersDueForDelivery queries TVSTZ via RFC
+      await adapter.getOrdersDueForDelivery({ plant: '1120' }, { rfc: mockRfc });
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
+
+      // Second call for same plant uses cached TVSTZ points without re-reading RFC
+      await adapter.getOrdersDueForDelivery({ plant: '1120' }, { rfc: mockRfc });
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('createDeliveryFromOrder', () => {
     test('throws 400 when SalesOrder reference is missing', async () => {
-      await expect(adapter.createDeliveryFromOrder({ salesOrder: '' })).rejects.toThrow('SalesOrder reference is required');
-      await expect(adapter.createDeliveryFromOrder({})).rejects.toThrow('SalesOrder reference is required');
+      const expected = { status: 400, message: 'SalesOrder reference is required to create an outbound delivery.' };
+      await expect(adapter.createDeliveryFromOrder({ salesOrder: '' })).rejects.toMatchObject(expected);
+      await expect(adapter.createDeliveryFromOrder({})).rejects.toMatchObject(expected);
+      expect(mockClient.post).not.toHaveBeenCalled();
+    });
+
+    test('throws 400 when ShippingPoint is missing and never defaults to first list entry', async () => {
+      const expected = { status: 400, message: 'ShippingPoint is required to create an outbound delivery and cannot be defaulted.' };
+      await expect(adapter.createDeliveryFromOrder({ salesOrder: '5000104' })).rejects.toMatchObject(expected);
+      await expect(adapter.createDeliveryFromOrder({ salesOrder: '5000104', shippingPoint: '' })).rejects.toMatchObject(expected);
+      expect(mockClient.post).not.toHaveBeenCalled();
+    });
+
+    test('returns an empty delivery number, never a made-up one, when SAP answers success without a number', async () => {
+      mockClient.post.mockResolvedValue({ status: 201, data: { d: { ReferenceSDDocument: '5000104' } } });
+
+      const result = await adapter.createDeliveryFromOrder({ salesOrder: '5000104', shippingPoint: '1120' });
+
+      expect(result.OutboundDelivery).toBe('');
+      expect(result.ReferenceSDDocument).toBe('5000104');
     });
 
     test('POSTs minimal payload with ReferenceSDDocument and ShippingPoint only', async () => {
@@ -398,13 +726,16 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       });
 
       const callOptions = mockClient.post.mock.calls[0][1];
-      expect(callOptions.data.DeliveryDate).toMatch(/^\/Date\(\d+\)\/$/);
+      // 2025-08-14T00:00:00Z
+      expect(callOptions.data.DeliveryDate).toBe('/Date(1755129600000)/');
     });
 
+    // SAP error shape not proven: V2/478 and this body are hand-written; the test proves our mapping only.
     test('maps SAP approval block error V2/478 with clean status and message', async () => {
       mockClient.post.mockRejectedValue({
         status: 400,
         response: {
+          status: 400, // the real client always sets it (S4HttpClient.js:402)
           data: {
             error: {
               code: 'V2/478',
@@ -430,10 +761,13 @@ describe('Unit: OutboundDeliveryAdapter', () => {
           salesOrder: '5000461',
           shippingPoint: 'WAVG'
         })
-      ).rejects.toThrow('Subsequent documents not possible due to approval status of the document.');
+      ).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringContaining('Subsequent documents not possible due to approval status of the document.')
+      });
     });
 
-    test('blocks with 502 when approval status check fails from Gateway', async () => {
+    test('blocks with 502 and no POST when approval status check fails from Gateway', async () => {
       mockClient.get.mockRejectedValueOnce(new Error('SD_F1873_SO_WL_SRV timeout'));
 
       await expect(
@@ -441,19 +775,23 @@ describe('Unit: OutboundDeliveryAdapter', () => {
           salesOrder: '5000104',
           shippingPoint: '1120'
         })
-      ).rejects.toThrow('Could not verify approval status for Sales Order 5000104. Outbound delivery creation blocked.');
+      ).rejects.toMatchObject({
+        status: 502,
+        message: 'Could not verify approval status for Sales Order 5000104. Outbound delivery creation blocked.'
+      });
+      expect(mockClient.post).not.toHaveBeenCalled();
     });
 
-    test('blocks with 400 when order is unapproved (status A, C, or D)', async () => {
+    // Status list comes from the adapter's own descriptions; SAP's value list is not proven here. 'Z' stands for any other value.
+    test.each([
+      ['A', 'Sales Order 5000461 is in approval and cannot be delivered.'],
+      ['C', 'Sales Order 5000461 is rejected and cannot be delivered.'],
+      ['D', 'Sales Order 5000461 is being reworked and cannot be delivered.'],
+      ['Z', "Sales Order 5000461 is status 'Z' and cannot be delivered."]
+    ])('blocks with 400 and no POST when approval status is %s', async (status, message) => {
       mockClient.get.mockResolvedValueOnce({
         status: 200,
-        data: {
-          d: {
-            results: [
-              { SalesOrder: '5000461', SalesDocApprovalStatus: 'A' }
-            ]
-          }
-        }
+        data: { d: { results: [{ SalesOrder: '5000461', SalesDocApprovalStatus: status }] } }
       });
 
       await expect(
@@ -461,7 +799,8 @@ describe('Unit: OutboundDeliveryAdapter', () => {
           salesOrder: '5000461',
           shippingPoint: '1120'
         })
-      ).rejects.toThrow('Sales Order 5000461 is in approval and cannot be delivered.');
+      ).rejects.toMatchObject({ status: 400, message });
+      expect(mockClient.post).not.toHaveBeenCalled();
     });
 
     test('bypasses approval check when skipApprovalCheck is true', async () => {
@@ -483,24 +822,6 @@ describe('Unit: OutboundDeliveryAdapter', () => {
 
       expect(mockClient.get).not.toHaveBeenCalled();
       expect(result.OutboundDelivery).toBe('13000528');
-    });
-  });
-
-  describe('postGoodsIssue (SD_SOFM_CREDIT_BLOCK_SRV/PostGoodsIssue)', () => {
-    test('rejects without a delivery number', async () => {
-      await expect(adapter.postGoodsIssue('')).rejects.toThrow('DeliveryDocument is required');
-    });
-
-    test('posts the function import with the delivery in the URL and reports SAP Done flag', async () => {
-      mockClient.post.mockResolvedValue({ data: { d: { PostGoodsIssue: { Done: true, ErrorAny: false, ErrorInGoodsIssue: false } } } });
-      const res = await adapter.postGoodsIssue('13000526');
-      expect(mockClient.post.mock.calls[0][0]).toBe("/sap/opu/odata/sap/SD_SOFM_CREDIT_BLOCK_SRV/PostGoodsIssue?DeliveryNumber='13000526'");
-      expect(res).toEqual({ DeliveryDocument: '13000526', Done: true, ErrorFlags: [] });
-    });
-
-    test('throws (never reports success) when SAP says Done=false and names the error flags', async () => {
-      mockClient.post.mockResolvedValue({ data: { d: { Done: false, ErrorAny: true, ErrorInGoodsIssue: true, ErrorInFinalCheck: false } } });
-      await expect(adapter.postGoodsIssue('13000526')).rejects.toThrow(/did not post goods issue.*ErrorInGoodsIssue/);
     });
   });
 

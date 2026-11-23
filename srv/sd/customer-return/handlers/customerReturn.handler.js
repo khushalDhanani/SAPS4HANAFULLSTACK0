@@ -1,4 +1,5 @@
 const LOG = require('../../../common/logger')('customer-return');
+const { throwIfTextMustShow } = require('../../../common/visibleError');
 const customerReturnAdapter = require('../../../integration/s4hana/sd/customer-return/CustomerReturnAdapter');
 const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
 
@@ -211,7 +212,7 @@ function registerCustomerReturnHandlers(srv) {
       // Check user authorization
       const allowedRoles = ['SalesRepresentative', 'SalesManager', 'Admin'];
       const hasRole = allowedRoles.some(r => req.user?.is(r));
-      if (req.user && !hasRole && req.user.id !== 'alice' && req.user.id !== 'mock') {
+      if (req.user && !hasRole && req.user.id !== 'mock') {
         return req.error(403, 'User not authorized to create Customer Returns in S/4HANA.');
       }
 
@@ -229,10 +230,16 @@ function registerCustomerReturnHandlers(srv) {
         Items
       };
 
-      const result = await customerReturnAdapter.createCustomerReturn(payload);
+      // CUSTOMER_RETURN_ROUTE=rfc: BAPI_CUSTOMERRETURN_CREATE, which carries the order reason, reference document and storage location
+      // (the default Lean Order route cannot). Opt-in until a live create has proven it; then it becomes the only route.
+      const create = process.env.CUSTOMER_RETURN_ROUTE === 'rfc'
+        ? customerReturnAdapter.createCustomerReturnViaRfc
+        : customerReturnAdapter.createCustomerReturn;
+      const result = await create.call(customerReturnAdapter, payload);
       return result;
     } catch (err) {
       LOG.error('Failed to execute createCustomerReturn:', err.message);
+      throwIfTextMustShow(err);
       const httpCode = (typeof err.status === 'number' && err.status >= 400 && err.status < 600)
         ? err.status
         : (typeof err.code === 'number' && err.code >= 400 && err.code < 600)

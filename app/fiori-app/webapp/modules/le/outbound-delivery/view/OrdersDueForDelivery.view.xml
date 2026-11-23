@@ -94,14 +94,13 @@
                     </GenericTile>
                 </HBox>
 
-                <!-- Follow-up on an existing delivery: PGI, then billing. Everything shown comes from S/4HANA. -->
+                <!-- Follow-up on an existing delivery: billing. Everything shown comes from S/4HANA. -->
                 <Panel id="deliveryFollowUpPanel" headerText="{i18n>dlvFollowUpTitle}" expandable="true" expanded="{= !!${deliveryFollowUp>/delivery} }" class="sapUiSmallMarginBottom" busy="{deliveryFollowUp>/busy}">
                     <HBox wrap="Wrap" alignItems="End" class="sapUiTinyMargin">
                         <VBox class="sapUiTinyMarginEnd">
                             <Label text="{i18n>dlvFollowUpDelivery}" labelFor="inpFollowUpDelivery" />
                             <Input id="inpFollowUpDelivery" value="{deliveryFollowUp>/delivery}" width="11rem" placeholder="{i18n>dlvFollowUpDeliveryPlaceholder}" change=".onLoadDeliveryStatus" submit=".onLoadDeliveryStatus" />
                         </VBox>
-                        <Button id="btnPostGoodsIssue" text="{i18n>btnPostGoodsIssue}" icon="sap-icon://outbox" type="Emphasized" press=".onPostGoodsIssue" class="sapUiTinyMarginEnd" enabled="{deliveryFollowUp>/canPgi}" />
                         <Button id="btnLoadBillingTypes" text="{i18n>btnLoadBillingTypes}" icon="sap-icon://refresh" press=".onLoadBillingTypes" class="sapUiTinyMarginEnd" enabled="{deliveryFollowUp>/canBill}" />
                         <VBox class="sapUiTinyMarginEnd">
                             <Label text="{i18n>dlvFollowUpBillingType}" labelFor="selBillingType" />
@@ -124,6 +123,7 @@
                     id="ordersDueTable"
                     items="{
                         path: 'outboundDelivery>/OrdersDueForDelivery',
+                        suspended: true,
                         parameters: {
                             $count: true
                         },
@@ -134,7 +134,7 @@
                     }"
                     growing="true"
                     growingThreshold="25"
-                    growingScrollToLoad="true"
+                    growingScrollToLoad="false"
                     noDataText="{i18n>ordersDueNoDataText}"
                     sticky="ColumnHeaders,HeaderToolbar">
                     <headerToolbar>
@@ -151,6 +151,31 @@
                                     <SegmentedButtonItem id="segBtnAll" key="all" text="{i18n>ordersDueTabAll}" />
                                 </items>
                             </SegmentedButton>
+                            <Input
+                                id="inputPlant"
+                                width="8rem"
+                                maxLength="4"
+                                required="true"
+                                value="{ordersDueView>/plant}"
+                                placeholder="{i18n>ordersDuePlantPlaceholder}"
+                                tooltip="{i18n>ordersDuePlantPlaceholder}"
+                                valueState="{ordersDueView>/plantValueState}"
+                                valueStateText="{ordersDueView>/plantValueStateText}"
+                                change=".onPlantChange" />
+                            <ComboBox
+                                id="comboFilterShippingPoint"
+                                width="13rem"
+                                placeholder="{i18n>ordersDueFilterShippingPointPlaceholder}"
+                                selectedKey="{ordersDueView>/filterShippingPoint}"
+                                selectionChange=".onFilterShippingPointChange"
+                                items="{
+                                    path: 'outboundDelivery>/ShippingPointVH',
+                                    sorter: { path: 'ShippingPoint' }
+                                }">
+                                <core:ListItem
+                                    key="{outboundDelivery>ShippingPoint}"
+                                    text="{= ${outboundDelivery>ShippingPointName} ? ${outboundDelivery>ShippingPoint} + ' - ' + ${outboundDelivery>ShippingPointName} : ${outboundDelivery>ShippingPoint} }" />
+                            </ComboBox>
                             <SearchField
                                 id="searchOrdersDue"
                                 width="16rem"

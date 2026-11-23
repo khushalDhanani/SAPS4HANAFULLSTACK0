@@ -7,16 +7,31 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "cds-serve",
-    "watch": "cds watch --exclude data",
+    "start": "sh -c '[ -f \"$HOME/.sap-certs/s4-dev.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$HOME/.sap-certs/s4-dev.pem\"; cds-serve'",
+    "watch": "sh -c '[ -f \"$HOME/.sap-certs/s4-dev.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$HOME/.sap-certs/s4-dev.pem\"; cds watch --exclude data'",
     "test": "jest --runInBand",
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",
-    "test:e2e": "jest test/e2e --runInBand",
+    "test:e2e": "node test/e2e/runAllE2E.js",
+    "test:e2e:sap-free": "node test/e2e/runAllE2E.js --sap-free",
+    "test:e2e:sap": "node test/e2e/runSapRoundTrips.js",
+    "test:coverage": "jest --coverage --runInBand",
+    "test:performance": "jest test/performance --runInBand",
+    "test:a11y": "jest test/a11y --runInBand",
+    "test:smoke": "node tools/smoke-test-deployment.js",
+    "test:monitoring": "jest test/unit/monitoring --runInBand",
+    "check:connectivity": "node tools/check-service-connectivity.js",
+    "check:rfc-runtime": "node tools/verify-cf-rfc-runtime.js",
+    "check:sap-diagnostic": "node tools/check-sap-integration-diagnostic.js",
+    "preflight:rfc": "node tools/rfc-preflight.js",
+    "scan:secrets": "node tools/scan-secrets.js",
+    "scan:dependencies": "node tools/scan-dependencies.js",
+    "validate:sap:sandbox": "node tools/validate-sap-sandbox.js",
     "lint": "eslint .",
     "generate:rules": "node tools/generate-po-rules.js",
-    "validate:mta": "mbt validate -x paths",
-    "build:mta": "mbt build"
+    "check:mbt": "mbt --version | grep -q . || { echo 'mbt binary is missing: its install script did not run or its download failed. Nothing was validated or built.' >&2; exit 1; }",
+    "validate:mta": "npm run -s check:mbt && mbt validate -x paths",
+    "build:mta": "npm run -s check:mbt && mbt build"
   },
   "license": "ISC",
   "dependencies": {
@@ -24,21 +39,24 @@
     "@sap-ai-sdk/orchestration": "^2.16.0",
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
-    "@sap-cloud-sdk/resilience": "^4",
     "@sap/cds": "^10.0.6",
-    "@ui5/cli": "^4.0.69",
+    "@sap/xssec": "^4.15.0",
     "dotenv": "^17.4.2",
+    "nodemailer": "^10.3.1",
     "openai": "^7.21.0"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.2",
     "@cap-js/sqlite": "^3.0.2",
     "@sap/cds-dk": "^10.0.7",
+    "@ui5/cli": "^4.0.71",
+    "axe-core": "4.14.0",
     "cds-plugin-ui5": "^0.17.4",
     "eslint": "^10.10.0",
     "globals": "^17.12.0",
     "jest": "^30.5.1",
-    "mbt": "^1.2.49"
+    "mbt": "^1.2.49",
+    "playwright": "^1.57.0"
   },
   "overrides": {
     "@sigstore/core": "^4.0.1"
@@ -48,129 +66,67 @@
       "db": {
         "[development]": {
           "kind": "sqlite",
-          "credentials": { "url": "db.sqlite" }
+          "credentials": {
+            "url": "db.sqlite"
+          }
         },
         "[test]": {
-          "credentials": { "url": ":memory:" }
+          "credentials": {
+            "url": ":memory:"
+          }
         }
       },
       "auth": {
         "[development]": {
           "kind": "mocked",
           "users": {
-            "alice": {
-              "roles": [
-                "Admin",
-                "Viewer",
-                "PurchasingManager",
-                "FinanceViewer",
-                "SalesRepresentative",
-                "SalesManager",
-                "WarehouseClerk",
-                "WarehouseManager"
-              ]
-            },
-            "bob": {
-              "roles": [
-                "Viewer"
-              ],
-              "attr": {
-                "Plant": ["1120"]
-              }
-            },
-            "dave": {
-              "roles": [
-                "Viewer"
-              ],
-              "attr": {
-                "Plant": ["1130"]
-              }
-            },
-            "eve": {
-              "roles": [
-                "Viewer"
-              ]
-            },
-            "carol": {
-              "roles": [
-                "Viewer",
-                "WarehouseClerk"
-              ],
-              "attr": {
-                "Plant": ["1120"]
-              }
-            },
             "khushal": {
               "roles": [
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer",
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
-                "WarehouseManager"
+                "WarehouseManager",
+                "SapLogsReader"
               ]
-            }
+            },
+            "alice": false,
+            "bob": false,
+            "carol": false,
+            "dave": false,
+            "erin": false,
+            "fred": false,
+            "me": false,
+            "yves": false,
+            "*": false
           }
         },
         "[test]": {
           "kind": "mocked",
           "users": {
-            "alice": {
-              "roles": [
-                "Admin",
-                "Viewer",
-                "PurchasingManager",
-                "FinanceViewer",
-                "SalesRepresentative",
-                "SalesManager",
-                "WarehouseClerk",
-                "WarehouseManager"
-              ]
-            },
-            "bob": {
-              "roles": [
-                "Viewer"
-              ],
-              "attr": {
-                "Plant": ["1120"]
-              }
-            },
-            "dave": {
-              "roles": [
-                "Viewer"
-              ],
-              "attr": {
-                "Plant": ["1130"]
-              }
-            },
-            "eve": {
-              "roles": [
-                "Viewer"
-              ]
-            },
-            "carol": {
-              "roles": [
-                "Viewer",
-                "WarehouseClerk"
-              ],
-              "attr": {
-                "Plant": ["1120"]
-              }
-            },
             "khushal": {
               "roles": [
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer",
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
-                "WarehouseManager"
+                "WarehouseManager",
+                "SapLogsReader"
               ]
-            }
+            },
+            "alice": false,
+            "bob": false,
+            "carol": false,
+            "dave": false,
+            "erin": false,
+            "fred": false,
+            "me": false,
+            "yves": false,
+            "*": false
           }
         },
         "[production]": {
@@ -213,24 +169,6 @@
           "credentials": {
             "destination": "S4HANA_PO_API",
             "path": "/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV"
-          }
-        }
-      },
-      "FAC_GL_JOURNALENTRY_VER_SRV": {
-        "kind": "odata-v2",
-        "model": "srv/external/FAC_GL_JOURNALENTRY_VER_SRV",
-        "[test]": {
-          "credentials": {
-            "url": "http://127.0.0.1:1",
-            "authentication": "BasicAuthentication",
-            "username": "JEST_ONLY",
-            "password": "JEST_ONLY"
-          }
-        },
-        "[production]": {
-          "credentials": {
-            "destination": "S4HANA_PO_API",
-            "path": "/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV"
           }
         }
       },
@@ -289,6 +227,7 @@
         }
       }
     },
+    "s4": {},
     "log": {
       "format": "plain",
       "levels": {
@@ -297,47 +236,15 @@
         "purchase-order": "info",
         "purchase-order-adapter": "info",
         "sales-inquiry": "info",
-        "sales-inquiry-adapter": "info",
-        "goods-receipt": "info",
-        "goods-receipt-adapter": "info",
-        "goods-issue-adapter": "info",
-        "tr-to-adapter": "info"
+        "sales-inquiry-adapter": "info"
       }
     },
-    "s4": {
-      "client": "220",
-      "plant": "1120",
-      "storageLocation": "CS01",
-      "warehouseNumber": "W01",
-      "salesOrganization": "1000",
-      "distributionChannel": "10",
-      "division": "52",
-      "currency": "INR",
-      "inquiryType": "ZIN",
-      "orderType": "ZDOM",
-      "conditionType": "ZPR1",
-      "shippingPoints": [
-        "1120",
-        "1112",
-        "1108",
-        "1109"
-      ],
-      "salesMaterialTypes": [
-        "ZFRT",
-        "FERT"
-      ],
-      "mvt261NotReadyBins": [
-        {
-          "storageType": "OH1",
-          "bin": "ONHOLD",
-          "reason": "onHold"
-        },
-        {
-          "storageType": "901",
-          "bin": "WE-ZONE",
-          "reason": "goodsReceiptZone"
+    "cds-plugin-ui5": {
+      "modules": {
+        "fiori-app": {
+          "configFile": "ui5-cap.yaml"
         }
-      ]
+      }
     }
   },
   "optionalDependencies": {

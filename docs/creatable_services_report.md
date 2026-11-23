@@ -1,12 +1,13 @@
-# SAP S/4HANA Creatable Services — Live Metadata Report
+# SAP S/4HANA Creatable Services — Historical Metadata Report
 
+> **Snapshot:** live `$metadata` scan performed 2026-09-23 12:05 IST against DS4 client 220. The catalog, classifications, blocker counts, owners, pending actions and environment notes below are historical observations from that scan and its contemporaneous follow-up; they are not current-state claims. Later dated evidence and corrections are recorded at the end of this document. No current full catalog rescan is recorded here.
 > **Source**: Live `$metadata` scan of **1,237 services** on DS4 client 220 — 23 Sep 2026 12:05 IST
 > **Errors**: 0 (previous scan had 1 timeout on `MD_CUSTOMER_MASTER_SRV_01` — now resolved)
 > **Tooling**: `python3 tools/find-creatable.py` → `catalog-creatable.csv` → `python3 tools/build-creatable-xlsx.py` → [`creatable-services.xlsx`](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/creatable-services.xlsx)
 
 ---
 
-## Scan Summary
+## Scan summary (2026-09-23 snapshot)
 
 | Metric | Count |
 |---|---|
@@ -19,7 +20,7 @@
 
 ---
 
-## Creatable Services by Module
+## Creatable services by module (historical scan counts)
 
 | Module | Total | API_* | Fiori | Entity Sets | POST Actions |
 |---|---|---|---|---|---|
@@ -46,61 +47,56 @@
 
 ---
 
-## Services Used by This App — Status &amp; Pending
+## App services — historical status at the 2026-09-23 scan
 
-These are the SAP OData services actually referenced in `srv/integration/s4hana/`. Each has its CREATE capability verified from live `$metadata`.
+These are the SAP OData services listed as referenced in `srv/integration/s4hana/` at the report snapshot. The metadata claims below are scan-time observations; they are not revalidated here.
 
-### Fully Implemented &amp; Proven Live
+### Recorded live evidence (not current validation)
 
 | Service | Module | Create Capability | App Usage | Status |
 |---|---|---|---|---|
 | `LORD_ODATA_ORDER_SRV` | SD | `HeaderSet` deep insert + `Simulate`, `CheckATP`, `RemoveBillingBlock`, `RemoveDeliveryBlock` | Sales Order &amp; Sales Inquiry creation | **Proven live** (ZDOM orders created) |
-| `LE_SHP_QC_DLVREF_SRV` | LE | `C_DelivWthRefQuickCreate` POST | Outbound Delivery with reference | **Proven live** (delivery 13000526 created) |
+| `LE_SHP_QC_DLVREF_SRV` | LE | `C_DelivWthRefQuickCreate` POST | Outbound Delivery with reference | **Recorded as created** (delivery 13000526); no read-back proof in the repo (corrected 2026-11-03) |
 | `MM_PUR_PO_MAINT_V2_SRV` | MM | 13 creatable entity sets + 57 POST actions (`C_PurchaseOrderTP`, items, notes, scheduling) | Purchase Order create/maintain | **Proven live** (POs created) |
-| `MMIM_GR4PO_DL_SRV` | WM | `GR4PO_DL_Headers` + items, sub-items, serial numbers, batch create | Goods Receipt posting | **Proven live** (GR posted) |
+| `MMIM_GR4PO_DL_SRV` | WM | `GR4PO_DL_Headers` + items, sub-items, serial numbers, batch create | Goods Receipt posting | **Not proven through this service** (corrected 2026-11-03): see the correction at the end of this report |
 
-### Implemented but Awaiting First Live POST
+### Recorded as awaiting live POST at the snapshot date
 
 | Service | Module | Create Capability | App Usage | Pending |
 |---|---|---|---|---|
-| `SD_SOFM_CREDIT_BLOCK_SRV` | SD | `PostGoodsIssue(DeliveryNumber)` + credit release/reject actions (7 POST actions) | Post Goods Issue from delivery | **Code done**, awaiting supervised PGI on a picked delivery (candidate: 13000515) |
+| `SD_SOFM_CREDIT_BLOCK_SRV` | SD | `PostGoodsIssue(DeliveryNumber)` + credit release/reject actions (7 POST actions) | Post Goods Issue from delivery | **DECOMMISSIONED** (Goods Issue removed across application) |
 | `SD_CUSTOMER_INVOICES_CREATE` | SD | `CreateBillingDocuments(...)` + `GetBillingDocumentTypes(...)` | Create Billing Document | **Code done**, awaiting supervised billing test on a goods-issued delivery (candidate: 13000522) |
 
-### Used for READ Only (Metadata Declares Creatable, Not Used for CREATE)
+### Recorded READ-only app use (metadata declared creatable in the snapshot)
 
 | Service | Module | Declared Create Capability | App Usage (READ only) | Pending |
 |---|---|---|---|---|
 | `SD_F1873_SO_WL_SRV` | SD | `C_SalesOrderWl_F1873` (creatable in metadata) | Sales order worklist + approval status lookup | No CREATE planned — worklist is read-only by design |
-| `LO_BM_BATCH_SRV` | WM | 4 creatable entity sets + 34 POST actions (batch management) | Batch info lookup for GR/GI | No batch CREATE planned currently |
+| `LO_BM_BATCH_SRV` | WM | 4 creatable entity sets + 34 POST actions (batch management) | Batch info lookup for Goods Receipt | No batch CREATE planned currently |
 | `PACK_OUTBDLV_SRV` | EWM | 6 creatable entity sets + 9 POST actions (packing station) | Delivery packing info | Packing module not yet built |
 | `PICKLIST_PAPER_SRV` | EWM | 5 creatable entity sets + 5 POST actions (pick confirmation) | Pick list info | Pick confirmation not yet built |
 | `SIMPLE_INB_DLV_SRV` | EWM | 7 creatable entity sets + 9 POST actions (inbound delivery) | Inbound delivery info for GR | Inbound delivery management not yet built |
 | `SD_SOF` | SD | `ItemCollection` + 4 POST actions (`CreateDeliveryForOrderItems`, `CheckATP`, `createInvoice`, `postToAccount`) | Delivery status lookup | Alternative delivery/billing path — not yet wired |
-| `UI_RESERVATION_ITM_MNG_V2` | MM | 0 entity sets but 10 POST actions (`CreateDraft`, `MarkAsCompleted`, `Copy`, etc.) | Reservation lookup for Goods Issue | Reservation creation not yet built |
-
-### Used for READ Only (Not Creatable per Metadata)
-
-| Service | Module | App Usage | Notes |
-|---|---|---|---|
+| `UI_RESERVATION_ITM_MNG_V2` | MM | 0 entity sets but 10 POST actions (`CreateDraft`, `MarkAsCompleted`, `Copy`, etc.) | Reservation lookup | Reservation creation not yet built |
 | `C_PURCHASEORDER_FS_SRV` | MM | PO list/detail fact sheet | Read-only by metadata (`sap:creatable="false"`) |
-| `C_STOCKQUANTITYVALUEBYTYPE_CDS` | MM | Stock quantity queries for GI | Read-only CDS view |
+| `C_STOCKQUANTITYVALUEBYTYPE_CDS` | MM | Stock quantity queries | Read-only CDS view |
 | `FAC_GL_JOURNALENTRY_VER_SRV` | FI | Journal entry items to verify | Read-only by metadata |
 | `SD_F2369_INQY_FS_SRV` | SD | Sales inquiry fact sheet | Read-only |
 | `SD_F2370_INQY_WL_SRV` | SD | Sales inquiry worklist | Read-only |
-| `MMIM_MATERIAL_DATA_SRV` | MM | Material data for GI | Read-only |
+| `MMIM_MATERIAL_DATA_SRV` | MM | Material data queries | Read-only |
 | `MMIM_MULTIPLE_MATERIAL_SRV` | MM | Multiple material lookup | Read-only |
 | `ZAPI_GETBUPA_SRV` | MD | Business partner lookup | Read-only custom service |
 
-### Blocked — Not Registered on Gateway
+### Historical Gateway registration observations (later evidence may supersede)
 
 | Service | Module | Needed For | Blocker | Ticket |
 |---|---|---|---|---|
-| `API_MATERIAL_DOCUMENT_SRV` | MM | Goods Issue movement 261 posting | **Not registered** — `/IWFND/MED/170` | [Item 2 in gateway ticket](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/docs/ticket-gateway-remediation-ds4.md) |
-| `ZMMIM_MATDOC_SRV` | MM | Goods Issue (fallback) | Registered but returns **HTTP 501** `CREATE_ENTITY not implemented` | Not viable — use `API_MATERIAL_DOCUMENT_SRV` |
+| `API_MATERIAL_DOCUMENT_SRV` | MM | Movement 261 posting (decommissioned) | **Not registered** — `/IWFND/MED/170` | [Item 2 in gateway ticket](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/docs/ticket-gateway-remediation-ds4.md) |
+| `ZMMIM_MATDOC_SRV` | MM | Material document posting (decommissioned) | Registered but returns **HTTP 501** `CREATE_ENTITY not implemented` | Decommissioned |
 
 ---
 
-## Key Creatable Services NOT Yet Used by the App
+## Services listed as not yet used by the app at the snapshot date
 
 ### SD - Sales (38 additional creatable services)
 
@@ -143,7 +139,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 ---
 
-## Blocked Services Summary (Gateway Remediation)
+## Historical blocked-services summary (Gateway remediation)
 
 | Blocker | Count | Ticket Item | Key Services Affected |
 |---|---|---|---|
@@ -154,17 +150,17 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 ---
 
-## Pending Action Items
+## Historical pending action items (as recorded in September 2026)
 
-### Critical (Blocks Current Features)
+### Historically marked critical (claimed to block features at the snapshot date)
 
 | # | Action | Owner | Status |
 |---|---|---|---|
-| 1 | **Register `API_MATERIAL_DOCUMENT_SRV`** on Gateway | Basis team | Blocked — Goods Issue 261 cannot post |
-| 2 | **Supervised PGI test** on delivery 13000515 | User/Dev | Code ready, needs explicit go-ahead |
+| 1 | **Register `API_MATERIAL_DOCUMENT_SRV`** on Gateway | Basis team | Decommissioned (Movement 261 removed) |
+| 2 | **Supervised PGI test** on delivery 13000515 | User/Dev | Decommissioned (Goods Issue removed across application) |
 | 3 | **Supervised billing test** on delivery 13000522 | User/Dev | Code ready, needs explicit go-ahead |
 
-### Important (Unlocks New Capabilities)
+### Historically marked important (snapshot action list)
 
 | # | Action | Owner | Status |
 |---|---|---|---|
@@ -173,7 +169,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 | 6 | **Fix empty alias** on `LE_SHP_OD_CREATE_SRV` | Basis team | Ticket Item 1b raised |
 | 7 | **Confirm V4 enablement** on DS4 hub | Basis team | Ticket Item 3 raised |
 
-### Development Ready (No Blockers)
+### Historically marked development-ready (not a current readiness assessment)
 
 | # | Feature | Service | Notes |
 |---|---|---|---|
@@ -188,7 +184,7 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 ---
 
-## Environment Items (Person-Dependent)
+## Historical environment notes (September 2026)
 
 | Item | Owner | Status |
 |---|---|---|
@@ -200,3 +196,33 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 > [!NOTE]
 > **Files regenerated**: [`catalog-creatable.csv`](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/catalog-creatable.csv) (23 Sep 12:05 IST) and [`creatable-services.xlsx`](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/creatable-services.xlsx) (23 Sep 12:06 IST) — both from live SAP `$metadata`, 0 errors.
+
+## Subsequent SAP Readiness Probe — 2026-10-24 16:45 IST
+
+This later probe supersedes relevant reachability statements in the September snapshot above, but does not prove a write or full-catalog refresh.
+
+This is a later, focused probe; it does not rewrite the dated 23 September catalog snapshot or claim that a goods movement was posted.
+
+- **READ-ONLY OData metadata GET:** `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/$metadata` succeeded against Client 220. The response was 38,620 characters and the current metadata declares `A_MaterialDocumentHeader` creation, its `to_MaterialDocumentItem` navigation, and `GoodsMovementType`. Authentication succeeded for this GET through the project's existing `S4HttpClient` destination resolution. The active local runtime resolved its environment URL credentials (`BasicAuthentication`) and client 220; no credential or URL value is recorded here.
+- **READ-ONLY RFC:** `RFC_READ_TABLE` against `T000` returned the configured client 220. The new readiness preflight also successfully read the `MATDOC` verification fields `MBLNR`, `MJAHR`, and `BWART` with a one-row cap and a fixed document-key filter.
+- **Alternate service:** a READ-ONLY GET of `/sap/opu/odata/sap/ZMMIM_MATDOC_SRV/$metadata` now returns HTTP 403 with Gateway message `/IWFND/MED/170` (service not registered). The historical report row describing HTTP 501 `CREATE_ENTITY not implemented` records an earlier observation; this probe did not issue CREATE and does not establish its current POST behavior.
+- **Write authorization and persistence:** Not verified. No POST/BAPI/write was sent. OData metadata and successful RFC reads establish readiness only; they do not prove create authorization, a generated material document, or SAP `BWART=261` read-back.
+- **Full workbook refresh:** Not run. `tools/find-creatable.py` could not start its catalog scan because the required `catalog-audit.csv` is absent in this checkout; the committed workbook remains the 23 September snapshot. Re-run the mandated catalog scan and workbook build after restoring that input file.
+
+## READ-ONLY Readiness Recheck — 2026-10-26 09:35 IST
+
+This is a dated readiness observation only; it does not establish current connectivity or authorize a write.
+
+- The automated 261 capability preflight passed again against the current local non-production configuration: exact `API_MATERIAL_DOCUMENT_SRV` metadata GET and read-only RFC access to `MATDOC` fields `MBLNR`, `MJAHR`, and `BWART`; SAP client 220 resolved.
+- `ALLOW_LIVE_SAP_TOOLS=1 npm run check:connectivity` passed the production guardrails, S/4 configuration, and live RFC client check for Client 220.
+- No SAP POST or other write was performed. Create authorization, generated document persistence, and exact post-write `BWART=261` remain unverified.
+
+## Correction — 2026-11-03
+
+This correction supersedes contradictory September snapshot rows above. The dated evidence remains historical and does not establish current system state.
+
+Two rows under "Fully Implemented & Proven Live" claimed more than the repo's evidence supports. The all-module count of proper services is in `docs/creatable-services-classification.md`.
+
+- **`MMIM_GR4PO_DL_SRV`:** the status log records this posting as unproven and failing live on 2026-10-06 (`docs/archive/WORKSTATUS-archive-2026-10-31.md:1805`). Goods receipt 5000005789/2026 of 2026-11-02 was posted through `BAPI_INB_DELIVERY_CONFIRM_DEC` (`srv/integration/s4hana/wm/GoodsReceiptAdapter.js:1471`), not this service.
+- **`LE_SHP_QC_DLVREF_SRV`:** delivery 13000526 appears only in this report, `docs/sd-creatable-services.md`, `docs/data-lineage-audit.md` and unit test fixtures. The repo holds no read-back proof.
+- **`API_MATERIAL_DOCUMENT_SRV`:** the "Blocked — Not Registered" row is out of date. The later probes above found it reachable, and 261 document 4900050350/2026 was posted and read back on 2026-11-02 (`WORKSTATUS.md`). The log names the CAP action, so the route through this service is traced from the code (INFERRED).

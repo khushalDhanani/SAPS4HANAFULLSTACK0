@@ -43,6 +43,9 @@
                                 sorter: { path: 'ShippingPoint' }
                             }"
                             placeholder="{i18n>dlgDeliveryShippingPointPlaceholder}"
+                            change=".onShippingPointChange"
+                            valueState="{deliveryDialog>/shippingPointValueState}"
+                            valueStateText="{deliveryDialog>/shippingPointValueStateText}"
                             width="100%">
                             <core:ListItem
                                 key="{outboundDelivery>ShippingPoint}"

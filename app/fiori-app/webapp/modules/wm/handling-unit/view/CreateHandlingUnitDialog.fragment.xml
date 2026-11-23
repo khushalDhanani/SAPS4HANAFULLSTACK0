@@ -28,7 +28,7 @@
         </content>
         <beginButton>
             <Button id="huCreateSubmit" text="{i18n>huCreateSubmit}" type="Emphasized" press=".onSubmitCreate"
-                enabled="{= !${huCreate>/busy} &amp;&amp; !!${huCreate>/packagingMaterial} &amp;&amp; !!${huCreate>/plant} &amp;&amp; !!${huCreate>/storageLocation} }" />
+                enabled="{= !${huCreate>/busy} &amp;&amp; !${huCreate>/submitBlocked} &amp;&amp; !!${huCreate>/packagingMaterial} &amp;&amp; !!${huCreate>/plant} &amp;&amp; !!${huCreate>/storageLocation} }" />
         </beginButton>
         <endButton>
             <Button id="huCreateCancel" text="{i18n>huCreateCancel}" press=".onCancelCreate" />

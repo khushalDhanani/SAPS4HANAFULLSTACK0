@@ -1,10 +1,11 @@
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 import json, base64, csv, sys, time
 import urllib.request, urllib.error
 
 BASE = "http://localhost:4004"
 AUTH = "Basic " + base64.b64encode(b"khushal:x").decode()
-SERVICES = ["/odata/v4/purchase-order","/odata/v4/journal-entry","/odata/v4/sales-inquiry",
-            "/odata/v4/warehouse-management","/odata/v4/goods-issue","/odata/v4/goods-receipt"]
+SERVICES = ["/odata/v4/purchase-order","/odata/v4/sales-inquiry"]
 FUNCS = {
  "/odata/v4/purchase-order": ["getDashboardMetrics()"],
  "/odata/v4/sales-inquiry": ["getSalesInquiryDefaults()","getInquiryCreationCapabilities()","getSalesInquiryMetrics()","getSalesOrderMetrics()"]

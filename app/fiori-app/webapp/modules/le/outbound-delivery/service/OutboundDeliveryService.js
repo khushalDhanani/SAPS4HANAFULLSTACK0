@@ -1,22 +1,9 @@
 sap.ui.define([
-    "saps4hana/fiori/service/ODataClient",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator"
-], function (ODataClient, Filter, FilterOperator) {
+    "saps4hana/fiori/service/ODataClient"
+], function (ODataClient) {
     "use strict";
 
     var SERVICE_BASE = "/odata/v4/outbound-delivery";
-
-    var _FilterOperator = FilterOperator || {
-        EQ: "EQ",
-        NE: "NE",
-        GT: "GT",
-        GE: "GE",
-        LT: "LT",
-        LE: "LE",
-        BT: "BT",
-        Contains: "Contains"
-    };
 
     var _oModel = null;
 
@@ -31,34 +18,8 @@ sap.ui.define([
      * @returns {Promise<Array>}
      */
     function _readEntitySet(oModel, sEntitySet, aFilters, mParameters) {
-        var oTargetModel = oModel || _oModel;
-        if (!oTargetModel || typeof oTargetModel.bindList !== "function") {
-            var sUrl = SERVICE_BASE + sEntitySet;
-            var aParts = [];
-            if (aFilters && aFilters.length > 0) {
-                var aFilterParts = aFilters.map(function (f) {
-                    var sVal = f.oValue1 !== undefined ? f.oValue1 : (f.getValue1 ? f.getValue1() : "");
-                    var sPath = f.sPath || (f.getPath ? f.getPath() : "");
-                    return sPath + " eq '" + encodeURIComponent(sVal) + "'";
-                });
-                aParts.push("$filter=" + aFilterParts.join(" and "));
-            }
-            if (mParameters && mParameters.$top) {
-                aParts.push("$top=" + mParameters.$top);
-            }
-            if (aParts.length > 0) {
-                sUrl += "?" + aParts.join("&");
-            }
-            return ODataClient.get(sUrl).then(function (result) {
-                if (!result) return [];
-                return result.value || (result.d && result.d.results) || [];
-            });
-        }
-
-        var oListBinding = oTargetModel.bindList(sEntitySet, undefined, undefined, aFilters, mParameters);
-        return oListBinding.requestContexts(0, Infinity).then(function (aContexts) {
-            return aContexts.map(function (oCtx) { return oCtx.getObject(); });
-        });
+        return ODataClient.readEntitySet(SERVICE_BASE, oModel || _oModel, sEntitySet, aFilters, mParameters,
+            { useFilterGetters: true });
     }
 
     /**
@@ -120,10 +81,12 @@ sap.ui.define([
          * KPI figures computed by the server over the full due-for-delivery set (not the loaded page).
          * Rejects on failure so the caller can show "-" instead of a number.
          *
+         * @param {string} sPlant plant whose shipping points select the due orders (the server fails closed without one)
          * @returns {Promise<{scheduleLineCount: number, shippingPointCount: number}>}
          */
-        getOrdersDueMetrics: function () {
-            return ODataClient.get(SERVICE_BASE + "/getOrdersDueMetrics()").then(function (result) {
+        getOrdersDueMetrics: function (sPlant) {
+            var sUrl = SERVICE_BASE + "/getOrdersDueMetrics(Plant='" + encodeURIComponent(String(sPlant || "").replace(/'/g, "''")) + "')";
+            return ODataClient.get(sUrl).then(function (result) {
                 var oData = (result && result.value) || result;
                 if (!oData || typeof oData.scheduleLineCount !== "number" || typeof oData.shippingPointCount !== "number") {
                     throw new Error("getOrdersDueMetrics returned no figures");
@@ -136,6 +99,21 @@ sap.ui.define([
                     distinctOrdersCount: typeof oData.distinctOrdersCount === "number" ? oData.distinctOrdersCount : 0,
                     readyOrdersCount: typeof oData.readyOrdersCount === "number" ? oData.readyOrdersCount : 0,
                     inApprovalOrdersCount: typeof oData.inApprovalOrdersCount === "number" ? oData.inApprovalOrdersCount : 0
+                };
+            });
+        },
+
+        /**
+         * The current user's plants for the worklist plant selector (server-side scope).
+         *
+         * @returns {Promise<{plants: string[], unrestricted: boolean}>}
+         */
+        getPlantContext: function () {
+            return ODataClient.get(SERVICE_BASE + "/getPlantContext()").then(function (result) {
+                var oData = (result && result.value) || result || {};
+                return {
+                    plants: Array.isArray(oData.plants) ? oData.plants : [],
+                    unrestricted: oData.unrestricted === true
                 };
             });
         },
@@ -200,12 +178,6 @@ sap.ui.define([
             });
         },
 
-        /** Post goods issue for a delivery. Resolves with SAP's PostGoodsReturnInfo-based result; rejects with SAP's message. */
-        postGoodsIssue: function (sDelivery) {
-            if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }
-            return ODataClient.post(SERVICE_BASE + "/postGoodsIssue", { DeliveryDocument: String(sDelivery).trim() });
-        },
-
         /** Billing document types SAP allows for this delivery (never a hardcoded list). */
         getBillingDocumentTypes: function (sDelivery) {
             if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }
@@ -216,47 +188,18 @@ sap.ui.define([
         },
 
         /** Create a billing document for a delivery; the number comes only from SAP. */
-        createBillingDocument: function (mParams) {
+        createBillingDocument: function (mParams, mOptions) {
             if (!mParams || !mParams.delivery) { return Promise.reject(new Error("Delivery number is required.")); }
-            return ODataClient.post(SERVICE_BASE + "/createBillingDocument", {
+            var oPayload = {
                 DeliveryDocument: String(mParams.delivery).trim(),
                 BillingDocumentType: mParams.billingType ? String(mParams.billingType).trim() : null,
                 BillingDocumentDate: mParams.billingDate ? String(mParams.billingDate).trim() : null
-            });
-        },
-
-        /**
-         * Fetch supported delivery document types for delivery without reference.
-         *
-         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
-         * @param {sap.ui.model.Filter[]} [aFilters]
-         * @param {Object} [mParameters]
-         * @returns {Promise<Array>}
-         */
-        getDeliveryWithoutRefTypes: function (oModel, aFilters, mParameters) {
-            if (oModel && typeof oModel.bindList !== "function") {
-                mParameters = aFilters;
-                aFilters = oModel;
-                oModel = _oModel;
+            };
+            var sETag = (mOptions && (mOptions.etag || mOptions.ifMatch)) || (mParams && (mParams.etag || mParams.ifMatch)) || "";
+            if (sETag) {
+                return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload, { "If-Match": sETag });
             }
-            return _readEntitySet(oModel || _oModel, "/DeliveryWithoutRefTypes", aFilters, mParameters);
-        },
-
-        /**
-         * Fetch ship-to parties value help for delivery without reference.
-         *
-         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
-         * @param {sap.ui.model.Filter[]} [aFilters]
-         * @param {Object} [mParameters]
-         * @returns {Promise<Array>}
-         */
-        getDeliveryWithoutRefShipToParties: function (oModel, aFilters, mParameters) {
-            if (oModel && typeof oModel.bindList !== "function") {
-                mParameters = aFilters;
-                aFilters = oModel;
-                oModel = _oModel;
-            }
-            return _readEntitySet(oModel || _oModel, "/DeliveryWithoutRefShipToParties", aFilters, mParameters);
+            return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload);
         },
 
         /**
@@ -280,9 +223,9 @@ sap.ui.define([
             var oPayload = {
                 ShippingPoint: String(mParams.shippingPoint).trim(),
                 DeliveryDocumentType: mParams.deliveryType ? String(mParams.deliveryType).trim() : "LO2",
-                SalesOrganization: mParams.salesOrg ? String(mParams.salesOrg).trim() : "1000",
-                DistributionChannel: mParams.distChannel ? String(mParams.distChannel).trim() : "10",
-                Division: mParams.division ? String(mParams.division).trim() : "52",
+                SalesOrganization: String(mParams.salesOrg || "").trim(),
+                DistributionChannel: String(mParams.distChannel || "").trim(),
+                Division: String(mParams.division || "").trim(),
                 ShipToParty: String(mParams.shipToParty).trim(),
                 Plant: String(mParams.plant).trim(),
                 StorageLocation: String(mParams.storageLocation).trim(),

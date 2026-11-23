@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 """Which catalogued services can CREATE data? Reads $metadata of every service that answered 200
 in catalog-audit.csv. Read-only (GET $metadata only). Writes catalog-creatable.csv.
-  python3 tools/find-creatable.py          PAR=4 to go gentler, LIMIT=50 for a trial run
+  ALLOW_LIVE_SAP_TOOLS=1 python3 tools/find-creatable.py --allow-live-sap  PAR=4 to go gentler, LIMIT=50 for a trial run
 Creatable = EntitySet not marked sap:creatable="false", excluding value helps / SAP__ technical sets
 (they lack the annotation but are never really writable). POST FunctionImports are counted separately.
 Metadata says what the service DECLARES; authorisation and backend checks can still reject a POST."""

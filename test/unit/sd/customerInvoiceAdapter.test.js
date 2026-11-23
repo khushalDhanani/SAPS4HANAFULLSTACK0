@@ -72,36 +72,37 @@ describe('Unit: CustomerInvoiceAdapter', () => {
   });
 
   describe('getBillingDocuments', () => {
-    test('calls SAP Gateway with pagination and filters', async () => {
-      mockHttpClient.get.mockResolvedValue({
-        data: {
-          d: {
-            __count: '2',
-            results: [
-              { BillingDocument: '31000111', TotalNetAmount: '100' },
-              { BillingDocument: '31000112', TotalNetAmount: '200' }
-            ]
-          }
+    // Row and count shape are hand-written; C_BillingDocument_F0797 metadata is not in the repo, so the SAP shape is not proven.
+    const twoRows = {
+      data: {
+        d: {
+          __count: '2',
+          results: [
+            { BillingDocument: '31000111', TotalNetAmount: '100' },
+            { BillingDocument: '31000112', TotalNetAmount: '200' }
+          ]
         }
-      });
+      }
+    };
 
-      const query = {
-        top: 10,
-        skip: 0,
-        filter: "SoldToParty eq '10358'",
-        orderby: 'BillingDocument desc'
-      };
+    test('builds the exact URL from paging, encoded filter and encoded order', async () => {
+      mockHttpClient.get.mockResolvedValue(twoRows);
 
-      const res = await adapter.getBillingDocuments(query);
+      await adapter.getBillingDocuments({ top: 10, skip: 0, filter: "SoldToParty eq '10358'", orderby: 'BillingDocument desc' });
+
       expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
-      const calledUrl = mockHttpClient.get.mock.calls[0][0];
-      expect(calledUrl).toContain('/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/C_BillingDocument_F0797?');
-      expect(calledUrl).toContain('$top=10');
-      expect(calledUrl).toContain('$skip=0');
-      expect(calledUrl).toContain('$inlinecount=allpages');
+      expect(mockHttpClient.get.mock.calls[0][0]).toBe(
+        "/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/C_BillingDocument_F0797?$top=10&$skip=0&$filter=SoldToParty%20eq%20'10358'&$orderby=BillingDocument%20desc&$inlinecount=allpages"
+      );
+    });
+
+    test('returns the mapped rows and the inline count', async () => {
+      mockHttpClient.get.mockResolvedValue(twoRows);
+
+      const res = await adapter.getBillingDocuments({});
+
       expect(res.count).toBe(2);
-      expect(res.results).toHaveLength(2);
-      expect(res.results[0].BillingDocument).toBe('31000111');
+      expect(res.results.map((r) => [r.BillingDocument, r.TotalNetAmount])).toEqual([['31000111', 100], ['31000112', 200]]);
     });
   });
 
@@ -196,6 +197,60 @@ describe('Unit: CustomerInvoiceAdapter', () => {
       expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
       const passedOptions = mockHttpClient.post.mock.calls[0][1];
       expect(passedOptions.headers).toBeUndefined();
+    });
+
+    test('preserves and propagates If-Match header from CAP request to S4HttpClient', async () => {
+      mockHttpClient.post.mockResolvedValue({
+        data: { d: { results: [{ Message: 'Document 31000111 has been saved.' }] } }
+      });
+      mockHttpClient.get.mockResolvedValue({
+        data: {
+          d: {
+            BillingDocument: '31000111',
+            AccountingDocument: '9000000100',
+            FiscalYear: '2026',
+            AccountingTransferStatus: 'C'
+          }
+        }
+      });
+
+      const fakeCapReq = {
+        data: { BillingDocument: '31000111' },
+        headers: { 'if-match': 'W/"2026-10-28T10:00:00Z"' },
+        reject: jest.fn()
+      };
+
+      await adapter.postBillingDocumentToAccounting({ billingDocument: '31000111' }, fakeCapReq);
+      expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+      const passedOptions = mockHttpClient.post.mock.calls[0][1];
+      expect(passedOptions.headers['If-Match']).toBe('W/"2026-10-28T10:00:00Z"');
+    });
+
+    test('preserves and propagates If-Match header from nested Express req.headers', async () => {
+      mockHttpClient.post.mockResolvedValue({
+        data: { d: { results: [{ BillingDocument: '31000111', MessageType: 'S', Message: 'Success' }] } }
+      });
+      mockHttpClient.get.mockResolvedValue({
+        data: {
+          d: {
+            BillingDocument: '31000111',
+            AccountingDocument: '9000000101',
+            FiscalYear: '2026',
+            AccountingTransferStatus: 'C'
+          }
+        }
+      });
+
+      const fakeCapReq = {
+        data: { BillingDocument: '31000111' },
+        req: { headers: { 'If-Match': 'W/"express-nested-etag"' } },
+        reject: jest.fn()
+      };
+
+      await adapter.postBillingDocumentToAccounting({ billingDocument: '31000111' }, fakeCapReq);
+      expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+      const passedOptions = mockHttpClient.post.mock.calls[0][1];
+      expect(passedOptions.headers['If-Match']).toBe('W/"express-nested-etag"');
     });
 
     test('throws 400 when SAP returns MessageType E in FunctionImportResult', async () => {
@@ -322,6 +377,60 @@ describe('Unit: CustomerInvoiceAdapter', () => {
     test('throws 400 when billing document is missing', async () => {
       await expect(adapter.cancelBillingDocument({ billingDocument: '' }))
         .rejects.toThrow('BillingDocument is required to cancel billing document.');
+    });
+
+    // SAP response shapes below are hand-written, as in the test above; only OUR reaction to them is checked.
+    const acceptedCancel = { data: { d: { results: [{ BillingDocument: '90000053', MessageType: 'S', Message: 'Document 90000053 has been saved.' }] } } };
+
+    const invoiceRead = (over) => ({ data: { d: { BillingDocument: '31000112', BillingDocumentIsCancelled: false, AccountingTransferStatus: 'C', ...over } } });
+    const notConfirmed = "SAP accepted the cancellation of billing document 31000112 (reversal document 90000053), but reading it back did not show it as cancelled, so it is NOT confirmed. Check it in SAP before trying again.";
+
+    test('refuses to report success when every read-back still shows the invoice as not cancelled', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockResolvedValue(invoiceRead());
+
+      await expect(adapter.cancelBillingDocument({ billingDocument: '31000112' })).rejects.toMatchObject({ status: 502, message: notConfirmed, $sanitize: false });
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(3);
+    });
+
+    test('refuses to report success when no read-back succeeded', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockRejectedValue(new Error('read-back unavailable'));
+
+      await expect(adapter.cancelBillingDocument({ billingDocument: '31000112' })).rejects.toMatchObject({ status: 502, message: notConfirmed });
+    });
+
+    test('a later failed read does not turn into a confirmation', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockResolvedValueOnce(invoiceRead()).mockRejectedValue(new Error('read-back unavailable'));
+
+      await expect(adapter.cancelBillingDocument({ billingDocument: '31000112' })).rejects.toMatchObject({ status: 502 });
+    });
+
+    test('leaves the reversal document out of the warning when SAP named none', async () => {
+      mockHttpClient.post.mockResolvedValue({ data: { d: { results: [{ MessageType: 'S', Message: 'Saved' }] } } });
+      mockHttpClient.get.mockResolvedValue(invoiceRead());
+
+      await expect(adapter.cancelBillingDocument({ billingDocument: '31000112' })).rejects.toThrow(/^SAP accepted the cancellation of billing document 31000112, but/);
+    });
+
+    test('accepts a read-back on a later attempt', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockRejectedValueOnce(new Error('not yet')).mockResolvedValueOnce(invoiceRead({ BillingDocumentIsCancelled: true }));
+
+      const res = await adapter.cancelBillingDocument({ billingDocument: '31000112' });
+
+      expect(res.Success).toBe(true);
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(2);
+    });
+
+    test('treats accounting status E as cancelled and says so, as the cancel and release checks do', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockResolvedValue(invoiceRead({ AccountingTransferStatus: 'E' }));
+
+      const res = await adapter.cancelBillingDocument({ billingDocument: '31000112' });
+
+      expect(res).toMatchObject({ BillingDocumentIsCancelled: true, AccountingTransferStatus: 'E', Success: true });
     });
   });
 });
