@@ -11,7 +11,7 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
 
     beforeAll(() => {
         process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-        process.env.LOCAL_AUTH_SECRET = 'test-secret-key-po-auth-2026';
+        process.env.LOCAL_AUTH_SECRET = 'test-secret-key-po-auth-2026-padded-to-32-characters';
     });
 
     afterAll(() => {

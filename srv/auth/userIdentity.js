@@ -5,11 +5,9 @@
  *   1. XSUAA user attributes (e.g. logon_name, email)
  *   2. CAP authenticated user ID (req.user.id !== 'anonymous')
  *   3. CAP user name (req.user.name !== 'anonymous')
- *   4. Custom forwarded 'x-user-id' header (strictly non-production / local dev only)
- *   5. Configured environment fallback (S4_USER || 'SYSTEM') (non-production only)
+ *   4. Configured environment fallback (S4_USER || 'SYSTEM') (non-production only)
  *
  * In production (process.env.NODE_ENV === 'production'):
- *   - Client-supplied 'x-user-id' headers are strictly rejected.
  *   - Unauthenticated requests fail closed and throw an error.
  *   - Missing request context throws an error.
  *
@@ -42,18 +40,14 @@ function resolveUserIdentity(req) {
         return String(req.user.name).trim();
     }
 
-    // In production, do NOT trust client headers or silently fall back to privileged system users
+    // In production, do NOT silently fall back to privileged system users
     if (process.env.NODE_ENV === 'production') {
         throw new Error('Authentication required: Trusted user identity cannot be determined');
     }
 
-    // 4. Custom forwarded user header (strictly non-production / local dev only)
-    const headerUser = req.headers?.['x-user-id'] || req._?.req?.headers?.['x-user-id'];
-    if (headerUser && String(headerUser).trim() !== '') {
-        return String(headerUser).trim();
-    }
+    // A client-supplied header (x-user-id) is never an identity, in any environment.
 
-    // 5. Configured system / service user fallback (non-production only)
+    // 4. Configured system / service user fallback (non-production only)
     return process.env.S4_USER || 'SYSTEM';
 }
 

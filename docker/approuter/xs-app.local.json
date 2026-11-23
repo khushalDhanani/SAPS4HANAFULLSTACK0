@@ -3,6 +3,20 @@
   "authenticationMethod": "none",
   "routes": [
     {
+      "source": "^/ai/chat/stream$",
+      "target": "/ai/chat/stream",
+      "destination": "cap-local",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/health(/.*)?$",
+      "target": "/health$1",
+      "destination": "cap-local",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/odata/v4/(.*)$",
       "target": "/odata/v4/$1",
       "destination": "cap-local",

@@ -1,5 +1,6 @@
 const LOG = require('../../../../common/logger')('sales-inquiry-adapter');
 const businessConfigResolver = require('../../../../common/BusinessConfigResolver');
+const { sapKey } = require('../../sapKey');
 
 /**
  * SalesInquiryAdapter methods: creation defaults and RFC master data (payment terms, contact persons).
@@ -92,7 +93,8 @@ module.exports = {
         }
       }
     }
-    const sCustPadded = sCustomer ? sCustomer.padStart(10, '0') : '';
+    // The value comes from the caller's $filter and is embedded in an RFC_READ_TABLE WHERE text: validate it.
+    const sCustPadded = sCustomer ? sapKey(sCustomer, 'kunnr', 'Customer').padStart(10, '0') : '';
     const cacheKey = `contacts:${sCustPadded || '*'}`;
     const cached = this.masterDataCache.get(cacheKey);
     if (cached) return cached;

@@ -3432,3 +3432,17 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **CHANGED:** `srv/auth/localTokenUtil.js` — `verifyToken` looks the user up in the sign-in list (`srv/auth/appUsers.js`) on every request: not listed -> token refused; roles come from the current list, not from the token. An isolated test-profile server (no SAP connectivity) keeps the roles in the token. Tests: `test/unit/auth/localTokenUtil.test.js` (3 new), `test/unit/auth/authMiddlewareOrdering.test.js` (lists its users).
 - **VALIDATION:** ESLint 0 errors; `jest --coverage --runInBand`: 214 suites, 3496 passed, 13 skipped, thresholds met.
 - **NOT VERIFIED:** browser E2E; a running server. No SAP calls.
+
+### 2026-11-23 IST — Remaining code-level audit fixes — PASS locally, not deployed
+- **Branch:** `fix/token-sign-in-list`. Not pushed, not deployed.
+- **CHANGED:**
+  - `srv/integration/s4hana/sd/sales-inquiry/salesInquiryMasterData.js` — the `Customer` filter of ContactPersonVH is validated (`sapKey` kunnr) before it is embedded in the RFC_READ_TABLE WHERE text on KNVK (injection reproduced before the fix).
+  - `srv/auth/localTokenUtil.js` — `LOCAL_AUTH_SECRET` must have at least 32 characters or the issuer stays off; a token must carry `exp`, the local issuer and `alg` HS256.
+  - `srv/auth/userIdentity.js` — the client header `x-user-id` is never an identity (was trusted outside production).
+  - `server.js` — `X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`; unreachable duplicate `/health` route removed.
+  - `docker/approuter/xs-app.json`, `xs-app.local.json` — routes for `/ai/chat/stream` and `/health` (AI streaming answered 404 behind the Docker approuter).
+  - `docker-compose.yml` — read-only mount of the SAP NW RFC SDK (`RFC_SDK_HOST_PATH`, default `./nwrfcsdk`) with `LD_LIBRARY_PATH`/`SAPNWRFC_HOME`.
+  - `Dockerfile`, `Dockerfile.dev`, `app/router/Dockerfile` — base image pinned to `node:22.23.5-bookworm-slim` (the version the server runs).
+- **VALIDATION:** ESLint 0 errors; full `jest --coverage --runInBand` 214 suites passed before the two new test files; auth and new suites pass after.
+- **NOT VERIFIED:** any Docker build (no Docker here); approuter routes behind a real approuter; RFC with a mounted SDK; browser E2E. `E2E_LOCAL_AUTH_SECRET` in GitHub must have 32+ characters.
+- **NOT DONE (needs Docker/SAP/BTP testing or a decision):** `@sap/approuter` upgrade; RFC connection pool default; schema deploy step for `db.sqlite`; broken `approuter` profile in `docker-compose.yml`; `getUserInfo` returning the access token; AI stream abort and quota; `npm start` signal handling in `tools/docker/runtime.js`.

@@ -30,7 +30,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
 
         it('should be disabled if LOCAL_AUTH_SECRET is set but ENABLE_DEV_TOKEN_ISSUER is not true', () => {
             delete process.env.ENABLE_DEV_TOKEN_ISSUER;
-            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345';
+            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345-padded-to-32-characters';
 
             expect(localTokenUtil.isDevTokenIssuerEnabled()).toBe(false);
             expect(() => localTokenUtil.issueToken('khushal')).toThrow(/disabled/i);
@@ -39,7 +39,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
 
         it('should be enabled when ENABLE_DEV_TOKEN_ISSUER=true and LOCAL_AUTH_SECRET is provided', () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345';
+            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345-padded-to-32-characters';
 
             expect(localTokenUtil.isDevTokenIssuerEnabled()).toBe(true);
         });
@@ -47,7 +47,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
         it('should be disabled when NODE_ENV is production even if flags are set', () => {
             process.env.NODE_ENV = 'production';
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345';
+            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345-padded-to-32-characters';
 
             expect(localTokenUtil.isDevTokenIssuerEnabled()).toBe(false);
             expect(() => localTokenUtil.issueToken('khushal')).toThrow(/disabled/i);
@@ -57,7 +57,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
     describe('Token Issuance and Verification', () => {
         beforeEach(() => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'test-secret-key-abcdef';
+            process.env.LOCAL_AUTH_SECRET = 'test-secret-key-abcdef-padded-to-32-characters';
         });
 
         it('should reject token issuance with missing or invalid username', () => {
@@ -125,7 +125,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
         };
         const enable = () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345';
+            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345-padded-to-32-characters';
         };
 
         it('signs in the user from a valid token, whatever the case of "Bearer"', () => {
@@ -201,4 +201,45 @@ describe('Unit: localTokenUtil - the sign-in list applies to every request', () 
         expect(user.is('SapLogsReader')).toBe(true);
     });
 });
+});
+
+describe('Unit: localTokenUtil - signing secret length and mandatory claims', () => {
+    const crypto = require('crypto');
+    const util = require('../../../srv/auth/localTokenUtil');
+    const originalEnv = { ...process.env };
+    const SECRET = 'local-test-signing-secret-at-least-32-characters';
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const sign = (header, payload) => {
+        const body = `${b64(header)}.${b64(payload)}`;
+        return `${body}.${crypto.createHmac('sha256', SECRET).update(body).digest('base64url')}`;
+    };
+    const HS256 = { alg: 'HS256', typ: 'JWT' };
+    const claims = (extra = {}) => ({
+        user_name: 'khushal', scope: ['$XSAPPNAME.Viewer'], iss: 'saps4hana-local-auth-service',
+        exp: Math.floor(Date.now() / 1000) + 600, ...extra
+    });
+
+    beforeEach(() => {
+        process.env.NODE_ENV = 'test';
+        process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+        process.env.LOCAL_AUTH_SECRET = SECRET;
+    });
+    afterEach(() => { process.env = { ...originalEnv }; });
+
+    test('a signing secret shorter than 32 characters keeps the issuer off', () => {
+        process.env.LOCAL_AUTH_SECRET = 'x'.repeat(31);
+        expect(util.isDevTokenIssuerEnabled()).toBe(false);
+        expect(() => util.issueToken('khushal')).toThrow(/at least 32 characters/);
+        process.env.LOCAL_AUTH_SECRET = 'x'.repeat(32);
+        expect(util.isDevTokenIssuerEnabled()).toBe(true);
+    });
+
+    test('a correctly signed token is accepted only with an expiry time, the issuer and HS256', () => {
+        expect(util.verifyToken(sign(HS256, claims())).id).toBe('khushal');
+        const { exp: _exp, ...noExpiry } = claims();
+        expect(util.verifyToken(sign(HS256, noExpiry))).toBeNull();
+        expect(util.verifyToken(sign(HS256, claims({ exp: 'never' })))).toBeNull();
+        expect(util.verifyToken(sign(HS256, claims({ iss: 'someone-else' })))).toBeNull();
+        expect(util.verifyToken(sign({ alg: 'none', typ: 'JWT' }, claims()))).toBeNull();
+    });
 });

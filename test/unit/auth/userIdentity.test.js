@@ -50,15 +50,16 @@ describe('Unit: Shared User Identity Resolution (srv/auth/userIdentity)', () => 
         expect(resolveUserIdentity(req)).toBe('NAMED_USER');
     });
 
-    it('should derive user identity from custom header x-user-id in non-production', () => {
+    it('ignores a client-supplied x-user-id header in non-production', () => {
         const req = {
             user: { id: 'anonymous' },
             headers: { 'x-user-id': 'DEV_SALES_REP' }
         };
-        expect(resolveUserIdentity(req)).toBe('DEV_SALES_REP');
+        delete process.env.S4_USER;
+        expect(resolveUserIdentity(req)).toBe('SYSTEM');
     });
 
-    it('should derive user identity from req._.req.headers x-user-id in non-production', () => {
+    it('ignores an x-user-id header on the raw request in non-production', () => {
         const req = {
             user: { id: 'anonymous' },
             _: {
@@ -67,7 +68,8 @@ describe('Unit: Shared User Identity Resolution (srv/auth/userIdentity)', () => 
                 }
             }
         };
-        expect(resolveUserIdentity(req)).toBe('EXPRESS_HEADER_USER');
+        delete process.env.S4_USER;
+        expect(resolveUserIdentity(req)).toBe('SYSTEM');
     });
 
     it('should fall back to process.env.S4_USER when unauthenticated in development', () => {

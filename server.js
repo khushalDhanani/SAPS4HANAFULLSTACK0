@@ -91,6 +91,9 @@ cds.on('bootstrap', (app) => {
     // Set Permissions-Policy header to eliminate Chromium 'unload is not allowed' violation warnings
     app.use((req, res, next) => {
         res.setHeader('Permissions-Policy', 'unload=*');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        res.setHeader('Referrer-Policy', 'same-origin');
         // Intercept WWW-Authenticate header to prevent native browser modal basic auth popups
         const originalSetHeader = res.setHeader;
         res.setHeader = function (name, value) {
@@ -150,15 +153,6 @@ cds.on('bootstrap', (app) => {
             isAtoAvailable: false,
             isAtoDone: false,
             isProductiveSystem: false
-        });
-    });
-
-    // Health check endpoint for MTA/BTP readiness, Docker, and Kubernetes probes
-    app.get('/health', (req, res) => {
-        res.status(200).json({
-            status: 'UP',
-            uptime: Math.floor(process.uptime()),
-            timestamp: new Date().toISOString()
         });
     });
 });

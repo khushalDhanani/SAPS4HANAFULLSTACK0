@@ -28,8 +28,14 @@ services:
       - NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}
       # One proxy in front (the tls profile): the failed sign-in limit then counts the real client address.
       - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-1}
+      # SAP NW RFC SDK (licensed, never in the image): mounted read-only from the host. While the host directory is
+      # empty the RFC-based functions answer 503; /health/dependencies shows rfcSdk DOWN.
+      - S4_RFC_SYSNR=${S4_RFC_SYSNR:-}
+      - SAPNWRFC_HOME=/usr/sap/nwrfcsdk
+      - LD_LIBRARY_PATH=/usr/sap/nwrfcsdk/lib
     volumes:
       - ./certs:/run/certs:ro
+      - ${RFC_SDK_HOST_PATH:-./nwrfcsdk}:/usr/sap/nwrfcsdk:ro
       - ./db.sqlite:/home/node/app/db.sqlite
     env_file:
       - path: .env

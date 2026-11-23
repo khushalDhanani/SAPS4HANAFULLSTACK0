@@ -6,7 +6,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Build SAPUI5 / Fiori Application
 # ------------------------------------------------------------------------------
-FROM node:22-bookworm-slim AS ui5-builder
+FROM node:22.23.5-bookworm-slim AS ui5-builder
 WORKDIR /build/app/fiori-app
 
 # Copy UI5 package descriptors and install build dependencies
@@ -23,7 +23,7 @@ RUN npm run build
 # ------------------------------------------------------------------------------
 # Stage 2: Lean Runtime Image
 # ------------------------------------------------------------------------------
-FROM node:22-bookworm-slim AS runtime
+FROM node:22.23.5-bookworm-slim AS runtime
 
 # Install dumb-init for proper PID 1 signal forwarding (SIGTERM / SIGINT) and curl for healthcheck
 RUN apt-get update \

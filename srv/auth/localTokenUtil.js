@@ -5,6 +5,8 @@ const { isIsolatedTestProfile } = require('./mockUserPasswords');
 
 const LOCAL_DEV_ISSUER = 'saps4hana-local-auth-service';
 const LOCAL_DEV_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
+// A short signing secret can be guessed offline from one captured token, and then any user can be forged.
+const MIN_SECRET_LENGTH = 32;
 
 /**
  * Performs a constant-time comparison of two strings to prevent timing attacks.
@@ -23,7 +25,7 @@ function timingSafeEqual(a, b) {
 
 /**
  * Checks whether the local development token issuer is explicitly enabled
- * via ENABLE_DEV_TOKEN_ISSUER=true and a non-empty LOCAL_AUTH_SECRET.
+ * via ENABLE_DEV_TOKEN_ISSUER=true and a LOCAL_AUTH_SECRET of at least 32 characters.
  *
  * @returns {boolean}
  */
@@ -31,7 +33,7 @@ function isDevTokenIssuerEnabled() {
     return process.env.NODE_ENV !== 'production' &&
            process.env.ENABLE_DEV_TOKEN_ISSUER === 'true' &&
            typeof process.env.LOCAL_AUTH_SECRET === 'string' &&
-           process.env.LOCAL_AUTH_SECRET.trim().length > 0;
+           process.env.LOCAL_AUTH_SECRET.trim().length >= MIN_SECRET_LENGTH;
 }
 
 /**
@@ -42,7 +44,7 @@ function isDevTokenIssuerEnabled() {
  */
 function getLocalDevSecret() {
     if (!isDevTokenIssuerEnabled()) {
-        throw new Error('Local development token issuer is disabled. Set ENABLE_DEV_TOKEN_ISSUER=true and provide LOCAL_AUTH_SECRET in the environment.');
+        throw new Error('Local development token issuer is disabled. Set ENABLE_DEV_TOKEN_ISSUER=true and provide a LOCAL_AUTH_SECRET of at least 32 characters in the environment.');
     }
     return process.env.LOCAL_AUTH_SECRET.trim();
 }
@@ -160,12 +162,16 @@ function verifyToken(token) {
 
     if (!timingSafeEqual(signature, expectedSig)) return null;
 
-    const payload = base64UrlDecode(payloadB64);
-    if (!payload || !payload.user_name) return null;
+    const header = base64UrlDecode(headerB64);
+    if (!header || header.alg !== 'HS256') return null;
 
-    // Check expiration
+    const payload = base64UrlDecode(payloadB64);
+    if (!payload || typeof payload.user_name !== 'string' || !payload.user_name) return null;
+    if (payload.iss !== LOCAL_DEV_ISSUER) return null;
+
+    // A token without an expiry time would be valid for ever: it is refused.
     const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && now > payload.exp) return null;
+    if (typeof payload.exp !== 'number' || now > payload.exp) return null;
 
     // Map XSUAA scopes ($XSAPPNAME.<Role>) to CAP roles (<Role>)
     const aScopes = Array.isArray(payload.scope) ? payload.scope : [];
@@ -234,5 +240,6 @@ module.exports = {
     verifyToken,
     applyBearerToken,
     isDevTokenIssuerEnabled,
+    MIN_SECRET_LENGTH,
     timingSafeEqual
 };

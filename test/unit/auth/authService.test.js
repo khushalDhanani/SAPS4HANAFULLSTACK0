@@ -133,7 +133,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it('should allow dev login for khushal with the local password and keep the configured roles', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.LOCAL_DEV_PASSWORD = 'local-password';
 
             const req = {
@@ -150,7 +150,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it('compares the local password exactly, including upper and lower case', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.LOCAL_DEV_PASSWORD = 'Local-Password';
             const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: false });
 
@@ -164,7 +164,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it.each(['alice', 'bob', 'carol', 'dave', 'eve', 'erin', 'fred', 'me', 'yves'])('%s is not a listed user: refused without asking SAP', async (name) => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.LOCAL_DEV_PASSWORD = 'local-password';
             const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: true });
 
@@ -195,7 +195,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
         it('should reject login for khushal when password is missing or wrong', async () => {
             jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: false, message: 'Invalid username or password.' });
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.LOCAL_DEV_PASSWORD = 'local-password';
 
             const req1 = {
@@ -215,7 +215,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it('never accepts the SAP connection password (S4_PASSWORD) as a login password', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.S4_USERNAME = 'khushal';
             process.env.S4_PASSWORD = 'RealS4Password!@#';
             process.env.LOCAL_DEV_PASSWORD = 'local-password';
@@ -237,7 +237,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it('the SAP connection user (S4_USERNAME) is not an application user unless it is listed', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.S4_USERNAME = 'custom_dev_user';
             process.env.S4_PASSWORD = 'devPassword123';
             const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: true });
@@ -250,7 +250,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it('stops asking SAP after three wrong passwords for a user, and a success clears the count', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.LOCAL_DEV_PASSWORD = 'local-password';
             const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({
                 authenticated: false, statusCode: 401, message: 'Invalid username or password.'
@@ -277,7 +277,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it('does not count an unreachable SAP system as a failed attempt', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({
                 authenticated: false, statusCode: 503, message: 'Cannot connect to S/4HANA system.'
             });
@@ -289,7 +289,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it('refuses khushal with a wrong password and asks SAP, instead of accepting any password', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.LOCAL_DEV_PASSWORD = 'mock-password';
             process.env.S4_PASSWORD = 'real-password';
             const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({
@@ -306,7 +306,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it('should validate a user listed in APP_USER_ROLES against authAdapter and grant the listed roles', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.APP_USER_ROLES = JSON.stringify({ real_sap_user: ['Viewer'] });
 
             jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
@@ -330,7 +330,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
         it('should build system label dynamically from S4_SYSTEM_NAME and S4_CLIENT in user profile and login', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.S4_SYSTEM_NAME = 'S4HANA_DEV';
             process.env.S4_CLIENT = '300';
             process.env.LOCAL_DEV_PASSWORD = 'local-password';
