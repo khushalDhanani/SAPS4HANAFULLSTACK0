@@ -1,0 +1,23 @@
+# TLS reverse proxy for the standalone stack (docker-compose.yml, profile "tls").
+# The certificate and key come from the host: certs/server.crt and certs/server.key (never committed).
+# No certificate is requested from a public authority.
+{
+	admin off
+}
+
+{$SERVER_NAME}:443 {
+	tls /run/certs/server.crt /run/certs/server.key
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# flush_interval -1: the AI chat answer is streamed (Server-Sent Events) and must not be buffered.
+	reverse_proxy backend:4004 {
+		flush_interval -1
+	}
+}

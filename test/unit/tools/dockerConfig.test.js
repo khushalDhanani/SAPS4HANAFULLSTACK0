@@ -41,4 +41,18 @@ describe('Docker Configuration Integrity', () => {
     expect(composeContent).toContain('./certs:/run/certs:ro');
     expect(composeContent).toContain('./db.sqlite:/home/node/app/db.sqlite');
   });
+
+  test('docker-compose.yml publishes the plain-HTTP services on loopback only and the TLS proxy alone on the network', () => {
+    const compose = fs.readFileSync(path.join(rootDir, 'docker-compose.yml'), 'utf8');
+    const published = compose.split('\n').filter((line) => /^\s*- "[^"]*:\d+"\s*$/.test(line)).map((line) => line.trim());
+    expect(published).toEqual([
+      '- "127.0.0.1:${PORT:-4004}:4004"',
+      '- "127.0.0.1:${ROUTER_PORT:-5000}:5000"',
+      '- "${HTTPS_PORT:-443}:443"'
+    ]);
+    expect(compose).toMatch(/proxy:[\s\S]*profiles:\s*\n\s*- tls/);
+    const caddyfile = fs.readFileSync(path.join(rootDir, 'docker/proxy/Caddyfile'), 'utf8');
+    expect(caddyfile).toContain('reverse_proxy backend:4004');
+    expect(caddyfile).toContain('tls /run/certs/server.crt /run/certs/server.key');
+  });
 });

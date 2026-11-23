@@ -144,3 +144,24 @@ disabled and must remain loopback-only. Its mock/test roles are for local
 development, not an authorization or production-security validation. A
 successful image build or health check does not verify XSUAA login, role
 enforcement, HANA persistence, SAP TLS, or RFC connectivity.
+
+## Standalone stack (`docker-compose.yml`) and its TLS proxy
+
+`docker-compose.yml` runs the application without BTP bindings, in the development
+profile. It speaks plain HTTP, so it is published on `127.0.0.1` only and must never
+be bound to a network interface. Remote users reach it through the `proxy` service:
+
+1. Set `SERVER_NAME` in `.env` to the host name on the certificate.
+2. Place `certs/server.crt` (certificate and chain) and `certs/server.key` on the host.
+3. Start both services, naming the file because `compose.yaml` otherwise takes precedence:
+
+```sh
+docker compose -f docker-compose.yml --profile tls up -d --build
+```
+
+4. Allow only the HTTPS port (default 443) through the host firewall.
+
+The proxy adds HSTS and basic security headers and forwards the client address;
+`TRUST_PROXY_HOPS` defaults to 1 in this file so the failed sign-in limit counts it.
+This stack is an interim arrangement: it has one shared SAP connection user and no
+single sign-on. A production deployment uses the `qa`/`prod` profiles above.

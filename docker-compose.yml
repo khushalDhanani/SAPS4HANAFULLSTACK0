@@ -9,8 +9,10 @@ services:
     image: saps4hana-fullstack:latest
     container_name: saps4hana-backend
     restart: unless-stopped
+    # Loopback only: the app speaks plain HTTP, so it is never published on the network. Remote users come in
+    # through the TLS proxy below (docker compose --profile tls up -d). See docs/deployment/docker.md.
     ports:
-      - "${PORT:-4004}:4004"
+      - "127.0.0.1:${PORT:-4004}:4004"
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=4004
@@ -24,6 +26,8 @@ services:
       - EWM_WAREHOUSE_NUMBER=${EWM_WAREHOUSE_NUMBER:-}
       - SU_HU_SERVICE_PATH=${SU_HU_SERVICE_PATH:-}
       - NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}
+      # One proxy in front (the tls profile): the failed sign-in limit then counts the real client address.
+      - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-1}
     volumes:
       - ./certs:/run/certs:ro
       - ./db.sqlite:/home/node/app/db.sqlite
@@ -57,7 +61,7 @@ services:
       - approuter
       - full
     ports:
-      - "${ROUTER_PORT:-5000}:5000"
+      - "127.0.0.1:${ROUTER_PORT:-5000}:5000"
     environment:
       - PORT=5000
       - NODE_ENV=production
@@ -70,3 +74,36 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # ----------------------------------------------------------------------------
+  # TLS reverse proxy: the only service published on the network
+  # Activated via: docker compose --profile tls up -d
+  # Needs SERVER_NAME in .env and certs/server.crt + certs/server.key on the host.
+  # ----------------------------------------------------------------------------
+  proxy:
+    image: caddy:2-alpine
+    container_name: saps4hana-proxy
+    restart: unless-stopped
+    profiles:
+      - tls
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      - SERVER_NAME=${SERVER_NAME:-localhost}
+    volumes:
+      - ./docker/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/run/certs:ro
+      - proxy-data:/data
+      - proxy-config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  proxy-data:
+  proxy-config:
