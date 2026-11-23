@@ -3425,3 +3425,10 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **VALIDATION:** root ESLint 0 errors; secret scan 0; `jest --coverage --runInBand`: 214 suites, 3492 passed, 13 skipped, coverage thresholds met.
 - **NOT VERIFIED:** browser E2E; a running server; the Linux deployment. No SAP calls were made.
 - **OPEN (audit):** item 1 (loopback bind + TLS proxy, secret rotation), item 3 SAP side (least-privilege connection user), item 5 (production target).
+
+### 2026-11-23 IST — Sign-in list enforced on every request (audit item 3, app side) — PASS locally, not deployed
+- **Branch:** `fix/token-sign-in-list` (from `main` `dc1c91dc`). Not pushed, not deployed.
+- **Gap closed:** the sign-in list was checked only at login, so a user taken off `APP_USER_ROLES` kept access, with the old roles, until the 24-hour token expired.
+- **CHANGED:** `srv/auth/localTokenUtil.js` — `verifyToken` looks the user up in the sign-in list (`srv/auth/appUsers.js`) on every request: not listed -> token refused; roles come from the current list, not from the token. An isolated test-profile server (no SAP connectivity) keeps the roles in the token. Tests: `test/unit/auth/localTokenUtil.test.js` (3 new), `test/unit/auth/authMiddlewareOrdering.test.js` (lists its users).
+- **VALIDATION:** ESLint 0 errors; `jest --coverage --runInBand`: 214 suites, 3496 passed, 13 skipped, thresholds met.
+- **NOT VERIFIED:** browser E2E; a running server. No SAP calls.

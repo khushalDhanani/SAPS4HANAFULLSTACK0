@@ -24,6 +24,11 @@ describe('Finding DEBT-02: Authentication Middleware Ordering & Dual-Boundary Id
     process.env.NODE_ENV = 'development';
     process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
     process.env.LOCAL_AUTH_SECRET = 'test-auth-secret-for-ordering-tests-1234567890';
+    // The sign-in list is checked on every request outside the isolated test profile.
+    process.env.APP_USER_ROLES = JSON.stringify({
+      alice_ordering: ['PurchasingManager', 'Viewer'], user_a: ['Viewer'], user_b: ['Admin'],
+      expired_user: ['Viewer'], admin_user: ['Admin']
+    });
   });
 
   afterAll(() => {

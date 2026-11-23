@@ -153,4 +153,52 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
             expect(run(`Bearer ${token}`).user).toBeUndefined();
         });
     });
+
+describe('Unit: localTokenUtil - the sign-in list applies to every request', () => {
+    const cds = require('@sap/cds');
+    const util = require('../../../srv/auth/localTokenUtil');
+    const originalEnv = { ...process.env };
+    let originalAuth;
+
+    beforeEach(() => {
+        originalAuth = cds.env.requires.auth;
+        cds.env.requires.auth = { kind: 'mocked', users: { khushal: { roles: ['Admin', 'Viewer'] } } };
+        process.env.NODE_ENV = 'development';
+        process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+        process.env.LOCAL_AUTH_SECRET = 'local-test-signing-secret-at-least-32-characters';
+        delete process.env.APP_USER_ROLES;
+    });
+
+    afterEach(() => {
+        cds.env.requires.auth = originalAuth;
+        process.env = { ...originalEnv };
+    });
+
+    test('a token of a user who is no longer listed is refused', () => {
+        process.env.APP_USER_ROLES = '{"JSMITH":["Viewer"]}';
+        const { token } = util.issueToken('JSMITH', ['Viewer']);
+        expect(util.verifyToken(token).id).toBe('JSMITH');
+
+        delete process.env.APP_USER_ROLES;
+        expect(util.verifyToken(token)).toBeNull();
+    });
+
+    test('roles come from the current list, not from the token', () => {
+        process.env.APP_USER_ROLES = '{"JSMITH":["Viewer"]}';
+        const { token } = util.issueToken('JSMITH', ['Admin', 'Viewer']);
+        const user = util.verifyToken(token);
+        expect(user.is('Viewer')).toBe(true);
+        expect(user.is('Admin')).toBe(false);
+
+        process.env.APP_USER_ROLES = '{"JSMITH":["Viewer","SalesManager"]}';
+        expect(util.verifyToken(token).is('SalesManager')).toBe(true);
+    });
+
+    test('a configured development user keeps its roles, and Admin still implies SapLogsReader', () => {
+        const { token } = util.issueToken('khushal', ['Viewer']);
+        const user = util.verifyToken(token);
+        expect(user.is('Admin')).toBe(true);
+        expect(user.is('SapLogsReader')).toBe(true);
+    });
+});
 });

@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const cds = require('@sap/cds');
+const { resolveAppUser } = require('./appUsers');
+const { isIsolatedTestProfile } = require('./mockUserPasswords');
 
 const LOCAL_DEV_ISSUER = 'saps4hana-local-auth-service';
 const LOCAL_DEV_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
@@ -167,7 +169,16 @@ function verifyToken(token) {
 
     // Map XSUAA scopes ($XSAPPNAME.<Role>) to CAP roles (<Role>)
     const aScopes = Array.isArray(payload.scope) ? payload.scope : [];
-    const aRoles = aScopes.map(s => s.replace(/^\$XSAPPNAME\./, ''));
+    let aRoles = aScopes.map(s => s.replace(/^\$XSAPPNAME\./, ''));
+
+    // The sign-in list (srv/auth/appUsers.js) is checked on every request, not only at login: a user taken off
+    // the list is refused at once instead of keeping access until the token expires, and a change of roles
+    // applies at once. An isolated test server (no SAP connectivity) keeps the roles in the token.
+    if (!isIsolatedTestProfile(process.env)) {
+        const listed = resolveAppUser(payload.user_name, cds.env?.requires?.auth);
+        if (!listed) return null;
+        aRoles = [...listed];
+    }
     if (aRoles.includes('Admin') && !aRoles.includes('SapLogsReader')) {
         aRoles.push('SapLogsReader');
     }
