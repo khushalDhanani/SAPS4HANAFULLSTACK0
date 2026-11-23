@@ -1,0 +1,22 @@
+# ==============================================================================
+# Development Compose Override (Hot Reload & Live Editing)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# ==============================================================================
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: saps4hana-fullstack:dev
+    container_name: saps4hana-backend-dev
+    environment:
+      - NODE_ENV=development
+      - PORT=4004
+    volumes:
+      - ./srv:/app/srv
+      - ./db:/app/db
+      - ./app:/app/app
+      - ./server.js:/app/server.js
+      - ./package.json:/app/package.json
+      - /app/node_modules
+      - /app/app/fiori-app/node_modules
