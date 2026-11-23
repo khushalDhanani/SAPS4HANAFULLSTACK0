@@ -17,6 +17,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `feature01`.
+- **Coverage gate and legacy inquiry path (2026-11-23) — PARTIAL (local, uncommitted):** Jest coverage covers `server.js` and `srv/**` (except generated `srv/external/**`) with enforced floors for `global`, `srv/integration/s4hana` and auth. The legacy OData Sales Inquiry creator is removed and the order path refuses type `ZIN`. Full suite: 210 suites, 3,444 passed, 13 skipped; 92.22% lines over 142 files. E2E not run. See the two 2026-11-23 Changes Log entries.
 - **Goods Receipt feature — REMOVED (2026-11-21, PARTIALLY COMPLETE):** the Goods Receipt feature (movement 101) is removed from the source and the final audit is done (13:28 IST entry). Verified: local lint, Jest, accessibility, performance, SAP-free E2E, CDS and UI5 production builds, MTA validation and build; hosted CI success on `601b289e`. Not done, each needing a decision or approval: any deployment, the physical database cleanup (`docs/decisions/goods-receipt-database-cleanup-plan.md`), withdrawal of the obsolete SAP authorization, SAP-connected E2E. Earlier entries in this file that describe Goods Receipt hardening (Phases 1–3, highest-risk findings, GR-03) are historical: that code no longer exists.
 - **Codebase Modularization Progress — PASS:** Executed full codebase scan using exact POSIX `wc -l` on first-party source files (713 by the reproducible filter in `SCAN_REPORT.md` Section 8.5; the earlier 715 and 722 figures came from the original scan and could not be reproduced). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
   1. *Decomposition Milestones (41 Monoliths Eliminated):* 41 major monolithic modules knocked below 300 lines (`PurchaseOrders.controller.js` [293], `Dashboard.controller.js` [275], `CreatePurchaseOrder.controller.js` [223], `CreateSalesOrder.controller.js` [280], `CreateSalesInquiry.controller.js` [271], `OrdersDueForDelivery.controller.js` [178], `HandlingUnits.controller.js` [268], `CreateCustomerReturn.controller.js` [219], `GoodsReceipt.controller.js` [275], `MibLabel.controller.js` [171], `QuarantineLabels.controller.js` [143], `CustomerInvoices.controller.js` [131], `SalesOrders.controller.js` [157], `CustomerReturns.controller.js` [146], `App.controller.js` [87], `SalesOrderModel.js` [137], `SalesInquiryModel.js` [122], `PurchaseOrderModel.js` [233], `PurchaseOrderDefaults.js` [199], `OutboundDeliveryAdapter.js` [106], `CustomerReturnAdapter.js` [72], `HandlingUnitAdapter.js` [99], `GoodsReceiptAdapter.js` [159], `salesInquiryDocumentCreator.js` [68], `GoodsReceiptPostingHelper.js` [11], `AuthService.js` [291], `AuthStorage.js` [222], `SystemLogAdapter.js` [212], `UserManagementAdapter.js` [273], `lockNotifier.js` [263], `MibLabelPdf.js` [264], `ValueHelpService.js` [285], `filterUtils.js` [214], `GoodsReceiptStorageUnitResolver.js` [47], `BusinessConfigResolver.js` [268], `service.js` [113], `S4HttpClient.js` [225], `integrationDiagnostics.js` [116], `MibLabelAdapter.js` [118], `QuarantineLabelAdapter.js` [130], `GoodsReceiptAttemptStore.js` [254]); on 2026-11-21 `SalesInquiryAdapter.js` [224] and `PurchaseOrderValidator.js` [285] were also brought below 300 (43 in total). `PurchaseOrders.controller.js` is 296 lines after the 2026-11-21 12:06 fixes.
@@ -399,6 +400,50 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-23 11:20 IST — Legacy OData Sales Inquiry creator removed; order path refuses type ZIN; S/4HANA coverage floors raised — PARTIAL
+
+- REQUEST: Next step after the coverage gate: `SalesInquirySequentialCreator.js` (6.5% line coverage). Inspection showed it was a legacy path, and the user chose to remove it instead of testing it.
+- INSPECT: `salesInquiryDocumentCreator.js`, `SalesInquiryAdapter.js`, `salesInquiry.handler.js`, `salesOrder.handler.js`, `salesInquiry.validation.js`, and all callers in `srv/`, `test/`, `tools/` and `app/fiori-app/webapp`.
+  - The Sales Inquiry screen and `createSalesInquiry` action create inquiries through `createSalesInquiryViaRfc` (`BAPI_INQUIRY_CREATEFROMDATA2`, with read-back).
+  - `adapter.createSalesInquiry()` had no caller. The sequential creator (header, then item, then price condition POSTs to `LORD_ODATA_ORDER_SRV`) was reachable only by calling the `createSalesOrder` action with `SalesOrderType` `ZIN`.
+- CHANGED:
+  - `srv/integration/s4hana/sd/sales-inquiry/SalesInquirySequentialCreator.js`: deleted (277 lines).
+  - `srv/integration/s4hana/sd/sales-inquiry/salesInquiryDocumentCreator.js`: `createSalesDocument` refuses type `ZIN` (any case) with status 400 before any destination lookup or SAP call; every other type goes to the unchanged order deep insert.
+  - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: removed the uncalled `createSalesInquiry` method.
+  - `jest.config.js`: `./srv/integration/s4hana/` floors raised to statements 90 / branches 75 / functions 96 / lines 91 (measured 92.28 / 77.07 / 97.96 / 93.36).
+  - Git index: the deletion is staged (`git rm --cached`), because `test/integration/goodsReceiptDecommissioned.test.js` reads every file in `git ls-files` and fails on a tracked file that is missing on disk. Nothing else is staged; nothing is committed.
+- TEST DECISION: ADDED — `test/unit/sales-order/salesOrderAdapter.test.js`, 5 tests: `createSalesOrder` refuses `ZIN`, `zin` and ` ZIN ` with 400 and makes no destination lookup or SAP call; `createSalesDocument` refuses `ZIN` carried in `SalesInquiryType`; the adapter exposes only the RFC way to create an inquiry.
+- VALIDATION (Linux aarch64 VM, Node 22.23.5):
+  - `npx jest --runInBand --ci --coverage --silent`: exit 0; 210 suites passed; 3,444 tests passed, 13 skipped, 0 failed; no threshold message. Coverage over 142 files: statements 90.96, branches 78.56, functions 92.56, lines 92.22.
+  - Before the deletion was staged the same run failed 1 test (`goodsReceiptDecommissioned`, ENOENT on the deleted file); it passes with the deletion staged (17/17).
+  - `npx eslint .`: 0 findings.
+- NOT VERIFIED: browser E2E (`npm run test:e2e`, not run); UI5 lint and build (no UI file changed); hosted CI (not committed); any call against SAP. Not checked in SAP: whether the Sales Order type value help can list `ZIN`; if it does, selecting it now returns a 400 with a message that names the Sales Inquiry screen.
+- REGRESSION: an API client that created inquiries by posting type `ZIN` to `createSalesOrder` now gets 400. No such caller exists in this repository.
+- ASSUMPTIONS: None.
+- NEXT: commit both changes on `feature01` and check hosted CI; then add tests for `srv/common/mailer.js`, `salesInquiryConnection.js` and `srv/common/RfcDiagnostics.js`.
+- FINAL STATUS: PARTIAL — local validation passed; E2E not run, not committed.
+
+### 2026-11-23 11:11 IST — Jest coverage measured on all server code, with enforced floors for S/4HANA integration and auth — PASS
+
+- REQUEST: Coverage was collected from `srv/common` only and the single enforced threshold was on `productionGuard.js`. Extend collection to `srv/**` and set thresholds for `srv/integration/s4hana` and `srv/auth`.
+- INSPECT: `jest.config.js`, `.github/workflows/ci.yml` (CI runs `npx jest --runInBand --ci --coverage`, so the config thresholds gate CI with no workflow change), `package.json` scripts, `AGENTS.md`.
+- PLAN: (1) measure real coverage over `server.js` and `srv/**` except generated `srv/external/**`; (2) set floors about two points under the measured values; (3) prove the full suite passes and that the floors fail a low-coverage run.
+- CHANGED: `jest.config.js` only.
+  - `collectCoverageFrom`: `server.js`, `srv/**/*.js`, excluding `srv/external/**` (143 files, 8,083 lines; before: `srv/common` only).
+  - `coverageThreshold` (statements / branches / functions / lines): `global` 87 / 78 / 83 / 88; `./srv/integration/s4hana/` 88 / 72 / 95 / 89; `./srv/auth` (path prefix: `srv/auth/` and `srv/auth-service.js`) 87 / 81 / 85 / 90; `productionGuard.js` unchanged.
+- MEASURED (commit `818adcf1`, statements / branches / functions / lines): all files 89.89 / 77.16 / 92.29 / 91.03; `srv/integration/s4hana` 90.42 / 74.78 / 97.43 / 91.28; auth 89.38 / 83.58 / 88.88 / 92.02; remainder checked as `global` 89.03 / 80.30 / 85.71 / 90.51.
+- TEST DECISION: EXISTING TEST SUFFICIENT — configuration change; no application code changed.
+- VALIDATION (Linux aarch64 VM, Node 22.23.5):
+  - `npx jest --runInBand --ci --coverage --silent`: exit 0; 210 suites passed; 3,439 tests passed, 13 skipped, 0 failed; no threshold message.
+  - Negative check, `npx jest test/unit/common/productionGuard.test.js --coverage`: exit 1 with threshold failures for `global`, `./srv/integration/s4hana/` and `./srv/auth`, so each key matches files and is enforced.
+  - `npx eslint jest.config.js`: 0 findings.
+- NOT VERIFIED: hosted CI (nothing committed or pushed); a run on macOS.
+- FOUND, NOT FIXED: files with weak coverage that the old scope hid — `srv/integration/s4hana/sd/sales-inquiry/SalesInquirySequentialCreator.js` 6.5% lines (a SAP write path), `srv/common/mailer.js` 44%, `salesInquiryConnection.js` 59%, `srv/common/RfcDiagnostics.js` 66%, `srv/ai/service.js` 68%, `OutboundDeliveryBilling.js` 68%. `srv/integration/s4hana/sd` is the weakest area (85% lines, 68% branches).
+- NOTE: a coverage run on a subset of tests now exits 1 by design; `npm run test:unit` and the other scripts without `--coverage` are unaffected.
+- ASSUMPTIONS: None.
+- NEXT: add unit tests for `SalesInquirySequentialCreator.js`, then raise the `./srv/integration/s4hana/` floors.
+- FINAL STATUS: PASS (local). Commit and hosted CI pending.
 
 ### 2026-11-21 13:28 IST — Final Goods Receipt decommissioning audit — PARTIALLY COMPLETE
 

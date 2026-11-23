@@ -601,6 +601,36 @@ describe('Unit: Sales Order Adapter Integration', () => {
         });
     });
 
+    describe('inquiry type on the order path', () => {
+        const header = { SalesOrganization: '1000', DistributionChannel: '10', OrganizationDivision: '52', SoldToParty: '10135' };
+        const items = [{ Material: '4000000123', OrderQuantity: 1, OrderQuantityUnit: 'KG' }];
+
+        test.each(['ZIN', 'zin', ' ZIN '])('createSalesOrder refuses type %p with 400 and sends nothing to SAP', async (type) => {
+            const mockExecute = jest.fn();
+            const getDestination = jest.spyOn(adapter, '_getDestination');
+
+            await expect(adapter.createSalesOrder({ ...header, SalesOrderType: type }, items, {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('Sales Inquiry') });
+
+            expect(mockExecute).not.toHaveBeenCalled();
+            expect(getDestination).not.toHaveBeenCalled();
+        });
+
+        test('createSalesDocument refuses ZIN whichever header field carries the type', async () => {
+            const mockExecute = jest.fn();
+            await expect(adapter.createSalesDocument('', { ...header, SalesInquiryType: 'ZIN' }, items, { executeHttpRequest: mockExecute }))
+                .rejects.toMatchObject({ status: 400 });
+            expect(mockExecute).not.toHaveBeenCalled();
+        });
+
+        test('the adapter offers one way to create an inquiry: the RFC path', () => {
+            expect(adapter.createSalesInquiry).toBeUndefined();
+            expect(typeof adapter.createSalesInquiryViaRfc).toBe('function');
+        });
+    });
+
     describe('LORD_ODATA_ORDER_SRV $metadata (docs/sap-metadata-reference/LORD_ODATA_ORDER_SRV.edmx, real capture)', () => {
         const lordMetadata = require('fs').readFileSync(
             require('path').resolve(__dirname, '../../../docs/sap-metadata-reference/LORD_ODATA_ORDER_SRV.edmx'), 'utf8');

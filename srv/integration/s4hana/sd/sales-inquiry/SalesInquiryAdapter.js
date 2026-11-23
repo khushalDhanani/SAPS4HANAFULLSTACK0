@@ -130,21 +130,11 @@ class SalesInquiryAdapter {
 
 
   /**
-   * Creates a Sales Document in SAP S/4HANA via LORD_ODATA_ORDER_SRV (delegated to salesInquiryDocumentCreator).
+   * Creates a Sales Order in SAP S/4HANA via LORD_ODATA_ORDER_SRV (delegated to salesInquiryDocumentCreator).
+   * Inquiry type ZIN is refused here; inquiries go through createSalesInquiryViaRfc.
    */
   async createSalesDocument(docType, header, items, options = {}) {
     return documentCreator.createSalesDocument(this, docType, header, items, options);
-  }
-
-  /**
-   * Creates a Sales Inquiry directly in SAP S/4HANA using LORD_ODATA_ORDER_SRV.
-   */
-  async createSalesInquiry(header, items, options = {}) {
-    const docType = header.SalesInquiryType;
-    if (!docType || String(docType).trim() === '') {
-      throw new Error('SalesInquiryType is required for Sales Inquiry creation');
-    }
-    return this.createSalesDocument(docType, header, items, options);
   }
 
   /**

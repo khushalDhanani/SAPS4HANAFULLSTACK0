@@ -2,17 +2,21 @@ const LOG = require('../../../../common/logger')('sales-inquiry-adapter');
 const { SalesInquiryRfcCreator, BAPI: INQUIRY_BAPI, UNSUPPORTED_HEADER_FIELDS } = require('./SalesInquiryRfcCreator');
 const { LEAN_ORDER_PATH } = require('./salesInquiryODataHelper');
 const { createSalesOrderDocument } = require('./SalesOrderDocumentCreator');
-const { createSalesInquiryDocument } = require('./SalesInquirySequentialCreator');
 
 async function createSalesDocument(adapter, docType, header, items, options = {}) {
   const effectiveDocType = String(docType || header.SalesOrderType || header.SalesInquiryType || '').trim();
   if (!effectiveDocType) {
     throw new Error('Document Type is required for Sales Document creation');
   }
-  if (effectiveDocType !== 'ZIN') {
-    return createSalesOrderDocument(adapter, effectiveDocType, header, items, options);
+  // Inquiries are created only through BAPI_INQUIRY_CREATEFROMDATA2 (createSalesInquiryViaRfc), which reads the
+  // document back from SAP. The order path must not create one.
+  if (effectiveDocType.toUpperCase() === 'ZIN') {
+    throw Object.assign(
+      new Error('Document type ZIN is a Sales Inquiry and cannot be created as a Sales Order. Create it on the Sales Inquiry screen.'),
+      { status: 400 }
+    );
   }
-  return createSalesInquiryDocument(adapter, effectiveDocType, header, items, options);
+  return createSalesOrderDocument(adapter, effectiveDocType, header, items, options);
 }
 
 async function createSalesInquiryViaRfc(adapter, header, items, options = {}) {
