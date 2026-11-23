@@ -23,6 +23,10 @@ services:
       - S4_DESTINATION_NAME=${S4_DESTINATION_NAME:-S4HANA_PO_API}
       - EWM_WAREHOUSE_NUMBER=${EWM_WAREHOUSE_NUMBER:-}
       - SU_HU_SERVICE_PATH=${SU_HU_SERVICE_PATH:-}
+      - NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}
+    volumes:
+      - ./certs:/run/certs:ro
+      - ./db.sqlite:/home/node/app/db.sqlite
     env_file:
       - path: .env
         required: false

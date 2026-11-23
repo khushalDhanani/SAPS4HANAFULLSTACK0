@@ -34,4 +34,11 @@ describe('Docker Configuration Integrity', () => {
     expect(serverJsContent).toContain("req.headers['x-csrf-token']");
     expect(serverJsContent).toContain("res.setHeader('X-CSRF-Token'");
   });
+
+  test('docker-compose.yml mounts ./certs and configures NODE_EXTRA_CA_CERTS for custom CA support', () => {
+    const composeContent = fs.readFileSync(path.join(rootDir, 'docker-compose.yml'), 'utf8');
+    expect(composeContent).toContain('NODE_EXTRA_CA_CERTS');
+    expect(composeContent).toContain('./certs:/run/certs:ro');
+    expect(composeContent).toContain('./db.sqlite:/home/node/app/db.sqlite');
+  });
 });

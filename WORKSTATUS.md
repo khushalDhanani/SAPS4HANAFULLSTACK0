@@ -17,6 +17,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `main` (updated to `origin/main` commit `14edf119`).
+- **SAP S/4HANA CA Certificate Trust & Docker Compose Mount — PASS (2026-11-23 15:00 IST):** Resolved login rejection ("SAP S/4HANA's security certificate was rejected. S4_DESTINATION_URL must use the host name on the certificate, not an IP address, and the server must be started with that certificate trusted (npm start).") when connecting to target S/4HANA system. Identified that the SAP Gateway server presents a self-signed corporate CA certificate (`CN=*.sap.aether.co.in`, SHA-256 `3F:D7:A6:85:71:3C:FB:87:35:61:03:E6:54:1B:B6:42:BE:29:0F:0B:0B:65:FA:25:CD:DF:76:CE:F5:7B:DE:EE`) while the standalone container had no CA cert mounted or trusted via `NODE_EXTRA_CA_CERTS`. Mounted `./certs` to `/run/certs:ro` and configured `NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}` in `docker-compose.yml` and `docker-compose.dev.yml`; mounted `./db.sqlite` for local standalone state; updated `package.json` start/watch scripts to support `certs/ca-bundle.pem`; linked `/home/cis/certs/sap-chain.pem` to `~/.sap-certs/s4-dev.pem` and `certs/ca-bundle.pem`; deployed local `db.sqlite` schema. Verified live TLS handshake (READ-ONLY) against SAP Gateway catalog service succeeds (HTTP 401 unauthenticated response instead of certificate rejection). Unit test added in `test/unit/tools/dockerConfig.test.js` (6/6 PASS); all 184 unit test suites pass (3,140 passed); eslint and scan:secrets pass clean.
 - **CSRF Token Handling & Security Token Issuance — PASS (2026-11-23 14:40 IST):** Resolved UI5 write refusal ("The server issued no security token, so the request was not sent. Reload the page and try again.") when accessing the standalone container/CAP server. Added CSRF token issuance middleware in `server.js` on `X-CSRF-Token: Fetch` requests (verified via `curl -i -X HEAD -H "X-CSRF-Token: Fetch" http://localhost:4004/odata/v4/auth/` returning HTTP 200 with `X-CSRF-Token`). Expanded `_isLocalDevHost()` in `app/fiori-app/webapp/service/ODataClient.js` to recognize private IPs (`10.*`, `172.16-31.*`, `192.168.*`), `.local` domains, and single-label local hostnames like `sapfioriapp`. Rebuilt UI5 bundle (`app/fiori-app/dist`). Rebuilt and verified backend container. All 34 CSRF tests pass in `test/unit/frontend/odataClientCsrf.test.js`; 5/5 tests pass in `test/unit/tools/dockerConfig.test.js`.
 - **Docker Compose Standalone Container Crash Loop Fix — PASS (2026-11-23 14:30 IST):** Fixed container restart crash loop on `docker compose -f docker-compose.yml up` (`Error: Authentication kind "jwt" configured, but no XSUAA instance bound to application`). Defaulted `docker-compose.yml` and `Dockerfile` `NODE_ENV` to `development`, removed premature `srv/csn.json` compilation from `Dockerfile` preventing duplicate artifact definition collisions, moved `@cap-js/sqlite` to runtime `dependencies` for lean container execution, and verified live container health (`Up (healthy)`, HTTP 200 `{"status":"UP"}` on `http://localhost:4004/health`). Added test suite `test/unit/tools/dockerConfig.test.js` (4/4 PASS). All 25 tools test suites pass (264/264 tests); `eslint`, `scan:secrets`, and `mta validate` pass clean.
 - **Secret scanner Docker template allowance (`.env.docker.example`) — PASS (2026-11-23 13:12 IST):** Permitted `.env.docker.example` in `tools/scan-secrets.js` and `.gitignore` alongside `.env.example` and `.env.docker.local.example`. Scan passes for 1,035 tracked files (0 secrets detected); all 21 scanner unit tests pass. Root eslint exits 0; git diff check clean.
@@ -403,6 +404,33 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-23 15:00 IST — SAP S/4HANA CA Certificate Trust & Docker Compose Mount — PASS
+
+- REQUEST: Address authentication login failure returning `@odata.context: "$metadata#AuthService.return_AuthService_login"`, `authenticated: false`, `message: "SAP S/4HANA's security certificate was rejected. S4_DESTINATION_URL must use the host name on the certificate, not an IP address, and the server must be started with that certificate trusted (npm start)."`
+- INSPECT:
+  - Root cause 1: Target SAP S/4HANA Gateway server (`vheudds4ap01.sap.aether.co.in:44300`) presents a self-signed corporate CA certificate (`subject=CN=*.sap.aether.co.in`, `issuer=CN=*.sap.aether.co.in`, SHA-256 fingerprint `3F:D7:A6:85:71:3C:FB:87:35:61:03:E6:54:1B:B6:42:BE:29:0F:0B:0B:65:FA:25:CD:DF:76:CE:F5:7B:DE:EE`).
+  - Root cause 2: In `.env`, `S4_DESTINATION_URL` already uses the host name (`https://vheudds4ap01.sap.aether.co.in:44300`) matching the wildcard certificate CN. However, Node.js rejects self-signed certificates by default (`DEPTH_ZERO_SELF_SIGNED_CERT` / `self-signed certificate`), which `AuthAdapter.js` intercepts and maps to the error message.
+  - Root cause 3: The backend was running as a standalone container via `docker-compose.yml`. Neither `docker-compose.yml` nor `docker-compose.dev.yml` mounted `./certs` or defined `NODE_EXTRA_CA_CERTS`. Furthermore, on the host, the CA certificate was stored at `/home/cis/certs/sap-chain.pem`, but neither `~/.sap-certs/s4-dev.pem` (expected by `npm start` in `package.json`) nor `./certs/ca-bundle.pem` (per `certs/README.md`) was populated.
+  - Root cause 4: The standalone container lacked schema tables in SQLite, causing background daemons (`UserLockMonitor`, `UserPasswordNotification`) to log missing table errors.
+- CHANGED:
+  - `docker-compose.yml`: Added volume mounts for `./certs:/run/certs:ro` and `./db.sqlite:/home/node/app/db.sqlite`; configured `NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}`.
+  - `docker-compose.dev.yml`: Added `./certs:/run/certs:ro` volume mount and `NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}`.
+  - `package.json`: Updated `start` and `watch` scripts to support CA certificates from either `$HOME/.sap-certs/s4-dev.pem` or project-local `certs/ca-bundle.pem`.
+  - Host environment (Git-ignored): Linked `/home/cis/certs/sap-chain.pem` to `~/.sap-certs/s4-dev.pem` and `certs/ca-bundle.pem`; deployed SQLite schema via `npx cds deploy --to sqlite:db.sqlite`.
+  - `test/unit/tools/dockerConfig.test.js`: Added unit test assertion verifying `docker-compose.yml` mounts `./certs` to `/run/certs:ro` and `./db.sqlite` to `/home/node/app/db.sqlite`, and sets `NODE_EXTRA_CA_CERTS`.
+- TEST DECISION: TEST ADDED — `test/unit/tools/dockerConfig.test.js` (6/6 tests PASS).
+- VALIDATION:
+  - READ-ONLY TLS probe with `NODE_EXTRA_CA_CERTS` against SAP server: HTTP 401 unauthenticated (strict TLS handshake succeeded without certificate rejection).
+  - Standalone Docker container recreated via `docker compose -f docker-compose.yml up -d --force-recreate backend`: Verified `NODE_EXTRA_CA_CERTS` is active and points to mounted `/run/certs/ca-bundle.pem`.
+  - Authentication endpoint test via `curl -s -X POST http://localhost:4004/odata/v4/auth/login`: Handshake with SAP S/4HANA succeeded; SAP responded with standard 401 credentials challenge rather than certificate rejection.
+  - `npx jest test/unit` → ✅ PASSED (184 suites, 3,140 passed, 13 skipped, 0 failed).
+  - `npm run lint` → ✅ PASSED (0 errors, 0 warnings).
+  - `npm run scan:secrets` → ✅ PASSED (1,036 tracked files, 0 secrets detected).
+- NOT VERIFIED: Live user login credentials with valid SAP user (safe read-only probe verified TLS handshake passes).
+- ASSUMPTIONS: None.
+- NEXT: Sign in via Fiori Launchpad at `http://localhost:4004`.
+- FINAL STATUS: PASS.
 
 ### 2026-11-23 14:40 IST — CSRF token issuance & local dev host expansion — PASS
 

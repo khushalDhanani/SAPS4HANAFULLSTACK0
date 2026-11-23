@@ -12,6 +12,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=4004
+      - NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}
     volumes:
       - ./srv:/app/srv
       - ./db:/app/db
@@ -20,3 +21,4 @@ services:
       - ./package.json:/app/package.json
       - /app/node_modules
       - /app/app/fiori-app/node_modules
+      - ./certs:/run/certs:ro
