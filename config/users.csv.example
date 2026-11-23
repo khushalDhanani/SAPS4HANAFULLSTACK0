@@ -1,0 +1,18 @@
+# Application Users CSV — example / template
+# Copy and rename to users.csv, then run:
+#   node tools/import-users.js --input users.csv --output config/app-users.json
+#
+# Format: username,roles
+#   - username: SAP logon name, 1-40 chars, letters/digits/@._-  (case-insensitive)
+#   - roles: single role or quoted comma-list
+#   - Lines starting with # are ignored
+#   - Roles: Admin, Viewer, PurchasingManager, SalesRepresentative, SalesManager,
+#            WarehouseClerk, WarehouseManager, SapLogsReader
+#
+username,roles
+JSMITH,"Viewer,SalesManager"
+ACLARKE,PurchasingManager
+BWILSON,"WarehouseClerk,WarehouseManager"
+LGARCIA,SalesRepresentative
+MADMIN,Admin
+ASHAH,"Viewer,SapLogsReader"

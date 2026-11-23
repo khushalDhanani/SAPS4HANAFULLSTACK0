@@ -10,6 +10,9 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
         service = new AuthServiceHandler();
         loginThrottle.reset();
         delete process.env.APP_USER_ROLES;
+        delete process.env.APP_USERS_FILE;
+        delete process.env.APP_ALLOW_ANY_SAP_USER;
+        delete process.env.APP_DEFAULT_ROLES;
         delete process.env.ENABLE_DEV_TOKEN_ISSUER;
         delete process.env.LOCAL_AUTH_SECRET;
         delete process.env.S4_SYSTEM_NAME;
@@ -398,5 +401,89 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             });
             expect(infoRes.system).toBe('S4HANA_DEV - Client 300');
         });
+
+        // ── APP_ALLOW_ANY_SAP_USER behaviour ───────────────────────────────
+
+        it('refuses an unlisted user when APP_ALLOW_ANY_SAP_USER is false (default)', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            const validate = jest.spyOn(authAdapter, 'validateCredentials');
+
+            const res = await service._handleLogin({
+                data: { username: 'STRANGER', password: 'any-password' }
+            });
+
+            expect(res.authenticated).toBe(false);
+            // SAP must NOT be contacted for an unlisted user when ALLOW_ANY is false
+            expect(validate).not.toHaveBeenCalled();
+        });
+
+        it('grants only APP_DEFAULT_ROLES to an unlisted SAP user when APP_ALLOW_ANY_SAP_USER=true', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+            process.env.APP_DEFAULT_ROLES = 'Viewer';
+
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: true,
+                message: 'Authentication successful.',
+                system: 'DS4 - Client 220'
+            });
+
+            const res = await service._handleLogin({
+                data: { username: 'NEWUSER', password: 'valid-sap-password' }
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
+            // Must never grant Admin to an unlisted user
+            expect(res.scopes).not.toContain('$XSAPPNAME.Admin');
+        });
+
+        it('never grants Admin via APP_DEFAULT_ROLES even when misconfigured (blocked at parseDefaultRoles)', () => {
+            // parseDefaultRoles throws if Admin appears in APP_DEFAULT_ROLES
+            const { parseDefaultRoles } = require('../../../srv/auth/appUsers');
+            expect(() => parseDefaultRoles({ APP_DEFAULT_ROLES: 'Admin' })).toThrow(/Admin/);
+        });
+
+        it('refuses an unlisted user when SAP rejects them, even with APP_ALLOW_ANY_SAP_USER=true', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: false,
+                statusCode: 401,
+                message: 'Invalid username or password. S/4HANA logon failed.'
+            });
+
+            const res = await service._handleLogin({
+                data: { username: 'BADUSER', password: 'wrong-password' }
+            });
+
+            expect(res.authenticated).toBe(false);
+            expect(res.token).toBeUndefined();
+        });
+
+        it('uses default ["Viewer"] when APP_ALLOW_ANY_SAP_USER=true and APP_DEFAULT_ROLES is unset', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+            // APP_DEFAULT_ROLES not set → parseDefaultRoles returns ['Viewer']
+
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: true,
+                message: 'Authentication successful.',
+                system: 'DS4 - Client 220'
+            });
+
+            const res = await service._handleLogin({
+                data: { username: 'ANYUSER', password: 'valid-sap-password' }
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
+        });
     });
 });
+

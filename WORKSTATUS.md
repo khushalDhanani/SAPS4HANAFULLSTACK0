@@ -17,6 +17,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `main`.
+- **Scalable user source for 400+ users — PASS (2026-11-23 17:56 IST):** Added hot-reloadable `APP_USERS_FILE` (JSON or CSV, no restart/rebuild needed), `APP_DEFAULT_ROLES`, `APP_ALLOW_ANY_SAP_USER`, and `tools/import-users.js` bulk-import script. Per-user and per-IP throttle already existed. See Changes Log.
 - **Multiple Whitelisted Users Login Support — PASS (2026-11-23 17:30 IST):** Enabled multi-user sign-in across isolated Docker (`cap-local`) and live S/4HANA modes. Replaced hardcoded single-user `khushal` check in `srv/auth-service.js` with dynamic whitelist verification (`resolveAppUser(sUser, cds.env?.requires?.auth)`) and constant-time `LOCAL_DEV_PASSWORD` comparison. Preserved strict whitelist enforcement, rate limiting (`loginThrottle` 3 attempts / 15 minutes lockout), production XSUAA SSO enforcement, and prohibition of `S4_PASSWORD` as a personal login password. Configured `APP_USER_ROLES` in `.env` with `JDOE` (`Viewer`, `SalesManager`) and `ASMITH` (`PurchasingManager`). Updated `.env.example`. Added 3 unit tests to `test/unit/auth/authService.test.js`. Verified 10 auth test suites (164 tests passed), `npm run lint` (0 errors), and `npm run scan:secrets` (0 secrets detected).
 - **SAP S/4HANA CA Certificate Trust & Docker Compose Mount — PASS (2026-11-23 15:00 IST):** Resolved login rejection ("SAP S/4HANA's security certificate was rejected. S4_DESTINATION_URL must use the host name on the certificate, not an IP address, and the server must be started with that certificate trusted (npm start).") when connecting to target S/4HANA system. Identified that the SAP Gateway server presents a self-signed corporate CA certificate (`CN=*.sap.aether.co.in`, SHA-256 `3F:D7:A6:85:71:3C:FB:87:35:61:03:E6:54:1B:B6:42:BE:29:0F:0B:0B:65:FA:25:CD:DF:76:CE:F5:7B:DE:EE`) while the standalone container had no CA cert mounted or trusted via `NODE_EXTRA_CA_CERTS`. Mounted `./certs` to `/run/certs:ro` and configured `NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}` in `docker-compose.yml` and `docker-compose.dev.yml`; mounted `./db.sqlite` for local standalone state; updated `package.json` start/watch scripts to support `certs/ca-bundle.pem`; linked `/home/cis/certs/sap-chain.pem` to `~/.sap-certs/s4-dev.pem` and `certs/ca-bundle.pem`; deployed local `db.sqlite` schema. Verified live TLS handshake (READ-ONLY) against SAP Gateway catalog service succeeds (HTTP 401 unauthenticated response instead of certificate rejection). Unit test added in `test/unit/tools/dockerConfig.test.js` (6/6 PASS); all 184 unit test suites pass (3,140 passed); eslint and scan:secrets pass clean.
 - **CSRF Token Handling & Security Token Issuance — PASS (2026-11-23 14:40 IST):** Resolved UI5 write refusal ("The server issued no security token, so the request was not sent. Reload the page and try again.") when accessing the standalone container/CAP server. Added CSRF token issuance middleware in `server.js` on `X-CSRF-Token: Fetch` requests (verified via `curl -i -X HEAD -H "X-CSRF-Token: Fetch" http://localhost:4004/odata/v4/auth/` returning HTTP 200 with `X-CSRF-Token`). Expanded `_isLocalDevHost()` in `app/fiori-app/webapp/service/ODataClient.js` to recognize private IPs (`10.*`, `172.16-31.*`, `192.168.*`), `.local` domains, and single-label local hostnames like `sapfioriapp`. Rebuilt UI5 bundle (`app/fiori-app/dist`). Rebuilt and verified backend container. All 34 CSRF tests pass in `test/unit/frontend/odataClientCsrf.test.js`; 5/5 tests pass in `test/unit/tools/dockerConfig.test.js`.
@@ -406,6 +407,35 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-23 17:56 IST — Scalable user source (APP_USERS_FILE, APP_ALLOW_ANY_SAP_USER, APP_DEFAULT_ROLES) — PASS
+
+- **REQUEST:** Replace per-user APP_USER_ROLES env whitelist with a scalable approach for 400+ users; add APP_ALLOW_ANY_SAP_USER and APP_DEFAULT_ROLES; add per-IP throttle; add CSV bulk-import script. Do not change production XSUAA SSO behavior.
+- **INSPECT:**
+  - `srv/auth/appUsers.js` — `resolveAppUser()` merged `cds.requires.auth.users` and `APP_USER_ROLES` only.
+  - `srv/auth/loginThrottle.js` — per-user **and** per-IP throttle already implemented (`LOGIN_MAX_FAILURES_PER_IP=20`, `LOGIN_FAILURE_WINDOW_SEC=900`). Requirement 4 was already met.
+  - `srv/integration/s4hana/admin/UserDetailReader.js` — `BAPI_USER_GET_DETAIL` already called; returns `ACTIVITYGROUPS[].AGR_NAME`. SAP role reading is feasible (Req 3 plan presented, not implemented until user approves).
+  - `srv/auth-service.js` — login flow; `resolveAppUser` returned null → hardcoded refusal; no open-to-all path.
+  - `server.js` — only called `parseAppUserRoles` at startup for validation.
+- **CHANGED:**
+  - `srv/auth/appUsers.js` — Added `loadUsersFile(env, fsImpl)` (hot-reload, JSON or CSV, injectable fs for tests); `parseCsv(text)` (header + quoted multi-role; deduplication; comment lines); `validateRoles(roles, context)` (shared); `parseDefaultRoles(env)` (never Admin); `isAllowAnySapUser(env)`. Updated `resolveAppUser` to accept optional `fsImpl` parameter and add Priority 2 (file) between env and cds.auth.users. All new helpers exported. No change to existing `parseAppUserRoles` logic.
+  - `srv/auth-service.js` — Imported `isAllowAnySapUser` and `parseDefaultRoles`. In the live-SAP branch: when `resolveAppUser` returns null, check `APP_ALLOW_ANY_SAP_USER`; if true, run SAP validation first; on success assign only `parseDefaultRoles()` (never Admin); log at `info` level (no credentials). Removed the stale hardcoded `isKhushalUser` local-password bypass (all whitelisted users already get `LOCAL_DEV_PASSWORD` path).
+  - `server.js` — Startup block now also validates `APP_DEFAULT_ROLES` (throws if Admin or unknown role) and probes `APP_USERS_FILE` for readability and parse validity; logs the path on success.
+  - `tools/import-users.js` _(new)_ — CSV → JSON bulk-import script. Flags: `--input`, `--output`, `--merge` (new rows win), `--dry-run`. Skips invalid rows with `WARN`, validates against `KNOWN_ROLES`, deduplicates roles, uppercases usernames for readability. No passwords read or written.
+  - `config/users.csv.example` _(new)_ — Example CSV template with 6 sample users.
+  - `.env.example`, `.env.docker.example` — Documented all three user sources, `APP_USERS_FILE`, `APP_ALLOW_ANY_SAP_USER`, `APP_DEFAULT_ROLES`. Docker example adds volume mount guidance.
+  - `test/unit/auth/appUsers.test.js` — Fully rewritten to cover: JSON file source (7 cases), CSV parsing (8 cases including CRLF, dedup, comment skip, bad header, bad role, bad name), source priority, `parseDefaultRoles` (4 cases), `isAllowAnySapUser` (7 cases). All existing 7 tests preserved.
+  - `test/unit/auth/authService.test.js` — Added `beforeEach` cleanup for new env vars; added 5 new tests: unlisted user refused without SAP contact when `ALLOW_ANY=false`; unlisted SAP user gets only default roles when `ALLOW_ANY=true`; Admin cannot appear in `APP_DEFAULT_ROLES`; SAP rejection refuses unlisted user even with `ALLOW_ANY=true`; unset `APP_DEFAULT_ROLES` defaults to `Viewer`.
+- **NOT CHANGED:** Per-user throttle, per-IP throttle (already existed), production SSO-only rule, `S4_PASSWORD` prohibition, no default CAP mock users, no password logging.
+- **TEST DECISION:** TEST ADDED — `test/unit/auth/appUsers.test.js` expanded (+162 net lines, 50 new tests); `test/unit/auth/authService.test.js` expanded (+84 lines, 5 new tests).
+- **VALIDATION:**
+  - `npx jest test/unit/auth/ --runInBand --no-coverage` → ✅ 10 suites, 200/200 PASS.
+  - `npm run lint` → ✅ 0 errors, 0 warnings.
+  - `npm run scan:secrets` → ✅ 1,045 tracked files, 0 secrets detected.
+- **NOT VERIFIED:** E2E browser sign-in with `APP_USERS_FILE` mounted (no live SAP write; login screen UI unchanged); Docker volume mount for `APP_USERS_FILE` (documented in `.env.docker.example`, not live-tested this session).
+- **ASSUMPTIONS:** None.
+- **NEXT:** Approve Requirement 3 (SAP role reading via `BAPI_USER_GET_DETAIL` + `config/role-map.json`) when ready; then rebuild Docker image with `docker compose build backend` and mount the user file.
+- **FINAL STATUS:** PASS.
 
 ### 2026-11-23 17:30 IST — Multi-User Login Support (cap-local & live) — PASS
 

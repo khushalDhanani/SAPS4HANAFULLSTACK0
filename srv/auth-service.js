@@ -4,7 +4,7 @@ const localTokenUtil = require("./auth/localTokenUtil");
 const { resolveUserIdentity } = require("./auth/userIdentity");
 const s4Config = require("./common/s4Config");
 const loginThrottle = require("./auth/loginThrottle");
-const { resolveAppUser } = require("./auth/appUsers");
+const { resolveAppUser, isAllowAnySapUser, parseDefaultRoles } = require("./auth/appUsers");
 const LOG = require("./common/logger")("auth");
 
 /**
@@ -118,7 +118,6 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
 
     let authResult;
     let devRoles;
-    const isKhushalUser = sUserLower === "khushal";
 
     if (process.env.APP_ROLE === "cap-local") {
       // The isolated Docker profile has no SAP connectivity or SAP credentials.
@@ -132,13 +131,26 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
         system: s4Config.getSystemLabel()
       };
     } else {
-      // Only listed users may sign in (cds.requires.auth.users, APP_USER_ROLES). Anyone else is refused here,
-      // without asking SAP, and with the same message as a wrong password.
+      // Look up explicit sources first (APP_USER_ROLES > APP_USERS_FILE > cds.requires.auth.users).
       devRoles = resolveAppUser(sUser, cds.env?.requires?.auth);
+
       if (!devRoles) {
-        return failed("Invalid username or password.");
-      }
-      if (isKhushalUser && sLocalDevPass && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
+        // When APP_ALLOW_ANY_SAP_USER=true, let SAP decide — but cap roles to APP_DEFAULT_ROLES.
+        if (!isAllowAnySapUser(process.env)) {
+          return failed("Invalid username or password.");
+        }
+        // Validate against SAP first; if that fails, the user is simply refused.
+        authResult = await authAdapter.validateCredentials(username, password);
+        if (!authResult.authenticated) {
+          const status = authResult.statusCode;
+          if (!status || status === 401 || status === 403) loginThrottle.recordFailure(sUser, sClientIp);
+          return { authenticated: false, message: authResult.message || "Invalid username or password." };
+        }
+        // SAP accepted the user; assign only the safe default roles — never Admin.
+        devRoles = parseDefaultRoles(process.env);
+        LOG.info(`login: ${sUserLower} not in user source; granted default roles via APP_ALLOW_ANY_SAP_USER`);
+      } else if (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
+        // A whitelisted user authenticated by LOCAL_DEV_PASSWORD (bypasses SAP for dev convenience).
         authResult = {
           authenticated: true,
           message: "Authentication successful (local development).",

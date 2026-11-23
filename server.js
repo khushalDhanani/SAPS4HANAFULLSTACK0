@@ -19,9 +19,23 @@ require('./srv/common/productionGuard').assertDevFlagsOff(process.env, cds.env.r
 require('./srv/common/productionGuard').assertS4ConnectionConfig(process.env);
 
 
-// Fail at startup on a malformed sign-in list (APP_USER_ROLES) instead of silently allowing nobody.
+// Fail at startup on a malformed config instead of silently granting nothing or the wrong roles.
 if (process.env.NODE_ENV !== 'production') {
-    require('./srv/auth/appUsers').parseAppUserRoles(process.env);
+    const appUsers = require('./srv/auth/appUsers');
+    appUsers.parseAppUserRoles(process.env);
+    appUsers.parseDefaultRoles(process.env);   // validates APP_DEFAULT_ROLES (never Admin)
+    // Probe APP_USERS_FILE for readability; a missing or unreadable file is a configuration error.
+    const usersFilePath = String(process.env.APP_USERS_FILE || '').trim();
+    if (usersFilePath) {
+        try {
+            appUsers.loadUsersFile(process.env); // throws if unreadable or malformed
+            require('./srv/common/logger')('auth').info(
+                `APP_USERS_FILE loaded: ${usersFilePath}`
+            );
+        } catch (e) {
+            throw new Error(`Startup: ${e.message}`);
+        }
+    }
 }
 
 // CAP accepts any password for a mocked user without one. Outside the test profile every mocked user gets
