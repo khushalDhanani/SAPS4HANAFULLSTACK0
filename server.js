@@ -19,20 +19,14 @@ require('./srv/common/productionGuard').assertDevFlagsOff(process.env, cds.env.r
 require('./srv/common/productionGuard').assertS4ConnectionConfig(process.env);
 
 
-// Register local development S4_USERNAME in mock auth users if running in development
-if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
-    const s4User = process.env.S4_USERNAME.trim();
-    cds.env.requires = cds.env.requires || {};
-    cds.env.requires.auth = cds.env.requires.auth || {};
-    cds.env.requires.auth.users = cds.env.requires.auth.users || {};
-    const devRoles = ['Admin', 'Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'SapLogsReader'];
-    cds.env.requires.auth.users[s4User] = { roles: devRoles };
-    cds.env.requires.auth.users[s4User.toLowerCase()] = { roles: devRoles };
-    cds.env.requires.auth.users[s4User.toUpperCase()] = { roles: devRoles };
+// Fail at startup on a malformed sign-in list (APP_USER_ROLES) instead of silently allowing nobody.
+if (process.env.NODE_ENV !== 'production') {
+    require('./srv/auth/appUsers').parseAppUserRoles(process.env);
 }
 
-// CAP accepts any password for a mocked user without one. Outside the test profile every mocked user, including the
-// S4_USERNAME entries above, gets LOCAL_DEV_PASSWORD, or a random password when that is not set.
+// CAP accepts any password for a mocked user without one. Outside the test profile every mocked user gets
+// LOCAL_DEV_PASSWORD, or a random password when that is not set. The SAP connection user (S4_USERNAME) is not an
+// application user: it is listed in APP_USER_ROLES like anyone else if it has to sign in.
 {
     const mockUsers = require('./srv/auth/mockUserPasswords').protectMockUsers(process.env, cds.env.requires && cds.env.requires.auth);
     if (mockUsers.applied && mockUsers.source === 'random') {
@@ -82,6 +76,12 @@ cds.on('bootstrap', (app) => {
     // Plain "the process answers" endpoint, used by Docker, CI and the smoke test. The Cloud Foundry readiness
     // check declared in mta.yaml uses /health/ready (srv/common/health.js). Registered before CAP mounts its
     // protocol adapters and auth middleware, so it needs no credentials and never touches S/4HANA.
+    // Behind a reverse proxy the client address is in X-Forwarded-For. Trust it only for the configured number of
+    // proxy hops (TRUST_PROXY_HOPS, default 0 = direct connections): otherwise a caller could forge the address
+    // the sign-in limiter counts.
+    const proxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS, 10);
+    if (Number.isFinite(proxyHops) && proxyHops > 0) app.set('trust proxy', proxyHops);
+
     app.get('/health', (req, res) => {
         res.set('Cache-Control', 'no-store').status(200).json({ status: 'UP' });
     });

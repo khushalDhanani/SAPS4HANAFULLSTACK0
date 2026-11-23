@@ -3,6 +3,9 @@ const authAdapter = require("./integration/s4hana/AuthAdapter");
 const localTokenUtil = require("./auth/localTokenUtil");
 const { resolveUserIdentity } = require("./auth/userIdentity");
 const s4Config = require("./common/s4Config");
+const loginThrottle = require("./auth/loginThrottle");
+const { resolveAppUser } = require("./auth/appUsers");
+const LOG = require("./common/logger")("auth");
 
 /**
  * CAP Authentication Service Handler
@@ -95,65 +98,68 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       };
     }
 
-    const sEnvDevUser = (process.env.S4_USERNAME || "").trim().toLowerCase();
     // A local password exists only when LOCAL_DEV_PASSWORD is set; a username is never a password.
     const sLocalDevPass = (process.env.LOCAL_DEV_PASSWORD || "").trim();
+    const sClientIp = req.http?.req?.ip || req._?.req?.ip || "";
+    const failed = (message) => {
+      loginThrottle.recordFailure(sUser, sClientIp);
+      return { authenticated: false, message };
+    };
+
+    // Before any credential check: a locked-out caller learns nothing and SAP sees no further logon attempt.
+    const throttle = loginThrottle.check(sUser, sClientIp);
+    if (!throttle.allowed) {
+      LOG.warn(`login refused for ${sUserLower}: too many failed attempts`);
+      return {
+        authenticated: false,
+        message: `Too many failed sign-in attempts. Try again in ${Math.max(1, Math.ceil(throttle.retryAfterSec / 60))} minute(s).`
+      };
+    }
 
     let authResult;
+    let devRoles;
     const isKhushalUser = sUserLower === "khushal";
 
     if (process.env.APP_ROLE === "cap-local") {
       // The isolated Docker profile has no SAP connectivity or SAP credentials.
       if (!isKhushalUser || !sLocalDevPass || !localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
-        return {
-          authenticated: false,
-          message: "Invalid local credentials. Use khushal and the configured LOCAL_DEV_PASSWORD."
-        };
+        return failed("Invalid local credentials. Use khushal and the configured LOCAL_DEV_PASSWORD.");
       }
+      devRoles = resolveAppUser(sUser, cds.env?.requires?.auth) || ["Viewer"];
       authResult = {
         authenticated: true,
         message: "Authentication successful (local development).",
         system: s4Config.getSystemLabel()
       };
-    } else if (isKhushalUser) {
-      // Allow 'khushal' with the local mock password (LOCAL_DEV_PASSWORD, if set),
-      // real S/4 credentials (S4_PASSWORD), or S/4 Gateway
-      const sEnvDevPass = (process.env.S4_PASSWORD || "").trim();
-      const isKnownPass =
-        (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) ||
-        (sEnvDevPass && localTokenUtil.timingSafeEqual(sPass, sEnvDevPass));
-
-      if (isKnownPass) {
-        authResult = {
-          authenticated: true,
-          message: "Authentication successful (S/4 Development User).",
-          system: s4Config.getSystemLabel()
-        };
-      } else {
-        authResult = await authAdapter.validateCredentials(username, password);
-      }
-    } else if (sEnvDevUser && sUserLower === sEnvDevUser) {
-      const sEnvDevPass = (process.env.S4_PASSWORD || "").trim();
-      if (sEnvDevPass && localTokenUtil.timingSafeEqual(sPass, sEnvDevPass)) {
-        authResult = {
-          authenticated: true,
-          message: "Authentication successful (S/4 Development User).",
-          system: s4Config.getSystemLabel()
-        };
-      } else {
-        // Validate against S/4 Gateway if local password doesn't match
-        authResult = await authAdapter.validateCredentials(username, password);
-      }
     } else {
-      authResult = await authAdapter.validateCredentials(username, password);
+      // Only listed users may sign in (cds.requires.auth.users, APP_USER_ROLES). Anyone else is refused here,
+      // without asking SAP, and with the same message as a wrong password.
+      devRoles = resolveAppUser(sUser, cds.env?.requires?.auth);
+      if (!devRoles) {
+        return failed("Invalid username or password.");
+      }
+      if (isKhushalUser && sLocalDevPass && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
+        authResult = {
+          authenticated: true,
+          message: "Authentication successful (local development).",
+          system: s4Config.getSystemLabel()
+        };
+      } else {
+        // SAP checks the password. The connection password (S4_PASSWORD) is never a login password.
+        authResult = await authAdapter.validateCredentials(username, password);
+      }
     }
 
     if (!authResult.authenticated) {
+      // Only a refused logon counts; SAP being unreachable or misconfigured is not a failed attempt.
+      const status = authResult.statusCode;
+      if (!status || status === 401 || status === 403) loginThrottle.recordFailure(sUser, sClientIp);
       return {
         authenticated: false,
         message: authResult.message || "Invalid username or password."
       };
     }
+    loginThrottle.recordSuccess(sUser);
 
     const sCapitalized = sUser.charAt(0).toUpperCase() + sUser.slice(1);
     const sInitials = sCapitalized.substring(0, 2).toUpperCase();
@@ -162,19 +168,6 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       minute: "2-digit",
     });
 
-    const configuredUsers = cds.env?.requires?.auth?.users || {};
-    const extractRoles = (userConfig) => {
-      if (!userConfig || !userConfig.roles) return null;
-      if (Array.isArray(userConfig.roles)) return userConfig.roles;
-      if (typeof userConfig.roles === 'object') return Object.keys(userConfig.roles).filter(k => userConfig.roles[k]);
-      if (typeof userConfig.roles === 'string') return [userConfig.roles];
-      return null;
-    };
-    let devRoles = extractRoles(configuredUsers[sUserLower]) || extractRoles(configuredUsers[sUser]);
-    if (!devRoles || devRoles.length === 0) {
-      // Roles come only from cds.requires.auth.users; nothing is granted implicitly.
-      devRoles = ["Viewer"];
-    }
     const tokenObj = localTokenUtil.issueToken(sUser, devRoles);
 
     return {

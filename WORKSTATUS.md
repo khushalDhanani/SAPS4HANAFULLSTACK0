@@ -3411,3 +3411,17 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: None. All public interfaces, prototype contracts, and module exports preserved.
 - NEXT: Continue decomposition of remaining oversized JS application files on roadmap (`app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js` [436 lines], `app/fiori-app/webapp/service/BarcodeScanService.js` [416 lines], `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js` [411 lines]).
 - FINAL STATUS: PASS — S/4 Clients, Admin Service, WM Adapters & Attempt Store modularization fully verified across all unit suites and linters; zero regressions.
+
+### 2026-11-23 IST — Login hardening (audit items 2, 3 app side, 4) — PASS locally, not deployed
+- **Branch:** `fix/login-hardening` (from `main` `b6c63863`). Not pushed, not deployed.
+- **CHANGED:**
+  - `srv/auth-service.js` — `S4_PASSWORD` is no longer accepted as a login password (both the `khushal` and the `S4_USERNAME` branch removed); only listed users may sign in, anyone else is refused without asking SAP; failed sign-ins are limited before any credential check; roles come from `srv/auth/appUsers.js`, the implicit `Viewer` for any valid SAP logon is gone.
+  - `srv/auth/loginThrottle.js` (new) — in-memory limit, default 3 failures per user and 20 per client address in 15 minutes (`LOGIN_MAX_FAILURES_PER_USER`, `LOGIN_MAX_FAILURES_PER_IP`, `LOGIN_FAILURE_WINDOW_SEC`). SAP unreachable (5xx) is not counted.
+  - `srv/auth/appUsers.js` (new) — sign-in list: `cds.requires.auth.users` plus `APP_USER_ROLES` (JSON, validated at startup).
+  - `server.js` — the SAP connection user (`S4_USERNAME`) is no longer registered as a mocked user with every role; `APP_USER_ROLES` is validated at startup; `TRUST_PROXY_HOPS` (default 0) sets Express `trust proxy`.
+  - `.env.example`, `.env.docker.example` — the new settings.
+  - Tests: `test/unit/auth/authService.test.js` (updated), `test/unit/auth/loginThrottle.test.js`, `test/unit/auth/appUsers.test.js` (new).
+- **BEHAVIOUR CHANGE:** a SAP user who signed in with only a valid SAP logon (got `Viewer`), and the `S4_USERNAME` user (got every role), must now be listed in `APP_USER_ROLES`. `khushal` is unchanged except that the connection password no longer works for it.
+- **VALIDATION:** root ESLint 0 errors; secret scan 0; `jest --coverage --runInBand`: 214 suites, 3492 passed, 13 skipped, coverage thresholds met.
+- **NOT VERIFIED:** browser E2E; a running server; the Linux deployment. No SAP calls were made.
+- **OPEN (audit):** item 1 (loopback bind + TLS proxy, secret rotation), item 3 SAP side (least-privilege connection user), item 5 (production target).
