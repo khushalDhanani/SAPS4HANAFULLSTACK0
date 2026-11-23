@@ -162,6 +162,57 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(exact.authenticated).toBe(true);
         });
 
+        it('allows a whitelisted second user to log in under cap-local with LOCAL_DEV_PASSWORD and grants configured roles', async () => {
+            process.env.APP_ROLE = 'cap-local';
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
+            process.env.APP_USER_ROLES = JSON.stringify({ jdoe: ['Viewer', 'SalesManager'] });
+            const sap = jest.spyOn(authAdapter, 'validateCredentials').mockRejectedValue(new Error('SAP must not be called'));
+
+            const res = await service._handleLogin({ data: { username: 'JDOE', password: 'local-password' } });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.username).toBe('JDOE');
+            expect(res.scopes).toEqual(expect.arrayContaining(['$XSAPPNAME.Viewer', '$XSAPPNAME.SalesManager']));
+            expect(res.token).toEqual(expect.any(String));
+            expect(sap).not.toHaveBeenCalled();
+        });
+
+        it('refuses a non-whitelisted user under cap-local even with LOCAL_DEV_PASSWORD', async () => {
+            process.env.APP_ROLE = 'cap-local';
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
+            process.env.APP_USER_ROLES = JSON.stringify({ jdoe: ['Viewer'] });
+            const sap = jest.spyOn(authAdapter, 'validateCredentials').mockRejectedValue(new Error('SAP must not be called'));
+
+            const res = await service._handleLogin({ data: { username: 'stranger', password: 'local-password' } });
+
+            expect(res.authenticated).toBe(false);
+            expect(res.token).toBeUndefined();
+            expect(res.message).toContain('Invalid local credentials');
+            expect(sap).not.toHaveBeenCalled();
+        });
+
+        it('locks out a cap-local user after three failed sign-in attempts', async () => {
+            process.env.APP_ROLE = 'cap-local';
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
+            process.env.APP_USER_ROLES = JSON.stringify({ jdoe: ['Viewer'] });
+
+            const attempt = (password) => service._handleLogin({ data: { username: 'jdoe', password } });
+
+            expect((await attempt('wrong-1')).authenticated).toBe(false);
+            expect((await attempt('wrong-2')).authenticated).toBe(false);
+            expect((await attempt('wrong-3')).authenticated).toBe(false);
+
+            const blocked = await attempt('local-password');
+            expect(blocked.authenticated).toBe(false);
+            expect(blocked.message).toContain('Too many failed sign-in attempts');
+        });
+
         it.each(['alice', 'bob', 'carol', 'dave', 'eve', 'erin', 'fred', 'me', 'yves'])('%s is not a listed user: refused without asking SAP', async (name) => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';

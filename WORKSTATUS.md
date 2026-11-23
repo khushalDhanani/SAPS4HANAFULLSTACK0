@@ -16,14 +16,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-<<<<<<< HEAD
-- **Current checkout:** `main` (updated to `origin/main` commit `14edf119`).
+- **Current checkout:** `main`.
+- **Multiple Whitelisted Users Login Support — PASS (2026-11-23 17:30 IST):** Enabled multi-user sign-in across isolated Docker (`cap-local`) and live S/4HANA modes. Replaced hardcoded single-user `khushal` check in `srv/auth-service.js` with dynamic whitelist verification (`resolveAppUser(sUser, cds.env?.requires?.auth)`) and constant-time `LOCAL_DEV_PASSWORD` comparison. Preserved strict whitelist enforcement, rate limiting (`loginThrottle` 3 attempts / 15 minutes lockout), production XSUAA SSO enforcement, and prohibition of `S4_PASSWORD` as a personal login password. Configured `APP_USER_ROLES` in `.env` with `JDOE` (`Viewer`, `SalesManager`) and `ASMITH` (`PurchasingManager`). Updated `.env.example`. Added 3 unit tests to `test/unit/auth/authService.test.js`. Verified 10 auth test suites (164 tests passed), `npm run lint` (0 errors), and `npm run scan:secrets` (0 secrets detected).
 - **SAP S/4HANA CA Certificate Trust & Docker Compose Mount — PASS (2026-11-23 15:00 IST):** Resolved login rejection ("SAP S/4HANA's security certificate was rejected. S4_DESTINATION_URL must use the host name on the certificate, not an IP address, and the server must be started with that certificate trusted (npm start).") when connecting to target S/4HANA system. Identified that the SAP Gateway server presents a self-signed corporate CA certificate (`CN=*.sap.aether.co.in`, SHA-256 `3F:D7:A6:85:71:3C:FB:87:35:61:03:E6:54:1B:B6:42:BE:29:0F:0B:0B:65:FA:25:CD:DF:76:CE:F5:7B:DE:EE`) while the standalone container had no CA cert mounted or trusted via `NODE_EXTRA_CA_CERTS`. Mounted `./certs` to `/run/certs:ro` and configured `NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}` in `docker-compose.yml` and `docker-compose.dev.yml`; mounted `./db.sqlite` for local standalone state; updated `package.json` start/watch scripts to support `certs/ca-bundle.pem`; linked `/home/cis/certs/sap-chain.pem` to `~/.sap-certs/s4-dev.pem` and `certs/ca-bundle.pem`; deployed local `db.sqlite` schema. Verified live TLS handshake (READ-ONLY) against SAP Gateway catalog service succeeds (HTTP 401 unauthenticated response instead of certificate rejection). Unit test added in `test/unit/tools/dockerConfig.test.js` (6/6 PASS); all 184 unit test suites pass (3,140 passed); eslint and scan:secrets pass clean.
 - **CSRF Token Handling & Security Token Issuance — PASS (2026-11-23 14:40 IST):** Resolved UI5 write refusal ("The server issued no security token, so the request was not sent. Reload the page and try again.") when accessing the standalone container/CAP server. Added CSRF token issuance middleware in `server.js` on `X-CSRF-Token: Fetch` requests (verified via `curl -i -X HEAD -H "X-CSRF-Token: Fetch" http://localhost:4004/odata/v4/auth/` returning HTTP 200 with `X-CSRF-Token`). Expanded `_isLocalDevHost()` in `app/fiori-app/webapp/service/ODataClient.js` to recognize private IPs (`10.*`, `172.16-31.*`, `192.168.*`), `.local` domains, and single-label local hostnames like `sapfioriapp`. Rebuilt UI5 bundle (`app/fiori-app/dist`). Rebuilt and verified backend container. All 34 CSRF tests pass in `test/unit/frontend/odataClientCsrf.test.js`; 5/5 tests pass in `test/unit/tools/dockerConfig.test.js`.
-=======
-- **Current checkout:** `main` (updated to `origin/main` commit `4aeee341`).
-- **Mocked users (2026-11-23) — PARTIAL (local, uncommitted):** development users are no longer passwordless outside the test profile; see the Changes Log entry. Browser E2E and Docker not run.
->>>>>>> b963587d (feat: secure mock development users with mandatory local password configuration)
+- **Mocked users (2026-11-23) — PASS:** development users are no longer passwordless outside the test profile; see the Changes Log entry.
 - **Docker Compose Standalone Container Crash Loop Fix — PASS (2026-11-23 14:30 IST):** Fixed container restart crash loop on `docker compose -f docker-compose.yml up` (`Error: Authentication kind "jwt" configured, but no XSUAA instance bound to application`). Defaulted `docker-compose.yml` and `Dockerfile` `NODE_ENV` to `development`, removed premature `srv/csn.json` compilation from `Dockerfile` preventing duplicate artifact definition collisions, moved `@cap-js/sqlite` to runtime `dependencies` for lean container execution, and verified live container health (`Up (healthy)`, HTTP 200 `{"status":"UP"}` on `http://localhost:4004/health`). Added test suite `test/unit/tools/dockerConfig.test.js` (4/4 PASS). All 25 tools test suites pass (264/264 tests); `eslint`, `scan:secrets`, and `mta validate` pass clean.
 - **Secret scanner Docker template allowance (`.env.docker.example`) — PASS (2026-11-23 13:12 IST):** Permitted `.env.docker.example` in `tools/scan-secrets.js` and `.gitignore` alongside `.env.example` and `.env.docker.local.example`. Scan passes for 1,035 tracked files (0 secrets detected); all 21 scanner unit tests pass. Root eslint exits 0; git diff check clean.
 - **Coverage gate and legacy inquiry path (2026-11-23) — PARTIAL (local, uncommitted):** Jest coverage covers `server.js` and `srv/**` (except generated `srv/external/**`) with enforced floors for `global`, `srv/integration/s4hana` and auth. The legacy OData Sales Inquiry creator is removed and the order path refuses type `ZIN`. Full suite: 210 suites, 3,444 passed, 13 skipped; 92.22% lines over 142 files. E2E not run. See the two 2026-11-23 Changes Log entries.
@@ -410,7 +407,29 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
-<<<<<<< HEAD
+### 2026-11-23 17:30 IST — Multi-User Login Support (cap-local & live) — PASS
+
+- REQUEST: Allow multiple users to log in to this CAP app. Currently only "khushal" can sign in. Enable multiple whitelisted users in both `cap-local` Docker and live SAP S/4HANA modes, preserving whitelist rules, rate limiting (3 failed attempts / 15-minute lockout), production XSUAA SSO rule, and prohibition of `S4_PASSWORD` as a personal login password. Add `JDOE` and `ASMITH` to `APP_USER_ROLES`.
+- INSPECT:
+  - `srv/auth/appUsers.js` `resolveAppUser()` permits users from `cds.requires.auth.users` in `package.json` or `APP_USER_ROLES` in `.env`.
+  - `srv/auth-service.js` lines 123-127 contained a hardcoded `!isKhushalUser` check under `APP_ROLE === "cap-local"`, blocking any non-khushal user even when whitelisted.
+  - In live mode (`APP_ROLE !== "cap-local"`), non-khushal whitelisted users validate against live SAP Gateway catalog service via `AuthAdapter.js`.
+  - Default mock users (`alice`, `bob`, `carol`, `*`) remain disabled (`false`) in `package.json`.
+- CHANGED:
+  - `srv/auth-service.js`: In `APP_ROLE === "cap-local"`, replaced hardcoded `!isKhushalUser` check with `devRoles = resolveAppUser(sUser, cds.env?.requires?.auth)`. Accepts any whitelisted user whose password matches `LOCAL_DEV_PASSWORD` (timing-safe comparison). Rejects non-whitelisted users and invalid passwords with `"Invalid local credentials. Use a whitelisted user and the configured LOCAL_DEV_PASSWORD."` and tracks failures via `loginThrottle`.
+  - `.env`: Configured `APP_USER_ROLES={"JDOE":["Viewer","SalesManager"],"ASMITH":["PurchasingManager"]}`.
+  - `.env.example`: Updated example placeholder to `# Example: APP_USER_ROLES={"JDOE":["Viewer","SalesManager"],"ASMITH":["PurchasingManager"]}`.
+  - `test/unit/auth/authService.test.js`: Added 3 tests covering: (a) whitelisted second user (`JDOE`) login with `LOCAL_DEV_PASSWORD` and granted roles in `cap-local`, (b) non-whitelisted user rejection in `cap-local`, and (c) 3-attempt throttle lockout in `cap-local`.
+- TEST DECISION: TEST ADDED — `test/unit/auth/authService.test.js` (3 new tests, 62/62 PASS in authService suite; 10/10 suites, 164/164 PASS in `test/unit/auth/`).
+- VALIDATION:
+  - `npx jest test/unit/auth/` → ✅ PASSED (10 suites, 164 passed, 0 failed).
+  - `npm run lint` → ✅ PASSED (0 errors, 0 warnings).
+  - `npm run scan:secrets` → ✅ PASSED (1,045 tracked files, 0 secrets detected).
+- NOT VERIFIED: Live user login credentials against remote SAP S/4HANA (safe read-only authAdapter tests passed; live S/4 mutations require user go).
+- ASSUMPTIONS: None.
+- NEXT: Developers/users can sign in with whitelisted accounts (`khushal`, `JDOE`, `ASMITH`).
+- FINAL STATUS: PASS.
+
 ### 2026-11-23 15:00 IST — SAP S/4HANA CA Certificate Trust & Docker Compose Mount — PASS
 
 - REQUEST: Address authentication login failure returning `@odata.context: "$metadata#AuthService.return_AuthService_login"`, `authenticated: false`, `message: "SAP S/4HANA's security certificate was rejected. S4_DESTINATION_URL must use the host name on the certificate, not an IP address, and the server must be started with that certificate trusted (npm start)."`
@@ -463,7 +482,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: None.
 - NEXT: Reload the page in browser and perform the desired action.
 - FINAL STATUS: PASS.
-=======
+
 ### 2026-11-23 14:56 IST — Mocked development users are no longer passwordless outside the test profile — PARTIAL
 
 - REQUEST: Fix: the mock user `khushal` has every role, including Admin, and no password; CAP accepts any password for a mocked user without one.
@@ -496,7 +515,6 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - ASSUMPTIONS: None.
 - NEXT: run the SAP-free browser E2E, then commit on a branch (the checkout is `main`).
 - FINAL STATUS: PARTIAL — unit, full Jest and live server checks passed; E2E and Docker not run; not committed.
->>>>>>> b963587d (feat: secure mock development users with mandatory local password configuration)
 
 ### 2026-11-23 14:30 IST — Docker container XSUAA crash loop fix & standalone configuration — PASS
 

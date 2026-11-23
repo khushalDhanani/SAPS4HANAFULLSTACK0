@@ -122,10 +122,10 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
 
     if (process.env.APP_ROLE === "cap-local") {
       // The isolated Docker profile has no SAP connectivity or SAP credentials.
-      if (!isKhushalUser || !sLocalDevPass || !localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
-        return failed("Invalid local credentials. Use khushal and the configured LOCAL_DEV_PASSWORD.");
+      devRoles = resolveAppUser(sUser, cds.env?.requires?.auth);
+      if (!devRoles || !sLocalDevPass || !localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
+        return failed("Invalid local credentials. Use a whitelisted user and the configured LOCAL_DEV_PASSWORD.");
       }
-      devRoles = resolveAppUser(sUser, cds.env?.requires?.auth) || ["Viewer"];
       authResult = {
         authenticated: true,
         message: "Authentication successful (local development).",
