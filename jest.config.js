@@ -6,5 +6,8 @@ module.exports = {
     '**/test/unit/**/*.test.js',
     '**/test/integration/**/*.test.js',
     '**/test/e2e/**/*.test.js'
+  ],
+  modulePathIgnorePatterns: [
+    '<rootDir>/gen/'
   ]
 };

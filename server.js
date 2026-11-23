@@ -170,6 +170,15 @@ cds.on('bootstrap', (app) => {
             isProductiveSystem: false
         });
     });
+
+    // Health check endpoint for MTA/BTP readiness, Docker, and Kubernetes probes
+    app.get('/health', (req, res) => {
+        res.status(200).json({
+            status: 'UP',
+            uptime: Math.floor(process.uptime()),
+            timestamp: new Date().toISOString()
+        });
+    });
 });
 
 // Ensure CAP service request context inherits verified user from Express in local development
@@ -205,4 +214,8 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Delegate to default CAP server bootstrap
-module.exports = cds.server;
+if (require.main === module) {
+    cds.server();
+} else {
+    module.exports = cds.server;
+}

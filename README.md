@@ -231,6 +231,23 @@ cd app/fiori-app
 npm start
 ```
 
+#### Option C: Docker & Docker Compose (Containerized)
+Run the application in a production-ready or development container without requiring local SAP tooling:
+
+```bash
+# 1. Configure environment
+cp .env.docker.example .env
+
+# 2. Start container stack
+npm run docker:up
+# or
+docker compose up -d
+```
+
+- **Fiori Application & Service Home**: [http://localhost:4004](http://localhost:4004)
+- **Container Health Check**: [http://localhost:4004/health](http://localhost:4004/health)
+- Detailed guide: [docs/DOCKER.md](docs/DOCKER.md)
+
 ---
 
 ## S/4HANA Configuration

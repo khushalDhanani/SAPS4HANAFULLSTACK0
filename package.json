@@ -11,7 +11,13 @@
     "test:integration": "jest test/integration --runInBand",
     "test:e2e": "jest test/e2e --runInBand",
     "validate:mta": "mbt validate",
-    "build:mta": "mbt build"
+    "build:mta": "mbt build",
+    "docker:build": "docker build -t saps4hana-fullstack:latest .",
+    "docker:build:dev": "docker build -f Dockerfile.dev -t saps4hana-fullstack:dev .",
+    "docker:run": "docker run -d --name saps4hana-app -p 4004:4004 --env-file .env saps4hana-fullstack:latest",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up"
   },
   "license": "ISC",
   "dependencies": {
