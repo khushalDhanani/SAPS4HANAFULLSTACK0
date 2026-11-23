@@ -91,7 +91,7 @@ describe('ODataClient CSRF handling', () => {
     expect(fetchMock.mock.calls.filter(([, init]) => init.method === method)).toHaveLength(0);
   });
 
-  describe.each(['localhost', '127.0.0.1'])('on the local development host %s (the CAP server issues no token)', (host) => {
+  describe.each(['localhost', '127.0.0.1', 'sapfioriapp', '192.168.1.1', '10.0.0.1', 'box.local'])('on the local development host %s (the CAP server issues no token)', (host) => {
     test('a write is sent without a token', async () => {
       const fetchMock = jest.fn((url, init) => Promise.resolve(init.method === 'HEAD' ? response(200) : response(200, {}, { ok: true })));
       const client = loadClient(fetchMock, host);

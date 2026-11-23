@@ -28,4 +28,10 @@ describe('Docker Configuration Integrity', () => {
     const envExample = fs.readFileSync(path.join(rootDir, '.env.docker.example'), 'utf8');
     expect(envExample).toMatch(/^NODE_ENV=development/m);
   });
+
+  test('server.js handles X-CSRF-Token: Fetch to support direct container and browser access', () => {
+    const serverJsContent = fs.readFileSync(path.join(rootDir, 'server.js'), 'utf8');
+    expect(serverJsContent).toContain("req.headers['x-csrf-token']");
+    expect(serverJsContent).toContain("res.setHeader('X-CSRF-Token'");
+  });
 });

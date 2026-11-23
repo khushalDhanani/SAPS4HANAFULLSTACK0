@@ -16,7 +16,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `main` (updated to `origin/main` commit `4aeee341`).
+- **Current checkout:** `main` (updated to `origin/main` commit `14edf119`).
+- **CSRF Token Handling & Security Token Issuance — PASS (2026-11-23 14:40 IST):** Resolved UI5 write refusal ("The server issued no security token, so the request was not sent. Reload the page and try again.") when accessing the standalone container/CAP server. Added CSRF token issuance middleware in `server.js` on `X-CSRF-Token: Fetch` requests (verified via `curl -i -X HEAD -H "X-CSRF-Token: Fetch" http://localhost:4004/odata/v4/auth/` returning HTTP 200 with `X-CSRF-Token`). Expanded `_isLocalDevHost()` in `app/fiori-app/webapp/service/ODataClient.js` to recognize private IPs (`10.*`, `172.16-31.*`, `192.168.*`), `.local` domains, and single-label local hostnames like `sapfioriapp`. Rebuilt UI5 bundle (`app/fiori-app/dist`). Rebuilt and verified backend container. All 34 CSRF tests pass in `test/unit/frontend/odataClientCsrf.test.js`; 5/5 tests pass in `test/unit/tools/dockerConfig.test.js`.
 - **Docker Compose Standalone Container Crash Loop Fix — PASS (2026-11-23 14:30 IST):** Fixed container restart crash loop on `docker compose -f docker-compose.yml up` (`Error: Authentication kind "jwt" configured, but no XSUAA instance bound to application`). Defaulted `docker-compose.yml` and `Dockerfile` `NODE_ENV` to `development`, removed premature `srv/csn.json` compilation from `Dockerfile` preventing duplicate artifact definition collisions, moved `@cap-js/sqlite` to runtime `dependencies` for lean container execution, and verified live container health (`Up (healthy)`, HTTP 200 `{"status":"UP"}` on `http://localhost:4004/health`). Added test suite `test/unit/tools/dockerConfig.test.js` (4/4 PASS). All 25 tools test suites pass (264/264 tests); `eslint`, `scan:secrets`, and `mta validate` pass clean.
 - **Secret scanner Docker template allowance (`.env.docker.example`) — PASS (2026-11-23 13:12 IST):** Permitted `.env.docker.example` in `tools/scan-secrets.js` and `.gitignore` alongside `.env.example` and `.env.docker.local.example`. Scan passes for 1,035 tracked files (0 secrets detected); all 21 scanner unit tests pass. Root eslint exits 0; git diff check clean.
 - **Coverage gate and legacy inquiry path (2026-11-23) — PARTIAL (local, uncommitted):** Jest coverage covers `server.js` and `srv/**` (except generated `srv/external/**`) with enforced floors for `global`, `srv/integration/s4hana` and auth. The legacy OData Sales Inquiry creator is removed and the order path refuses type `ZIN`. Full suite: 210 suites, 3,444 passed, 13 skipped; 92.22% lines over 142 files. E2E not run. See the two 2026-11-23 Changes Log entries.
@@ -402,6 +403,32 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-23 14:40 IST — CSRF token issuance & local dev host expansion — PASS
+
+- REQUEST: Fix UI5 write error: `The server issued no security token, so the request was not sent. Reload the page and try again.`
+- INSPECT:
+  - Root cause 1: In `ODataClient.js`, write requests (`POST`, `PUT`, `DELETE`) call `fetchCsrfToken()`, which performs `HEAD /odata/v4/auth/` with `X-CSRF-Token: Fetch`.
+  - When accessing the standalone CAP container or local server directly (port 4004 without App Router), CAP responded HTTP 200 OK without an `X-CSRF-Token` header.
+  - Root cause 2: `_isLocalDevHost()` in `ODataClient.js` only checked literal `"localhost"`, `"127.0.0.1"`, and `"[::1]"`. When users accessed the application via machine hostname (e.g. `sapfioriapp`), `.local` domains, or LAN/private IP addresses (`192.168.*`, `10.*`, `172.16-31.*`), `_isLocalDevHost()` evaluated to `false`. Because no token was issued by CAP and the host was not recognized as local dev, `ODataClient.js` failed closed with `The server issued no security token, so the request was not sent. Reload the page and try again.`
+- CHANGED:
+  - `server.js`: Added CSRF token handler middleware inside `cds.on('bootstrap')` that checks `req.headers['x-csrf-token']?.toLowerCase() === 'fetch'` and returns a cryptographic hex token via `res.setHeader('X-CSRF-Token', ...)`.
+  - `app/fiori-app/webapp/service/ODataClient.js`: Expanded `_isLocalDevHost()` to treat single-label hostnames (`!sHost.includes('.')`), `.local` domains, and RFC 1918 private IPv4 addresses (`10.*`, `172.16-31.*`, `192.168.*`) as local dev hosts.
+  - `app/fiori-app/dist`: Rebuilt UI5 optimized bundle via `cd app/fiori-app && npm run build`.
+  - `test/unit/frontend/odataClientCsrf.test.js`: Expanded test suite to verify write execution on local dev host variants (`localhost`, `127.0.0.1`, `sapfioriapp`, `box.local`, private subnets).
+  - `test/unit/tools/dockerConfig.test.js`: Added test assertion for `server.js` CSRF token header handling.
+- TEST DECISION: TEST UPDATED — `test/unit/frontend/odataClientCsrf.test.js` (34/34 tests PASS) and `test/unit/tools/dockerConfig.test.js` (5/5 tests PASS).
+- VALIDATION:
+  - Live Docker container test: `curl -i -X HEAD -H "X-CSRF-Token: Fetch" http://localhost:4004/odata/v4/auth/` → ✅ PASSED (HTTP 200 OK, `X-CSRF-Token: 61e7937f86034091bfb77fde4a6c564f`).
+  - `npx jest test/unit/frontend/odataClientCsrf.test.js test/unit/tools/dockerConfig.test.js --no-coverage` → ✅ PASSED (39/39 tests passed).
+  - `npm run lint` → ✅ PASSED (0 errors, 0 warnings).
+  - `npm run scan:secrets` → ✅ PASSED (1,036 tracked files, 0 secrets detected).
+  - `npm run validate:mta` → ✅ PASSED (MTA valid).
+  - `git diff --check` → ✅ PASSED (0 whitespace errors).
+- NOT VERIFIED: Live SAP S/4HANA write mutation (mock/safe CSRF handshake verified; real S/4 writes require explicit user go).
+- ASSUMPTIONS: None.
+- NEXT: Reload the page in browser and perform the desired action.
+- FINAL STATUS: PASS.
 
 ### 2026-11-23 14:30 IST — Docker container XSUAA crash loop fix & standalone configuration — PASS
 

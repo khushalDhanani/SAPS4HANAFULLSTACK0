@@ -10,7 +10,12 @@ sap.ui.define([
     /** The local CAP development server issues no CSRF token; every other host must. */
     function _isLocalDevHost() {
         var sHost = (typeof window !== "undefined" && window.location && window.location.hostname) || "";
-        return sHost === "localhost" || sHost === "127.0.0.1" || sHost === "[::1]";
+        return sHost === "localhost" || sHost === "127.0.0.1" || sHost === "[::1]" ||
+            sHost.endsWith(".local") ||
+            sHost.indexOf(".") === -1 ||
+            /^10\./.test(sHost) ||
+            /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(sHost) ||
+            /^192\.168\./.test(sHost);
     }
 
     function _csrfUnavailable(sMessage, oCause) {

@@ -89,6 +89,12 @@ cds.on('bootstrap', (app) => {
             }
             return originalSetHeader.apply(this, arguments);
         };
+        // Issue CSRF security token when requested via standard SAP X-CSRF-Token: Fetch
+        const csrfHeader = req.headers['x-csrf-token'];
+        if (csrfHeader && csrfHeader.toLowerCase() === 'fetch') {
+            const crypto = require('crypto');
+            res.setHeader('X-CSRF-Token', crypto.randomBytes(16).toString('hex'));
+        }
         next();
     });
 
