@@ -16,7 +16,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Current checkout:** `feature01`.
+- **Current checkout:** `main` (updated to `origin/main` commit `4aeee341`).
+- **Secret scanner Docker template allowance (`.env.docker.example`) — PASS (2026-11-23 13:12 IST):** Permitted `.env.docker.example` in `tools/scan-secrets.js` and `.gitignore` alongside `.env.example` and `.env.docker.local.example`. Scan passes for 1,035 tracked files (0 secrets detected); all 21 scanner unit tests pass. Root eslint exits 0; git diff check clean.
 - **Coverage gate and legacy inquiry path (2026-11-23) — PARTIAL (local, uncommitted):** Jest coverage covers `server.js` and `srv/**` (except generated `srv/external/**`) with enforced floors for `global`, `srv/integration/s4hana` and auth. The legacy OData Sales Inquiry creator is removed and the order path refuses type `ZIN`. Full suite: 210 suites, 3,444 passed, 13 skipped; 92.22% lines over 142 files. E2E not run. See the two 2026-11-23 Changes Log entries.
 - **Goods Receipt feature — REMOVED (2026-11-21, PARTIALLY COMPLETE):** the Goods Receipt feature (movement 101) is removed from the source and the final audit is done (13:28 IST entry). Verified: local lint, Jest, accessibility, performance, SAP-free E2E, CDS and UI5 production builds, MTA validation and build; hosted CI success on `601b289e`. Not done, each needing a decision or approval: any deployment, the physical database cleanup (`docs/decisions/goods-receipt-database-cleanup-plan.md`), withdrawal of the obsolete SAP authorization, SAP-connected E2E. Earlier entries in this file that describe Goods Receipt hardening (Phases 1–3, highest-risk findings, GR-03) are historical: that code no longer exists.
 - **Codebase Modularization Progress — PASS:** Executed full codebase scan using exact POSIX `wc -l` on first-party source files (713 by the reproducible filter in `SCAN_REPORT.md` Section 8.5; the earlier 715 and 722 figures came from the original scan and could not be reproduced). Updated [`SCAN_REPORT.md`](SCAN_REPORT.md) with complete inventory, architectural evaluation, and modularization milestones:
@@ -400,6 +401,30 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-23 13:12 IST — Secret scanner allowance for `.env.docker.example` — PASS
+
+- REQUEST: Fix `npm run scan:secrets` failure: `FATAL: Sensitive environment file(s) are tracked in git: .env.docker.example`.
+- INSPECT:
+  - Root cause: Commit `1c8602dd` ("Add Docker Setup") added `.env.docker.example` as a clean environment configuration template for Docker deployments.
+  - Following the merge with `development` in PR #7, `tools/scan-secrets.js` enforced an allowlist of tracked templates containing only `['.env.example', '.env.docker.local.example']`.
+  - `verifyGitignore()` detects tracked environment files via `git ls-files .env .env.local .env.*` and failed because `.env.docker.example` was missing from `allowedTemplates`.
+  - In `.gitignore`, `!.env.docker.example` was missing following the branch merge.
+- CHANGED:
+  - `tools/scan-secrets.js`: Added `.env.docker.example` to `allowedTemplates` (now `['.env.example', '.env.docker.local.example', '.env.docker.example']`).
+  - `.gitignore`: Added `!.env.docker.example` under `# Environment & Secrets`.
+  - `test/unit/tools/scanSecrets.test.js`: Updated scanner unit test assertions to include `.env.docker.example` in allowed templates verification, rejection tests, and content scan assertions.
+  - `WORKSTATUS.md`: Updated Current Status and appended Changes Log entry.
+- TEST DECISION: TEST UPDATED — Updated `test/unit/tools/scanSecrets.test.js` to test all three permitted environment templates (`.env.example`, `.env.docker.local.example`, `.env.docker.example`) while keeping rejection of untrusted `.env*` files intact.
+- VALIDATION:
+  - `npm run scan:secrets` → ✅ PASSED (1,035 tracked files inspected against 9 rules, 0 secrets/credentials detected, gitignore rules verified).
+  - `npx jest test/unit/tools/scanSecrets.test.js --no-coverage` → ✅ PASSED (1 suite, 21/21 tests passed).
+  - `npm run lint -- tools/scan-secrets.js test/unit/tools/scanSecrets.test.js` → ✅ PASSED (0 errors, 0 warnings).
+  - `git diff --check` → ✅ PASSED (0 whitespace errors).
+- NOT VERIFIED: Hosted CI run (not yet pushed).
+- ASSUMPTIONS: None. Template contains placeholder values only; content scan verifies zero credentials.
+- NEXT: Commit and push changes to origin.
+- FINAL STATUS: PASS.
 
 ### 2026-11-23 11:20 IST — Legacy OData Sales Inquiry creator removed; order path refuses type ZIN; S/4HANA coverage floors raised — PARTIAL
 

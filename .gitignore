@@ -14,6 +14,7 @@ yarn-error.log*
 .env.docker.local
 !.env.example
 !.env.docker.local.example
+!.env.docker.example
 default-env.json
 default-services.json
 secrets/*

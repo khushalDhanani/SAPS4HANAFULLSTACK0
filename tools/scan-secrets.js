@@ -111,7 +111,7 @@ function verifyGitignore(exec = execSync) {
   }
 
   // Only the explicitly permitted templates may be tracked; their contents are still scanned.
-  const allowedTemplates = ['.env.example', '.env.docker.local.example'];
+  const allowedTemplates = ['.env.example', '.env.docker.local.example', '.env.docker.example'];
   try {
     const rawTracked = exec('git ls-files .env .env.local .env.*', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
     const trackedSecrets = rawTracked
