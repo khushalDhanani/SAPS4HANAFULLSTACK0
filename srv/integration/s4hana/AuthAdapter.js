@@ -142,7 +142,11 @@ class AuthAdapter {
       }
     } catch (err) {
       const status = err.response?.status;
+      // Server-side log only (the user sees the messages below): the HTTP status tells a wrong password (401) from
+      // a refused catalog read (403) and from a connection problem. It names the user, never the password.
+      const sWho = sUser.toLowerCase();
       if (status === 401) {
+        LOG.warn(`S/4HANA sign-in check for '${sWho}': HTTP 401 (SAP did not accept the user name and password)`);
         return {
           authenticated: false,
           statusCode: status,
@@ -153,7 +157,7 @@ class AuthAdapter {
         // Not a wrong password as far as this check can tell: SAP answered the request and refused access.
         // Which cause applies (lock, missing authorization for the catalog service read above) is not verified
         // against the SAP system, so the user is not told the password is wrong and is still refused.
-        LOG.warn(`S/4HANA answered HTTP 403 to the sign-in check for '${sUser.toLowerCase()}' (Gateway service catalog read)`);
+        LOG.warn(`S/4HANA sign-in check for '${sWho}': HTTP 403 (SAP refused the read of the Gateway service catalog /IWFND/CATALOGSERVICE)`);
         return {
           authenticated: false,
           statusCode: status,
@@ -162,7 +166,7 @@ class AuthAdapter {
       }
 
       if (!err.response) {
-        LOG.error('S/4HANA connection error:', err.message);
+        LOG.error(`S/4HANA connection error during the sign-in check for '${sWho}' (no HTTP answer${err.code ? `, ${err.code}` : ''}):`, err.message);
         if (/certificate|altnames|ERR_TLS|SELF_SIGNED/i.test(`${err.code || ''} ${err.message || ''}`)) {
           return {
             authenticated: false,
@@ -177,7 +181,7 @@ class AuthAdapter {
         };
       }
 
-      LOG.error(`Unexpected S/4 response: ${status}`);
+      LOG.error(`S/4HANA sign-in check for '${sWho}': unexpected HTTP ${status}`);
       return {
         authenticated: false,
         statusCode: status,

@@ -115,6 +115,58 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             expect(res.message).not.toContain('Invalid username or password');
         });
 
+        describe('server-side log of the SAP answer (the user sees none of it)', () => {
+            const LOG = require('../../srv/common/logger')('auth');
+            let warn;
+            let error;
+            beforeEach(() => {
+                warn = jest.spyOn(LOG, 'warn').mockImplementation(() => {});
+                error = jest.spyOn(LOG, 'error').mockImplementation(() => {});
+            });
+            afterEach(() => jest.restoreAllMocks());
+            const check = (fetchFn) => authAdapter.validateCredentials('JSmith', 'made-up-own-password', {
+                baseUrl: 'http://s4hana.example.corp:8000', fetchFn
+            });
+            const logged = () => JSON.stringify([...warn.mock.calls, ...error.mock.calls]);
+
+            it('logs HTTP 401 with the user name', async () => {
+                const res = await check(jest.fn().mockResolvedValueOnce({ ok: false, status: 401 }));
+                expect(warn).toHaveBeenCalledWith("S/4HANA sign-in check for 'jsmith': HTTP 401 (SAP did not accept the user name and password)");
+                expect(res.message).toBe('Invalid username or password. S/4HANA logon failed (check credentials or SU01 lock status).');
+            });
+
+            it('logs HTTP 403 as a refused catalog read, not as 401', async () => {
+                await check(jest.fn().mockResolvedValueOnce({ ok: false, status: 403 }));
+                expect(warn).toHaveBeenCalledWith(expect.stringContaining("sign-in check for 'jsmith': HTTP 403"));
+                expect(warn).toHaveBeenCalledWith(expect.stringContaining('/IWFND/CATALOGSERVICE'));
+                expect(logged()).not.toContain('HTTP 401');
+            });
+
+            it('logs a network error with its code, and an unexpected status with its number', async () => {
+                await check(jest.fn().mockRejectedValueOnce(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })));
+                expect(error).toHaveBeenCalledWith(
+                    "S/4HANA connection error during the sign-in check for 'jsmith' (no HTTP answer, ECONNREFUSED):", 'connect ECONNREFUSED'
+                );
+
+                await check(jest.fn().mockResolvedValueOnce({ ok: false, status: 500 }));
+                expect(error).toHaveBeenCalledWith("S/4HANA sign-in check for 'jsmith': unexpected HTTP 500");
+            });
+
+            it('never logs the password, and logs nothing for an accepted sign-in', async () => {
+                for (const answer of [{ ok: false, status: 401 }, { ok: false, status: 403 }, { ok: false, status: 500 }]) {
+                    await check(jest.fn().mockResolvedValueOnce(answer));
+                }
+                await check(jest.fn().mockRejectedValueOnce(new Error('socket hang up')));
+                expect(logged()).not.toContain('made-up-own-password');
+
+                warn.mockClear(); error.mockClear();
+                const ok = await check(jest.fn().mockResolvedValueOnce({ ok: true, status: 200, data: {} }));
+                expect(ok.authenticated).toBe(true);
+                expect(warn).not.toHaveBeenCalled();
+                expect(error).not.toHaveBeenCalled();
+            });
+        });
+
         it('should handle network connection failures with 503 Service Unavailable', async () => {
             const mockFetch = jest.fn().mockRejectedValueOnce(new Error('ECONNREFUSED'));
 

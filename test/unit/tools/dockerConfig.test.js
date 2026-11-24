@@ -68,4 +68,21 @@ describe('Docker Configuration Integrity', () => {
     expect(text).toContain('refuses');
     expect(text).toMatch(/^LOCAL_DEV_PASSWORD=$/m);
   });
+  test('docker-compose.yml lets the app trust one proxy by default, so the sign-in limit sees the client address behind the tls proxy', () => {
+    const compose = fs.readFileSync(path.join(rootDir, 'docker-compose.yml'), 'utf8');
+    expect(compose).toContain('- TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-1}');
+    expect(compose).toMatch(/proxy:[\s\S]*profiles:\s*\n\s*- tls/);
+  });
+
+  test.each(['.env.example', '.env.docker.example'])('%s needs no user list: automatic roles are set up, without sample users', (file) => {
+    const text = fs.readFileSync(path.join(rootDir, file), 'utf8');
+    expect(text).toMatch(/^APP_ALLOW_ANY_SAP_USER=true$/m);
+    expect(text).toMatch(/^APP_DEFAULT_ROLES=Viewer$/m);
+    expect(text).toMatch(/^APP_SAP_ROLE_PREFIX=ZAPP_$/m);
+    expect(text).toMatch(/^APP_ADMIN_USERS=$/m);
+    expect(text).toMatch(/^APP_USER_ROLES=$/m);
+    expect(text).toMatch(/^APP_USERS_FILE=$/m);
+    expect(text).not.toMatch(/JDOE|ASMITH|JSMITH|MADMIN|KHUSHAL/);
+    expect(text).toContain("a role change in SAP applies at the user's next sign-in");
+  });
 });

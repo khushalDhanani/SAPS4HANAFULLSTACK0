@@ -631,7 +631,171 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
         });
 
-        it('never grants Admin through role mapping unless user is in APP_ADMIN_USERS', async () => {
+        describe('automatic roles: no user list, Admin only through APP_ADMIN_USERS', () => {
+            const util = require('../../../srv/auth/localTokenUtil');
+            const sapAccepts = () => jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({
+                authenticated: true, message: 'Authentication successful.', system: 'DS4 - Client 220'
+            });
+            const sapRoles = (...names) => { service._fetchDetail = jest.fn().mockResolvedValue({ roles: names.map((name) => ({ name })) }); };
+            const login = (username) => service._handleLogin({ data: { username, password: 'made-up-own-sap-password' } });
+            const roles = (res) => (res.scopes || []).map((s) => s.replace('$XSAPPNAME.', ''));
+
+            beforeEach(() => {
+                process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+                process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+                process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+                delete process.env.APP_SAP_ROLE_PREFIX;
+            });
+
+            it('an unlisted user gets the union of the ZAPP_ roles SAP returns, with no list configured', async () => {
+                sapAccepts();
+                sapRoles('SAP_BC_ENDUSER', 'ZAPP_SALESMANAGER', 'zapp_WarehouseClerk', 'ZAPP_VIEWER', 'ZAPP_NOT_A_ROLE');
+
+                const res = await login('JSMITH');
+                expect(res.authenticated).toBe(true);
+                expect(roles(res).sort()).toEqual(['SalesManager', 'Viewer', 'WarehouseClerk']);
+                expect(service._fetchDetail).toHaveBeenCalledWith('JSMITH');
+                expect(util.verifyToken(res.token).is('SalesManager')).toBe(true);
+            });
+
+            it('follows APP_SAP_ROLE_PREFIX', async () => {
+                process.env.APP_SAP_ROLE_PREFIX = 'YAETHER_';
+                sapAccepts();
+                sapRoles('ZAPP_SALESMANAGER', 'YAETHER_PURCHASINGMANAGER');
+                expect(roles(await login('JSMITH'))).toEqual(['PurchasingManager']);
+            });
+
+            it('a user without a matching SAP role gets only APP_DEFAULT_ROLES', async () => {
+                sapAccepts();
+                sapRoles('SAP_ALL', 'Z_SOMETHING_ELSE');
+                expect(roles(await login('JSMITH'))).toEqual(['Viewer']);
+
+                process.env.APP_DEFAULT_ROLES = 'Viewer,SalesRepresentative';
+                loginThrottle.reset();
+                expect(roles(await login('JSMITH'))).toEqual(['Viewer', 'SalesRepresentative']);
+            });
+
+            it.each([
+                ['the BAPI call fails', () => jest.fn().mockRejectedValue(new Error('BAPI_USER_GET_DETAIL failed'))],
+                ['the BAPI call times out', () => jest.fn().mockRejectedValue(Object.assign(new Error('RFC call timed out'), { code: 'RFC_TIMEOUT' }))],
+                ['RFC is not available', () => null]
+            ])('when %s the user gets only APP_DEFAULT_ROLES, and a warning names the user', async (_case, fetchDetail) => {
+                sapAccepts();
+                service._fetchDetail = fetchDetail();
+                const LOG = require('../../../srv/common/logger')('auth');
+                const warn = jest.spyOn(LOG, 'warn').mockImplementation(() => {});
+
+                const res = await login('JSMITH');
+                expect(res.authenticated).toBe(true);
+                expect(roles(res)).toEqual(['Viewer']);
+                expect(warn.mock.calls.some(([text]) => /'jsmith'/.test(text) && /APP_DEFAULT_ROLES/.test(text))).toBe(true);
+                expect(JSON.stringify(warn.mock.calls)).not.toContain('made-up-own-sap-password');
+            });
+
+            it('a ZAPP_Admin SAP role does not grant Admin', async () => {
+                sapAccepts();
+                sapRoles('ZAPP_ADMIN', 'ZAPP_Admin', 'ZAPP_SALESMANAGER');
+
+                const res = await login('JSMITH');
+                expect(roles(res)).toEqual(['SalesManager']);
+                const user = util.verifyToken(res.token);
+                expect(user.is('Admin')).toBe(false);
+                expect(user.is('SapLogsReader')).toBe(false);
+            });
+
+            it('Admin goes only to a user named in APP_ADMIN_USERS, on top of the SAP roles, and also when SAP cannot be asked', async () => {
+                process.env.APP_ADMIN_USERS = 'boss, second_admin';
+                sapAccepts();
+                sapRoles('ZAPP_SALESMANAGER');
+
+                expect(roles(await login('BOSS'))).toEqual(['SalesManager', 'Admin', 'SapLogsReader']);
+                expect(roles(await login('JSMITH'))).toEqual(['SalesManager']);
+
+                service._fetchDetail = jest.fn().mockRejectedValue(new Error('RFC down'));
+                const res = await login('Boss');
+                expect(roles(res)).toEqual(['Viewer', 'Admin', 'SapLogsReader']);
+                expect(util.verifyToken(res.token).is('Admin')).toBe(true);
+
+                // Taken off the list: the same token loses Admin at once.
+                process.env.APP_ADMIN_USERS = 'second_admin';
+                expect(util.verifyToken(res.token).is('Admin')).toBe(false);
+                expect(util.verifyToken(res.token).is('Viewer')).toBe(true);
+            });
+
+            it('a user named in APP_ADMIN_USERS may sign in without any list and with APP_ALLOW_ANY_SAP_USER off', async () => {
+                process.env.APP_ALLOW_ANY_SAP_USER = 'false';
+                process.env.APP_ADMIN_USERS = 'boss';
+                const sap = sapAccepts();
+                sapRoles();
+
+                const res = await login('BOSS');
+                expect(res.authenticated).toBe(true);
+                expect(roles(res)).toContain('Admin');
+                expect(sap).toHaveBeenCalledWith('BOSS', 'made-up-own-sap-password');
+                expect(util.verifyToken(res.token).is('Admin')).toBe(true);
+
+                loginThrottle.reset();
+                expect((await login('JSMITH')).authenticated).toBe(false); // everybody else still needs the opt-in
+            });
+
+            it('an override entry wins over the SAP roles, and cannot grant Admin', async () => {
+                process.env.APP_USER_ROLES = '{"JSMITH":["WarehouseClerk"],"MADMIN":["Admin","Viewer"]}';
+                sapAccepts();
+                sapRoles('ZAPP_SALESMANAGER');
+
+                expect(roles(await login('JSMITH'))).toEqual(['WarehouseClerk']);
+                const res = await login('MADMIN');
+                expect(roles(res)).toEqual(['Viewer']);
+                expect(util.verifyToken(res.token).is('Admin')).toBe(false);
+                expect(service._fetchDetail).not.toHaveBeenCalled();
+
+                process.env.APP_ADMIN_USERS = 'madmin';
+                loginThrottle.reset();
+                expect(roles(await login('MADMIN'))).toEqual(['Viewer', 'Admin', 'SapLogsReader']);
+            });
+
+            it('the SAP connection user is still refused, also when APP_ADMIN_USERS names it', async () => {
+                process.env.S4_USERNAME = 'SAPCONN';
+                process.env.S4_PASSWORD = 'made-up-connection-password';
+                process.env.APP_ADMIN_USERS = 'sapconn';
+                const sap = sapAccepts();
+                sapRoles('ZAPP_SALESMANAGER');
+
+                const res = await login('sapconn');
+                expect(res).toEqual({ authenticated: false, message: 'Invalid username or password.' });
+                const other = await service._handleLogin({ data: { username: 'JSMITH', password: 'made-up-connection-password' } });
+                expect(other).toEqual({ authenticated: false, message: 'Invalid username or password.' });
+                expect(sap).not.toHaveBeenCalled();
+            });
+
+            it('warns at startup about the connection user in APP_ADMIN_USERS or APP_USER_ROLES, and about Admin entries that grant nothing', async () => {
+                const none = AuthServiceHandler.startupWarnings({ S4_USERNAME: 'SAPCONN', APP_ADMIN_USERS: 'boss', APP_USER_ROLES: '{"JSMITH":["Viewer"]}' });
+                expect(none).toEqual([]);
+
+                const env = {
+                    S4_USERNAME: 'SapConn', S4_PASSWORD: 'made-up-connection-password',
+                    APP_ADMIN_USERS: 'boss, SAPCONN', APP_USER_ROLES: '{"sapconn":["Viewer"],"MADMIN":["Admin"],"BOSS":["Admin"]}',
+                    APP_USERS_FILE: '/fake/users.json'
+                };
+                const warnings = AuthServiceHandler.startupWarnings(env, { readFileSync: () => '{"FADMIN":["Admin","Viewer"]}' });
+                expect(warnings).toHaveLength(3);
+                expect(warnings[0]).toMatch(/S4_USERNAME\) is named in APP_ADMIN_USERS and APP_USER_ROLES/);
+                expect(warnings[1]).toMatch(/APP_USER_ROLES lists Admin for 1 user\(s\) not named in APP_ADMIN_USERS \(madmin\)/);
+                expect(warnings[2]).toMatch(/APP_USERS_FILE lists Admin for 1 user\(s\).*\(fadmin\)/);
+                expect(warnings.join(' ')).not.toContain('made-up-connection-password');
+                expect(warnings.join(' ').toLowerCase()).not.toContain('sapconn');
+
+                // init() logs them as warnings and still starts
+                const LOG = require('../../../srv/common/logger')('auth');
+                const warn = jest.spyOn(LOG, 'warn').mockImplementation(() => {});
+                jest.spyOn(require('@sap/cds').ApplicationService.prototype, 'init').mockResolvedValue();
+                Object.assign(process.env, { S4_USERNAME: 'SAPCONN', APP_ADMIN_USERS: 'sapconn' });
+                await expect(new AuthServiceHandler().init()).resolves.toBeUndefined();
+                expect(warn.mock.calls.some(([text]) => /S4_USERNAME\) is named in APP_ADMIN_USERS/.test(text))).toBe(true);
+            });
+        });
+
+        it('a user in APP_ADMIN_USERS gets Admin, and nobody gets it from a role map', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.APP_ALLOW_ANY_SAP_USER = 'true';

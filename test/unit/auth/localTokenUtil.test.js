@@ -167,6 +167,7 @@ describe('Unit: localTokenUtil - the sign-in list applies to every request', () 
         process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
         process.env.LOCAL_AUTH_SECRET = 'local-test-signing-secret-at-least-32-characters';
         delete process.env.APP_USER_ROLES;
+        delete process.env.APP_ADMIN_USERS;
     });
 
     afterEach(() => {
@@ -194,11 +195,26 @@ describe('Unit: localTokenUtil - the sign-in list applies to every request', () 
         expect(util.verifyToken(token).is('SalesManager')).toBe(true);
     });
 
-    test('a configured development user keeps its roles, and Admin still implies SapLogsReader', () => {
+    test('a configured development user keeps its roles; Admin needs APP_ADMIN_USERS and still implies SapLogsReader', () => {
         const { token } = util.issueToken('khushal', ['Viewer']);
+        const listedOnly = util.verifyToken(token);
+        expect(listedOnly.is('Viewer')).toBe(true);
+        expect(listedOnly.is('Admin')).toBe(false);
+
+        process.env.APP_ADMIN_USERS = 'khushal';
         const user = util.verifyToken(token);
         expect(user.is('Admin')).toBe(true);
         expect(user.is('SapLogsReader')).toBe(true);
+    });
+
+    test('a token cannot carry Admin from an override entry: the list is read with the Admin rule on every request', () => {
+        process.env.APP_USER_ROLES = '{"MADMIN":["Admin","Viewer"]}';
+        const { token } = util.issueToken('MADMIN', ['Admin', 'Viewer']);
+        expect(util.verifyToken(token).is('Admin')).toBe(false);
+        expect(util.verifyToken(token).is('Viewer')).toBe(true);
+
+        process.env.APP_ADMIN_USERS = 'madmin';
+        expect(util.verifyToken(token).is('Admin')).toBe(true);
     });
 });
 });

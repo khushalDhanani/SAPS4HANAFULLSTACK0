@@ -29,6 +29,8 @@ describe('Finding DEBT-02: Authentication Middleware Ordering & Dual-Boundary Id
       alice_ordering: ['PurchasingManager', 'Viewer'], user_a: ['Viewer'], user_b: ['Admin'],
       expired_user: ['Viewer'], admin_user: ['Admin']
     });
+    // Admin is given only to the users named here, whatever the list above says.
+    process.env.APP_ADMIN_USERS = 'user_b,admin_user';
   });
 
   afterAll(() => {

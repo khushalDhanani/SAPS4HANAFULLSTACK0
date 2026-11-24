@@ -173,11 +173,23 @@ describe('Unit: sapRoleMapper (Prefix-based SAP PFCG role mapping + optional rol
       expect(roles).toBeNull();
     });
 
-    it('grants Admin through prefix match if user IS in APP_ADMIN_USERS', () => {
+    it('a ZAPP_Admin SAP role never grants Admin, not even for a user in APP_ADMIN_USERS: mapping knows no Admin', () => {
       const env = { APP_ADMIN_USERS: 'adminuser,other' };
-      const roles = mapRoles('adminuser', ['ZAPP_Admin', 'ZAPP_Viewer'], null, env);
-      expect(roles).toContain('Admin');
-      expect(roles).toContain('Viewer');
+      expect(mapRoles('adminuser', ['ZAPP_Admin', 'ZAPP_Viewer'], null, env)).toEqual(['Viewer']);
+      expect(mapRoles('regularuser', ['ZAPP_ADMIN', 'zapp_admin'], null, {})).toBeNull();
+      expect(matchKnownRole('Admin')).toBeNull();
+      expect(matchKnownRole('ADMIN')).toBeNull();
+    });
+
+    it('unions every matching ZAPP_ role, whatever the case of the SAP role name', () => {
+      const roles = mapRoles('jsmith', ['ZAPP_SALESMANAGER', 'zapp_WarehouseClerk', 'ZAPP_SAPLOGSREADER', 'SAP_ALL', 'ZAPP_SALESMANAGER'], null, {});
+      expect(roles.sort()).toEqual(['SalesManager', 'SapLogsReader', 'WarehouseClerk']);
+    });
+
+    it('never grants Admin through role-map.json either', () => {
+      const map = { Z_SUPER: ['Admin', 'Viewer'], Z_ONLY_ADMIN: ['Admin'] };
+      expect(mapRoles('adminuser', ['Z_SUPER'], map, { APP_ADMIN_USERS: 'adminuser' })).toEqual(['Viewer']);
+      expect(mapRoles('regularuser', ['Z_ONLY_ADMIN'], map, {})).toBeNull();
     });
 
     it('never grants Admin through role-map override unless user is in APP_ADMIN_USERS', () => {
@@ -227,19 +239,43 @@ describe('Unit: sapRoleMapper (Prefix-based SAP PFCG role mapping + optional rol
       expect(roles).toEqual(['Viewer']);
     });
 
-    it('enforces Admin guard through fetchAndMapRoles', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        roles: [{ name: 'ZAPP_Admin' }]
-      });
+    it('Admin comes from APP_ADMIN_USERS only, whatever SAP returns', async () => {
+      const zappAdmin = jest.fn().mockResolvedValue({ roles: [{ name: 'ZAPP_Admin' }] });
       const fsImpl = makeFs(null);
 
-      // Regular user falls back to default because Admin is stripped
-      const roles1 = await fetchAndMapRoles('regularuser', mockFetch, { APP_DEFAULT_ROLES: 'Viewer' }, '/fake/absent.json', fsImpl);
-      expect(roles1).toEqual(['Viewer']);
+      // A ZAPP_Admin SAP role grants nothing: the user gets the defaults.
+      expect(await fetchAndMapRoles('regularuser', zappAdmin, { APP_DEFAULT_ROLES: 'Viewer' }, '/fake/absent.json', fsImpl)).toEqual(['Viewer']);
 
-      // Admin user in APP_ADMIN_USERS gets Admin
-      const roles2 = await fetchAndMapRoles('adminuser', mockFetch, { APP_ADMIN_USERS: 'adminuser' }, '/fake/absent.json', fsImpl);
-      expect(roles2).toEqual(['Admin']);
+      // A user named in APP_ADMIN_USERS gets Admin on top of the SAP roles, with or without an SAP role for it...
+      const sales = jest.fn().mockResolvedValue({ roles: [{ name: 'ZAPP_SALESMANAGER' }] });
+      expect(await fetchAndMapRoles('AdminUser', sales, { APP_ADMIN_USERS: 'adminuser' }, '/fake/absent.json', fsImpl)).toEqual(['SalesManager', 'Admin']);
+      expect(await fetchAndMapRoles('adminuser', zappAdmin, { APP_ADMIN_USERS: 'adminuser' }, '/fake/absent.json', fsImpl)).toEqual(['Viewer', 'Admin']);
+
+      // ...and keeps it when SAP cannot be asked, while everybody else gets the defaults only.
+      const down = jest.fn().mockRejectedValue(new Error('RFC_TIMEOUT'));
+      expect(await fetchAndMapRoles('adminuser', down, { APP_ADMIN_USERS: 'adminuser' }, '/fake/absent.json', fsImpl)).toEqual(['Viewer', 'Admin']);
+      expect(await fetchAndMapRoles('regularuser', down, { APP_ADMIN_USERS: 'adminuser' }, '/fake/absent.json', fsImpl)).toEqual(['Viewer']);
+      expect(await fetchAndMapRoles('regularuser', null, { APP_ADMIN_USERS: 'adminuser', APP_DEFAULT_ROLES: 'SalesRepresentative' }, '/fake/absent.json', fsImpl)).toEqual(['SalesRepresentative']);
+    });
+
+    it('logs a warning that names the user when no role matches and when the BAPI fails, and never a password', async () => {
+      const LOG = require('../../../srv/common/logger')('auth');
+      const warn = jest.spyOn(LOG, 'warn').mockImplementation(() => {});
+      const fsImpl = makeFs(null);
+      try {
+        await fetchAndMapRoles('JSmith', jest.fn().mockResolvedValue({ roles: [{ name: 'SAP_ALL' }] }), {}, '/fake/absent.json', fsImpl);
+        expect(warn).toHaveBeenLastCalledWith(expect.stringMatching(/No SAP role matched.*'jsmith'.*APP_DEFAULT_ROLES/));
+
+        await fetchAndMapRoles('JSmith', jest.fn().mockRejectedValue(new Error('RFC_TIMEOUT')), { S4_PASSWORD: 'made-up-connection-password' }, '/fake/absent.json', fsImpl);
+        expect(warn).toHaveBeenLastCalledWith(expect.stringMatching(/BAPI_USER_GET_DETAIL for 'jsmith' failed: RFC_TIMEOUT.*APP_DEFAULT_ROLES/));
+
+        await fetchAndMapRoles('JSmith', jest.fn().mockResolvedValue({ roles: [{ name: 'ZAPP_ADMIN' }] }), {}, '/fake/absent.json', fsImpl);
+        expect(warn.mock.calls.some(([text]) => /ZAPP_ADMIN.*'jsmith'.*do not grant Admin/.test(text))).toBe(true);
+
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('made-up-connection-password');
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 });

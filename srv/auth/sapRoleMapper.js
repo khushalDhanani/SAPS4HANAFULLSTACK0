@@ -17,8 +17,8 @@
  * Rules enforced here:
  *   1. Result = union of all app roles mapped from the user's AGR_NAMEs.
  *   2. If no AGR_NAME matches, return APP_DEFAULT_ROLES (never empty, never Admin).
- *   3. Admin is NEVER granted through role mapping unless APP_ADMIN_USERS explicitly
- *      names the user (comma-separated SAP logon names, case-insensitive).
+ *   3. Admin is NEVER granted through role mapping (prefix or role-map.json). It is given only to the users
+ *      named in APP_ADMIN_USERS (comma-separated SAP logon names, case-insensitive), whatever their SAP roles.
  *   4. If the BAPI call fails or times out, fall back to APP_DEFAULT_ROLES only.
  *      Never fail open to higher roles.
  *   5. All credentials are injected; none are logged.
@@ -26,7 +26,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { KNOWN_ROLES, parseDefaultRoles } = require('./appUsers');
+const { KNOWN_ROLES, parseDefaultRoles, parseAdminUsers, applyAdminRule } = require('./appUsers');
 const LOG = require('../common/logger')('auth');
 
 const DEFAULT_ROLE_MAP_PATH = path.resolve(__dirname, '../../config/role-map.json');
@@ -57,13 +57,15 @@ function getSapRolePrefix(env = process.env) {
  */
 function matchKnownRole(suffix) {
   if (!suffix) return null;
+  // Admin is not a role an SAP role name can stand for: it comes from APP_ADMIN_USERS only.
+  const mappable = KNOWN_ROLES.filter((role) => role !== 'Admin');
   const s = String(suffix).trim().toLowerCase();
-  for (const role of KNOWN_ROLES) {
+  for (const role of mappable) {
     if (role.toLowerCase() === s) return role;
   }
   // Also check without underscores (e.g. SALES_MANAGER -> SalesManager)
   const clean = s.replace(/_/g, '');
-  for (const role of KNOWN_ROLES) {
+  for (const role of mappable) {
     if (role.toLowerCase() === clean) return role;
   }
   return null;
@@ -119,36 +121,21 @@ function loadRoleMap(mapPath = DEFAULT_ROLE_MAP_PATH, fsImpl = fs) {
 }
 
 /**
- * Parses APP_ADMIN_USERS (comma-separated SAP logon names, case-insensitive).
- * Returns a Set of lower-cased user names who are allowed to receive Admin via role mapping.
- *
- * @param {NodeJS.ProcessEnv} [env]
- * @returns {Set<string>}
- */
-function parseAdminUsers(env = process.env) {
-  return new Set(
-    String(env.APP_ADMIN_USERS || '')
-      .split(',')
-      .map((u) => u.trim().toLowerCase())
-      .filter(Boolean)
-  );
-}
-
-/**
  * Maps an array of SAP AGR_NAMEs to app roles using prefix matching and optional role-map.json.
  *
- * Admin is stripped unless the user is in APP_ADMIN_USERS.
+ * Admin is never a result: not from the prefix (ZAPP_ADMIN) and not from role-map.json. Such an SAP role is
+ * logged and otherwise ignored; Admin comes from APP_ADMIN_USERS only (appUsers.applyAdminRule).
  * Returns null when no AGR_NAME matched anything (caller should fall back to defaults).
  *
- * @param {string}   username  - SAP logon name (for the Admin guard check)
+ * @param {string}   username  - SAP logon name (for the log entry)
  * @param {string[]} agrNames  - AGR_NAME values from BAPI_USER_GET_DETAIL ACTIVITYGROUPS
  * @param {Object|null} [roleMap] - optional loaded role map (SAP role -> app role[])
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {string[]|null}    - deduplicated app roles, or null if nothing matched
  */
 function mapRoles(username, agrNames, roleMap = null, env = process.env) {
-  const adminAllowed = parseAdminUsers(env).has(String(username || '').toLowerCase());
   const prefix = getSapRolePrefix(env);
+  const adminClaims = [];
   const prefixRegex = new RegExp(`^${escapeRegExp(prefix)}(.+)$`, 'i');
   const appRoles = new Set();
   const map = roleMap || {};
@@ -161,9 +148,8 @@ function mapRoles(username, agrNames, roleMap = null, env = process.env) {
     const mapped = map[agr] || map[agr.toUpperCase()] || null;
     if (Array.isArray(mapped) && mapped.length) {
       for (const role of mapped) {
-        if (KNOWN_ROLES.includes(role)) {
-          appRoles.add(role);
-        }
+        if (role === 'Admin') adminClaims.push(agr);
+        else if (KNOWN_ROLES.includes(role)) appRoles.add(role);
       }
       continue;
     }
@@ -175,13 +161,17 @@ function mapRoles(username, agrNames, roleMap = null, env = process.env) {
       const matchedRole = matchKnownRole(suffix);
       if (matchedRole) {
         appRoles.add(matchedRole);
+      } else if (suffix.trim().toLowerCase() === 'admin') {
+        adminClaims.push(agr);
       }
     }
   }
 
-  // Admin guard: strip Admin unless this user is in APP_ADMIN_USERS.
-  if (!adminAllowed) {
-    appRoles.delete('Admin');
+  if (adminClaims.length) {
+    LOG.warn(
+      `SAP role(s) [${adminClaims.join(', ')}] of '${String(username || '').toLowerCase()}' do not grant Admin: ` +
+      'Admin is given only to the users named in APP_ADMIN_USERS'
+    );
   }
 
   const result = [...appRoles];
@@ -189,13 +179,20 @@ function mapRoles(username, agrNames, roleMap = null, env = process.env) {
 }
 
 /**
- * Fetches the user's SAP PFCG roles via BAPI_USER_GET_DETAIL and maps them to app roles.
+ * The roles of a user whose own password SAP has accepted and who has no override entry.
  *
+ * Reads the user's SAP PFCG roles via BAPI_USER_GET_DETAIL and maps them to app roles (mapRoles).
  * Falls back to parseDefaultRoles() (never Admin, never empty) when:
- *   - The BAPI call throws for any reason.
+ *   - The BAPI call throws for any reason, including a timeout (RfcClient) and RFC not being available.
  *   - No AGR_NAME in the response matched prefix or role map.
+ * Either case is logged as a warning that names the user. It never fails open to more roles.
  *
- * Never throws: a BAPI failure is logged as a warning and the safe default is returned.
+ * Admin is added last, and only for a user named in APP_ADMIN_USERS (appUsers.applyAdminRule): it does not
+ * depend on the SAP role lookup, so an administrator stays one while RFC is down.
+ *
+ * The roles go into the token at sign-in: a role change in SAP applies at the user's next sign-in.
+ *
+ * Never throws.
  *
  * @param {string} username          - SAP logon name (upper/lower case preserved from login)
  * @param {Function} fetchDetail     - async (username) => { roles: [{name: string}] }
@@ -220,8 +217,11 @@ async function fetchAndMapRoles(username, fetchDetail, env = process.env, mapPat
   let detail;
   try {
     if (typeof fetchDetail !== 'function') {
-      LOG.warn('RFC fetchDetail is not available; falling back to APP_DEFAULT_ROLES');
-      return parseDefaultRoles(env);
+      LOG.warn(
+        `SAP roles of '${String(username).toLowerCase()}' could not be read (RFC is not available); ` +
+        'using APP_DEFAULT_ROLES'
+      );
+      return applyAdminRule(username, parseDefaultRoles(env), env);
     }
     detail = await fetchDetail(username);
   } catch (e) {
@@ -229,25 +229,25 @@ async function fetchAndMapRoles(username, fetchDetail, env = process.env, mapPat
       `BAPI_USER_GET_DETAIL for '${String(username).toLowerCase()}' failed: ${e.message}; ` +
       'falling back to APP_DEFAULT_ROLES'
     );
-    return parseDefaultRoles(env);
+    return applyAdminRule(username, parseDefaultRoles(env), env);
   }
 
   const agrNames = (detail && detail.roles || []).map((r) => String(r.name || '').trim()).filter(Boolean);
   const mapped = mapRoles(username, agrNames, roleMap, env);
 
   if (!mapped) {
-    LOG.info(
+    LOG.warn(
       `No SAP role matched prefix or role-map for '${String(username).toLowerCase()}' ` +
       `(${agrNames.length} SAP role(s) checked); using APP_DEFAULT_ROLES`
     );
-    return parseDefaultRoles(env);
+    return applyAdminRule(username, parseDefaultRoles(env), env);
   }
 
   LOG.info(
     `Mapped SAP roles for '${String(username).toLowerCase()}': [${mapped.join(', ')}] ` +
     `(from ${agrNames.length} SAP role(s))`
   );
-  return mapped;
+  return applyAdminRule(username, mapped, env);
 }
 
 /**

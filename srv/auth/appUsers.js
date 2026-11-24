@@ -3,18 +3,20 @@
 /**
  * Who may sign in through the login action, and with which roles.
  *
- * Sources, evaluated in priority order on every login (no restart needed for 2–3):
- *   1. APP_USER_ROLES    – JSON map env var; override for backward compatibility; validated at startup
+ * No list is needed for ordinary users: with APP_ALLOW_ANY_SAP_USER=true every user whose own password SAP
+ * accepts may sign in, and the roles come from the user's SAP roles (srv/auth/sapRoleMapper.js) or
+ * APP_DEFAULT_ROLES. The lists below are optional overrides, empty by default.
+ *
+ * Admin is granted only to the users named in APP_ADMIN_USERS (comma-separated, case-insensitive). No list, no
+ * default, no SAP role and no role map grants it: an Admin entry anywhere else is dropped (applyAdminRule).
+ *
+ * Optional overrides, evaluated in priority order on every login (no restart needed for 2–3):
+ *   1. APP_USER_ROLES    – JSON map env var; validated at startup
  *   2. APP_USERS_FILE    – path to a JSON or CSV file (hot-reloaded on every call; mount as a Docker volume)
  *   3. cds.requires.auth.users – development profile users (entries set to false are off)
  *
- * Open-to-any-SAP-user mode (requires explicit opt-in):
- *   APP_ALLOW_ANY_SAP_USER=true  — a user absent from all sources but who passes live SAP validation
- *                                   gets only APP_DEFAULT_ROLES (default: ["Viewer"]).
- *                                   Admin is never granted this way.
- *
- * A user in none of the sources is refused before SAP is asked, so the login action cannot be used to
- * test or lock arbitrary SAP users, and a valid SAP logon alone grants nothing.
+ * With APP_ALLOW_ANY_SAP_USER unset or false, a user in none of the sources and not in APP_ADMIN_USERS is refused
+ * before SAP is asked.
  * User names are case-insensitive throughout.
  *
  * APP_USERS_FILE format
@@ -245,8 +247,76 @@ function isAllowAnySapUser(env = process.env) {
 }
 
 /**
- * Returns explicit roles for a user from APP_USER_ROLES or APP_USERS_FILE,
- * or null if the user has no explicit entry in either source.
+ * Parses APP_ADMIN_USERS (comma-separated logon names, case-insensitive): the only source of the Admin role.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {Set<string>} lower-cased user names
+ */
+function parseAdminUsers(env = process.env) {
+  return new Set(
+    String(env.APP_ADMIN_USERS || '')
+      .split(',')
+      .map((u) => u.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+/** Whether APP_ADMIN_USERS names the user. */
+function isAdminUser(username, env = process.env) {
+  const user = String(username || '').trim().toLowerCase();
+  return user !== '' && parseAdminUsers(env).has(user);
+}
+
+/**
+ * The one rule for Admin: it is taken out of whatever a source gave, and added for a user named in
+ * APP_ADMIN_USERS. A user left without any role gets APP_DEFAULT_ROLES (never Admin).
+ *
+ * @param {string} username
+ * @param {string[]} roles - roles from a list, the SAP role lookup or the defaults
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string[]} non-empty
+ */
+function applyAdminRule(username, roles, env = process.env) {
+  const result = [...new Set(roles || [])].filter((role) => role !== 'Admin');
+  if (isAdminUser(username, env)) return [...result, 'Admin'];
+  if (result.length) return result;
+  try {
+    return parseDefaultRoles(env);
+  } catch {
+    return ['Viewer']; // a malformed APP_DEFAULT_ROLES is reported at startup
+  }
+}
+
+/** Roles exactly as APP_USER_ROLES / APP_USERS_FILE list them, or null. Admin rule not applied. */
+function listedExplicitRoles(user, env, fsImpl) {
+  try {
+    const fromEnv = parseAppUserRoles(env).get(user);
+    if (fromEnv && fromEnv.length) return fromEnv;
+  } catch {
+    // reported at startup; a broken list allows nobody
+  }
+  const fromFile = usersFileOrNobody(env, fsImpl).get(user);
+  return fromFile && fromFile.length ? fromFile : null;
+}
+
+/** Roles exactly as the first source that knows the user lists them, or null. Admin rule not applied. */
+function listedRoles(user, auth, env, fsImpl) {
+  const explicit = listedExplicitRoles(user, env, fsImpl);
+  if (explicit) return explicit;
+
+  // cds.requires.auth.users (dev profile)
+  const configured = (auth && auth.users) || {};
+  for (const [name, config] of Object.entries(configured)) {
+    if (name === '*' || !config || String(name).toLowerCase() !== user) continue;
+    const roles = rolesOf(config);
+    if (roles.length) return roles;
+  }
+  return null;
+}
+
+/**
+ * Returns the override roles of a user from APP_USER_ROLES or APP_USERS_FILE, or null if the user has no entry
+ * in either. Admin follows applyAdminRule: an Admin entry here grants nothing unless APP_ADMIN_USERS names the user.
  *
  * @param {string} username
  * @param {NodeJS.ProcessEnv} [env]
@@ -256,22 +326,33 @@ function isAllowAnySapUser(env = process.env) {
 function getExplicitAppUserRoles(username, env = process.env, fsImpl = fs) {
   const user = String(username || '').trim().toLowerCase();
   if (!user) return null;
-
-  try {
-    const fromEnv = parseAppUserRoles(env).get(user);
-    if (fromEnv && fromEnv.length) return fromEnv;
-  } catch {}
-
-  const fromFile = usersFileOrNobody(env, fsImpl).get(user);
-  if (fromFile && fromFile.length) return fromFile;
-
-  return null;
+  const explicit = listedExplicitRoles(user, env, fsImpl);
+  return explicit ? applyAdminRule(user, explicit, env) : null;
 }
 
 /**
- * Roles of a user who may sign in, or null when the user is not in any explicit source.
- * Returns null even when APP_ALLOW_ANY_SAP_USER=true — the caller (auth-service) must
- * do the SAP validation and then call parseDefaultRoles() separately.
+ * Whether a user is set up as an administrator anywhere: named in APP_ADMIN_USERS, or listed with Admin in
+ * APP_USER_ROLES, APP_USERS_FILE or cds.requires.auth.users (even though such an entry no longer grants Admin).
+ * The login action uses it to keep the shared LOCAL_DEV_PASSWORD away from every such user.
+ *
+ * @param {string} username
+ * @param {{users?: object}} [auth]
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {object} [fsImpl]
+ * @returns {boolean}
+ */
+function holdsConfiguredAdmin(username, auth, env = process.env, fsImpl = fs) {
+  const user = String(username || '').trim().toLowerCase();
+  if (!user) return false;
+  if (isAdminUser(user, env)) return true;
+  const listed = listedRoles(user, auth, env, fsImpl);
+  return Boolean(listed && listed.includes('Admin'));
+}
+
+/**
+ * Roles of a user who is known by name, or null when the user is in no list and not in APP_ADMIN_USERS.
+ * Returns null even when APP_ALLOW_ANY_SAP_USER=true: the caller (auth-service) lets SAP check the password and
+ * then takes the roles from the SAP role lookup. Admin follows applyAdminRule.
  *
  * @param {string} username
  * @param {{users?: object}} [auth] - the effective cds.requires.auth
@@ -283,27 +364,10 @@ function resolveAppUser(username, auth, env = process.env, fsImpl = fs) {
   const user = String(username || '').trim().toLowerCase();
   if (!user) return null;
 
-  // Priority 1: APP_USER_ROLES env var (backward-compatible override)
-  let fromEnv;
-  try {
-    fromEnv = parseAppUserRoles(env).get(user);
-  } catch {
-    fromEnv = undefined; // reported at startup; a broken list allows nobody
-  }
-  if (fromEnv) return fromEnv;
-
-  // Priority 2: APP_USERS_FILE (hot-reloaded on every call)
-  const fromFile = usersFileOrNobody(env, fsImpl).get(user);
-  if (fromFile) return fromFile;
-
-  // Priority 3: cds.requires.auth.users (dev profile)
-  const configured = (auth && auth.users) || {};
-  for (const [name, config] of Object.entries(configured)) {
-    if (name === '*' || !config || String(name).toLowerCase() !== user) continue;
-    const roles = rolesOf(config);
-    if (roles.length) return roles;
-  }
-  return null;
+  const listed = listedRoles(user, auth, env, fsImpl);
+  if (listed) return applyAdminRule(user, listed, env);
+  // Naming a user in APP_ADMIN_USERS is enough for that user to be known.
+  return isAdminUser(user, env) ? applyAdminRule(user, [], env) : null;
 }
 
 module.exports = {
@@ -314,6 +378,10 @@ module.exports = {
   parseCsv,
   parseDefaultRoles,
   isAllowAnySapUser,
+  parseAdminUsers,
+  isAdminUser,
+  applyAdminRule,
+  holdsConfiguredAdmin,
   getExplicitAppUserRoles,
   resolveAppUser,
 };

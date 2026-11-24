@@ -12,8 +12,64 @@ describe('Unit: appUsers (who may sign in, and with which roles)', () => {
 
     // ── Existing tests (unchanged) ──────────────────────────────────────────
 
-    it('allows a configured development user with its roles, ignoring case', () => {
-        expect(resolveAppUser('KHUSHAL', auth, {})).toEqual(['Admin', 'Viewer']);
+    it('allows a configured development user with its roles, ignoring case; Admin only with APP_ADMIN_USERS', () => {
+        expect(resolveAppUser('KHUSHAL', auth, {})).toEqual(['Viewer']);
+        expect(resolveAppUser('KHUSHAL', auth, { APP_ADMIN_USERS: 'other, Khushal' })).toEqual(['Viewer', 'Admin']);
+    });
+
+    describe('Admin comes from APP_ADMIN_USERS only', () => {
+        const {
+            applyAdminRule, isAdminUser, parseAdminUsers, holdsConfiguredAdmin, getExplicitAppUserRoles
+        } = require('../../../srv/auth/appUsers');
+        const fileWith = (content) => ({ readFileSync: () => JSON.stringify(content) });
+
+        it('parses the list case-insensitively and ignores blanks', () => {
+            expect([...parseAdminUsers({ APP_ADMIN_USERS: ' Boss , ,SECOND ' })]).toEqual(['boss', 'second']);
+            expect(isAdminUser('BOSS', { APP_ADMIN_USERS: 'boss' })).toBe(true);
+            expect(isAdminUser('boss', {})).toBe(false);
+            expect(isAdminUser('', { APP_ADMIN_USERS: 'boss' })).toBe(false);
+        });
+
+        it('takes Admin out of any roles and adds it for a named user', () => {
+            expect(applyAdminRule('jsmith', ['Admin', 'Viewer', 'Viewer'], {})).toEqual(['Viewer']);
+            expect(applyAdminRule('JSMITH', ['Viewer'], { APP_ADMIN_USERS: 'jsmith' })).toEqual(['Viewer', 'Admin']);
+            expect(applyAdminRule('jsmith', [], { APP_ADMIN_USERS: 'jsmith' })).toEqual(['Admin']);
+        });
+
+        it('a user left without a role gets APP_DEFAULT_ROLES, never Admin', () => {
+            expect(applyAdminRule('jsmith', ['Admin'], {})).toEqual(['Viewer']);
+            expect(applyAdminRule('jsmith', ['Admin'], { APP_DEFAULT_ROLES: 'SalesRepresentative' })).toEqual(['SalesRepresentative']);
+            expect(applyAdminRule('jsmith', ['Admin'], { APP_DEFAULT_ROLES: 'Admin' })).toEqual(['Viewer']);
+        });
+
+        it('an Admin entry in APP_USER_ROLES or APP_USERS_FILE grants nothing without APP_ADMIN_USERS', () => {
+            const env = { APP_USER_ROLES: '{"MADMIN":["Admin","Viewer"],"ONLYADMIN":["Admin"]}', APP_USERS_FILE: '/fake/users.json' };
+            const fsImpl = fileWith({ FADMIN: ['Admin', 'SalesManager'] });
+
+            expect(resolveAppUser('madmin', auth, env, fsImpl)).toEqual(['Viewer']);
+            expect(resolveAppUser('onlyadmin', auth, env, fsImpl)).toEqual(['Viewer']);
+            expect(resolveAppUser('fadmin', auth, env, fsImpl)).toEqual(['SalesManager']);
+            expect(getExplicitAppUserRoles('madmin', env, fsImpl)).toEqual(['Viewer']);
+            expect(getExplicitAppUserRoles('fadmin', env, fsImpl)).toEqual(['SalesManager']);
+
+            const withAdmins = { ...env, APP_ADMIN_USERS: 'madmin,fadmin' };
+            expect(resolveAppUser('madmin', auth, withAdmins, fsImpl)).toEqual(['Viewer', 'Admin']);
+            expect(getExplicitAppUserRoles('fadmin', withAdmins, fsImpl)).toEqual(['SalesManager', 'Admin']);
+        });
+
+        it('a user named only in APP_ADMIN_USERS is known, and has no override entry', () => {
+            const env = { APP_ADMIN_USERS: 'boss' };
+            expect(resolveAppUser('BOSS', auth, env)).toEqual(['Admin']);
+            expect(getExplicitAppUserRoles('boss', env)).toBeNull();
+            expect(resolveAppUser('stranger', auth, env)).toBeNull();
+        });
+
+        it('holdsConfiguredAdmin sees an administrator in every source, also where the entry grants nothing', () => {
+            const env = { APP_USER_ROLES: '{"MADMIN":["Admin"],"CLERK":["Viewer"]}', APP_USERS_FILE: '/fake/users.json', APP_ADMIN_USERS: 'boss' };
+            const fsImpl = fileWith({ FADMIN: ['Admin'] });
+            for (const name of ['khushal', 'MADMIN', 'fadmin', 'Boss']) expect(holdsConfiguredAdmin(name, auth, env, fsImpl)).toBe(true);
+            for (const name of ['clerk', 'stranger', '']) expect(holdsConfiguredAdmin(name, auth, env, fsImpl)).toBe(false);
+        });
     });
 
     it('refuses switched-off, wildcard, role-less and unknown users', () => {
@@ -42,7 +98,7 @@ describe('Unit: appUsers (who may sign in, and with which roles)', () => {
     it('a malformed list allows nobody from it, while configured users still work', () => {
         const env = { APP_USER_ROLES: '{"a":["SuperUser"]}' };
         expect(resolveAppUser('a', auth, env)).toBeNull();
-        expect(resolveAppUser('khushal', auth, env)).toEqual(['Admin', 'Viewer']);
+        expect(resolveAppUser('khushal', auth, env)).toEqual(['Viewer']);
     });
 
     // ── APP_USERS_FILE — JSON format ────────────────────────────────────────
@@ -173,7 +229,7 @@ describe('Unit: appUsers (who may sign in, and with which roles)', () => {
     it('falls through to cds.auth.users when user is absent from both env and file', () => {
         const fsImpl = { readFileSync: () => '{"OTHER":["Viewer"]}' };
         const env = { APP_USERS_FILE: '/fake/users.json' };
-        expect(resolveAppUser('khushal', auth, env, fsImpl)).toEqual(['Admin', 'Viewer']);
+        expect(resolveAppUser('khushal', auth, env, fsImpl)).toEqual(['Viewer']);
     });
 
     // ── parseDefaultRoles ───────────────────────────────────────────────────
@@ -193,7 +249,7 @@ describe('Unit: appUsers (who may sign in, and with which roles)', () => {
 
             expect(resolveAppUser('JSMITH', auth, env, broken)).toBeNull();
             expect(getExplicitAppUserRoles('JSMITH', env, broken)).toBeNull();
-            expect(resolveAppUser('KHUSHAL', auth, env, broken)).toEqual(['Admin', 'Viewer']);
+            expect(resolveAppUser('KHUSHAL', auth, env, broken)).toEqual(['Viewer']);
 
             expect(error).toHaveBeenCalledTimes(1);
             expect(error).toHaveBeenCalledWith(expect.stringContaining('invalid JSON'));
