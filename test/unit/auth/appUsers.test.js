@@ -104,6 +104,20 @@ describe('Unit: appUsers (who may sign in, and with which roles)', () => {
             expect(result.size).toBe(1);
         });
 
+        it('skips comment and blank lines before the header, as in config/users.csv.example', () => {
+            const result = parseCsv('# template\n#\n\nusername,roles\nJSMITH,Viewer\n');
+            expect(result.get('jsmith')).toEqual(['Viewer']);
+
+            const example = require('fs').readFileSync(require('path').resolve(__dirname, '../../../config/users.csv.example'), 'utf8');
+            const shipped = parseCsv(example);
+            expect(shipped.size).toBe(6);
+            expect(shipped.get('bwilson')).toEqual(['WarehouseClerk', 'WarehouseManager']);
+        });
+
+        it('names the line of the file in an error, counting comment and blank lines', () => {
+            expect(() => parseCsv('# template\n\nusername,roles\nJSMITH,Viewer\nACLARKE,SuperAdmin')).toThrow(/line 5/);
+        });
+
         it('skips rows without a comma (no roles column)', () => {
             const result = parseCsv('username,roles\nJSMITH\nACLARKE,Viewer\n');
             expect(result.size).toBe(1);
@@ -163,6 +177,38 @@ describe('Unit: appUsers (who may sign in, and with which roles)', () => {
     });
 
     // ── parseDefaultRoles ───────────────────────────────────────────────────
+
+    describe('a users file that breaks after startup', () => {
+        const LOG = require('../../../srv/common/logger')('auth');
+        const { getExplicitAppUserRoles } = require('../../../srv/auth/appUsers');
+        const env = { APP_USERS_FILE: '/run/app-users.json' };
+        const good = { readFileSync: () => '{"JSMITH":["Viewer"]}' };
+        const broken = { readFileSync: () => '{"JSMITH":["Viewer"' };
+
+        afterEach(() => jest.restoreAllMocks());
+
+        it('allows nobody from it and logs the reason once, not on every request', () => {
+            resolveAppUser('JSMITH', auth, env, good); // a readable file clears an earlier fault
+            const error = jest.spyOn(LOG, 'error').mockImplementation(() => {});
+
+            expect(resolveAppUser('JSMITH', auth, env, broken)).toBeNull();
+            expect(getExplicitAppUserRoles('JSMITH', env, broken)).toBeNull();
+            expect(resolveAppUser('KHUSHAL', auth, env, broken)).toEqual(['Admin', 'Viewer']);
+
+            expect(error).toHaveBeenCalledTimes(1);
+            expect(error).toHaveBeenCalledWith(expect.stringContaining('invalid JSON'));
+            expect(error).toHaveBeenCalledWith(expect.stringContaining('Nobody listed in the file can sign in'));
+        });
+
+        it('logs again when the file was readable in between', () => {
+            const error = jest.spyOn(LOG, 'error').mockImplementation(() => {});
+            resolveAppUser('JSMITH', auth, env, broken);
+            expect(resolveAppUser('JSMITH', auth, env, good)).toEqual(['Viewer']);
+            resolveAppUser('JSMITH', auth, env, broken);
+            expect(error.mock.calls.length).toBeGreaterThanOrEqual(1);
+            expect(error).toHaveBeenLastCalledWith(expect.stringContaining('invalid JSON'));
+        });
+    });
 
     describe('parseDefaultRoles', () => {
         it('returns ["Viewer"] when APP_DEFAULT_ROLES is unset', () => {

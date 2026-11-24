@@ -12,6 +12,9 @@
  *   LOGIN_MAX_FAILURES_PER_USER  default 3
  *   LOGIN_MAX_FAILURES_PER_IP    default 20
  *   LOGIN_FAILURE_WINDOW_SEC     default 900 (15 minutes)
+ *
+ * The per-user limit is not tied to the client address on purpose: a second address would otherwise get its own
+ * three attempts, and five wrong passwords lock the user in SAP itself, which only an administrator undoes.
  */
 
 const MAX_ENTRIES = 10000;
@@ -107,8 +110,25 @@ class LoginThrottle {
     }
   }
 
+  /**
+   * True the first time a request shows a reverse proxy in front (X-Forwarded-For) while the app does not trust
+   * one (TRUST_PROXY_HOPS not set, server.js). Every user then has the proxy's address, so the per-address limit
+   * counts all users together and LOGIN_MAX_FAILURES_PER_IP failed sign-ins lock everybody out. The caller logs it.
+   *
+   * @param {import('express').Request} [req] - the raw HTTP request
+   * @returns {boolean}
+   */
+  proxyNotTrusted(req) {
+    if (this._proxyReported || !req || !req.headers || !req.headers['x-forwarded-for']) return false;
+    const trusted = req.app && typeof req.app.get === 'function' ? req.app.get('trust proxy') : false;
+    if (trusted) return false;
+    this._proxyReported = true;
+    return true;
+  }
+
   reset() {
     this._failures.clear();
+    this._proxyReported = false;
   }
 }
 

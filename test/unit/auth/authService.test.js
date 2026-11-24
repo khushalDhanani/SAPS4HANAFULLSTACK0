@@ -651,6 +651,23 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(util.verifyToken(res.token)).toBeNull();
         });
 
+        it('warns once when sign-in requests come through a reverse proxy the app does not trust', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            const LOG = require('../../../srv/common/logger')('auth');
+            const warn = jest.spyOn(LOG, 'warn').mockImplementation(() => {});
+            const viaProxy = {
+                data: { username: 'STRANGER', password: 'any-password' },
+                http: { req: { ip: '172.18.0.5', headers: { 'x-forwarded-for': '10.20.30.40' }, app: { get: () => false } } }
+            };
+
+            await service._handleLogin(viaProxy);
+            await service._handleLogin(viaProxy);
+
+            const proxyWarnings = warn.mock.calls.filter(([text]) => String(text).includes('TRUST_PROXY_HOPS'));
+            expect(proxyWarnings).toHaveLength(1);
+        });
+
         it('explicit entries in APP_USER_ROLES override SAP role mapping', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';

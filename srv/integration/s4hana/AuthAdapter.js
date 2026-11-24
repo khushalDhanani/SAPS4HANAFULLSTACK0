@@ -142,11 +142,22 @@ class AuthAdapter {
       }
     } catch (err) {
       const status = err.response?.status;
-      if (status === 401 || status === 403) {
+      if (status === 401) {
         return {
           authenticated: false,
           statusCode: status,
           message: 'Invalid username or password. S/4HANA logon failed (check credentials or SU01 lock status).'
+        };
+      }
+      if (status === 403) {
+        // Not a wrong password as far as this check can tell: SAP answered the request and refused access.
+        // Which cause applies (lock, missing authorization for the catalog service read above) is not verified
+        // against the SAP system, so the user is not told the password is wrong and is still refused.
+        LOG.warn(`S/4HANA answered HTTP 403 to the sign-in check for '${sUser.toLowerCase()}' (Gateway service catalog read)`);
+        return {
+          authenticated: false,
+          statusCode: status,
+          message: 'S/4HANA refused this sign-in (HTTP 403). The user may be locked, or may not be authorized for the SAP Gateway service catalog that the sign-in check reads. Contact your SAP administrator.'
         };
       }
 

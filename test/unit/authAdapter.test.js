@@ -97,7 +97,7 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             expect(res.message).toContain('Invalid username or password');
         });
 
-        it('should return 403 when S/4 Gateway returns forbidden (e.g. SU01 locked)', async () => {
+        it('should return 403 when S/4 Gateway returns forbidden, without calling it a wrong password', async () => {
             const mockFetch = jest.fn().mockResolvedValueOnce({
                 ok: false,
                 status: 403
@@ -110,7 +110,9 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
             expect(res.authenticated).toBe(false);
             expect(res.statusCode).toBe(403);
-            expect(res.message).toContain('Invalid username or password');
+            expect(res.message).toContain('HTTP 403');
+            expect(res.message).toContain('SAP administrator');
+            expect(res.message).not.toContain('Invalid username or password');
         });
 
         it('should handle network connection failures with 503 Service Unavailable', async () => {

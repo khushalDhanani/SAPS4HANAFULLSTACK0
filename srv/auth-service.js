@@ -102,7 +102,15 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
 
     // A local password exists only when LOCAL_DEV_PASSWORD is set; a username is never a password.
     const sLocalDevPass = (process.env.LOCAL_DEV_PASSWORD || "").trim();
-    const sClientIp = req.http?.req?.ip || req._?.req?.ip || "";
+    const oHttpReq = req.http?.req || req._?.req;
+    const sClientIp = oHttpReq?.ip || "";
+    if (loginThrottle.proxyNotTrusted(oHttpReq)) {
+      LOG.warn(
+        "A sign-in request came through a reverse proxy (X-Forwarded-For) but TRUST_PROXY_HOPS is not set: all users " +
+        "count as one address, so LOGIN_MAX_FAILURES_PER_IP failed sign-ins lock everybody out. " +
+        "Set TRUST_PROXY_HOPS to the number of proxies in front of the app."
+      );
+    }
     const failed = (message) => {
       loginThrottle.recordFailure(sUser, sClientIp);
       return { authenticated: false, message };

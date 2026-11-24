@@ -48,6 +48,29 @@ describe('Unit: loginThrottle (failed sign-in limiter)', () => {
         expect(t.check('b', '10.0.0.1').allowed).toBe(true);
     });
 
+    describe('proxyNotTrusted (reverse proxy in front, TRUST_PROXY_HOPS not set)', () => {
+        const request = (forwardedFor, trustProxy) => ({
+            headers: forwardedFor ? { 'x-forwarded-for': forwardedFor } : {},
+            app: { get: (name) => (name === 'trust proxy' ? trustProxy : undefined) }
+        });
+
+        it('is true once for a forwarded request the app does not trust, and again after reset', () => {
+            const t = make();
+            expect(t.proxyNotTrusted(request('10.1.2.3', false))).toBe(true);
+            expect(t.proxyNotTrusted(request('10.1.2.4', false))).toBe(false);
+            t.reset();
+            expect(t.proxyNotTrusted(request('10.1.2.3', false))).toBe(true);
+        });
+
+        it('is false for a direct request, a trusted proxy and a missing request', () => {
+            const t = make();
+            expect(t.proxyNotTrusted(request('', false))).toBe(false);
+            expect(t.proxyNotTrusted(request('10.1.2.3', 1))).toBe(false);
+            expect(t.proxyNotTrusted(undefined)).toBe(false);
+            expect(t.proxyNotTrusted({ headers: { 'x-forwarded-for': '10.1.2.3' } })).toBe(true);
+        });
+    });
+
     it('does not grow without bound', () => {
         const t = make();
         for (let i = 0; i < 10050; i++) t.recordFailure(`u${i}`, '');

@@ -77,25 +77,24 @@ function parseCsv(text) {
   const users = {};
   let warnings = 0;
   let imported = 0;
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  // Blank lines and comment lines (#) are ignored everywhere, also before the header; `no` is the line in the file.
+  const rows = text.split(/\r?\n/)
+    .map((l, index) => ({ line: l.trim(), no: index + 1 }))
+    .filter((row) => row.line && !row.line.startsWith('#'));
 
-  if (!lines.length) {
+  if (!rows.length) {
     console.error('ERROR: CSV file is empty.');
     process.exit(1);
   }
-  const header = lines[0].toLowerCase();
-  if (!header.startsWith('username')) {
+  if (!rows[0].line.toLowerCase().startsWith('username')) {
     console.error('ERROR: CSV must start with a "username,roles" header row.');
     process.exit(1);
   }
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith('#')) continue;
-
+  for (const { line, no } of rows.slice(1)) {
     const sep = line.indexOf(',');
     if (sep === -1) {
-      console.warn(`WARN line ${i + 1}: no comma found, skipping: ${line}`);
+      console.warn(`WARN line ${no}: no comma found, skipping: ${line}`);
       warnings++;
       continue;
     }
@@ -104,7 +103,7 @@ function parseCsv(text) {
     const rawRoles = line.slice(sep + 1).trim().replace(/^"|"$/g, '');
 
     if (!rawUser || !/^[A-Z0-9@._-]{1,40}$/.test(rawUser)) {
-      console.warn(`WARN line ${i + 1}: invalid user name '${rawUser}', skipping`);
+      console.warn(`WARN line ${no}: invalid user name '${rawUser}', skipping`);
       warnings++;
       continue;
     }
@@ -112,7 +111,7 @@ function parseCsv(text) {
     const roles = rawRoles.split(',').map((r) => r.trim()).filter(Boolean);
     const unknown = roles.filter((r) => !KNOWN_ROLES.has(r));
     if (unknown.length) {
-      console.warn(`WARN line ${i + 1}: user ${rawUser} has unknown role(s) [${unknown.join(', ')}], skipping`);
+      console.warn(`WARN line ${no}: user ${rawUser} has unknown role(s) [${unknown.join(', ')}], skipping`);
       warnings++;
       continue;
     }

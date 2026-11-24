@@ -26,6 +26,7 @@
  */
 
 const fs = require('fs');
+const LOG = require('../common/logger')('auth');
 
 const KNOWN_ROLES = Object.freeze([
   'Admin', 'Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager',
@@ -102,18 +103,17 @@ function validateRoles(roles, context) {
  */
 function parseCsv(text) {
   const users = new Map();
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  if (!lines.length) return users;
+  // Blank lines and comment lines (#) are ignored everywhere, also before the header; `no` is the line in the file.
+  const rows = text.split(/\r?\n/)
+    .map((l, index) => ({ line: l.trim(), no: index + 1 }))
+    .filter((row) => row.line && !row.line.startsWith('#'));
+  if (!rows.length) return users;
 
-  const header = lines[0].toLowerCase();
-  if (!header.startsWith('username')) {
+  if (!rows[0].line.toLowerCase().startsWith('username')) {
     throw new Error('APP_USERS_FILE CSV must start with a "username,roles" header row');
   }
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith('#')) continue; // allow comment lines
-
+  for (const { line, no } of rows.slice(1)) {
     // Split on the first comma; the roles cell may be quoted
     const sep = line.indexOf(',');
     if (sep === -1) continue; // no comma -> no roles column, skip
@@ -122,10 +122,10 @@ function parseCsv(text) {
 
     const user = rawUser.toLowerCase();
     if (!user || !/^[a-z0-9@._-]{1,40}$/.test(user)) {
-      throw new Error(`APP_USERS_FILE CSV line ${i + 1}: invalid user name '${rawUser}'`);
+      throw new Error(`APP_USERS_FILE CSV line ${no}: invalid user name '${rawUser}'`);
     }
     const roles = rawRoles.split(',').map((r) => r.trim()).filter(Boolean);
-    users.set(user, validateRoles(roles, `APP_USERS_FILE CSV line ${i + 1}`));
+    users.set(user, validateRoles(roles, `APP_USERS_FILE CSV line ${no}`));
   }
   return users;
 }
@@ -184,6 +184,34 @@ function loadUsersFile(env = process.env, fsImpl = fs) {
   }
 }
 
+// The file is read on every request, so one fault is logged once a minute, not once per request.
+const FILE_ERROR_LOG_INTERVAL_MS = 60 * 1000;
+let lastFileError = { message: '', at: 0 };
+
+/**
+ * The users of APP_USERS_FILE for a sign-in decision. A file that became unreadable or malformed after startup
+ * allows nobody from it (startup itself fails on a broken file, server.js), and that is logged: without the log
+ * entry every user of the file is refused with no trace of the reason.
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @param {object} fsImpl
+ * @returns {Map<string, string[]>}
+ */
+function usersFileOrNobody(env, fsImpl) {
+  try {
+    const users = loadUsersFile(env, fsImpl);
+    lastFileError = { message: '', at: 0 };
+    return users;
+  } catch (e) {
+    const now = Date.now();
+    if (e.message !== lastFileError.message || now - lastFileError.at >= FILE_ERROR_LOG_INTERVAL_MS) {
+      lastFileError = { message: e.message, at: now };
+      LOG.error(`${e.message}. Nobody listed in the file can sign in until it is corrected.`);
+    }
+    return new Map();
+  }
+}
+
 /**
  * Parses APP_DEFAULT_ROLES (comma-separated string). Never includes Admin.
  * Returns ['Viewer'] when the var is unset or empty.
@@ -234,10 +262,8 @@ function getExplicitAppUserRoles(username, env = process.env, fsImpl = fs) {
     if (fromEnv && fromEnv.length) return fromEnv;
   } catch {}
 
-  try {
-    const fromFile = loadUsersFile(env, fsImpl).get(user);
-    if (fromFile && fromFile.length) return fromFile;
-  } catch {}
+  const fromFile = usersFileOrNobody(env, fsImpl).get(user);
+  if (fromFile && fromFile.length) return fromFile;
 
   return null;
 }
@@ -267,12 +293,8 @@ function resolveAppUser(username, auth, env = process.env, fsImpl = fs) {
   if (fromEnv) return fromEnv;
 
   // Priority 2: APP_USERS_FILE (hot-reloaded on every call)
-  try {
-    const fromFile = loadUsersFile(env, fsImpl).get(user);
-    if (fromFile) return fromFile;
-  } catch {
-    // A broken file is treated as empty (the error is surfaced at startup by server.js)
-  }
+  const fromFile = usersFileOrNobody(env, fsImpl).get(user);
+  if (fromFile) return fromFile;
 
   // Priority 3: cds.requires.auth.users (dev profile)
   const configured = (auth && auth.users) || {};
