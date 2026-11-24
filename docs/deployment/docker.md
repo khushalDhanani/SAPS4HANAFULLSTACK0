@@ -19,13 +19,15 @@ the container because it may contain SAP credentials:
 
 ```sh
 umask 077
-printf 'LOCAL_AUTH_SECRET=%s\nLOCAL_DEV_PASSWORD=%s\n' \
+printf 'LOCAL_AUTH_SECRET=%s\nLOCAL_DEV_PASSWORD=%s\nAPP_USER_ROLES=%s\n' \
   "$(openssl rand -hex 32)" \
-  "$(openssl rand -hex 24)" > .env.docker.local
+  "$(openssl rand -hex 24)" \
+  '{"LOCALDEV":["Viewer","PurchasingManager","SalesManager","WarehouseManager"]}' > .env.docker.local
 ```
 
-The generated password is the local login password for `khushal`; it is not an
-SAP password. The JWT signing secret stays in that ignored host file and is
+The generated password is the local login password for `LOCALDEV`; it is not an
+SAP password. The local password is never accepted for a user who holds Admin
+(`khushal`), so the administration screens are not reachable in this isolated profile. The JWT signing secret stays in that ignored host file and is
 never baked into the image or printed by the startup code. Start the local app:
 
 ```sh
@@ -35,7 +37,7 @@ docker compose --env-file .env.example --profile dev up --build
 Set `PLATFORM`, `ROUTER_PLATFORM`, and `ROUTER_PORT` in a separate non-secret Compose env file as
 needed. In local development (`dev` profile), `approuter-dev` defaults to the host's native
 architecture (e.g. `linux/arm64` on Apple Silicon) so it runs natively without emulation. Open
-`http://127.0.0.1:5000` and log in with username `khushal` and the generated local password.
+`http://127.0.0.1:5000` and log in with username `LOCALDEV` and the generated local password.
 
 ## QA and production profiles
 

@@ -55,4 +55,17 @@ describe('Docker Configuration Integrity', () => {
     expect(caddyfile).toContain('reverse_proxy backend:4004');
     expect(caddyfile).toContain('tls /run/certs/server.crt /run/certs/server.key');
   });
+  test.each(['.env.example', '.env.docker.example', 'docs/DOCKER.md'])('%s does not say that the login screen takes S4_PASSWORD', (file) => {
+    const text = fs.readFileSync(path.join(rootDir, file), 'utf8');
+    expect(text).not.toMatch(/takes `?S4_PASSWORD|accepts `?S4_PASSWORD/);
+    expect(text).toMatch(/S4_PASSWORD`?\)? (is|are) refused/);
+    expect(text).not.toMatch(/\(khushal, S4_USERNAME\)/);
+  });
+
+  test.each(['.env.example', '.env.docker.example'])('%s says when LOCAL_DEV_PASSWORD works and that the example secret is refused', (file) => {
+    const text = fs.readFileSync(path.join(rootDir, file), 'utf8');
+    expect(text).toContain('only when NODE_ENV=development or APP_ROLE=cap-local, and never for a user who holds Admin');
+    expect(text).toContain('refuses');
+    expect(text).toMatch(/^LOCAL_DEV_PASSWORD=$/m);
+  });
 });
