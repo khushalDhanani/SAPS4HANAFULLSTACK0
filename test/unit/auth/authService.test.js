@@ -79,7 +79,8 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
     describe('login (Custom Login Restrictions)', () => {
         it.each([
-            ['khushal', 'local-password', true, ''],
+            ['test-clerk-1120', 'local-password', true, ''],
+            ['khushal', 'local-password', false, 'without the Admin role'],
             ['khushal', 'wrong-password', false, 'Invalid local credentials'],
             ['another-user', 'local-password', false, 'Invalid local credentials'],
             ['khushal', 'sap-password', false, 'Invalid username or password.']
@@ -135,21 +136,55 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(req.error).toHaveBeenCalledWith(403, expect.stringContaining('SAP BTP XSUAA Single Sign-On'));
         });
 
-        it('should allow dev login for khushal with the local password and keep the configured roles', async () => {
+        it('should allow dev login for a listed user without Admin with the local password and keep the configured roles', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.LOCAL_DEV_PASSWORD = 'local-password';
+            const sap = jest.spyOn(authAdapter, 'validateCredentials').mockRejectedValue(new Error('SAP must not be called'));
 
-            const req = {
-                data: { username: 'khushal', password: 'local-password' }
-            };
-
-            const res = await service._handleLogin(req);
+            const res = await service._handleLogin({ data: { username: 'test-clerk-1120', password: 'local-password' } });
             expect(res.authenticated).toBe(true);
-            expect(res.username).toBe('khushal');
-            expect(res.token).toBeDefined();
+            expect(res.username).toBe('test-clerk-1120');
             expect(typeof res.token).toBe('string');
-            expect(res.scopes).toEqual(expect.arrayContaining(['$XSAPPNAME.PurchasingManager']));
+            expect(res.scopes).toEqual(['$XSAPPNAME.Viewer', '$XSAPPNAME.WarehouseClerk']);
+            expect(sap).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['khushal (package.json user)', 'khushal', {}],
+            ['a user given Admin in APP_USER_ROLES', 'MADMIN', { APP_USER_ROLES: '{"MADMIN":["Viewer","Admin"]}' }],
+            ['under cap-local', 'MADMIN', { APP_ROLE: 'cap-local', APP_USER_ROLES: '{"MADMIN":["Admin"]}' }]
+        ])('never accepts LOCAL_DEV_PASSWORD for a user holding Admin: %s', async (_case, username, env) => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
+            Object.assign(process.env, env);
+            // SAP would accept anything: the shared password must not even be forwarded to SAP.
+            const sap = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: true });
+
+            const res = await service._handleLogin({ data: { username, password: 'local-password' } });
+            expect(res.authenticated).toBe(false);
+            expect(res.token).toBeUndefined();
+            expect(sap).not.toHaveBeenCalled();
+        });
+
+        it.each(['test', 'staging', 'qa', ''])('LOCAL_DEV_PASSWORD is not a password when NODE_ENV is "%s" (and not cap-local)', async (nodeEnv) => {
+            process.env.NODE_ENV = nodeEnv;
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
+            const sap = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: false, statusCode: 401 });
+
+            // Like any other password it goes to SAP, which refuses it.
+            const res = await service._handleLogin({ data: { username: 'test-clerk-1120', password: 'local-password' } });
+            expect(res.authenticated).toBe(false);
+            expect(res.token).toBeUndefined();
+            expect(sap).toHaveBeenCalledWith('test-clerk-1120', 'local-password');
+
+            // The isolated Docker profile runs under NODE_ENV=test and keeps its local password.
+            process.env.APP_ROLE = 'cap-local';
+            loginThrottle.reset();
+            expect((await service._handleLogin({ data: { username: 'test-clerk-1120', password: 'local-password' } })).authenticated).toBe(true);
         });
 
         it('compares the local password exactly, including upper and lower case', async () => {
@@ -158,11 +193,11 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             process.env.LOCAL_DEV_PASSWORD = 'Local-Password';
             const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: false });
 
-            const wrongCase = await service._handleLogin({ data: { username: 'khushal', password: 'local-password' } });
+            const wrongCase = await service._handleLogin({ data: { username: 'test-clerk-1120', password: 'local-password' } });
             expect(wrongCase.authenticated).toBe(false);
             expect(validate).toHaveBeenCalledTimes(1);
 
-            const exact = await service._handleLogin({ data: { username: 'khushal', password: 'Local-Password' } });
+            const exact = await service._handleLogin({ data: { username: 'test-clerk-1120', password: 'Local-Password' } });
             expect(exact.authenticated).toBe(true);
         });
 
@@ -285,7 +320,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res.message).toBe('Invalid username or password.');
             expect(validate).not.toHaveBeenCalled();
 
-            const local = await service._handleLogin({ data: { username: 'KHUSHAL', password: 'local-password' } });
+            const local = await service._handleLogin({ data: { username: 'TEST-CLERK-1120', password: 'local-password' } });
             expect(local.authenticated).toBe(true);
             expect(local.system).toBe('DEV - Client 220');
         });
@@ -347,7 +382,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({
                 authenticated: false, statusCode: 401, message: 'Invalid username or password.'
             });
-            const attempt = (password) => service._handleLogin({ data: { username: 'khushal', password } });
+            const attempt = (password) => service._handleLogin({ data: { username: 'test-clerk-1120', password } });
 
             await attempt('wrong-1');
             await attempt('wrong-2');
@@ -428,7 +463,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             process.env.LOCAL_DEV_PASSWORD = 'local-password';
 
             const req = {
-                data: { username: 'khushal', password: 'local-password' }
+                data: { username: 'test-clerk-1120', password: 'local-password' }
             };
 
             const res = await service._handleLogin(req);

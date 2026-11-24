@@ -101,7 +101,13 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     }
 
     // A local password exists only when LOCAL_DEV_PASSWORD is set; a username is never a password.
-    const sLocalDevPass = (process.env.LOCAL_DEV_PASSWORD || "").trim();
+    // It is one shared password that skips the SAP check, so it works only on a development server
+    // (NODE_ENV=development) or in the isolated Docker profile (APP_ROLE=cap-local), and never for a user who
+    // holds Admin: an administrator always proves a password of their own to SAP.
+    const bLocalPasswordAllowed = process.env.NODE_ENV === "development" || process.env.APP_ROLE === "cap-local";
+    const sLocalDevPass = bLocalPasswordAllowed ? (process.env.LOCAL_DEV_PASSWORD || "").trim() : "";
+    const bIsLocalDevPass = Boolean(sLocalDevPass) && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass);
+    const holdsAdmin = (aRoles) => Array.isArray(aRoles) && aRoles.includes("Admin");
     const oHttpReq = req.http?.req || req._?.req;
     const sClientIp = oHttpReq?.ip || "";
     if (loginThrottle.proxyNotTrusted(oHttpReq)) {
@@ -144,8 +150,9 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     if (process.env.APP_ROLE === "cap-local") {
       // The isolated Docker profile has no SAP connectivity or SAP credentials.
       devRoles = resolveAppUser(sUser, cds.env?.requires?.auth);
-      if (!devRoles || !sLocalDevPass || !localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
-        return failed("Invalid local credentials. Use a whitelisted user and the configured LOCAL_DEV_PASSWORD.");
+      if (!devRoles || !bIsLocalDevPass || holdsAdmin(devRoles)) {
+        if (devRoles && bIsLocalDevPass) LOG.warn(`login refused for ${sUserLower}: LOCAL_DEV_PASSWORD is not accepted for a user holding Admin`);
+        return failed("Invalid local credentials. Use a whitelisted user without the Admin role and the configured LOCAL_DEV_PASSWORD.");
       }
       authResult = {
         authenticated: true,
@@ -172,8 +179,13 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
         devRoles = await fetchAndMapRoles(sUser, this._fetchDetail, process.env);
         roleSource = localTokenUtil.ROLE_SOURCE_SAP;
         LOG.info(`login: ${sUserLower} not in explicit user source; roles assigned via SAP mapping / defaults`);
-      } else if (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
+      } else if (bIsLocalDevPass) {
         // A whitelisted user authenticated by LOCAL_DEV_PASSWORD (bypasses SAP for dev convenience).
+        if (holdsAdmin(devRoles)) {
+          // Not forwarded to SAP either: the shared password is not this user's SAP password.
+          LOG.warn(`login refused for ${sUserLower}: LOCAL_DEV_PASSWORD is not accepted for a user holding Admin`);
+          return failed("Invalid username or password.");
+        }
         authResult = {
           authenticated: true,
           message: "Authentication successful (local development).",
