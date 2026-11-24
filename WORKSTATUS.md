@@ -17,6 +17,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `main`.
+- **Confirmed sign-in findings N1–N7 and item 14 — PASS locally, not deployed (2026-11-24 09:56 IST):** Seven commits on branch `fix/login-confirmed-findings` (`ff3ededb`..`1e130f38`), not merged, not pushed. The server refuses to start outside `NODE_ENV=test` with an example or short `LOCAL_AUTH_SECRET`; local tokens check `aud`, `iat`, `nbf`; the SAP connection user and its password are refused at sign-in; `LOCAL_DEV_PASSWORD` works only on a development server or `cap-local` and never for Admin; Basic with it only under `NODE_ENV=development`, rate-limited; `config/app-users.json` ignored; `config/role-map.json` shipped empty. **Action needed before the next start:** the local `.env` still holds the example `LOCAL_AUTH_SECRET` (server refuses to start), and its `S4_USERNAME` is `khushal`, who therefore can no longer sign in. See the Changes Log entry.
 - **Sign-in review, high findings 4, 6, 7 — PASS locally, not deployed (2026-11-24 09:29 IST):** HTTP 403 from the SAP sign-in check is no longer reported as a wrong password (still refused). A one-time warning is logged when sign-in requests come through a reverse proxy while `TRUST_PROXY_HOPS` is not set. `APP_USERS_FILE` CSV and `tools/import-users.js` accept comment lines before the header (`config/users.csv.example` now loads as shipped), and a users file that breaks after startup is logged instead of silently allowing nobody. Finding 5 (per-user lockout) deliberately not changed. Uncommitted. See the Changes Log entry.
 - **SAP-mapped sign-in: roles in the token are honoured on every request — PASS locally, not deployed (2026-11-24 09:22 IST):** With `APP_ALLOW_ANY_SAP_USER=true` an unlisted SAP user signed in and was then refused on every request, and a user whose roles were mapped from SAP got those roles in the UI but the roles of the sign-in list on the server. `srv/auth-service.js` now marks such tokens with the signed claim `role_source: 'sap'`, and `localTokenUtil.verifyToken` takes their roles from the token. Tokens of listed users are unchanged (list read on every request). Committed as `42346628` (09:24 IST). Server restart needed. Live SAP sign-in not verified. See the Changes Log entry.
 - **User VSREDDY Login Configuration & Docker Environment Alignment — PASS (2026-11-24 09:16 IST):** Resolved login failure for user `VSREDDY`. Root cause: `VSREDDY` was neither whitelisted in `APP_USER_ROLES` / `APP_USERS_FILE` / `cds.requires.auth.users` nor permitted via `APP_ALLOW_ANY_SAP_USER=true` in `.env`, causing `resolveAppUser()` to fail-closed with "Invalid username or password" before contacting SAP S/4HANA. Fix: Configured `APP_ALLOW_ANY_SAP_USER=true`, `APP_DEFAULT_ROLES=Viewer`, and explicitly whitelisted `VSREDDY` with `Viewer`, `PurchasingManager`, `SalesManager`, `WarehouseClerk` in `APP_USER_ROLES` in local `.env`; declared user role environment variables in `docker-compose.yml`. Verified `test/unit/tools/dockerConfig.test.js` (7/7 PASS), `npm run lint` (0 errors, 0 warnings), and `npm run scan:secrets` (0 secrets). No passwords logged, stored, or tested.
@@ -412,6 +413,34 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-24 09:56 IST — Confirmed sign-in findings N1–N7 and item 14 (seven commits on `fix/login-confirmed-findings`) — PASS locally, not deployed
+
+- **REQUEST:** Fix the CONFIRMED findings of the verification pass only, smallest change each, one commit per fix, a mock-based test for each; run tests, lint and the secret scan; production SSO unchanged.
+- **CHANGED (one commit each):**
+  1. `ff3ededb` — N1/N5. `srv/common/productionGuard.js` `assertLocalAuthSecret()`, called from `server.js`: outside `NODE_ENV=test` (and not in production, where any `LOCAL_AUTH_SECRET` is already refused) the server does not start when the secret is under 32 bytes or equals a value of `.env.example` / `.env.docker.example` (files read when present; a SHA-256 list covers images without them). `srv/auth/localTokenUtil.js`: tokens carry `aud` and `nbf`; verification requires the audience and refuses a missing or future `iat` / `nbf` (60 s tolerance).
+  2. `865b9e28` — N4. `srv/auth-service.js`: a user name equal to `S4_USERNAME` (case-insensitive) or a password equal to `S4_PASSWORD` is refused ahead of every branch, before SAP is asked; the attempt counts in the limiter. `server.js` comment and the test title corrected.
+  3. `735bf2eb` — N2. `srv/auth-service.js`: `LOCAL_DEV_PASSWORD` is accepted only when `NODE_ENV === 'development'` or `APP_ROLE === 'cap-local'`, and never for a listed user holding Admin (not forwarded to SAP either).
+  4. `5d5ae3da` — N3. `srv/auth/mockUserPasswords.js`: mocked users get `LOCAL_DEV_PASSWORD` for HTTP Basic only when `NODE_ENV === 'development'`, otherwise a random password. New `srv/auth/basicAuthThrottle.js`, registered in `server.js` for development only: the limiter of the login action for Basic requests (HTTP 429).
+  5. `0231d3ea` — N7. `.gitignore`: `config/app-users.json`; `tools/scan-secrets.js` requires the rule.
+  6. `7201c4b3` — item 14. `config/role-map.json` is `{}`; env examples and the module comment explain how to enter real SAP role names.
+  7. `1e130f38` — N6. `.env.example`, `.env.docker.example`, `docs/DOCKER.md`, `docs/deployment/docker.md` describe the rules as implemented.
+- **NOT CHANGED:** `.env` (not edited); production authentication (`kind: jwt`, XSUAA) and `assertDevFlagsOff`; the isolated test profile (passwordless mocked users under `NODE_ENV=test` without SAP connectivity); HTTP Basic for `khushal` (Admin) with `LOCAL_DEV_PASSWORD` on a development server, which stays possible, rate-limited (the Admin exclusion was requested for the login action). Nothing merged, pushed or deployed. No SAP call was made.
+- **CONSEQUENCES TO ACT ON:**
+  - The local `.env` holds the example `LOCAL_AUTH_SECRET`: the server refuses to start until it is replaced (CONFIRMED by running the check against `.env`; value not printed).
+  - `S4_USERNAME` in the local `.env` is `khushal`: that user can no longer sign in on the login screen. A technical SAP user is needed for the connection, or another application user.
+  - Tokens issued before commit 1 are refused (no `aud` / `nbf`): everybody signs in again once.
+  - No user holding Admin can use `LOCAL_DEV_PASSWORD`. In the isolated Docker profile (`cap-local`, no SAP) the administration screens are therefore not reachable; `docs/deployment/docker.md` now lists a non-Admin local user.
+  - Docker profile `cap-dev` runs `NODE_ENV=test`: Basic authentication is refused there.
+- **TEST DECISION:** ADDED / UPDATED (mock-based: `productionGuard.test.js`, `serverStartupGuards.test.js`, `serverLocalConfig.test.js`, `localTokenUtil.test.js`, `authService.test.js`, `mockUserPasswords.test.js`, new `basicAuthThrottle.test.js`, `scanSecrets.test.js`, `sapRoleMapper.test.js`, `dockerConfig.test.js`).
+- **VALIDATION:**
+  - `npx jest --runInBand --coverage --coverageDirectory=/tmp/verify/cov` → exit 0, 217/217 suites, 3640 passed, 13 skipped, coverage floors met (`srv/auth` statements 93.56, branches 87.81, functions 93.84, lines 95.72).
+  - `npx eslint .` → exit 0. `node tools/scan-secrets.js` → 1052 tracked files, 0 findings.
+  - Commit 5 was first made with a failing new test (a string replace in the test removed the wrong occurrence); found on the next run, test corrected, commit amended before any later commit.
+- **NOT VERIFIED:** A started server (the check stops it with the current `.env`); live SAP sign-in; Docker build and run; browser E2E (`npm run test:e2e`); the CI secrets `E2E_LOCAL_AUTH_SECRET` and `S4_DEV_USERNAME` (a CI run fails if the first equals the example value).
+- **ASSUMPTIONS:** Audience value `saps4hana-fiori-app` and 60 s clock tolerance are choices made here, not requirements given.
+- **NEXT:** Set a new `LOCAL_AUTH_SECRET`; decide the SAP connection user; review and merge the branch; `docker compose -f docker-compose.yml --profile tls up -d --build`.
+- **FINAL STATUS:** PASS locally (unit and integration); not deployed.
 
 ### 2026-11-24 09:29 IST — Sign-in review, high findings 4, 6, 7 (403 message, untrusted proxy warning, users file) — PASS locally, not deployed
 
