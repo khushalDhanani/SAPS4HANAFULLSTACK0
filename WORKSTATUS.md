@@ -17,6 +17,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `main`.
+- **Prefix-Based SAP Role Mapping (^ZAPP_(.+)$) — PASS (2026-11-23 18:14 IST):** Updated SAP PFCG role mapping in `srv/auth/sapRoleMapper.js` to eliminate the requirement for `config/role-map.json`. SAP roles matching `^ZAPP_(.+)$` (configurable via `APP_SAP_ROLE_PREFIX`, default `ZAPP_`) map directly to application roles where the suffix matches a `KNOWN_ROLE` case-insensitively (e.g. `ZAPP_SalesManager`, `ZAPP_SALES_MANAGER`). `config/role-map.json` is preserved as an optional override when present. Removed the startup probe in `server.js` that failed when the file was missing. Enforced rules: union of roles, fallback to `APP_DEFAULT_ROLES` on no match or BAPI failure (never fails open), `Admin` granted only to users in `APP_ADMIN_USERS`, explicit `APP_USER_ROLES` / `APP_USERS_FILE` entries override. Added 22 unit tests in `test/unit/auth/sapRoleMapper.test.js` and expanded `test/unit/auth/authService.test.js`. All 11 auth test suites pass (233/233 tests); `npm run lint` (0 errors, 0 warnings); `scan:secrets` (0 secrets).
+- **SAP PFCG Role Mapping via BAPI_USER_GET_DETAIL — PASS (2026-11-23 18:08 IST):** Implemented Req 3: Live-mode SAP users (both unlisted via `APP_ALLOW_ANY_SAP_USER` and listed users without explicit file/env overrides) have their SAP PFCG activity groups (`ACTIVITYGROUPS[].AGR_NAME`) read via `BAPI_USER_GET_DETAIL` and mapped to application roles using `config/role-map.json`. Enforced rules: result is union of mapped roles; falls back to `APP_DEFAULT_ROLES` if none match or BAPI fails; Admin is strictly forbidden through the map unless the user is explicitly named in `APP_ADMIN_USERS`; explicit entries in `APP_USER_ROLES` and `APP_USERS_FILE` override; roles cached in JWT session context; no credentials logged or tested. Created `srv/auth/sapRoleMapper.js`, `config/role-map.json`, and `test/unit/auth/sapRoleMapper.test.js`. All 11 auth test suites pass (225/225 tests); `npm run lint` (0 errors, 0 warnings); `scan:secrets` (0 secrets).
 - **Scalable user source for 400+ users — PASS (2026-11-23 17:56 IST):** Added hot-reloadable `APP_USERS_FILE` (JSON or CSV, no restart/rebuild needed), `APP_DEFAULT_ROLES`, `APP_ALLOW_ANY_SAP_USER`, and `tools/import-users.js` bulk-import script. Per-user and per-IP throttle already existed. See Changes Log.
 - **Multiple Whitelisted Users Login Support — PASS (2026-11-23 17:30 IST):** Enabled multi-user sign-in across isolated Docker (`cap-local`) and live S/4HANA modes. Replaced hardcoded single-user `khushal` check in `srv/auth-service.js` with dynamic whitelist verification (`resolveAppUser(sUser, cds.env?.requires?.auth)`) and constant-time `LOCAL_DEV_PASSWORD` comparison. Preserved strict whitelist enforcement, rate limiting (`loginThrottle` 3 attempts / 15 minutes lockout), production XSUAA SSO enforcement, and prohibition of `S4_PASSWORD` as a personal login password. Configured `APP_USER_ROLES` in `.env` with `JDOE` (`Viewer`, `SalesManager`) and `ASMITH` (`PurchasingManager`). Updated `.env.example`. Added 3 unit tests to `test/unit/auth/authService.test.js`. Verified 10 auth test suites (164 tests passed), `npm run lint` (0 errors), and `npm run scan:secrets` (0 secrets detected).
 - **SAP S/4HANA CA Certificate Trust & Docker Compose Mount — PASS (2026-11-23 15:00 IST):** Resolved login rejection ("SAP S/4HANA's security certificate was rejected. S4_DESTINATION_URL must use the host name on the certificate, not an IP address, and the server must be started with that certificate trusted (npm start).") when connecting to target S/4HANA system. Identified that the SAP Gateway server presents a self-signed corporate CA certificate (`CN=*.sap.aether.co.in`, SHA-256 `3F:D7:A6:85:71:3C:FB:87:35:61:03:E6:54:1B:B6:42:BE:29:0F:0B:0B:65:FA:25:CD:DF:76:CE:F5:7B:DE:EE`) while the standalone container had no CA cert mounted or trusted via `NODE_EXTRA_CA_CERTS`. Mounted `./certs` to `/run/certs:ro` and configured `NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}` in `docker-compose.yml` and `docker-compose.dev.yml`; mounted `./db.sqlite` for local standalone state; updated `package.json` start/watch scripts to support `certs/ca-bundle.pem`; linked `/home/cis/certs/sap-chain.pem` to `~/.sap-certs/s4-dev.pem` and `certs/ca-bundle.pem`; deployed local `db.sqlite` schema. Verified live TLS handshake (READ-ONLY) against SAP Gateway catalog service succeeds (HTTP 401 unauthenticated response instead of certificate rejection). Unit test added in `test/unit/tools/dockerConfig.test.js` (6/6 PASS); all 184 unit test suites pass (3,140 passed); eslint and scan:secrets pass clean.
@@ -407,6 +409,68 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-23 18:14 IST — Prefix-based SAP role mapping (^ZAPP_(.+)$) without mandatory role-map.json — PASS
+
+- **REQUEST:** Change SAP role mapping in `srv/auth/sapRoleMapper.js` so it does not need `config/role-map.json`. After `BAPI_USER_GET_DETAIL`, match each `ACTIVITYGROUPS[].AGR_NAME` against `^ZAPP_(.+)$` (prefix configurable via `APP_SAP_ROLE_PREFIX`, default `ZAPP_`) and if suffix is a `KNOWN_ROLE` (case-insensitive), grant that app role. Keep: union of roles, fallback to `APP_DEFAULT_ROLES` on no match or BAPI failure (never fail open), `Admin` only for users in `APP_ADMIN_USERS`, explicit `APP_USER_ROLES` / `APP_USERS_FILE` entries override. Keep `role-map.json` support as an optional override only if the file exists; remove startup probe that fails when missing. Never log passwords. Mocks only.
+- **INSPECT:**
+  - `srv/auth/sapRoleMapper.js` — previously required `config/role-map.json` and skipped prefix matching.
+  - `server.js` — contained startup probe `require('./srv/auth/sapRoleMapper').loadRoleMap()` that threw if the probe failed.
+  - `test/unit/auth/sapRoleMapper.test.js` — tested role-map mapping only.
+- **CHANGED:**
+  - `srv/auth/sapRoleMapper.js`:
+    - Added `getSapRolePrefix(env)` reading `env.APP_SAP_ROLE_PREFIX` (defaults to `"ZAPP_"`).
+    - Added `matchKnownRole(suffix)` matching case-insensitively and supporting underscore-separated role names (e.g. `SALES_MANAGER` -> `SalesManager`).
+    - Updated `loadRoleMap(mapPath, fsImpl)` to return `null` when file is absent (ENOENT) instead of treating as required.
+    - Updated `mapRoles(username, agrNames, roleMap, env)`: first checks optional `roleMap` override if provided; then tests `^<prefix>(.+)$` and matches suffix to `KNOWN_ROLES`. Union of mapped roles returned. Admin guard enforced (`Admin` stripped unless username in `APP_ADMIN_USERS`). Returns `null` if nothing matched.
+    - Updated `fetchAndMapRoles(username, fetchDetail, env, mapPath, fsImpl)`: loads optional role map without throwing if missing; invokes `fetchDetail(username)`; calls `mapRoles`; falls back safely to `parseDefaultRoles(env)` on no match or BAPI exception.
+  - `server.js`: removed startup probe `loadRoleMap()` so startup succeeds when `role-map.json` is absent.
+  - `.env.example`, `.env.docker.example`: documented `APP_SAP_ROLE_PREFIX`.
+  - `test/unit/auth/sapRoleMapper.test.js`: added 22 unit tests covering default prefix match, custom prefix (`APP_SAP_ROLE_PREFIX`), case handling (`zapp_salesmanager`, `ZAPP_SALES_MANAGER`), unknown suffix ignored, Admin guard (both stripped and allowed), BAPI failure fallback, and optional role-map override.
+  - `test/unit/auth/authService.test.js`: added integration test verifying `ZAPP_WarehouseClerk` maps via prefix matching without `role-map.json`.
+- **NOT CHANGED:** Explicit `APP_USER_ROLES` and `APP_USERS_FILE` overrides, per-user and per-IP throttles, production SSO-only rule, no password logging.
+- **TEST DECISION:** TEST ADDED — `test/unit/auth/sapRoleMapper.test.js` rewritten (+22 tests); `test/unit/auth/authService.test.js` (+1 test).
+- **VALIDATION:**
+  - `npx jest test/unit/auth/ --runInBand --no-coverage` → ✅ 11 suites, 233/233 PASS.
+  - `npm run lint` → ✅ 0 errors, 0 warnings.
+  - `npm run scan:secrets` → ✅ 1,047 tracked files, 0 secrets detected.
+- **NOT VERIFIED:** Physical SAP RFC call (mocked in unit test; live SAP writes require explicit user go).
+- **ASSUMPTIONS:** None.
+- **NEXT:** Ready for local execution or Docker container build.
+- **FINAL STATUS:** PASS.
+
+### 2026-11-23 18:08 IST — SAP PFCG Role Mapping via BAPI_USER_GET_DETAIL (Req 3) — PASS
+
+- **REQUEST:** After SAP validates the login (live mode, APP_ALLOW_ANY_SAP_USER or listed user), read the user's SAP roles via BAPI_USER_GET_DETAIL (ACTIVITYGROUPS[].AGR_NAME) and map them to app roles using config/role-map.json (SAP role -> app role). Union of mapped roles; if none match, use APP_DEFAULT_ROLES. Admin never granted through map unless APP_ADMIN_USERS explicitly names user. Explicit entries in APP_USER_ROLES / APP_USERS_FILE still override. If BAPI fails, fall back to APP_DEFAULT_ROLES only (never fail open). Roles cached for session. Never log passwords. Mocks only.
+- **INSPECT:**
+  - `srv/integration/s4hana/admin/UserDetailReader.js` — already implements `readUserDetail(call, username)` calling `BAPI_USER_GET_DETAIL` and extracting `ACTIVITYGROUPS[].AGR_NAME` into `roles: [{name: text(r.AGR_NAME)}]`.
+  - `srv/integration/s4hana/RfcClient.js` — encapsulates `node-rfc` pooling and session execution; provides `isAvailable()` check.
+  - `srv/auth/appUsers.js` — exports `KNOWN_ROLES`, `parseDefaultRoles()`, `resolveAppUser()`.
+  - `srv/auth-service.js` — handles `_handleLogin`; already executes `authAdapter.validateCredentials` for live mode.
+- **CHANGED:**
+  - `srv/auth/sapRoleMapper.js` (new):
+    - `loadRoleMap(mapPath, fsImpl)`: loads and parses `config/role-map.json`; validates mapped roles against `KNOWN_ROLES`; returns empty object if file absent or empty. Supports `ROLE_MAP_PATH` or `APP_ROLE_MAP_FILE` overrides.
+    - `parseAdminUsers(env)`: parses `APP_ADMIN_USERS` comma-separated list of lower-cased usernames.
+    - `mapRoles(username, agrNames, roleMap, env)`: computes union of mapped app roles; matches case-insensitively; strips `Admin` unless user is in `APP_ADMIN_USERS`; returns `null` if no match.
+    - `fetchAndMapRoles(username, fetchDetail, env, mapPath, fsImpl)`: orchestrates loading map, calling `fetchDetail(username)`, and mapping roles; falls back safely to `parseDefaultRoles(env)` if map absent, BAPI throws, or no roles match (never fails open).
+    - `createRfcFetchDetail(env)`: produces RFC session caller using `RfcClient` + `UserDetailReader.readUserDetail` when `node-rfc` is available; returns `null` otherwise.
+  - `config/role-map.json` (new): standard mapping template (`Z_APP_SALES_MGR` -> `SalesManager`, `Z_APP_WH_CLERK` -> `WarehouseClerk`, `Z_APP_PURCHASING` -> `PurchasingManager`).
+  - `srv/auth/appUsers.js`: added `getExplicitAppUserRoles(username, env, fsImpl)` to check whether a user has an explicit override entry in `APP_USER_ROLES` or `APP_USERS_FILE`.
+  - `srv/auth-service.js`: initialized `this._fetchDetail = createRfcFetchDetail(process.env)`; in live mode after SAP validates credentials, checks `getExplicitAppUserRoles`: if explicit entry exists, it overrides; otherwise calls `fetchAndMapRoles(sUser, this._fetchDetail, process.env)`. Session caching is implicit in the issued JWT (`localTokenUtil.issueToken(sUser, devRoles)`).
+  - `server.js`: added startup validation probe `require('./srv/auth/sapRoleMapper').loadRoleMap()`.
+  - `.env.example`, `.env.docker.example`: documented `APP_ADMIN_USERS`.
+  - `test/unit/auth/sapRoleMapper.test.js` (new): comprehensive unit tests (20 test cases) covering `loadRoleMap`, `parseAdminUsers`, `mapRoles`, and `fetchAndMapRoles`.
+  - `test/unit/auth/authService.test.js`: added tests for SAP role mapping via BAPI, fallback on BAPI timeout/failure, Admin restriction without `APP_ADMIN_USERS`, Admin allowance with `APP_ADMIN_USERS`, and explicit `APP_USER_ROLES` override precedence.
+- **NOT CHANGED:** Production XSUAA SSO behavior, `S4_PASSWORD` prohibitions, per-user and per-IP throttles.
+- **TEST DECISION:** TEST ADDED — `test/unit/auth/sapRoleMapper.test.js` (20 new tests); `test/unit/auth/authService.test.js` expanded (+4 tests).
+- **VALIDATION:**
+  - `npx jest test/unit/auth/ --runInBand --no-coverage` → ✅ 11 suites, 225/225 PASS.
+  - `npm run lint` → ✅ 0 errors, 0 warnings.
+  - `npm run scan:secrets` → ✅ 1,047 tracked files, 0 secrets detected.
+- **NOT VERIFIED:** Live RFC call against physical SAP backend (node-rfc mock/controlled validation verified; live SAP writes require explicit user go).
+- **ASSUMPTIONS:** None.
+- **NEXT:** Ready for container deployment or local dev verification.
+- **FINAL STATUS:** PASS.
 
 ### 2026-11-23 17:56 IST — Scalable user source (APP_USERS_FILE, APP_ALLOW_ANY_SAP_USER, APP_DEFAULT_ROLES) — PASS
 

@@ -13,6 +13,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
         delete process.env.APP_USERS_FILE;
         delete process.env.APP_ALLOW_ANY_SAP_USER;
         delete process.env.APP_DEFAULT_ROLES;
+        delete process.env.APP_ADMIN_USERS;
         delete process.env.ENABLE_DEV_TOKEN_ISSUER;
         delete process.env.LOCAL_AUTH_SECRET;
         delete process.env.S4_SYSTEM_NAME;
@@ -483,6 +484,143 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
             expect(res.authenticated).toBe(true);
             expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
+        });
+
+        // ── Req 3: SAP role mapping via BAPI_USER_GET_DETAIL ──────────────────
+
+        it('maps SAP roles via BAPI_USER_GET_DETAIL and role-map.json for APP_ALLOW_ANY_SAP_USER', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: true,
+                message: 'Authentication successful.',
+                system: 'DS4 - Client 220'
+            });
+
+            service._fetchDetail = jest.fn().mockResolvedValue({
+                roles: [{ name: 'Z_APP_SALES_MGR' }]
+            });
+
+            const res = await service._handleLogin({
+                data: { username: 'SALES_REP_1', password: 'valid-password' }
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.scopes).toEqual(['$XSAPPNAME.SalesManager']);
+            expect(service._fetchDetail).toHaveBeenCalledWith('SALES_REP_1');
+        });
+
+        it('maps SAP roles via prefix ZAPP_<ROLE> without role-map for APP_ALLOW_ANY_SAP_USER', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: true,
+                message: 'Authentication successful.',
+                system: 'DS4 - Client 220'
+            });
+
+            service._fetchDetail = jest.fn().mockResolvedValue({
+                roles: [{ name: 'ZAPP_WarehouseClerk' }]
+            });
+
+            const res = await service._handleLogin({
+                data: { username: 'PREFIX_USER', password: 'valid-password' }
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.scopes).toEqual(['$XSAPPNAME.WarehouseClerk']);
+        });
+
+        it('falls back to APP_DEFAULT_ROLES when BAPI fails or throws', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+            process.env.APP_DEFAULT_ROLES = 'Viewer';
+
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: true,
+                message: 'Authentication successful.',
+                system: 'DS4 - Client 220'
+            });
+
+            service._fetchDetail = jest.fn().mockRejectedValue(new Error('RFC connection timeout'));
+
+            const res = await service._handleLogin({
+                data: { username: 'SOME_USER', password: 'valid-password' }
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
+        });
+
+        it('never grants Admin through role mapping unless user is in APP_ADMIN_USERS', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+
+            const { loadRoleMap: _originalLoad } = require('../../../srv/auth/sapRoleMapper');
+            // Inject a map with Admin
+            const sapRoleMapper = require('../../../srv/auth/sapRoleMapper');
+            jest.spyOn(sapRoleMapper, 'loadRoleMap').mockReturnValue({
+                Z_SAP_SUPER: ['Admin', 'Viewer']
+            });
+
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({
+                authenticated: true,
+                message: 'Authentication successful.',
+                system: 'DS4 - Client 220'
+            });
+
+            service._fetchDetail = jest.fn().mockResolvedValue({
+                roles: [{ name: 'Z_SAP_SUPER' }]
+            });
+
+            // 1. Regular user: Admin stripped
+            const res1 = await service._handleLogin({
+                data: { username: 'REGULAR_USER', password: 'valid-password' }
+            });
+            expect(res1.authenticated).toBe(true);
+            expect(res1.scopes).toEqual(['$XSAPPNAME.Viewer']);
+            expect(res1.scopes).not.toContain('$XSAPPNAME.Admin');
+
+            // 2. Admin user listed in APP_ADMIN_USERS: Admin allowed
+            process.env.APP_ADMIN_USERS = 'admin_user';
+            const res2 = await service._handleLogin({
+                data: { username: 'ADMIN_USER', password: 'valid-password' }
+            });
+            expect(res2.authenticated).toBe(true);
+            expect(res2.scopes).toContain('$XSAPPNAME.Admin');
+        });
+
+        it('explicit entries in APP_USER_ROLES override SAP role mapping', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_USER_ROLES = JSON.stringify({
+                overridden_user: ['WarehouseClerk']
+            });
+
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: true,
+                message: 'Authentication successful.',
+                system: 'DS4 - Client 220'
+            });
+
+            service._fetchDetail = jest.fn().mockResolvedValue({
+                roles: [{ name: 'Z_APP_SALES_MGR' }] // would map to SalesManager
+            });
+
+            const res = await service._handleLogin({
+                data: { username: 'OVERRIDDEN_USER', password: 'valid-password' }
+            });
+
+            expect(res.authenticated).toBe(true);
+            // Explicit entry in APP_USER_ROLES wins (WarehouseClerk, NOT SalesManager)
+            expect(res.scopes).toEqual(['$XSAPPNAME.WarehouseClerk']);
+            expect(service._fetchDetail).not.toHaveBeenCalled();
         });
     });
 });

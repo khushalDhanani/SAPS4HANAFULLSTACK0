@@ -4,7 +4,8 @@ const localTokenUtil = require("./auth/localTokenUtil");
 const { resolveUserIdentity } = require("./auth/userIdentity");
 const s4Config = require("./common/s4Config");
 const loginThrottle = require("./auth/loginThrottle");
-const { resolveAppUser, isAllowAnySapUser, parseDefaultRoles } = require("./auth/appUsers");
+const { resolveAppUser, isAllowAnySapUser, getExplicitAppUserRoles } = require("./auth/appUsers");
+const { fetchAndMapRoles, createRfcFetchDetail } = require("./auth/sapRoleMapper");
 const LOG = require("./common/logger")("auth");
 
 /**
@@ -17,6 +18,7 @@ const LOG = require("./common/logger")("auth");
  */
 module.exports = class AuthServiceHandler extends cds.ApplicationService {
   async init() {
+    this._fetchDetail = createRfcFetchDetail(process.env);
     this.on("getUserInfo", this._handleGetUserInfo.bind(this));
     this.on("login", this._handleLogin.bind(this));
     await super.init();
@@ -135,7 +137,7 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       devRoles = resolveAppUser(sUser, cds.env?.requires?.auth);
 
       if (!devRoles) {
-        // When APP_ALLOW_ANY_SAP_USER=true, let SAP decide — but cap roles to APP_DEFAULT_ROLES.
+        // When APP_ALLOW_ANY_SAP_USER=true, let SAP decide — read SAP roles or default
         if (!isAllowAnySapUser(process.env)) {
           return failed("Invalid username or password.");
         }
@@ -146,9 +148,9 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
           if (!status || status === 401 || status === 403) loginThrottle.recordFailure(sUser, sClientIp);
           return { authenticated: false, message: authResult.message || "Invalid username or password." };
         }
-        // SAP accepted the user; assign only the safe default roles — never Admin.
-        devRoles = parseDefaultRoles(process.env);
-        LOG.info(`login: ${sUserLower} not in user source; granted default roles via APP_ALLOW_ANY_SAP_USER`);
+        // SAP accepted the user; map roles via BAPI_USER_GET_DETAIL or fall back to default
+        devRoles = await fetchAndMapRoles(sUser, this._fetchDetail, process.env);
+        LOG.info(`login: ${sUserLower} not in explicit user source; roles assigned via SAP mapping / defaults`);
       } else if (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
         // A whitelisted user authenticated by LOCAL_DEV_PASSWORD (bypasses SAP for dev convenience).
         authResult = {
@@ -159,6 +161,16 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       } else {
         // SAP checks the password. The connection password (S4_PASSWORD) is never a login password.
         authResult = await authAdapter.validateCredentials(username, password);
+        if (authResult.authenticated) {
+          // Explicit entries in APP_USER_ROLES / APP_USERS_FILE still override.
+          const explicit = getExplicitAppUserRoles(sUser, process.env);
+          if (explicit && explicit.length) {
+            devRoles = explicit;
+          } else {
+            // Listed user without explicit APP_USER_ROLES / APP_USERS_FILE override: map from SAP!
+            devRoles = await fetchAndMapRoles(sUser, this._fetchDetail, process.env);
+          }
+        }
       }
     }
 

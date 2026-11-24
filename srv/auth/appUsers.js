@@ -217,6 +217,32 @@ function isAllowAnySapUser(env = process.env) {
 }
 
 /**
+ * Returns explicit roles for a user from APP_USER_ROLES or APP_USERS_FILE,
+ * or null if the user has no explicit entry in either source.
+ *
+ * @param {string} username
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {object} [fsImpl]
+ * @returns {string[]|null}
+ */
+function getExplicitAppUserRoles(username, env = process.env, fsImpl = fs) {
+  const user = String(username || '').trim().toLowerCase();
+  if (!user) return null;
+
+  try {
+    const fromEnv = parseAppUserRoles(env).get(user);
+    if (fromEnv && fromEnv.length) return fromEnv;
+  } catch {}
+
+  try {
+    const fromFile = loadUsersFile(env, fsImpl).get(user);
+    if (fromFile && fromFile.length) return fromFile;
+  } catch {}
+
+  return null;
+}
+
+/**
  * Roles of a user who may sign in, or null when the user is not in any explicit source.
  * Returns null even when APP_ALLOW_ANY_SAP_USER=true — the caller (auth-service) must
  * do the SAP validation and then call parseDefaultRoles() separately.
@@ -266,5 +292,6 @@ module.exports = {
   parseCsv,
   parseDefaultRoles,
   isAllowAnySapUser,
+  getExplicitAppUserRoles,
   resolveAppUser,
 };

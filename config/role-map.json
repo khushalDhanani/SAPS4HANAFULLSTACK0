@@ -1,0 +1,5 @@
+{
+  "Z_APP_SALES_MGR": ["SalesManager"],
+  "Z_APP_WH_CLERK": ["WarehouseClerk"],
+  "Z_APP_PURCHASING": ["PurchasingManager"]
+}
