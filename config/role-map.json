@@ -1,1 +1,11 @@
-{}
+{
+  "Z_SALES_GROUP_L1": ["Viewer", "SalesManager"],
+  "Z_SALES_GROUP_L2": ["Viewer", "SalesRepresentative"],
+  "Z_SALES_GROUP_L3": ["Viewer", "SalesRepresentative"],
+  "Z_SAP_BR_SALES_MANAGER": ["Viewer", "SalesManager"],
+  "Z_PURCHASE_GROUP_L1": ["Viewer", "PurchasingManager"],
+  "Z_PURCHASE_GROUP_L1_101_HOD": ["Viewer", "PurchasingManager"],
+  "Z_PURCHASE_GROUP_L2": ["Viewer", "PurchasingManager"],
+  "Z_PURCHASE_GROUP_L3": ["Viewer", "PurchasingManager"],
+  "ZWM_WM_ALL": ["Viewer", "WarehouseClerk"]
+}

@@ -11,8 +11,8 @@
  *      (case-insensitive, e.g. ZAPP_SalesManager or ZAPP_SALES_MANAGER) grants that application role.
  *      The prefix is configurable via APP_SAP_ROLE_PREFIX (default "ZAPP_").
  *   2. Optional role-map.json: entries in config/role-map.json override or augment the prefix convention for
- *      SAP roles with other names. The file is shipped empty ({}): nothing is mapped until the real role names
- *      of the SAP system are entered, as {"<SAP role name>": ["AppRole", ...]}.
+ *      SAP roles with other names, as {"<SAP role name>": ["AppRole", ...]}. It holds only role names that
+ *      exist in the connected SAP system (read from AGR_USERS), never samples; an empty file ({}) maps nothing.
  *
  * Rules enforced here:
  *   1. Result = union of all app roles mapped from the user's AGR_NAMEs.

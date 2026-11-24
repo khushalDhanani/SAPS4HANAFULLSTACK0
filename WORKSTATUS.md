@@ -17,6 +17,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `main`.
+- **Existing SAP group roles mapped to application roles — PASS locally (2026-11-24 13:20 IST):** No role with the `ZAPP_` prefix exists in the SAP system, so `config/role-map.json` now maps nine roles that users already hold (sales group L1–L3, `Z_SAP_BR_SALES_MANAGER`, purchase group L1–L3 and its `_101_HOD` variant, `ZWM_WM_ALL`), each to `Viewer` plus one functional role. 79 of 278 users hold at least one of them. The empty lists remain an SAP task (user master comparison for the connection user). See the Changes Log entry.
 - **User detail kept when SAP adds SUID01/313 — PASS locally, verified read-only against SAP, not deployed (2026-11-24 13:05 IST):** `BAPI_USER_GET_DETAIL` returned the complete user data together with error SUID01/313 for the new connection user, and `UserDetailReader.readUserDetail` discarded it (502 on `getUserDetail`, 279 failed list rows, sign-in role lookup falling back to defaults). That one message is now tolerated while SAP returns the user. Uncommitted on `main`. Server findings of the same session (empty lists because most roles of the connection user are not effective) are in the Changes Log entry.
 - **Technical User SAPAETHER Alignment & Container Recreation — PASS (2026-11-24 12:40 IST):** Technical user `SAPAETHER` configured in `.env` for `S4_USERNAME` and verified via READ-ONLY SAP Gateway catalog query (HTTP 200 OK). Recreated standalone Docker container (`docker compose -f docker-compose.yml --profile tls up -d`); confirmed `S4_USERNAME=SAPAETHER` loaded in container and `loginThrottle` in-memory failure counts reset. User `KHUSHAL` unblocked for personal login with `APP_ADMIN_USERS=KHUSHAL`. Server healthy (`{"status":"UP"}` on `https://localhost/health`).
 - **Automatic roles, no user list — PASS locally, not deployed (2026-11-24 10:35 IST):** After SAP accepts a user's own password the roles are: Admin only for users named in `APP_ADMIN_USERS`; an optional override entry (`APP_USER_ROLES` / `APP_USERS_FILE`); otherwise the user's `ZAPP_<Role>` SAP roles; otherwise `APP_DEFAULT_ROLES`. An SAP role or `role-map.json` entry never grants Admin, and an Admin entry in an override grants nothing. The SAP answer to the sign-in check (401 / 403 / connection error) is logged on the server. Env examples carry no sample users and set `APP_ALLOW_ANY_SAP_USER=true`. Uncommitted on `main`. In the current container RFC is not available, so step 3 cannot run and every user without an override gets the default roles. See the Changes Log entry and `docs/architecture/sign-in-and-roles.md`.
@@ -417,9 +418,23 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-24 13:20 IST — Existing SAP group roles mapped in `config/role-map.json` — PASS locally
+
+- **REQUEST:** "Fix one by one" for the two open items: empty lists, and every user getting only the default roles at sign-in.
+- **INSPECT (READ-ONLY, `RFC_READ_TABLE` on `AGR_DEFINE` and `AGR_USERS`):** no role named `ZAPP*` exists; 278 users hold a valid role; role names and holders: `Z_SALES_GROUP_L1` 17, `_L2` 18, `_L3` 27, `Z_SAP_BR_SALES_MANAGER` 3, `Z_PURCHASE_GROUP_L1` 14, `Z_PURCHASE_GROUP_L1_101_HOD` 1, `_L2` 20, `_L3` 26, `ZWM_WM_ALL` 17, `Z_WM_STOCK_ENGG` 4; 79 users hold at least one of the mapped roles.
+- **DECISIONS (user, 2026-11-24):** L1 is the senior level; all three purchase group levels get PurchasingManager; the user carries out the SAP user comparison for the connection user himself.
+- **ASSUMPTIONS:** L2 and L3 of the sales group map to SalesRepresentative; every mapped role also gets Viewer, so a user with a mapped role reads at least what a user with only the default role reads; `ZWM_WM_ALL` maps to WarehouseClerk (the question was not answered; the lower of the two offered roles was taken); `Z_WM_STOCK_ENGG` is left unmapped until confirmed.
+- **CHANGED:** `config/role-map.json` (nine entries, real role names only); comments in `srv/auth/sapRoleMapper.js`, `.env.example`, `.env.docker.example` and `docs/architecture/sign-in-and-roles.md` no longer say the file is shipped empty; `test/unit/auth/sapRoleMapper.test.js` (the "shipped file is empty" test replaced by five tests on the shipped map); this file: a private network address removed from the entry of 13:05 IST, where the secret scan flagged it after that entry had been committed and pushed (`d54b7408`; the scan had been run before the entry was written).
+- **NOT CHANGED:** Admin still comes only from `APP_ADMIN_USERS`; overrides and the `ZAPP_` prefix work as before; nothing in SAP.
+- **TEST DECISION:** UPDATED / ADDED (mocks only).
+- **VALIDATION:** `npx jest --runInBand --coverage=false` → exit 0, 218/218 suites, 3681 passed, 13 skipped (coverage not measured in this run). `npx eslint .` → exit 0. `node tools/scan-secrets.js` → 0 findings, run again after this entry was written.
+- **NOT VERIFIED:** That the mapped application roles match what each group may do in SAP; browser E2E.
+- **OPEN:** In SAP: user master comparison and profile generation for the connection user (empty lists). The address removed here remains in the Git history of `d54b7408`.
+- **FINAL STATUS:** PASS locally.
+
 ### 2026-11-24 13:05 IST — Server deep dive; user detail kept when SAP adds SUID01/313 — PASS locally, verified read-only against SAP, not deployed
 
-- **REQUEST:** `getUserDetail(username='101HOD')` answered 502 on the server (172.27.1.178) and "so many APIs are not working"; deep dive, then "Fix".
+- **REQUEST:** `getUserDetail(username='101HOD')` answered 502 on the Linux server and "so many APIs are not working"; deep dive, then "Fix".
 - **INSPECT (server, READ-ONLY over SSH; SAP calls READ-ONLY: OData GET `$top=1`, `RFC_READ_TABLE`, `BAPI_USER_GETLIST`, `BAPI_USER_GET_DETAIL`):**
   - Containers healthy, commit `2c844ed4`, no restarts; the application's read-only integration diagnostic: OData and RFC HEALTHY in all six stages.
   - Backend log since the last container start: failing calls were `getUserDetail` (502, twice) and one 404 (no quarantine label rows for a material document). 279 `Could not enrich SAP user list row` warnings and `BAPI_USER_GET_DETAIL for 'khushal' failed ... falling back to APP_DEFAULT_ROLES`, all with the same SAP message.

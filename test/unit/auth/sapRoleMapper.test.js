@@ -74,15 +74,49 @@ describe('Unit: sapRoleMapper (Prefix-based SAP PFCG role mapping + optional rol
       expect(loadRoleMap('/fake/empty.json', makeFs('{}'))).toBeNull();
     });
 
-    it('the shipped config/role-map.json is empty: no SAP role name is mapped until a site enters its own', () => {
-      const shipped = require('fs').readFileSync(require('path').resolve(__dirname, '../../../config/role-map.json'), 'utf8');
-      expect(JSON.parse(shipped)).toEqual({});
-      expect(loadRoleMap()).toBeNull();
-      for (const name of ['Z_APP_SALES_MGR', 'Z_APP_WH_CLERK', 'Z_APP_PURCHASING']) {
-        expect(mapRoles('JSMITH', [name], loadRoleMap(), {})).toBeNull();
-      }
-      // the prefix convention needs no file
-      expect(mapRoles('JSMITH', ['ZAPP_SALESMANAGER'], loadRoleMap(), {})).toEqual(['SalesManager']);
+    describe('the shipped config/role-map.json', () => {
+      const shipped = JSON.parse(require('fs').readFileSync(require('path').resolve(__dirname, '../../../config/role-map.json'), 'utf8'));
+      const KNOWN = ['Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'SapLogsReader'];
+
+      it('loads, grants known roles only, never Admin, and always Viewer next to the functional role', () => {
+        expect(loadRoleMap()).toEqual(shipped);
+        for (const [sapRole, appRoles] of Object.entries(shipped)) {
+          expect(sapRole).toMatch(/^[A-Z0-9_:/-]+$/);
+          expect(appRoles).not.toContain('Admin');
+          expect(appRoles).toContain('Viewer');
+          for (const role of appRoles) expect(KNOWN).toContain(role);
+        }
+      });
+
+      it('holds no sample names', () => {
+        for (const name of ['Z_APP_SALES_MGR', 'Z_APP_WH_CLERK', 'Z_APP_PURCHASING']) {
+          expect(shipped[name]).toBeUndefined();
+          expect(mapRoles('JSMITH', [name], shipped, {})).toBeNull();
+        }
+      });
+
+      it('maps the sales and purchase group roles as decided on 2026-11-24 (L1 is the senior level)', () => {
+        expect(mapRoles('U', ['Z_SALES_GROUP_L1'], shipped, {})).toEqual(['Viewer', 'SalesManager']);
+        expect(mapRoles('U', ['Z_SAP_BR_SALES_MANAGER'], shipped, {})).toEqual(['Viewer', 'SalesManager']);
+        for (const level of ['Z_SALES_GROUP_L2', 'Z_SALES_GROUP_L3']) {
+          expect(mapRoles('U', [level], shipped, {})).toEqual(['Viewer', 'SalesRepresentative']);
+        }
+        for (const level of ['Z_PURCHASE_GROUP_L1', 'Z_PURCHASE_GROUP_L1_101_HOD', 'Z_PURCHASE_GROUP_L2', 'Z_PURCHASE_GROUP_L3']) {
+          expect(mapRoles('U', [level], shipped, {})).toEqual(['Viewer', 'PurchasingManager']);
+        }
+        expect(mapRoles('U', ['ZWM_WM_ALL'], shipped, {})).toEqual(['Viewer', 'WarehouseClerk']);
+      });
+
+      it('unions the roles of a user who holds several group roles, and leaves other SAP roles out', () => {
+        const roles = mapRoles('U', ['Z_GENERAL_ALL_TCODE', 'Z_SALES_GROUP_L3', 'Z_PURCHASE_GROUP_L2', 'ZSU53'], shipped, {});
+        expect(roles.sort()).toEqual(['PurchasingManager', 'SalesRepresentative', 'Viewer']);
+        expect(mapRoles('U', ['Z_GENERAL_ALL_TCODE', 'ZSU53', 'Z_WM_STOCK_ENGG'], shipped, {})).toBeNull();
+      });
+
+      it('still cannot make anybody Admin, and the ZAPP_ prefix keeps working next to it', () => {
+        expect(mapRoles('U', ['Z_SALES_GROUP_L1', 'ZAPP_ADMIN'], shipped, { APP_ADMIN_USERS: 'u' })).toEqual(['Viewer', 'SalesManager']);
+        expect(mapRoles('U', ['ZAPP_WAREHOUSEMANAGER', 'Z_PURCHASE_GROUP_L1'], shipped, {}).sort()).toEqual(['PurchasingManager', 'Viewer', 'WarehouseManager']);
+      });
     });
 
     it('parses valid role-map JSON when file exists', () => {

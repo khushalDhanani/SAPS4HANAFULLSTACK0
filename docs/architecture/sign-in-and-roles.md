@@ -30,7 +30,9 @@ Decided once SAP has accepted the user's own password, in this order:
 3. **SAP roles**: the user's SAP roles are read with `BAPI_USER_GET_DETAIL` (`ACTIVITYGROUPS[].AGR_NAME`).
    An SAP role named `<APP_SAP_ROLE_PREFIX><Role>` (default prefix `ZAPP_`) grants the application role `<Role>`;
    the part after the prefix is compared without regard to case and underscores, and Admin is excluded.
-   All matches are combined. `config/role-map.json` may map SAP roles with other names; it is shipped as `{}`.
+   All matches are combined. `config/role-map.json` maps SAP roles with other names. It holds only role names that
+   exist in the connected SAP system; the current entries (2026-11-24) map the sales and purchase group roles and
+   `ZWM_WM_ALL`, each to `Viewer` plus one functional role. An empty file (`{}`) maps nothing.
 4. **Defaults**: when no SAP role matches, or the BAPI call fails or times out, the user gets only
    `APP_DEFAULT_ROLES` (default `Viewer`, never Admin). A warning with the user name is logged. It never falls
    back to more roles.
