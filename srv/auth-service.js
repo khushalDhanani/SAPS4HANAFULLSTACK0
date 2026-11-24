@@ -120,6 +120,9 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
 
     let authResult;
     let devRoles;
+    // Set when the roles were mapped from SAP at sign-in and are in no sign-in list: the token then records
+    // that, so the per-request check (localTokenUtil.verifyToken) takes the roles from the token.
+    let roleSource;
 
     if (process.env.APP_ROLE === "cap-local") {
       // The isolated Docker profile has no SAP connectivity or SAP credentials.
@@ -150,6 +153,7 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
         }
         // SAP accepted the user; map roles via BAPI_USER_GET_DETAIL or fall back to default
         devRoles = await fetchAndMapRoles(sUser, this._fetchDetail, process.env);
+        roleSource = localTokenUtil.ROLE_SOURCE_SAP;
         LOG.info(`login: ${sUserLower} not in explicit user source; roles assigned via SAP mapping / defaults`);
       } else if (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) {
         // A whitelisted user authenticated by LOCAL_DEV_PASSWORD (bypasses SAP for dev convenience).
@@ -169,6 +173,7 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
           } else {
             // Listed user without explicit APP_USER_ROLES / APP_USERS_FILE override: map from SAP!
             devRoles = await fetchAndMapRoles(sUser, this._fetchDetail, process.env);
+            roleSource = localTokenUtil.ROLE_SOURCE_SAP;
           }
         }
       }
@@ -192,7 +197,7 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       minute: "2-digit",
     });
 
-    const tokenObj = localTokenUtil.issueToken(sUser, devRoles);
+    const tokenObj = localTokenUtil.issueToken(sUser, devRoles, roleSource ? { roleSource } : {});
 
     return {
       authenticated: true,

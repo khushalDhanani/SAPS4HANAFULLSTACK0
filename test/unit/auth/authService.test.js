@@ -596,6 +596,61 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res2.scopes).toContain('$XSAPPNAME.Admin');
         });
 
+        it('the token of an unlisted SAP user is accepted on later requests with the SAP-mapped roles', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: true, message: 'Authentication successful.', system: 'DS4 - Client 220'
+            });
+            service._fetchDetail = jest.fn().mockResolvedValue({ roles: [{ name: 'ZAPP_SALESMANAGER' }] });
+
+            const res = await service._handleLogin({ data: { username: 'JSMITH', password: 'valid-sap-password' } });
+            expect(res.authenticated).toBe(true);
+            expect(res.scopes).toEqual(['$XSAPPNAME.SalesManager']);
+
+            const user = require('../../../srv/auth/localTokenUtil').verifyToken(res.token);
+            expect(user).not.toBeNull();
+            expect(user.id).toBe('JSMITH');
+            expect(user.is('SalesManager')).toBe(true);
+            expect(user.is('Admin')).toBe(false);
+        });
+
+        it('khushal signing in with the SAP password has the same roles in the login answer and on later requests', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: true, message: 'Authentication successful.', system: 'DS4 - Client 220'
+            });
+            service._fetchDetail = jest.fn().mockResolvedValue({ roles: [{ name: 'SOME_OTHER_SAP_ROLE' }] });
+
+            const res = await service._handleLogin({ data: { username: 'khushal', password: 'valid-sap-password' } });
+            expect(res.authenticated).toBe(true);
+            expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
+
+            const user = require('../../../srv/auth/localTokenUtil').verifyToken(res.token);
+            expect(user.is('Viewer')).toBe(true);
+            expect(user.is('Admin')).toBe(false);
+        });
+
+        it('a user of a sign-in list still gets the roles of the list on every request', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.APP_USER_ROLES = JSON.stringify({ listed_user: ['WarehouseClerk'] });
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValueOnce({
+                authenticated: true, message: 'Authentication successful.', system: 'DS4 - Client 220'
+            });
+
+            const res = await service._handleLogin({ data: { username: 'LISTED_USER', password: 'valid-sap-password' } });
+            const util = require('../../../srv/auth/localTokenUtil');
+            expect(util.verifyToken(res.token).is('WarehouseClerk')).toBe(true);
+
+            process.env.APP_USER_ROLES = JSON.stringify({ listed_user: ['Viewer'] });
+            expect(util.verifyToken(res.token).is('WarehouseClerk')).toBe(false);
+            delete process.env.APP_USER_ROLES;
+            expect(util.verifyToken(res.token)).toBeNull();
+        });
+
         it('explicit entries in APP_USER_ROLES override SAP role mapping', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';

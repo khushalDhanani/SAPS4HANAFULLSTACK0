@@ -243,3 +243,96 @@ describe('Unit: localTokenUtil - signing secret length and mandatory claims', ()
         expect(util.verifyToken(sign({ alg: 'none', typ: 'JWT' }, claims()))).toBeNull();
     });
 });
+
+describe('Unit: localTokenUtil - roles mapped from SAP at sign-in live in the token', () => {
+    const cds = require('@sap/cds');
+    const util = require('../../../srv/auth/localTokenUtil');
+    const originalEnv = { ...process.env };
+    const SAP = { roleSource: util.ROLE_SOURCE_SAP };
+    let originalAuth;
+
+    beforeEach(() => {
+        originalAuth = cds.env.requires.auth;
+        cds.env.requires.auth = { kind: 'mocked', users: { khushal: { roles: ['Admin', 'Viewer'] } } };
+        process.env.NODE_ENV = 'development';
+        process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+        process.env.LOCAL_AUTH_SECRET = 'local-test-signing-secret-at-least-32-characters';
+        for (const key of ['APP_USER_ROLES', 'APP_USERS_FILE', 'APP_ALLOW_ANY_SAP_USER', 'APP_DEFAULT_ROLES', 'APP_ADMIN_USERS']) {
+            delete process.env[key];
+        }
+    });
+
+    afterEach(() => {
+        cds.env.requires.auth = originalAuth;
+        process.env = { ...originalEnv };
+    });
+
+    test('an unlisted SAP user keeps the mapped roles on later requests while APP_ALLOW_ANY_SAP_USER is on', () => {
+        process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+        const { token } = util.issueToken('JSMITH', ['SalesManager'], SAP);
+
+        const user = util.verifyToken(token);
+        expect(user.id).toBe('JSMITH');
+        expect(user.is('SalesManager')).toBe(true);
+        expect(user.is('Admin')).toBe(false);
+    });
+
+    test('turning APP_ALLOW_ANY_SAP_USER off refuses the token of an unlisted SAP user at once', () => {
+        process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+        const { token } = util.issueToken('JSMITH', ['Viewer'], SAP);
+        expect(util.verifyToken(token)).not.toBeNull();
+
+        process.env.APP_ALLOW_ANY_SAP_USER = 'false';
+        expect(util.verifyToken(token)).toBeNull();
+    });
+
+    test('a token without the claim is still refused for an unlisted user, whatever APP_ALLOW_ANY_SAP_USER says', () => {
+        process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+        const { token } = util.issueToken('JSMITH', ['Admin', 'Viewer']);
+        expect(util.verifyToken(token)).toBeNull();
+    });
+
+    test('a configured development user who signed in through SAP has the mapped roles, not the configured ones', () => {
+        const { token } = util.issueToken('khushal', ['Viewer'], SAP);
+        const user = util.verifyToken(token);
+        expect(user.is('Viewer')).toBe(true);
+        expect(user.is('Admin')).toBe(false);
+        expect(user.is('SapLogsReader')).toBe(false);
+    });
+
+    test('an entry added to APP_USER_ROLES after sign-in replaces the mapped roles at once', () => {
+        process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+        const { token } = util.issueToken('JSMITH', ['SalesManager'], SAP);
+
+        process.env.APP_USER_ROLES = '{"JSMITH":["WarehouseClerk"]}';
+        const user = util.verifyToken(token);
+        expect(user.is('WarehouseClerk')).toBe(true);
+        expect(user.is('SalesManager')).toBe(false);
+    });
+
+    test('Admin from SAP needs APP_ADMIN_USERS on every request, and takes its implied SapLogsReader with it', () => {
+        process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+        process.env.APP_ADMIN_USERS = 'madmin';
+        const { token } = util.issueToken('MADMIN', ['Admin', 'Viewer'], SAP);
+        expect(util.verifyToken(token).is('Admin')).toBe(true);
+        expect(util.verifyToken(token).is('SapLogsReader')).toBe(true);
+
+        delete process.env.APP_ADMIN_USERS;
+        const user = util.verifyToken(token);
+        expect(user.is('Admin')).toBe(false);
+        expect(user.is('SapLogsReader')).toBe(false);
+        expect(user.is('Viewer')).toBe(true);
+    });
+
+    test('unknown roles in the token are dropped, and a token left without roles gets APP_DEFAULT_ROLES', () => {
+        process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+        const mixed = util.verifyToken(util.issueToken('JSMITH', ['Viewer', 'Superuser'], SAP).token);
+        expect(mixed.is('Viewer')).toBe(true);
+        expect(mixed.is('Superuser')).toBe(false);
+
+        process.env.APP_DEFAULT_ROLES = 'SalesRepresentative';
+        const onlyAdmin = util.verifyToken(util.issueToken('JSMITH', ['Admin'], SAP).token);
+        expect(onlyAdmin.is('Admin')).toBe(false);
+        expect(onlyAdmin.is('SalesRepresentative')).toBe(true);
+    });
+});

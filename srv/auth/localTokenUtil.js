@@ -1,12 +1,16 @@
 const crypto = require('crypto');
 const cds = require('@sap/cds');
-const { resolveAppUser } = require('./appUsers');
+const { resolveAppUser, getExplicitAppUserRoles, isAllowAnySapUser, parseDefaultRoles, KNOWN_ROLES } = require('./appUsers');
+const { parseAdminUsers } = require('./sapRoleMapper');
 const { isIsolatedTestProfile } = require('./mockUserPasswords');
 
 const LOCAL_DEV_ISSUER = 'saps4hana-local-auth-service';
 const LOCAL_DEV_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
 // A short signing secret can be guessed offline from one captured token, and then any user can be forged.
 const MIN_SECRET_LENGTH = 32;
+// Token claim `role_source`. Set when SAP checked the password and the roles were mapped from the user's SAP
+// roles (or APP_DEFAULT_ROLES) at sign-in: such roles exist only in the token, not in a sign-in list.
+const ROLE_SOURCE_SAP = 'sap';
 
 /**
  * Performs a constant-time comparison of two strings to prevent timing attacks.
@@ -79,6 +83,7 @@ function base64UrlDecode(str) {
  * @param {string[]} [roles] - Application roles (e.g. ['PurchasingManager', 'Viewer'])
  * @param {Object} [options]
  * @param {number} [options.expiresInSeconds] - Token expiration in seconds
+ * @param {string} [options.roleSource] - 'sap' when the roles were mapped from SAP at sign-in (see currentRoles)
  * @returns {{ token: string, scopes: string[], expiresAt: number }}
  */
 function issueToken(username, roles = ['PurchasingManager', 'Viewer'], options = {}) {
@@ -120,6 +125,9 @@ function issueToken(username, roles = ['PurchasingManager', 'Viewer'], options =
         iat: now,
         exp: exp
     };
+    if (options.roleSource === ROLE_SOURCE_SAP) {
+        payload.role_source = ROLE_SOURCE_SAP;
+    }
 
     const headerB64 = base64UrlEncode(header);
     const payloadB64 = base64UrlEncode(payload);
@@ -135,6 +143,47 @@ function issueToken(username, roles = ['PurchasingManager', 'Viewer'], options =
         scopes: aScopes,
         expiresAt: exp
     };
+}
+
+/**
+ * The roles a verified token grants on this request, or null when its user may no longer sign in.
+ *
+ * A token without `role_source` belongs to a user of a sign-in list (srv/auth/appUsers.js). The list is read on
+ * every request: a user taken off it is refused at once, and a change of roles applies at once.
+ *
+ * A token with `role_source: 'sap'` belongs to a user whose password SAP checked and whose roles were mapped from
+ * SAP at sign-in (srv/auth/sapRoleMapper.js). No list holds those roles, so the signed token is their only record:
+ *   - an entry in APP_USER_ROLES / APP_USERS_FILE added since sign-in wins at once (it also wins at sign-in);
+ *   - a user in no list is accepted only while APP_ALLOW_ANY_SAP_USER is on, so turning it off ends the session;
+ *   - Admin needs APP_ADMIN_USERS on every request, exactly as at sign-in, and unknown roles are dropped.
+ * A change of roles or a lock in SAP itself applies at the next sign-in (the token lives 24 hours at most).
+ *
+ * @param {{user_name: string, role_source?: string}} payload - verified token payload
+ * @param {string[]} tokenRoles - roles carried by the token
+ * @returns {string[]|null}
+ */
+function currentRoles(payload, tokenRoles) {
+    const auth = cds.env?.requires?.auth;
+    const listed = resolveAppUser(payload.user_name, auth);
+
+    if (payload.role_source !== ROLE_SOURCE_SAP) {
+        return listed ? [...listed] : null;
+    }
+
+    const explicit = getExplicitAppUserRoles(payload.user_name, process.env);
+    if (explicit) return [...explicit];
+    if (!listed && !isAllowAnySapUser(process.env)) return null;
+
+    const adminAllowed = parseAdminUsers(process.env).has(payload.user_name.trim().toLowerCase());
+    // SapLogsReader is added to an Admin token when it is issued, so it goes with a refused Admin.
+    const refused = !adminAllowed && tokenRoles.includes('Admin') ? ['Admin', 'SapLogsReader'] : [];
+    const roles = [...new Set(tokenRoles)].filter((r) => KNOWN_ROLES.includes(r) && !refused.includes(r));
+    if (roles.length) return roles;
+    try {
+        return parseDefaultRoles(process.env);
+    } catch {
+        return ['Viewer']; // a malformed APP_DEFAULT_ROLES is reported at startup
+    }
 }
 
 /**
@@ -177,13 +226,11 @@ function verifyToken(token) {
     const aScopes = Array.isArray(payload.scope) ? payload.scope : [];
     let aRoles = aScopes.map(s => s.replace(/^\$XSAPPNAME\./, ''));
 
-    // The sign-in list (srv/auth/appUsers.js) is checked on every request, not only at login: a user taken off
-    // the list is refused at once instead of keeping access until the token expires, and a change of roles
-    // applies at once. An isolated test server (no SAP connectivity) keeps the roles in the token.
+    // Who may sign in is checked on every request, not only at login (see currentRoles). An isolated test server
+    // (no SAP connectivity) keeps the roles in the token.
     if (!isIsolatedTestProfile(process.env)) {
-        const listed = resolveAppUser(payload.user_name, cds.env?.requires?.auth);
-        if (!listed) return null;
-        aRoles = [...listed];
+        aRoles = currentRoles(payload, aRoles);
+        if (!aRoles) return null;
     }
     if (aRoles.includes('Admin') && !aRoles.includes('SapLogsReader')) {
         aRoles.push('SapLogsReader');
@@ -241,5 +288,6 @@ module.exports = {
     applyBearerToken,
     isDevTokenIssuerEnabled,
     MIN_SECRET_LENGTH,
+    ROLE_SOURCE_SAP,
     timingSafeEqual
 };
