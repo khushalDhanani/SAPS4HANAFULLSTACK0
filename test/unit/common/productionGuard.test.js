@@ -1,6 +1,64 @@
 'use strict';
 
-const { assertDevFlagsOff, assertS4ConnectionConfig, ProductionGuardError } = require('../../../srv/common/productionGuard');
+const {
+  assertDevFlagsOff, assertS4ConnectionConfig, assertLocalAuthSecret, ProductionGuardError,
+  EXAMPLE_ENV_FILES, EXAMPLE_SECRET_DIGESTS
+} = require('../../../srv/common/productionGuard');
+
+describe('Unit: productionGuard — assertLocalAuthSecret() (signing secret of the local token issuer)', () => {
+  const crypto = require('crypto');
+  const fs = require('fs');
+  const path = require('path');
+  const ROOT = path.resolve(__dirname, '../../..');
+  const GOOD = 'a-signing-secret-made-up-for-this-test-0123456789'; // not a real secret
+  const noFiles = { readFileSync: () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); } };
+  const files = (content) => ({ readFileSync: (file) => { if (file in content) return content[file]; throw new Error('ENOENT'); } });
+  /** LOCAL_AUTH_SECRET as written in a tracked example file; used only to compare, never printed. */
+  const exampleSecret = (file) => (/^LOCAL_AUTH_SECRET=(.*)$/m.exec(fs.readFileSync(path.join(ROOT, file), 'utf8')) || [])[1].trim();
+  const dev = (extra) => ({ NODE_ENV: 'development', ENABLE_DEV_TOKEN_ISSUER: 'true', ...extra });
+
+  test('accepts a secret of 32 bytes or more that is in no example file', () => {
+    expect(() => assertLocalAuthSecret(dev({ LOCAL_AUTH_SECRET: GOOD }))).not.toThrow();
+    expect(() => assertLocalAuthSecret(dev({ LOCAL_AUTH_SECRET: 'x'.repeat(32) }), { fsImpl: noFiles })).not.toThrow();
+  });
+
+  test.each(EXAMPLE_ENV_FILES)('refuses the LOCAL_AUTH_SECRET printed in %s, with the example files present', (file) => {
+    expect(() => assertLocalAuthSecret(dev({ LOCAL_AUTH_SECRET: exampleSecret(file) })))
+      .toThrow(/LOCAL_AUTH_SECRET is a value from \.env\.example/);
+  });
+
+  test.each(EXAMPLE_ENV_FILES)('refuses the LOCAL_AUTH_SECRET printed in %s inside an image without the example files', (file) => {
+    const secret = exampleSecret(file);
+    expect(EXAMPLE_SECRET_DIGESTS).toContain(crypto.createHash('sha256').update(secret).digest('hex'));
+    expect(() => assertLocalAuthSecret(dev({ LOCAL_AUTH_SECRET: `  ${secret}  ` }), { fsImpl: noFiles })).toThrow(ProductionGuardError);
+  });
+
+  test('refuses any other value of an example file, quoted or not, and never repeats the secret in the message', () => {
+    const other = 'another-sample-value-from-an-example-file-0001';
+    const fsImpl = files({ [path.join('/app', '.env.example')]: `# sample\nFOO=bar\nSOME_KEY="${other}"\n`, [path.join('/app', '.env.docker.example')]: 'A=1\n' });
+    let message = '';
+    try { assertLocalAuthSecret(dev({ LOCAL_AUTH_SECRET: other }), { rootDir: '/app', fsImpl }); } catch (e) { message = e.message; }
+    expect(message).toMatch(/is a value from/);
+    expect(message).not.toContain(other);
+    expect(() => assertLocalAuthSecret(dev({ LOCAL_AUTH_SECRET: GOOD }), { rootDir: '/app', fsImpl })).not.toThrow();
+  });
+
+  test('refuses a secret under 32 bytes, also when only ENABLE_DEV_TOKEN_ISSUER is set', () => {
+    expect(() => assertLocalAuthSecret(dev({ LOCAL_AUTH_SECRET: 'x'.repeat(31) }))).toThrow(/at least 32 bytes/);
+    expect(() => assertLocalAuthSecret(dev({}))).toThrow(/at least 32 bytes/);
+    expect(() => assertLocalAuthSecret({ NODE_ENV: 'staging', LOCAL_AUTH_SECRET: 'short' })).toThrow(/at least 32 bytes/);
+    expect(() => assertLocalAuthSecret({ LOCAL_AUTH_SECRET: 'short' })).toThrow(/at least 32 bytes/);
+  });
+
+  test('is not applied without a secret and issuer, under NODE_ENV=test, or in production', () => {
+    expect(() => assertLocalAuthSecret({ NODE_ENV: 'development' })).not.toThrow();
+    expect(() => assertLocalAuthSecret({ NODE_ENV: 'test', ENABLE_DEV_TOKEN_ISSUER: 'true', LOCAL_AUTH_SECRET: 'short' })).not.toThrow();
+    expect(() => assertLocalAuthSecret({ NODE_ENV: 'test', LOCAL_AUTH_SECRET: exampleSecret('.env.example') })).not.toThrow();
+    // production: assertDevFlagsOff refuses any LOCAL_AUTH_SECRET; this check adds nothing there
+    expect(() => assertLocalAuthSecret({ NODE_ENV: 'production' })).not.toThrow();
+    expect(() => assertDevFlagsOff({ NODE_ENV: 'production', LOCAL_AUTH_SECRET: GOOD })).toThrow(/LOCAL_AUTH_SECRET must not be set in production/);
+  });
+});
 
 describe('Unit: productionGuard — assertDevFlagsOff()', () => {
 

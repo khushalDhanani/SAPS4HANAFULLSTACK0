@@ -43,6 +43,17 @@ describe('server.js startup guards', () => {
         expect(() => loadServer('xsuaa')).toThrow('ENABLE_DEV_TOKEN_ISSUER=true is not allowed in production');
     });
 
+    it('refuses to load outside the test profile with the signing secret of the example files', () => {
+        const example = (/^LOCAL_AUTH_SECRET=(.*)$/m.exec(require('fs').readFileSync(require('path').resolve(__dirname, '../../.env.example'), 'utf8')) || [])[1].trim();
+        Object.assign(process.env, { NODE_ENV: 'development', ENABLE_DEV_TOKEN_ISSUER: 'true', LOCAL_AUTH_SECRET: example });
+        expect(() => loadServer('mocked')).toThrow('LOCAL_AUTH_SECRET is a value from .env.example');
+    });
+
+    it('refuses to load outside the test profile with a signing secret under 32 bytes', () => {
+        Object.assign(process.env, { NODE_ENV: 'development', ENABLE_DEV_TOKEN_ISSUER: 'true', LOCAL_AUTH_SECRET: 'x'.repeat(31) });
+        expect(() => loadServer('mocked')).toThrow('LOCAL_AUTH_SECRET must be at least 32 bytes');
+    });
+
     it('refuses to load in production without the Destination service binding', () => {
         process.env.NODE_ENV = 'production';
         expect(() => loadServer('xsuaa')).toThrow('missing: Destination service binding (VCAP_SERVICES.destination)');

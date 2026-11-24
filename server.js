@@ -16,6 +16,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
 
 require('./srv/common/wmMismatchOverrideGuard').assertMismatchOverrideAllowed();
 require('./srv/common/productionGuard').assertDevFlagsOff(process.env, cds.env.requires && cds.env.requires.auth);
+require('./srv/common/productionGuard').assertLocalAuthSecret(process.env);
 require('./srv/common/productionGuard').assertS4ConnectionConfig(process.env);
 
 

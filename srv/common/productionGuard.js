@@ -13,6 +13,19 @@
  *   auth.kind                – mocked/dummy/basic authentication (dev profile) must not reach production
  */
 
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
+const MIN_LOCAL_AUTH_SECRET_BYTES = 32;
+// Files in Git whose values everybody with the repository knows.
+const EXAMPLE_ENV_FILES = ['.env.example', '.env.docker.example'];
+// SHA-256 of the LOCAL_AUTH_SECRET values in those files, for images that do not contain the files
+// (Dockerfile copies neither). test/unit/common/productionGuard.test.js fails when a file value is missing here.
+const EXAMPLE_SECRET_DIGESTS = Object.freeze([
+  'e3be996c5295cae7d937e6d03dd478f230b7db4ef7d8d06058f4b24f11790b8b'
+]);
+
 class ProductionGuardError extends Error {
   constructor(message) {
     super(message);
@@ -103,4 +116,63 @@ function assertS4ConnectionConfig(env = process.env) {
   }
 }
 
-module.exports = { assertDevFlagsOff, assertS4ConnectionConfig, ProductionGuardError };
+/** Every non-empty value assigned in the example env files that exist under rootDir. */
+function exampleEnvValues(rootDir, fsImpl) {
+  const values = new Set();
+  for (const file of EXAMPLE_ENV_FILES) {
+    let text;
+    try { text = fsImpl.readFileSync(path.join(rootDir, file), 'utf8'); } catch (_) { continue; }
+    for (const line of text.split(/\r?\n/)) {
+      const match = /^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=(.*)$/.exec(line);
+      const value = match ? match[1].trim().replace(/^(['"])(.*)\1$/, '$2').trim() : '';
+      if (value) values.add(value);
+    }
+  }
+  return values;
+}
+
+/**
+ * Asserts at startup that the signing secret of the local token issuer (srv/auth/localTokenUtil.js) is not one
+ * that others know or can guess: whoever has it can sign a token for any user, without a password.
+ *
+ * Refused: a LOCAL_AUTH_SECRET under 32 bytes, and one equal to a value in .env.example or .env.docker.example.
+ * Checked when the secret is set or ENABLE_DEV_TOKEN_ISSUER=true. Not checked under NODE_ENV=test (tests use
+ * fixed secrets) or in production, where assertDevFlagsOff() already refuses any LOCAL_AUTH_SECRET.
+ * The message never contains the secret.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {{rootDir?: string, fsImpl?: object}} [options] - injectable for tests
+ * @throws {ProductionGuardError}
+ */
+function assertLocalAuthSecret(env = process.env, { rootDir = path.resolve(__dirname, '../..'), fsImpl = fs } = {}) {
+  const nodeEnv = String(env.NODE_ENV || '').trim().toLowerCase();
+  if (nodeEnv === 'test' || nodeEnv === 'production') return;
+
+  const secret = String(env.LOCAL_AUTH_SECRET || '').trim();
+  const issuerOn = String(env.ENABLE_DEV_TOKEN_ISSUER || '').trim().toLowerCase() === 'true';
+  if (!secret && !issuerOn) return;
+
+  const howTo = 'Set LOCAL_AUTH_SECRET to a new random value, for example the output of: ' +
+    'node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"';
+  if (Buffer.byteLength(secret, 'utf8') < MIN_LOCAL_AUTH_SECRET_BYTES) {
+    throw new ProductionGuardError(
+      `Startup check failed: LOCAL_AUTH_SECRET must be at least ${MIN_LOCAL_AUTH_SECRET_BYTES} bytes. ${howTo}`
+    );
+  }
+  const digest = crypto.createHash('sha256').update(secret).digest('hex');
+  if (EXAMPLE_SECRET_DIGESTS.includes(digest) || exampleEnvValues(rootDir, fsImpl).has(secret)) {
+    throw new ProductionGuardError(
+      `Startup check failed: LOCAL_AUTH_SECRET is a value from ${EXAMPLE_ENV_FILES.join(' / ')}. ` +
+      `Those files are in Git, so anyone with the repository could sign in as any user. ${howTo}`
+    );
+  }
+}
+
+module.exports = {
+  assertDevFlagsOff,
+  assertS4ConnectionConfig,
+  assertLocalAuthSecret,
+  ProductionGuardError,
+  EXAMPLE_ENV_FILES,
+  EXAMPLE_SECRET_DIGESTS
+};

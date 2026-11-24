@@ -5,6 +5,9 @@ const { parseAdminUsers } = require('./sapRoleMapper');
 const { isIsolatedTestProfile } = require('./mockUserPasswords');
 
 const LOCAL_DEV_ISSUER = 'saps4hana-local-auth-service';
+// Tokens are for this application only (`aud`), and one that claims to be issued or valid in the future is refused.
+const LOCAL_DEV_AUDIENCE = 'saps4hana-fiori-app';
+const CLOCK_SKEW_SECONDS = 60;
 const LOCAL_DEV_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
 // A short signing secret can be guessed offline from one captured token, and then any user can be forged.
 const MIN_SECRET_LENGTH = 32;
@@ -122,7 +125,9 @@ function issueToken(username, roles = ['PurchasingManager', 'Viewer'], options =
         email: `${sUser.toLowerCase()}@example.corp`,
         scope: aScopes,
         iss: LOCAL_DEV_ISSUER,
+        aud: LOCAL_DEV_AUDIENCE,
         iat: now,
+        nbf: now,
         exp: exp
     };
     if (options.roleSource === ROLE_SOURCE_SAP) {
@@ -217,10 +222,15 @@ function verifyToken(token) {
     const payload = base64UrlDecode(payloadB64);
     if (!payload || typeof payload.user_name !== 'string' || !payload.user_name) return null;
     if (payload.iss !== LOCAL_DEV_ISSUER) return null;
+    const audience = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (!audience.includes(LOCAL_DEV_AUDIENCE)) return null;
 
     // A token without an expiry time would be valid for ever: it is refused.
     const now = Math.floor(Date.now() / 1000);
     if (typeof payload.exp !== 'number' || now > payload.exp) return null;
+    // Issued-at and not-before are mandatory and may not lie in the future (one minute of clock difference allowed).
+    if (typeof payload.iat !== 'number' || payload.iat > now + CLOCK_SKEW_SECONDS) return null;
+    if (typeof payload.nbf !== 'number' || payload.nbf > now + CLOCK_SKEW_SECONDS) return null;
 
     // Map XSUAA scopes ($XSAPPNAME.<Role>) to CAP roles (<Role>)
     const aScopes = Array.isArray(payload.scope) ? payload.scope : [];
@@ -288,6 +298,7 @@ module.exports = {
     applyBearerToken,
     isDevTokenIssuerEnabled,
     MIN_SECRET_LENGTH,
+    LOCAL_DEV_AUDIENCE,
     ROLE_SOURCE_SAP,
     timingSafeEqual
 };

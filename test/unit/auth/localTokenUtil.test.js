@@ -214,10 +214,12 @@ describe('Unit: localTokenUtil - signing secret length and mandatory claims', ()
         return `${body}.${crypto.createHmac('sha256', SECRET).update(body).digest('base64url')}`;
     };
     const HS256 = { alg: 'HS256', typ: 'JWT' };
+    const now = () => Math.floor(Date.now() / 1000);
     const claims = (extra = {}) => ({
         user_name: 'khushal', scope: ['$XSAPPNAME.Viewer'], iss: 'saps4hana-local-auth-service',
-        exp: Math.floor(Date.now() / 1000) + 600, ...extra
+        aud: 'saps4hana-fiori-app', iat: now(), nbf: now(), exp: now() + 600, ...extra
     });
+    const without = (key) => { const all = claims(); delete all[key]; return all; };
 
     beforeEach(() => {
         process.env.NODE_ENV = 'test';
@@ -241,6 +243,30 @@ describe('Unit: localTokenUtil - signing secret length and mandatory claims', ()
         expect(util.verifyToken(sign(HS256, claims({ exp: 'never' })))).toBeNull();
         expect(util.verifyToken(sign(HS256, claims({ iss: 'someone-else' })))).toBeNull();
         expect(util.verifyToken(sign({ alg: 'none', typ: 'JWT' }, claims()))).toBeNull();
+    });
+
+    test('an issued token names this application as audience, and carries iat and nbf', () => {
+        const payload = JSON.parse(Buffer.from(util.issueToken('khushal').token.split('.')[1], 'base64url').toString());
+        expect(payload.aud).toBe(util.LOCAL_DEV_AUDIENCE);
+        expect(payload.iat).toBeLessThanOrEqual(now());
+        expect(payload.nbf).toBe(payload.iat);
+    });
+
+    test('a token for another audience, or without one, is refused', () => {
+        expect(util.verifyToken(sign(HS256, claims({ aud: ['other-app', 'saps4hana-fiori-app'] }))).id).toBe('khushal');
+        expect(util.verifyToken(sign(HS256, claims({ aud: 'some-other-app' })))).toBeNull();
+        expect(util.verifyToken(sign(HS256, claims({ aud: ['some-other-app'] })))).toBeNull();
+        expect(util.verifyToken(sign(HS256, without('aud')))).toBeNull();
+    });
+
+    test('a token without iat or nbf, or issued or valid only in the future, is refused', () => {
+        expect(util.verifyToken(sign(HS256, without('iat')))).toBeNull();
+        expect(util.verifyToken(sign(HS256, without('nbf')))).toBeNull();
+        expect(util.verifyToken(sign(HS256, claims({ iat: 'now' })))).toBeNull();
+        expect(util.verifyToken(sign(HS256, claims({ iat: now() + 3600 })))).toBeNull();
+        expect(util.verifyToken(sign(HS256, claims({ nbf: now() + 3600 })))).toBeNull();
+        // one minute of clock difference between issuer and verifier is tolerated
+        expect(util.verifyToken(sign(HS256, claims({ iat: now() + 30, nbf: now() + 30 }))).id).toBe('khushal');
     });
 });
 
