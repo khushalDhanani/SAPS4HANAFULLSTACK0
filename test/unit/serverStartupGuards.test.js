@@ -54,6 +54,17 @@ describe('server.js startup guards', () => {
         expect(() => loadServer('mocked')).toThrow('LOCAL_AUTH_SECRET must be at least 32 bytes');
     });
 
+    it('does not add the Basic sign-in limiter outside a development server', () => {
+        process.env.NODE_ENV = 'test';
+        jest.isolateModules(() => {
+            const cds = require('@sap/cds');
+            require('../../server');
+            const names = cds.middlewares.before.map((m) => m.name);
+            expect(names).toContain('applyBearerToken');
+            expect(names).not.toContain('basicAuthThrottle');
+        });
+    });
+
     it('refuses to load in production without the Destination service binding', () => {
         process.env.NODE_ENV = 'production';
         expect(() => loadServer('xsuaa')).toThrow('missing: Destination service binding (VCAP_SERVICES.destination)');

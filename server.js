@@ -194,6 +194,12 @@ cds.on('serving', (srv) => {
 // Full specification: docs/architecture/authentication-middleware-ordering.md
 cds.middlewares.add(localTokenUtil.applyBearerToken, { before: 'auth' });
 
+// HTTP Basic with LOCAL_DEV_PASSWORD exists on a development server only (srv/auth/mockUserPasswords.js). There it
+// gets the failed sign-in limit of the login action, ahead of CAP's own Basic handler, which has none.
+if (process.env.NODE_ENV === 'development') {
+    cds.middlewares.add(require('./srv/auth/basicAuthThrottle'), { before: 'auth' });
+}
+
 // Delegate to default CAP server bootstrap
 if (require.main === module) {
     cds.server();

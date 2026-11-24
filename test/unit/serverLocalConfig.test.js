@@ -36,6 +36,10 @@ describe('Unit: server.js local S/4 connection setup', () => {
         process.env = { ...originalEnv };
     });
 
+    it('puts the Basic sign-in limiter ahead of CAP authentication on a development server', () => {
+        expect(cds.middlewares.before).toContain(require('../../srv/auth/basicAuthThrottle'));
+    });
+
     it.each(SERVICES)('gives %s its own URL and the shared logon', (service) => {
         const required = cds.env.requires[service];
 

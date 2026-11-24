@@ -7,8 +7,10 @@ const crypto = require('crypto');
  * profile, anyone who reaches the port could then sign in with Basic authentication as a development user that
  * holds every role.
  *
- * This gives each mocked user without a password one: LOCAL_DEV_PASSWORD when it is set, otherwise a random value
- * nobody knows, so Basic authentication is refused. Sign-in through the login action (srv/auth-service.js) checks
+ * This gives each mocked user without a password one: LOCAL_DEV_PASSWORD when it is set and the server is a
+ * development server (NODE_ENV === 'development'), otherwise a random value nobody knows, so Basic authentication
+ * is refused. On a development server Basic authentication is rate-limited like the login action
+ * (srv/auth/basicAuthThrottle.js). Sign-in through the login action (srv/auth-service.js) checks
  * its own credentials and is not affected. A '*' wildcard user is switched off.
  *
  * A test-profile server keeps passwordless users only while it cannot reach SAP: no S4_DESTINATION_URL, no
@@ -32,7 +34,9 @@ function protectMockUsers(env = process.env, auth) {
 
   const configured = String(env.LOCAL_DEV_PASSWORD || '').trim();
   // Basic authentication splits "user:password" at every colon, so a password with one could never match.
-  const usable = configured !== '' && !configured.includes(':');
+  // One shared password for users who hold every role is a development convenience only.
+  const development = env.NODE_ENV === 'development';
+  const usable = configured !== '' && !configured.includes(':') && development;
   const password = usable ? configured : crypto.randomBytes(32).toString('hex');
 
   let users = 0;
@@ -49,7 +53,11 @@ function protectMockUsers(env = process.env, auth) {
   }
 
   const result = { applied: true, source: usable ? 'LOCAL_DEV_PASSWORD' : 'random', users };
-  if (!usable) result.reason = configured ? 'LOCAL_DEV_PASSWORD contains a colon' : 'LOCAL_DEV_PASSWORD is not set';
+  if (!usable) {
+    if (!configured) result.reason = 'LOCAL_DEV_PASSWORD is not set';
+    else if (configured.includes(':')) result.reason = 'LOCAL_DEV_PASSWORD contains a colon';
+    else result.reason = 'LOCAL_DEV_PASSWORD is used for Basic authentication only when NODE_ENV=development';
+  }
   return result;
 }
 

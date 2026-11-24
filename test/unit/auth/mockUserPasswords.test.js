@@ -48,7 +48,7 @@ describe('Mocked users get a password outside the test profile', () => {
 
   test('covers users added at startup and `true` entries, keeps an existing password, and switches the wildcard off', () => {
     const auth = devAuth({ S4USER: { roles: ROLES }, s4user: { roles: ROLES }, flag: true, own: { password: 'kept' }, text: 'kept-too', '*': true });
-    const result = protectMockUsers({ LOCAL_DEV_PASSWORD: 'local-pass' }, auth);
+    const result = protectMockUsers({ NODE_ENV: 'development', LOCAL_DEV_PASSWORD: 'local-pass' }, auth);
 
     expect(result.users).toBe(4);
     expect(auth.users.S4USER.password).toBe('local-pass');
@@ -59,6 +59,27 @@ describe('Mocked users get a password outside the test profile', () => {
     expect(auth.users.alice).toBe(false);
     expect(auth.users['*']).toBe(false);
     expect(mockedUsers(auth).verify('nobody', '').failed).toMatch(/not found/);
+  });
+
+  test.each([
+    ['unset', {}],
+    ['empty', { NODE_ENV: '' }],
+    ['qa', { NODE_ENV: 'qa' }],
+    ['staging', { NODE_ENV: 'staging' }],
+    ['production', { NODE_ENV: 'production' }],
+    ['Development (not the exact value)', { NODE_ENV: 'Development' }],
+    ['test with SAP connectivity', { NODE_ENV: 'test', S4_DESTINATION_URL: 'https://sap.example.test:44300' }],
+    ['test in the Docker cap-local role', { NODE_ENV: 'test', APP_ROLE: 'cap-local' }]
+  ])('outside NODE_ENV=development (%s) LOCAL_DEV_PASSWORD is not a Basic password', (_name, env) => {
+    const auth = devAuth();
+    const result = protectMockUsers({ ...env, LOCAL_DEV_PASSWORD: 'local-pass' }, auth);
+
+    expect(result).toEqual({
+      applied: true, source: 'random', users: 1,
+      reason: 'LOCAL_DEV_PASSWORD is used for Basic authentication only when NODE_ENV=development'
+    });
+    const cap = mockedUsers(auth);
+    for (const guess of ['local-pass', '', 'khushal']) expect(cap.verify('khushal', guess).failed).toMatch(/Wrong password/);
   });
 
   test('applies when NODE_ENV is unset or anything other than test', () => {
