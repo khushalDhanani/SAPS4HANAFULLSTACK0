@@ -21,6 +21,25 @@ describe('Release Automation: Secret Scanner Unit Tests', () => {
     expect(res.ok).toBe(true);
   });
 
+  it('requires the generated sign-in list config/app-users.json to be ignored', () => {
+    const fs = require('fs');
+    const realRead = fs.readFileSync;
+    const ignored = realRead(require('path').resolve(__dirname, '../../../.gitignore'), 'utf8');
+    expect(ignored.split(/\r?\n/)).toContain('config/app-users.json');
+
+    // A .gitignore without the rule fails the scan.
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...rest) => (
+      String(file).endsWith('.gitignore') ? ignored.split('config/app-users.json').join('') : realRead(file, ...rest)
+    ));
+    try {
+      expect(verifyGitignore(() => '')).toEqual({
+        ok: false, message: 'Missing required secret patterns in .gitignore: config/app-users.json'
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('accepts only the explicitly allowed environment templates', () => {
     expect(verifyGitignore(() => '.env.example\n.env.docker.local.example\n.env.docker.example\n')).toEqual({ ok: true });
   });

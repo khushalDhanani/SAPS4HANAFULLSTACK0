@@ -103,7 +103,8 @@ function verifyGitignore(exec = execSync) {
   }
 
   const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
-  const requiredPatterns = ['.env', '.env.*', '.env.local'];
+  // config/app-users.json is the generated sign-in list (tools/import-users.js): real user names and their roles.
+  const requiredPatterns = ['.env', '.env.*', '.env.local', 'config/app-users.json'];
   const missing = requiredPatterns.filter((pattern) => !gitignoreContent.includes(pattern));
 
   if (missing.length > 0) {

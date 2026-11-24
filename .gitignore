@@ -18,6 +18,8 @@ yarn-error.log*
 default-env.json
 default-services.json
 secrets/*
+# Generated sign-in list (tools/import-users.js --output config/app-users.json): real user names and roles
+config/app-users.json
 !secrets/README.md
 !secrets/.gitkeep
 certs/*
