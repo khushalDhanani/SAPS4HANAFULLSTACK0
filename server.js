@@ -40,8 +40,9 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // CAP accepts any password for a mocked user without one. Outside the test profile every mocked user gets
-// LOCAL_DEV_PASSWORD, or a random password when that is not set. The SAP connection user (S4_USERNAME) is not an
-// application user: it is listed in APP_USER_ROLES like anyone else if it has to sign in.
+// LOCAL_DEV_PASSWORD, or a random password when that is not set. The SAP connection user (S4_USERNAME) is never an
+// application user: the login action refuses its name and its password (S4_PASSWORD) in every branch, also when
+// the name is in a sign-in list or APP_ALLOW_ANY_SAP_USER is on (srv/auth-service.js).
 {
     const mockUsers = require('./srv/auth/mockUserPasswords').protectMockUsers(process.env, cds.env.requires && cds.env.requires.auth);
     if (mockUsers.applied && mockUsers.source === 'random') {

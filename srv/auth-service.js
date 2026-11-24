@@ -126,6 +126,15 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       };
     }
 
+    // The SAP connection user (S4_USERNAME / S4_PASSWORD) is the technical logon the app itself uses. It is never an
+    // application user: its name and its password are refused here, ahead of every branch and before SAP is asked.
+    const sConnUser = (process.env.S4_USERNAME || "").trim().toLowerCase();
+    const sConnPass = (process.env.S4_PASSWORD || "").trim();
+    if ((sConnUser && sUserLower === sConnUser) || (sConnPass && localTokenUtil.timingSafeEqual(sPass, sConnPass))) {
+      LOG.warn(`login refused for ${sUserLower}: the name or the password of the SAP connection user was used`);
+      return failed("Invalid username or password.");
+    }
+
     let authResult;
     let devRoles;
     // Set when the roles were mapped from SAP at sign-in and are in no sign-in list: the token then records
@@ -171,7 +180,7 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
           system: s4Config.getSystemLabel()
         };
       } else {
-        // SAP checks the password. The connection password (S4_PASSWORD) is never a login password.
+        // SAP checks the password. The connection password (S4_PASSWORD) was refused above.
         authResult = await authAdapter.validateCredentials(username, password);
         if (authResult.authenticated) {
           // Explicit entries in APP_USER_ROLES / APP_USERS_FILE still override.

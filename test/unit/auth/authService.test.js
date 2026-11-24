@@ -79,11 +79,11 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
 
     describe('login (Custom Login Restrictions)', () => {
         it.each([
-            ['khushal', 'local-password', true],
-            ['khushal', 'wrong-password', false],
-            ['another-user', 'local-password', false],
-            ['khushal', 'sap-password', false]
-        ])('isolated local login for %s authenticates=%s without SAP fallback', async (username, password, authenticated) => {
+            ['khushal', 'local-password', true, ''],
+            ['khushal', 'wrong-password', false, 'Invalid local credentials'],
+            ['another-user', 'local-password', false, 'Invalid local credentials'],
+            ['khushal', 'sap-password', false, 'Invalid username or password.']
+        ])('isolated local login for %s with %s authenticates=%s without SAP fallback', async (username, password, authenticated, message) => {
             process.env.APP_ROLE = 'cap-local';
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'local-test-signing-secret-at-least-32-characters';
@@ -96,7 +96,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             if (authenticated) expect(result.token).toEqual(expect.any(String));
             else {
                 expect(result.token).toBeUndefined();
-                expect(result.message).toContain('Invalid local credentials');
+                expect(result.message).toContain(message);
             }
         });
 
@@ -271,36 +271,73 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
         it('never accepts the SAP connection password (S4_PASSWORD) as a login password', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
-            process.env.S4_USERNAME = 'khushal';
-            process.env.S4_PASSWORD = 'RealS4Password!@#';
+            process.env.S4_USERNAME = 'SAPCONN';
+            process.env.S4_PASSWORD = 'made-up-connection-password';
             process.env.LOCAL_DEV_PASSWORD = 'local-password';
             process.env.S4_CLIENT = '220';
-            const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({
-                authenticated: false, statusCode: 401, message: 'Invalid username or password.'
-            });
+            // SAP would accept it: the refusal must come from the login action itself.
+            const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: true });
 
-            // The connection password is not compared locally: SAP is asked, and here SAP refuses.
-            const res = await service._handleLogin({ data: { username: 'KHUSHAL', password: 'RealS4Password!@#' } });
+            // The connection password is refused for every user, and SAP is not asked.
+            const res = await service._handleLogin({ data: { username: 'KHUSHAL', password: 'made-up-connection-password' } });
             expect(res.authenticated).toBe(false);
             expect(res.token).toBeUndefined();
-            expect(validate).toHaveBeenCalledWith('KHUSHAL', 'RealS4Password!@#');
+            expect(res.message).toBe('Invalid username or password.');
+            expect(validate).not.toHaveBeenCalled();
 
             const local = await service._handleLogin({ data: { username: 'KHUSHAL', password: 'local-password' } });
             expect(local.authenticated).toBe(true);
             expect(local.system).toBe('DEV - Client 220');
         });
 
-        it('the SAP connection user (S4_USERNAME) is not an application user unless it is listed', async () => {
+        it.each([
+            ['in no sign-in list', {}],
+            ['listed in APP_USER_ROLES', { APP_USER_ROLES: '{"custom_dev_user":["Viewer"]}' }],
+            ['with APP_ALLOW_ANY_SAP_USER on', { APP_ALLOW_ANY_SAP_USER: 'true' }],
+            ['under cap-local with the local password', { APP_ROLE: 'cap-local', APP_USER_ROLES: '{"custom_dev_user":["Viewer"]}', LOCAL_DEV_PASSWORD: 'made-up-connection-password' }]
+        ])('the SAP connection user (S4_USERNAME) can never sign in: %s', async (_case, env) => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
             process.env.S4_USERNAME = 'custom_dev_user';
-            process.env.S4_PASSWORD = 'devPassword123';
+            process.env.S4_PASSWORD = 'made-up-connection-password';
+            Object.assign(process.env, env);
+            // SAP would accept its own connection user: the refusal must come from the login action itself.
             const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: true });
 
-            const res = await service._handleLogin({ data: { username: 'CUSTOM_DEV_USER', password: 'devPassword123' } });
-
-            expect(res.authenticated).toBe(false);
+            for (const [username, password] of [
+                ['CUSTOM_DEV_USER', 'made-up-connection-password'],
+                ['custom_dev_user', 'made-up-connection-password'],
+                ['Custom_Dev_User', 'any-other-password']
+            ]) {
+                loginThrottle.reset();
+                const res = await service._handleLogin({ data: { username, password } });
+                expect(res.authenticated).toBe(false);
+                expect(res.token).toBeUndefined();
+                expect(res.message).toBe('Invalid username or password.');
+            }
             expect(validate).not.toHaveBeenCalled();
+        });
+
+        it('refuses the connection password for any other user in every branch, and counts the attempt', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890-padded-to-32-characters';
+            process.env.S4_USERNAME = 'SAPCONN';
+            process.env.S4_PASSWORD = 'made-up-connection-password';
+            const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: true });
+            const attempt = (username) => service._handleLogin({ data: { username, password: ' made-up-connection-password ' } });
+
+            process.env.APP_USER_ROLES = '{"LISTED_USER":["Viewer"]}';
+            expect((await attempt('LISTED_USER')).authenticated).toBe(false);          // listed user, SAP branch
+            process.env.APP_ALLOW_ANY_SAP_USER = 'true';
+            expect((await attempt('UNLISTED_USER')).authenticated).toBe(false);        // unlisted user, SAP branch
+            process.env.APP_ROLE = 'cap-local';
+            process.env.LOCAL_DEV_PASSWORD = 'made-up-connection-password';
+            expect((await attempt('LISTED_USER')).authenticated).toBe(false);          // isolated local branch
+            expect(validate).not.toHaveBeenCalled();
+
+            delete process.env.APP_ROLE;
+            await attempt('LISTED_USER');
+            expect(loginThrottle.check('LISTED_USER', '').allowed).toBe(false);         // three refused attempts
         });
 
         it('stops asking SAP after three wrong passwords for a user, and a success clears the count', async () => {
