@@ -17,6 +17,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `main`.
+- **Technical User SAPAETHER Alignment & Container Recreation — PASS (2026-11-24 12:40 IST):** Technical user `SAPAETHER` configured in `.env` for `S4_USERNAME` and verified via READ-ONLY SAP Gateway catalog query (HTTP 200 OK). Recreated standalone Docker container (`docker compose -f docker-compose.yml --profile tls up -d`); confirmed `S4_USERNAME=SAPAETHER` loaded in container and `loginThrottle` in-memory failure counts reset. User `KHUSHAL` unblocked for personal login with `APP_ADMIN_USERS=KHUSHAL`. Server healthy (`{"status":"UP"}` on `https://localhost/health`).
 - **Automatic roles, no user list — PASS locally, not deployed (2026-11-24 10:35 IST):** After SAP accepts a user's own password the roles are: Admin only for users named in `APP_ADMIN_USERS`; an optional override entry (`APP_USER_ROLES` / `APP_USERS_FILE`); otherwise the user's `ZAPP_<Role>` SAP roles; otherwise `APP_DEFAULT_ROLES`. An SAP role or `role-map.json` entry never grants Admin, and an Admin entry in an override grants nothing. The SAP answer to the sign-in check (401 / 403 / connection error) is logged on the server. Env examples carry no sample users and set `APP_ALLOW_ANY_SAP_USER=true`. Uncommitted on `main`. In the current container RFC is not available, so step 3 cannot run and every user without an override gets the default roles. See the Changes Log entry and `docs/architecture/sign-in-and-roles.md`.
 - **Confirmed sign-in findings N1–N7 and item 14 — PASS locally, not deployed (2026-11-24 09:56 IST):** Seven commits on branch `fix/login-confirmed-findings` (`ff3ededb`..`1e130f38`), not merged, not pushed. The server refuses to start outside `NODE_ENV=test` with an example or short `LOCAL_AUTH_SECRET`; local tokens check `aud`, `iat`, `nbf`; the SAP connection user and its password are refused at sign-in; `LOCAL_DEV_PASSWORD` works only on a development server or `cap-local` and never for Admin; Basic with it only under `NODE_ENV=development`, rate-limited; `config/app-users.json` ignored; `config/role-map.json` shipped empty. **Action needed before the next start:** the local `.env` still holds the example `LOCAL_AUTH_SECRET` (server refuses to start), and its `S4_USERNAME` is `khushal`, who therefore can no longer sign in. See the Changes Log entry.
 - **Sign-in review, high findings 4, 6, 7 — PASS locally, not deployed (2026-11-24 09:29 IST):** HTTP 403 from the SAP sign-in check is no longer reported as a wrong password (still refused). A one-time warning is logged when sign-in requests come through a reverse proxy while `TRUST_PROXY_HOPS` is not set. `APP_USERS_FILE` CSV and `tools/import-users.js` accept comment lines before the header (`config/users.csv.example` now loads as shipped), and a users file that breaks after startup is logged instead of silently allowing nobody. Finding 5 (per-user lockout) deliberately not changed. Uncommitted. See the Changes Log entry.
@@ -414,6 +415,20 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-24 12:40 IST — Technical User SAPAETHER Alignment & Container Recreation — PASS
+
+- **REQUEST:** Verify newly created SAP technical user and align environment so user `KHUSHAL` can sign in.
+- **INSPECT:** Confirmed `S4_USERNAME=SAPAETHER` updated in `.env`. Running container `saps4hana-backend` was still holding prior `S4_USERNAME=KHUSHAL`.
+- **CHANGED:** Recreated Docker containers using `docker compose -f docker-compose.yml --profile tls up -d`. Verified container environment has `S4_USERNAME=SAPAETHER`.
+- **VALIDATION:**
+  - READ-ONLY credential verification: `authAdapter.validateCredentials('SAPAETHER', ...)` against SAP Gateway Catalog Service returned HTTP 200 (`authenticated: true`, `system: 'S4HANA_DEV - Client 220'`).
+  - Container health check: `https://localhost/health` returned HTTP 200 `{"status":"UP"}`.
+  - Container startup logs: previous startup warning regarding `S4_USERNAME` in `APP_ADMIN_USERS` cleared; throttle lock counter reset.
+  - Secret scan / credentials: no passwords printed, stored, or logged (`node tools/scan-secrets.js` 0 secrets).
+- **NOT VERIFIED:** Interactive browser login as `KHUSHAL` (user will sign in).
+- **NEXT:** User signs in on the login UI as `KHUSHAL`.
+- **FINAL STATUS:** PASS
 
 ### 2026-11-24 10:35 IST — Automatic roles: no user list for ordinary users, Admin only through `APP_ADMIN_USERS` — PASS locally, not deployed
 
