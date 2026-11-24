@@ -571,8 +571,10 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
                 system: 'DS4 - Client 220'
             });
 
+            // The shipped config/role-map.json is empty; a site enters its own SAP role names there.
+            jest.spyOn(require('../../../srv/auth/sapRoleMapper'), 'loadRoleMap').mockReturnValue({ YS_SALES_LEAD: ['SalesManager'] });
             service._fetchDetail = jest.fn().mockResolvedValue({
-                roles: [{ name: 'Z_APP_SALES_MGR' }]
+                roles: [{ name: 'YS_SALES_LEAD' }]
             });
 
             const res = await service._handleLogin({
@@ -754,7 +756,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             });
 
             service._fetchDetail = jest.fn().mockResolvedValue({
-                roles: [{ name: 'Z_APP_SALES_MGR' }] // would map to SalesManager
+                roles: [{ name: 'ZAPP_SALESMANAGER' }] // would map to SalesManager
             });
 
             const res = await service._handleLogin({

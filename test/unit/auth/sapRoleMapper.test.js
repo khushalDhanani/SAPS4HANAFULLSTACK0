@@ -74,6 +74,17 @@ describe('Unit: sapRoleMapper (Prefix-based SAP PFCG role mapping + optional rol
       expect(loadRoleMap('/fake/empty.json', makeFs('{}'))).toBeNull();
     });
 
+    it('the shipped config/role-map.json is empty: no SAP role name is mapped until a site enters its own', () => {
+      const shipped = require('fs').readFileSync(require('path').resolve(__dirname, '../../../config/role-map.json'), 'utf8');
+      expect(JSON.parse(shipped)).toEqual({});
+      expect(loadRoleMap()).toBeNull();
+      for (const name of ['Z_APP_SALES_MGR', 'Z_APP_WH_CLERK', 'Z_APP_PURCHASING']) {
+        expect(mapRoles('JSMITH', [name], loadRoleMap(), {})).toBeNull();
+      }
+      // the prefix convention needs no file
+      expect(mapRoles('JSMITH', ['ZAPP_SALESMANAGER'], loadRoleMap(), {})).toEqual(['SalesManager']);
+    });
+
     it('parses valid role-map JSON when file exists', () => {
       const fsImpl = makeFs(JSON.stringify(sampleMap));
       expect(loadRoleMap('/fake/role-map.json', fsImpl)).toEqual(sampleMap);
