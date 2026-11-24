@@ -26,6 +26,12 @@ services:
       - EWM_WAREHOUSE_NUMBER=${EWM_WAREHOUSE_NUMBER:-}
       - SU_HU_SERVICE_PATH=${SU_HU_SERVICE_PATH:-}
       - NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-/run/certs/ca-bundle.pem}
+      - APP_USER_ROLES=${APP_USER_ROLES:-}
+      - APP_USERS_FILE=${APP_USERS_FILE:-}
+      - APP_ALLOW_ANY_SAP_USER=${APP_ALLOW_ANY_SAP_USER:-false}
+      - APP_DEFAULT_ROLES=${APP_DEFAULT_ROLES:-}
+      - APP_SAP_ROLE_PREFIX=${APP_SAP_ROLE_PREFIX:-ZAPP_}
+      - APP_ADMIN_USERS=${APP_ADMIN_USERS:-}
       # One proxy in front (the tls profile): the failed sign-in limit then counts the real client address.
       - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-1}
       # SAP NW RFC SDK (licensed, never in the image): mounted read-only from the host. While the host directory is
