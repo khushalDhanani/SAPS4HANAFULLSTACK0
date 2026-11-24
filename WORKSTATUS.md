@@ -17,6 +17,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `main`.
+- **User detail kept when SAP adds SUID01/313 — PASS locally, verified read-only against SAP, not deployed (2026-11-24 13:05 IST):** `BAPI_USER_GET_DETAIL` returned the complete user data together with error SUID01/313 for the new connection user, and `UserDetailReader.readUserDetail` discarded it (502 on `getUserDetail`, 279 failed list rows, sign-in role lookup falling back to defaults). That one message is now tolerated while SAP returns the user. Uncommitted on `main`. Server findings of the same session (empty lists because most roles of the connection user are not effective) are in the Changes Log entry.
 - **Technical User SAPAETHER Alignment & Container Recreation — PASS (2026-11-24 12:40 IST):** Technical user `SAPAETHER` configured in `.env` for `S4_USERNAME` and verified via READ-ONLY SAP Gateway catalog query (HTTP 200 OK). Recreated standalone Docker container (`docker compose -f docker-compose.yml --profile tls up -d`); confirmed `S4_USERNAME=SAPAETHER` loaded in container and `loginThrottle` in-memory failure counts reset. User `KHUSHAL` unblocked for personal login with `APP_ADMIN_USERS=KHUSHAL`. Server healthy (`{"status":"UP"}` on `https://localhost/health`).
 - **Automatic roles, no user list — PASS locally, not deployed (2026-11-24 10:35 IST):** After SAP accepts a user's own password the roles are: Admin only for users named in `APP_ADMIN_USERS`; an optional override entry (`APP_USER_ROLES` / `APP_USERS_FILE`); otherwise the user's `ZAPP_<Role>` SAP roles; otherwise `APP_DEFAULT_ROLES`. An SAP role or `role-map.json` entry never grants Admin, and an Admin entry in an override grants nothing. The SAP answer to the sign-in check (401 / 403 / connection error) is logged on the server. Env examples carry no sample users and set `APP_ALLOW_ANY_SAP_USER=true`. Uncommitted on `main`. In the current container RFC is not available, so step 3 cannot run and every user without an override gets the default roles. See the Changes Log entry and `docs/architecture/sign-in-and-roles.md`.
 - **Confirmed sign-in findings N1–N7 and item 14 — PASS locally, not deployed (2026-11-24 09:56 IST):** Seven commits on branch `fix/login-confirmed-findings` (`ff3ededb`..`1e130f38`), not merged, not pushed. The server refuses to start outside `NODE_ENV=test` with an example or short `LOCAL_AUTH_SECRET`; local tokens check `aud`, `iat`, `nbf`; the SAP connection user and its password are refused at sign-in; `LOCAL_DEV_PASSWORD` works only on a development server or `cap-local` and never for Admin; Basic with it only under `NODE_ENV=development`, rate-limited; `config/app-users.json` ignored; `config/role-map.json` shipped empty. **Action needed before the next start:** the local `.env` still holds the example `LOCAL_AUTH_SECRET` (server refuses to start), and its `S4_USERNAME` is `khushal`, who therefore can no longer sign in. See the Changes Log entry.
@@ -415,6 +416,31 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-24 13:05 IST — Server deep dive; user detail kept when SAP adds SUID01/313 — PASS locally, verified read-only against SAP, not deployed
+
+- **REQUEST:** `getUserDetail(username='101HOD')` answered 502 on the server (172.27.1.178) and "so many APIs are not working"; deep dive, then "Fix".
+- **INSPECT (server, READ-ONLY over SSH; SAP calls READ-ONLY: OData GET `$top=1`, `RFC_READ_TABLE`, `BAPI_USER_GETLIST`, `BAPI_USER_GET_DETAIL`):**
+  - Containers healthy, commit `2c844ed4`, no restarts; the application's read-only integration diagnostic: OData and RFC HEALTHY in all six stages.
+  - Backend log since the last container start: failing calls were `getUserDetail` (502, twice) and one 404 (no quarantine label rows for a material document). 279 `Could not enrich SAP user list row` warnings and `BAPI_USER_GET_DETAIL for 'khushal' failed ... falling back to APP_DEFAULT_ROLES`, all with the same SAP message.
+  - All 18 SAP OData services used by the app returned `$metadata`; all 22 tables read over RFC returned a row.
+  - As the connection user, these entity sets returned 0 rows: `C_SalesOrderWl_F1873`, `C_InquiryWL_F2370`, `C_CustomerReturnOPg`, `C_BillingDocument_F0797`, `C_CustomerList`, `HandlingUnit` (`C_HANDLINGUNITMONITOR_CDS` and `API_HANDLING_UNIT`), `ReservationDocumentItem`; `VBAK`, `KNVV` and `VEKP` returned rows over RFC. `C_PurchaseOrderFs` 6, `C_MM_SupplierValueHelp` 5, `Warehouse` 2.
+  - Role tables (`AGR_USERS`, `AGR_1016`, `UST04`): the connection user has 503 valid role assignments, 102 profiles, no `SAP_ALL`; of 229 roles with a generated profile, 128 have a profile that is not in the user master; 274 roles have no generated profile. `KHUSHAL` (the previous connection user): 98 roles, `SAP_ALL`, none missing.
+  - `BAPI_USER_GET_DETAIL` returned `E SUID01/313` "No authorization to display the global user ID for users" together with the full data (roles, profiles, logon data, address) for both users tried.
+- **CAUSE:** CONFIRMED for the 502: `readUserDetail` threw on any `E` message and so discarded a complete answer. INFERRED for the empty lists: the connection user lacks effective business authorizations (rows exist in the tables, the services return none, most assigned roles carry no effective profile). Which authorization object raises SUID01/313 is **Not verified**.
+- **CHANGED:**
+  - `srv/integration/s4hana/admin/UserDetailReader.js` — `SUID01/313` (matched by message class and number) no longer stops the read while the answer carries logon data or an address; without user data it is still an error; every other `E`/`A` message still stops the read; the notice is logged at most once a minute. The application does not use the global user ID.
+  - New `test/unit/admin/UserDetailReader.test.js` (8 tests, mocks only).
+- **NOT CHANGED:** Nothing on the server (one temporary file in the container's `/tmp` and one in the host's `/tmp` were created for the checks and removed); nothing in SAP; `.env`. No commit.
+- **TEST DECISION:** ADDED.
+- **VALIDATION:**
+  - `npx jest --runInBand --coverage --coverageDirectory=/tmp/verify/cov3` → exit 0, 218/218 suites, 3677 passed, 13 skipped, coverage floors met (`UserDetailReader.js` lines 100).
+  - `npx eslint .` → exit 0. `node tools/scan-secrets.js` → 0 findings.
+  - READ-ONLY against SAP from the server container, deployed reader next to the patched one: `101HOD` and `KHUSHAL` → deployed 502, patched OK (15 / 98 roles); an unknown user → 404 with both. Sign-in role lookup for `KHUSHAL` with the patched reader read 98 SAP roles, none with the `ZAPP_` prefix → `APP_DEFAULT_ROLES`.
+- **NOT VERIFIED:** The change running in the deployed container (not deployed); the authorization that clears SUID01/313; that the empty lists fill once the roles are effective; browser E2E.
+- **OPEN, outside the code:** user master comparison and profile generation for the connection user in SAP; no `ZAPP_<Role>` roles exist yet for the users checked; the container cannot resolve the SMTP host, so password-expiry mail fails.
+- **NEXT:** Commit and deploy this change (`git pull` and `docker compose -f docker-compose.yml --profile tls up -d --build` on the server); in SAP run the user comparison for the connection user and check the failing screens with `SU53`.
+- **FINAL STATUS:** PASS locally and against SAP read-only; not deployed.
 
 ### 2026-11-24 12:40 IST — Technical User SAPAETHER Alignment & Container Recreation — PASS
 
