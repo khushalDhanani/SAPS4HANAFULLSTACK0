@@ -22,11 +22,12 @@ for every user. At startup a warning is logged when `S4_USERNAME` is named in `A
 
 Decided once SAP has accepted the user's own password, in this order:
 
-1. **Admin** is given only to the users named in `APP_ADMIN_USERS` (comma-separated SAP logon names,
-   case-insensitive). No default, no SAP role, no `config/role-map.json` entry and no override entry grants it.
-   A user named there gets Admin on top of the roles from steps 2 to 4, also while SAP cannot be asked for roles.
+1. **Admin** is given only to users named in `APP_ADMIN_USERS` (comma-separated SAP logon names,
+   case-insensitive) or explicitly assigned `"Admin"` in `APP_USER_ROLES` / `APP_USERS_FILE` (e.g. `config/app-users.json`).
+   No default (`APP_DEFAULT_ROLES`), no SAP role (`ZAPP_*`), no `config/role-map.json` entry, and no `package.json` mocked user grants it.
+   A user named in `APP_ADMIN_USERS` gets Admin on top of the roles from steps 2 to 4, also while SAP cannot be asked for roles.
 2. **Optional override**: an entry for the user in `APP_USER_ROLES` or `APP_USERS_FILE`. Both are empty by
-   default and never required. An Admin entry in them grants nothing (a startup warning names such entries).
+   default and never required. Assigning `"Admin"` there grants Admin immediately on every request (and hot-reloads from `APP_USERS_FILE` without restart).
 3. **SAP roles**: the user's SAP roles are read with `BAPI_USER_GET_DETAIL` (`ACTIVITYGROUPS[].AGR_NAME`).
    An SAP role named `<APP_SAP_ROLE_PREFIX><Role>` (default prefix `ZAPP_`) grants the application role `<Role>`;
    the part after the prefix is compared without regard to case and underscores, and Admin is excluded.

@@ -7,8 +7,8 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "sh -c '[ -f \"$HOME/.sap-certs/s4-dev.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$HOME/.sap-certs/s4-dev.pem\"; [ -f \"certs/ca-bundle.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$PWD/certs/ca-bundle.pem\"; cds-serve'",
-    "watch": "sh -c '[ -f \"$HOME/.sap-certs/s4-dev.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$HOME/.sap-certs/s4-dev.pem\"; [ -f \"certs/ca-bundle.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$PWD/certs/ca-bundle.pem\"; cds watch --exclude data'",
+    "start": "node -e \"const fs=require('fs'),p=require('path'),os=require('os'),{spawnSync}=require('child_process');const e={...process.env};for(const c of[p.join(os.homedir(),'.sap-certs/s4-dev.pem'),p.resolve('certs/ca-bundle.pem')])if(fs.existsSync(c))e.NODE_EXTRA_CA_CERTS=c;const lib=process.platform==='darwin'?'libsapnwrfc.dylib':'libsapnwrfc.so',k=process.platform==='darwin'?'DYLD_LIBRARY_PATH':'LD_LIBRARY_PATH';for(const d of[e.SAPNWRFC_HOME&&p.join(e.SAPNWRFC_HOME,'lib'),p.resolve('nwrfcsdk/lib'),p.join(os.homedir(),'nwrfcsdk/lib'),'/usr/local/sap/nwrfcsdk/lib'].filter(Boolean))if(fs.existsSync(p.join(d,lib))){const cur=e[k]?e[k].split(p.delimiter):[];if(!cur.includes(d))e[k]=[d,...cur].join(p.delimiter);break;}const w=process.argv[1]==='--watch';const r=spawnSync(process.execPath,[require.resolve(w?'@sap/cds-dk/bin/cds.js':'@sap/cds/bin/serve.js'),...(w?['watch','--exclude','data']:process.argv.slice(1))],{stdio:'inherit',env:e});if(r.signal)process.kill(process.pid,r.signal);process.exit(r.status??1);\"",
+    "watch": "npm start -- --watch",
     "test": "jest --runInBand",
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",

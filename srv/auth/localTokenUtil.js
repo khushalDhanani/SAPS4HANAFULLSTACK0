@@ -1,7 +1,6 @@
 const crypto = require('crypto');
 const cds = require('@sap/cds');
-const { resolveAppUser, getExplicitAppUserRoles, isAllowAnySapUser, parseDefaultRoles, KNOWN_ROLES } = require('./appUsers');
-const { parseAdminUsers } = require('./sapRoleMapper');
+const { resolveAppUser, getExplicitAppUserRoles, isAllowAnySapUser, isAdminUser, parseDefaultRoles, KNOWN_ROLES } = require('./appUsers');
 const { isIsolatedTestProfile } = require('./mockUserPasswords');
 
 const LOCAL_DEV_ISSUER = 'saps4hana-local-auth-service';
@@ -160,7 +159,8 @@ function issueToken(username, roles = ['PurchasingManager', 'Viewer'], options =
  * SAP at sign-in (srv/auth/sapRoleMapper.js). No list holds those roles, so the signed token is their only record:
  *   - an entry in APP_USER_ROLES / APP_USERS_FILE added since sign-in wins at once (it also wins at sign-in);
  *   - a user in no list is accepted only while APP_ALLOW_ANY_SAP_USER is on, so turning it off ends the session;
- *   - Admin needs APP_ADMIN_USERS on every request, exactly as at sign-in, and unknown roles are dropped.
+ *   - Admin needs APP_ADMIN_USERS or an explicit Admin entry in APP_USER_ROLES / APP_USERS_FILE on every request,
+ *     and unknown roles are dropped.
  * A change of roles or a lock in SAP itself applies at the next sign-in (the token lives 24 hours at most).
  *
  * @param {{user_name: string, role_source?: string}} payload - verified token payload
@@ -179,7 +179,7 @@ function currentRoles(payload, tokenRoles) {
     if (explicit) return [...explicit];
     if (!listed && !isAllowAnySapUser(process.env)) return null;
 
-    const adminAllowed = parseAdminUsers(process.env).has(payload.user_name.trim().toLowerCase());
+    const adminAllowed = isAdminUser(payload.user_name, process.env);
     // SapLogsReader is added to an Admin token when it is issued, so it goes with a refused Admin.
     const refused = !adminAllowed && tokenRoles.includes('Admin') ? ['Admin', 'SapLogsReader'] : [];
     const roles = [...new Set(tokenRoles)].filter((r) => KNOWN_ROLES.includes(r) && !refused.includes(r));

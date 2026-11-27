@@ -7,8 +7,9 @@
  * accepts may sign in, and the roles come from the user's SAP roles (srv/auth/sapRoleMapper.js) or
  * APP_DEFAULT_ROLES. The lists below are optional overrides, empty by default.
  *
- * Admin is granted only to the users named in APP_ADMIN_USERS (comma-separated, case-insensitive). No list, no
- * default, no SAP role and no role map grants it: an Admin entry anywhere else is dropped (applyAdminRule).
+ * Admin is granted to users named in APP_ADMIN_USERS (comma-separated, case-insensitive) or explicitly
+ * assigned "Admin" in APP_USER_ROLES / APP_USERS_FILE. No default (APP_DEFAULT_ROLES), no SAP role, no
+ * role-map.json entry, and no package.json mocked user grants Admin on its own (applyAdminRule).
  *
  * Optional overrides, evaluated in priority order on every login (no restart needed for 2–3):
  *   1. APP_USER_ROLES    – JSON map env var; validated at startup
@@ -247,7 +248,7 @@ function isAllowAnySapUser(env = process.env) {
 }
 
 /**
- * Parses APP_ADMIN_USERS (comma-separated logon names, case-insensitive): the only source of the Admin role.
+ * Parses APP_ADMIN_USERS (comma-separated logon names, case-insensitive).
  *
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {Set<string>} lower-cased user names
@@ -261,24 +262,29 @@ function parseAdminUsers(env = process.env) {
   );
 }
 
-/** Whether APP_ADMIN_USERS names the user. */
-function isAdminUser(username, env = process.env) {
+/** Whether APP_ADMIN_USERS names the user or APP_USER_ROLES / APP_USERS_FILE assigns Admin to them. */
+function isAdminUser(username, env = process.env, fsImpl = fs) {
   const user = String(username || '').trim().toLowerCase();
-  return user !== '' && parseAdminUsers(env).has(user);
+  if (!user) return false;
+  if (parseAdminUsers(env).has(user)) return true;
+  const explicit = listedExplicitRoles(user, env, fsImpl);
+  return Boolean(explicit && explicit.includes('Admin'));
 }
 
 /**
- * The one rule for Admin: it is taken out of whatever a source gave, and added for a user named in
- * APP_ADMIN_USERS. A user left without any role gets APP_DEFAULT_ROLES (never Admin).
+ * The Admin rule: Admin is stripped from untrusted sources (cds.requires.auth.users, SAP roles, defaults)
+ * and granted when APP_ADMIN_USERS names the user or APP_USER_ROLES / APP_USERS_FILE explicitly lists Admin.
+ * A user left without any role gets APP_DEFAULT_ROLES (never Admin).
  *
  * @param {string} username
  * @param {string[]} roles - roles from a list, the SAP role lookup or the defaults
  * @param {NodeJS.ProcessEnv} [env]
+ * @param {object} [fsImpl]
  * @returns {string[]} non-empty
  */
-function applyAdminRule(username, roles, env = process.env) {
+function applyAdminRule(username, roles, env = process.env, fsImpl = fs) {
   const result = [...new Set(roles || [])].filter((role) => role !== 'Admin');
-  if (isAdminUser(username, env)) return [...result, 'Admin'];
+  if (isAdminUser(username, env, fsImpl)) return [...result, 'Admin'];
   if (result.length) return result;
   try {
     return parseDefaultRoles(env);
@@ -316,7 +322,7 @@ function listedRoles(user, auth, env, fsImpl) {
 
 /**
  * Returns the override roles of a user from APP_USER_ROLES or APP_USERS_FILE, or null if the user has no entry
- * in either. Admin follows applyAdminRule: an Admin entry here grants nothing unless APP_ADMIN_USERS names the user.
+ * in either. Admin is granted when listed in either override or in APP_ADMIN_USERS.
  *
  * @param {string} username
  * @param {NodeJS.ProcessEnv} [env]
@@ -327,7 +333,7 @@ function getExplicitAppUserRoles(username, env = process.env, fsImpl = fs) {
   const user = String(username || '').trim().toLowerCase();
   if (!user) return null;
   const explicit = listedExplicitRoles(user, env, fsImpl);
-  return explicit ? applyAdminRule(user, explicit, env) : null;
+  return explicit ? applyAdminRule(user, explicit, env, fsImpl) : null;
 }
 
 /**
@@ -365,9 +371,9 @@ function resolveAppUser(username, auth, env = process.env, fsImpl = fs) {
   if (!user) return null;
 
   const listed = listedRoles(user, auth, env, fsImpl);
-  if (listed) return applyAdminRule(user, listed, env);
+  if (listed) return applyAdminRule(user, listed, env, fsImpl);
   // Naming a user in APP_ADMIN_USERS is enough for that user to be known.
-  return isAdminUser(user, env) ? applyAdminRule(user, [], env) : null;
+  return isAdminUser(user, env, fsImpl) ? applyAdminRule(user, [], env, fsImpl) : null;
 }
 
 module.exports = {

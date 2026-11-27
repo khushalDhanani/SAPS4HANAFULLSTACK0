@@ -17,6 +17,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 ## Current Status
 
 - **Current checkout:** `main`.
+- **`npm start` / `npm run watch` auto-loads CA certs and SAP NW RFC SDK (`DYLD_LIBRARY_PATH`) — PASS locally, not deployed (2026-11-27 12:48 IST):** Replaced `sh -c` in `package.json` `scripts.start` with a self-contained Node launcher (and `watch` delegating via `npm start -- --watch`). Configures `NODE_EXTRA_CA_CERTS` (`~/.sap-certs/s4-dev.pem` or `certs/ca-bundle.pem`) and prepends the first NW RFC SDK `lib` directory containing `libsapnwrfc.dylib` / `libsapnwrfc.so` (`$SAPNWRFC_HOME/lib`, `./nwrfcsdk/lib`, `$HOME/nwrfcsdk/lib`, `/usr/local/sap/nwrfcsdk/lib`) directly to `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH` before spawning Node, bypassing macOS SIP `/bin/sh` stripping. Works inside `gen/srv` (Cloud Foundry) with zero extra files. See the Changes Log entry.
+- **Admin role manageable from JSON (`APP_USERS_FILE` / `APP_USER_ROLES`) — PARTIAL locally, not deployed (2026-11-27 12:37 IST):** `APP_USER_ROLES` and `APP_USERS_FILE` (e.g. `config/app-users.json`, hot-reloaded on every sign-in and token verification without restart) can now grant the `Admin` role alongside `APP_ADMIN_USERS`. Untrusted sources (`cds.requires.auth.users`, `APP_DEFAULT_ROLES`, `ZAPP_*` SAP roles, `config/role-map.json`) still cannot grant `Admin`, `LOCAL_DEV_PASSWORD` remains refused for any Admin user, and `S4_USERNAME` / `S4_PASSWORD` remain refused at sign-in. Auth + Docker config suites (`13/13` suites, `322/322` tests), ESLint, secret scan, and CDS compile pass; 2 loopback-binding suites (`e2eRoundTripKit.test.js`, `SapLogsServiceAuth.test.js`) failed inside the sandbox due to `connect EPERM 127.0.0.1`. See the Changes Log entry.
 - **Existing SAP group roles mapped to application roles — PASS locally (2026-11-24 13:20 IST):** No role with the `ZAPP_` prefix exists in the SAP system, so `config/role-map.json` now maps nine roles that users already hold (sales group L1–L3, `Z_SAP_BR_SALES_MANAGER`, purchase group L1–L3 and its `_101_HOD` variant, `ZWM_WM_ALL`), each to `Viewer` plus one functional role. 79 of 278 users hold at least one of them. The empty lists remain an SAP task (user master comparison for the connection user). See the Changes Log entry.
 - **User detail kept when SAP adds SUID01/313 — PASS locally, verified read-only against SAP, not deployed (2026-11-24 13:05 IST):** `BAPI_USER_GET_DETAIL` returned the complete user data together with error SUID01/313 for the new connection user, and `UserDetailReader.readUserDetail` discarded it (502 on `getUserDetail`, 279 failed list rows, sign-in role lookup falling back to defaults). That one message is now tolerated while SAP returns the user. Uncommitted on `main`. Server findings of the same session (empty lists because most roles of the connection user are not effective) are in the Changes Log entry.
 - **Technical User SAPAETHER Alignment & Container Recreation — PASS (2026-11-24 12:40 IST):** Technical user `SAPAETHER` configured in `.env` for `S4_USERNAME` and verified via READ-ONLY SAP Gateway catalog query (HTTP 200 OK). Recreated standalone Docker container (`docker compose -f docker-compose.yml --profile tls up -d`); confirmed `S4_USERNAME=SAPAETHER` loaded in container and `loginThrottle` in-memory failure counts reset. User `KHUSHAL` unblocked for personal login with `APP_ADMIN_USERS=KHUSHAL`. Server healthy (`{"status":"UP"}` on `https://localhost/health`).
@@ -417,6 +419,50 @@ All historical change logs and past milestone statuses are preserved verbatim in
 12. If branch protection is to be changed, authorize the specific repository settings change; then verify required checks through GitHub.
 
 ## Changes Log
+
+### 2026-11-27 12:48 IST — Auto-configure NW RFC SDK (`DYLD_LIBRARY_PATH`) and CA certs in `npm start` / `npm run watch` — PASS locally, not deployed
+
+- **REQUEST:** Fix `listUsers` 502 error when starting via `npm start` / `npm run watch` on macOS (SIP strips `DYLD_LIBRARY_PATH` across `sh -c`).
+- **INSPECT:** `package.json` (`scripts.start` and `scripts.watch` wrapped `sh -c`, causing macOS SIP to strip `DYLD_LIBRARY_PATH` before `cds-serve`/`cds watch`); `mta.yaml` and `gen/srv/package.json` (`cds build --production` copies `scripts.start` into `gen/srv`, where `tools/` is absent). Verified `DYLD_LIBRARY_PATH="/tmp/test" sh -c` strips the var while `node` child spawning preserves it, and verified `UserManagementAdapter.listUsers({ maxRows: 5 })` succeeds (`RfcClient.isAvailable(): true`, 5 rows) when `$HOME/nwrfcsdk/lib` is preserved in `DYLD_LIBRARY_PATH`.
+- **CHANGED:**
+  - `package.json`: replaced `sh -c` in `scripts.start` with a self-contained `node -e` launcher using only Node built-ins + `@sap/cds` (and `scripts.watch` delegating via `npm start -- --watch`). Sets `NODE_EXTRA_CA_CERTS` (`~/.sap-certs/s4-dev.pem` or `certs/ca-bundle.pem`), prepends the first NW RFC SDK `lib` directory containing `libsapnwrfc.dylib` / `libsapnwrfc.so` (`$SAPNWRFC_HOME/lib`, `./nwrfcsdk/lib`, `$HOME/nwrfcsdk/lib`, `/usr/local/sap/nwrfcsdk/lib`) to `DYLD_LIBRARY_PATH` / `LD_LIBRARY_PATH` if not already present, and spawns `process.execPath` directly on `@sap/cds/bin/serve.js` (or `@sap/cds-dk/bin/cds.js watch --exclude data`).
+  - `test/unit/tools/startScript.test.js` (new): 4 unit tests verifying `watch` delegation, direct `node` spawning, CA/RFC path configuration, and `DYLD_LIBRARY_PATH`/`LD_LIBRARY_PATH` preservation.
+- **NOT CHANGED:** `Dockerfile`, `mta.yaml`, `tools/`. No commit or deployment.
+- **TEST DECISION:** TEST ADDED (`test/unit/tools/startScript.test.js`).
+- **VALIDATION:**
+  - `npm start -- --help >/dev/null` → **PASS** (exit `0`).
+  - `npx jest test/unit/tools/startScript.test.js test/unit/tools/dockerConfig.test.js --no-coverage` → **PASS** (`2/2` suites, `19/19` tests).
+  - `npm run lint` → **PASS** (`0` errors, `0` warnings).
+  - `npm run scan:secrets` → **PASS** (`1054` tracked files, `0` secrets).
+  - `git diff --check` → **PASS** (clean).
+- **NOT VERIFIED:** Live `npm start` against `$HOME/nwrfcsdk/lib` outside the sandbox (sandbox blocks `$HOME/nwrfcsdk/lib`, though direct `node` with `DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib"` already passed `listUsers` outside sandbox).
+- **ASSUMPTIONS:** None.
+- **NEXT:** Stop the running CAP server (`Ctrl+C`), start with `npm start` (or `npm run watch`), and reload the User Management (SU01) screen in the browser.
+- **FINAL STATUS:** **PASS** locally (unit, CLI `--help`, lint, and secret scan passed; live `npm start` server restart left to user).
+
+### 2026-11-27 12:37 IST — Allow `Admin` role via `APP_USERS_FILE` and `APP_USER_ROLES` JSON — PARTIAL locally, not deployed
+
+- **REQUEST:** Allow managing the `Admin` role from JSON (`APP_USERS_FILE` such as `config/app-users.json` and `APP_USER_ROLES` JSON) instead of requiring `APP_ADMIN_USERS` in `.env` (user selected Option 1).
+- **INSPECT:** `srv/auth/appUsers.js` (`isAdminUser`, `applyAdminRule`, `getExplicitAppUserRoles`, `resolveAppUser` previously stripped `Admin` unless named in `APP_ADMIN_USERS`), `srv/auth/localTokenUtil.js` (`currentRoles` checked `parseAdminUsers` only), `srv/auth-service.js` (`startupWarnings` warned that `Admin` in `APP_USER_ROLES` / `APP_USERS_FILE` granted nothing), `docs/architecture/sign-in-and-roles.md`, `.env.example`, `.env.docker.example`, `test/unit/auth/appUsers.test.js`, `test/unit/auth/authService.test.js`, `test/unit/auth/localTokenUtil.test.js`, `test/unit/tools/dockerConfig.test.js`.
+- **CHANGED:**
+  - `srv/auth/appUsers.js`: updated `isAdminUser(username, env, fsImpl)` and `applyAdminRule(username, roles, env, fsImpl)` (plus callers `getExplicitAppUserRoles` and `resolveAppUser`) so explicit `"Admin"` entries in `APP_USER_ROLES` or `APP_USERS_FILE` grant `Admin` alongside `APP_ADMIN_USERS`. Untrusted sources (`cds.requires.auth.users`, `APP_DEFAULT_ROLES`, SAP roles, `config/role-map.json`) still have `Admin` stripped.
+  - `srv/auth/localTokenUtil.js`: updated `currentRoles()` to use `isAdminUser(payload.user_name, process.env)` and updated comments.
+  - `srv/auth-service.js`: updated `startupWarnings()` to drop the obsolete "Admin in `APP_USER_ROLES` / `APP_USERS_FILE` grants nothing" warning while also warning if `S4_USERNAME` appears in `APP_USERS_FILE`.
+  - `.env.example`, `.env.docker.example`, `docs/architecture/sign-in-and-roles.md`: documented that `Admin` can be assigned via `APP_ADMIN_USERS` or explicitly in `APP_USER_ROLES` / `APP_USERS_FILE` (hot-reloaded on every request without restart).
+  - `test/unit/auth/appUsers.test.js`, `test/unit/auth/authService.test.js`, `test/unit/auth/localTokenUtil.test.js`: updated and expanded unit tests for JSON-managed `Admin` grant/revocation, `SapLogsReader` implication, priority override, and continued blocking of `cds.requires.auth.users`, `ZAPP_ADMIN`, `role-map.json`, `LOCAL_DEV_PASSWORD`, and `S4_USERNAME`.
+- **NOT CHANGED:** `.env`, `srv/auth/sapRoleMapper.js` (SAP PFCG roles / `role-map.json` still never grant `Admin`), `LOCAL_DEV_PASSWORD` Admin exclusion, `S4_USERNAME` / `S4_PASSWORD` refusal, production XSUAA SSO. No commit or deployment.
+- **TEST DECISION:** TEST UPDATED (`test/unit/auth/appUsers.test.js`, `test/unit/auth/authService.test.js`, `test/unit/auth/localTokenUtil.test.js`).
+- **VALIDATION:**
+  - `npx jest test/unit/auth/ test/unit/tools/dockerConfig.test.js --runInBand --no-coverage` → **PASS** (`13/13` suites, `322/322` tests).
+  - `npm run lint` → **PASS** (`0` errors, `0` warnings).
+  - `npm run scan:secrets` → **PASS** (`1054` tracked files, `0` secrets).
+  - `npx cds compile srv/service.cds >/dev/null` → **PASS** (exit `0`).
+  - `git diff --check` → **PASS** (clean).
+  - `npx jest test/unit --runInBand --no-coverage --silent` → **189 passed, 2 failed** (`3346 passed, 13 skipped, 14 failed`): the 13 skipped tests are live-SAP suites (`ALLOW_LIVE_SAP_TOOLS=1`); the 2 failed suites (`test/unit/tools/e2eRoundTripKit.test.js`, `test/unit/admin/SapLogsServiceAuth.test.js`) failed only because the sandbox blocks loopback connections (`connect EPERM 127.0.0.1`).
+- **NOT VERIFIED:** `test/integration/` and `e2eRoundTripKit.test.js` / `SapLogsServiceAuth.test.js` (blocked in sandbox by `connect EPERM 127.0.0.1`); live CAP server login + User Management (SU01) browser flow (also depends on NW RFC SDK `libsapnwrfc.dylib` being on `DYLD_LIBRARY_PATH` and creating local `config/app-users.json` + setting `APP_USERS_FILE` in `.env`).
+- **ASSUMPTIONS:** None.
+- **NEXT:** Configure `APP_USERS_FILE=config/app-users.json` in `.env` with `{"<USER>":["Admin","Viewer",...]}`, restart CAP with `DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" npm start`, re-run `test/integration/` + `SapLogsServiceAuth.test.js` outside sandbox before committing.
+- **FINAL STATUS:** **PARTIAL** (unit auth/config suites, lint, CDS compile, and secret scan passed; loopback-binding test suites and live browser/RFC sign-in not verified).
 
 ### 2026-11-24 13:20 IST — Existing SAP group roles mapped in `config/role-map.json` — PASS locally
 

@@ -22,10 +22,8 @@ const LOG = require("./common/logger")("auth");
 module.exports = class AuthServiceHandler extends cds.ApplicationService {
   /**
    * Configuration that cannot work as written, reported once at startup as warnings (never an error):
-   *   - the SAP connection user (S4_USERNAME) named in APP_ADMIN_USERS or APP_USER_ROLES: the login action refuses
-   *     that name in every branch, so the entry has no effect;
-   *   - Admin listed in APP_USER_ROLES / APP_USERS_FILE for a user who is not in APP_ADMIN_USERS: Admin is given
-   *     only through APP_ADMIN_USERS, so the entry grants nothing.
+   *   - the SAP connection user (S4_USERNAME) named in APP_ADMIN_USERS, APP_USER_ROLES, or APP_USERS_FILE:
+   *     the login action refuses that name in every branch, so the entry has no effect.
    * The messages name settings and user names, never a password.
    *
    * @param {NodeJS.ProcessEnv} [env]
@@ -45,21 +43,11 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       const where = [];
       if (admins.has(sConnUser)) where.push("APP_ADMIN_USERS");
       if (listed.has(sConnUser)) where.push("APP_USER_ROLES");
+      if (fromFile.has(sConnUser)) where.push("APP_USERS_FILE");
       if (where.length) {
         warnings.push(
           `The SAP connection user (S4_USERNAME) is named in ${where.join(" and ")}, but it can never sign in: ` +
           "the login action refuses its name. Use a technical SAP user for the connection, or name a personal user there."
-        );
-      }
-    }
-
-    for (const [setting, users] of [["APP_USER_ROLES", listed], ["APP_USERS_FILE", fromFile]]) {
-      const ignored = [...users].filter(([name, roles]) => roles.includes("Admin") && !admins.has(name)).map(([name]) => name);
-      if (ignored.length) {
-        warnings.push(
-          `${setting} lists Admin for ${ignored.length} user(s) not named in APP_ADMIN_USERS ` +
-          `(${ignored.slice(0, 5).join(", ")}${ignored.length > 5 ? ", ..." : ""}): Admin is not granted. ` +
-          "Add them to APP_ADMIN_USERS to make them administrators."
         );
       }
     }

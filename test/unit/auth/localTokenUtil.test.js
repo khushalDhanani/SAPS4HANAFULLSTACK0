@@ -207,14 +207,17 @@ describe('Unit: localTokenUtil - the sign-in list applies to every request', () 
         expect(user.is('SapLogsReader')).toBe(true);
     });
 
-    test('a token cannot carry Admin from an override entry: the list is read with the Admin rule on every request', () => {
+    test('a token honours Admin from APP_USER_ROLES JSON on every request and implies SapLogsReader', () => {
         process.env.APP_USER_ROLES = '{"MADMIN":["Admin","Viewer"]}';
         const { token } = util.issueToken('MADMIN', ['Admin', 'Viewer']);
-        expect(util.verifyToken(token).is('Admin')).toBe(false);
+        expect(util.verifyToken(token).is('Admin')).toBe(true);
+        expect(util.verifyToken(token).is('SapLogsReader')).toBe(true);
         expect(util.verifyToken(token).is('Viewer')).toBe(true);
 
-        process.env.APP_ADMIN_USERS = 'madmin';
-        expect(util.verifyToken(token).is('Admin')).toBe(true);
+        process.env.APP_USER_ROLES = '{"MADMIN":["Viewer"]}';
+        expect(util.verifyToken(token).is('Admin')).toBe(false);
+        expect(util.verifyToken(token).is('SapLogsReader')).toBe(false);
+        expect(util.verifyToken(token).is('Viewer')).toBe(true);
     });
 });
 });

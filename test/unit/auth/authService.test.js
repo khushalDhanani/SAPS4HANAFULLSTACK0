@@ -738,20 +738,22 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
                 expect((await login('JSMITH')).authenticated).toBe(false); // everybody else still needs the opt-in
             });
 
-            it('an override entry wins over the SAP roles, and cannot grant Admin', async () => {
+            it('an override entry wins over the SAP roles, and can grant Admin from JSON', async () => {
                 process.env.APP_USER_ROLES = '{"JSMITH":["WarehouseClerk"],"MADMIN":["Admin","Viewer"]}';
                 sapAccepts();
                 sapRoles('ZAPP_SALESMANAGER');
 
                 expect(roles(await login('JSMITH'))).toEqual(['WarehouseClerk']);
                 const res = await login('MADMIN');
-                expect(roles(res)).toEqual(['Viewer']);
-                expect(util.verifyToken(res.token).is('Admin')).toBe(false);
+                expect(roles(res)).toEqual(['Viewer', 'Admin', 'SapLogsReader']);
+                expect(util.verifyToken(res.token).is('Admin')).toBe(true);
+                expect(util.verifyToken(res.token).is('SapLogsReader')).toBe(true);
                 expect(service._fetchDetail).not.toHaveBeenCalled();
 
-                process.env.APP_ADMIN_USERS = 'madmin';
-                loginThrottle.reset();
-                expect(roles(await login('MADMIN'))).toEqual(['Viewer', 'Admin', 'SapLogsReader']);
+                // Removing Admin from the JSON list revokes it immediately on subsequent requests.
+                process.env.APP_USER_ROLES = '{"JSMITH":["WarehouseClerk"],"MADMIN":["Viewer"]}';
+                expect(util.verifyToken(res.token).is('Admin')).toBe(false);
+                expect(util.verifyToken(res.token).is('SapLogsReader')).toBe(false);
             });
 
             it('the SAP connection user is still refused, also when APP_ADMIN_USERS names it', async () => {
@@ -768,7 +770,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
                 expect(sap).not.toHaveBeenCalled();
             });
 
-            it('warns at startup about the connection user in APP_ADMIN_USERS or APP_USER_ROLES, and about Admin entries that grant nothing', async () => {
+            it('warns at startup about the connection user in APP_ADMIN_USERS, APP_USER_ROLES, or APP_USERS_FILE', async () => {
                 const none = AuthServiceHandler.startupWarnings({ S4_USERNAME: 'SAPCONN', APP_ADMIN_USERS: 'boss', APP_USER_ROLES: '{"JSMITH":["Viewer"]}' });
                 expect(none).toEqual([]);
 
@@ -777,11 +779,9 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
                     APP_ADMIN_USERS: 'boss, SAPCONN', APP_USER_ROLES: '{"sapconn":["Viewer"],"MADMIN":["Admin"],"BOSS":["Admin"]}',
                     APP_USERS_FILE: '/fake/users.json'
                 };
-                const warnings = AuthServiceHandler.startupWarnings(env, { readFileSync: () => '{"FADMIN":["Admin","Viewer"]}' });
-                expect(warnings).toHaveLength(3);
-                expect(warnings[0]).toMatch(/S4_USERNAME\) is named in APP_ADMIN_USERS and APP_USER_ROLES/);
-                expect(warnings[1]).toMatch(/APP_USER_ROLES lists Admin for 1 user\(s\) not named in APP_ADMIN_USERS \(madmin\)/);
-                expect(warnings[2]).toMatch(/APP_USERS_FILE lists Admin for 1 user\(s\).*\(fadmin\)/);
+                const warnings = AuthServiceHandler.startupWarnings(env, { readFileSync: () => '{"FADMIN":["Admin","Viewer"],"sapconn":["Viewer"]}' });
+                expect(warnings).toHaveLength(1);
+                expect(warnings[0]).toMatch(/S4_USERNAME\) is named in APP_ADMIN_USERS and APP_USER_ROLES and APP_USERS_FILE/);
                 expect(warnings.join(' ')).not.toContain('made-up-connection-password');
                 expect(warnings.join(' ').toLowerCase()).not.toContain('sapconn');
 

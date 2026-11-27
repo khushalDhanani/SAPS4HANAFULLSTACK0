@@ -17,20 +17,22 @@ describe('Unit: appUsers (who may sign in, and with which roles)', () => {
         expect(resolveAppUser('KHUSHAL', auth, { APP_ADMIN_USERS: 'other, Khushal' })).toEqual(['Viewer', 'Admin']);
     });
 
-    describe('Admin comes from APP_ADMIN_USERS only', () => {
+    describe('Admin comes from APP_ADMIN_USERS or APP_USER_ROLES / APP_USERS_FILE', () => {
         const {
             applyAdminRule, isAdminUser, parseAdminUsers, holdsConfiguredAdmin, getExplicitAppUserRoles
         } = require('../../../srv/auth/appUsers');
         const fileWith = (content) => ({ readFileSync: () => JSON.stringify(content) });
 
-        it('parses the list case-insensitively and ignores blanks', () => {
+        it('parses APP_ADMIN_USERS case-insensitively and checks explicit JSON/file Admin entries', () => {
             expect([...parseAdminUsers({ APP_ADMIN_USERS: ' Boss , ,SECOND ' })]).toEqual(['boss', 'second']);
             expect(isAdminUser('BOSS', { APP_ADMIN_USERS: 'boss' })).toBe(true);
+            expect(isAdminUser('madmin', { APP_USER_ROLES: '{"MADMIN":["Admin","Viewer"]}' })).toBe(true);
+            expect(isAdminUser('fadmin', { APP_USERS_FILE: '/fake/users.json' }, fileWith({ FADMIN: ['Admin'] }))).toBe(true);
             expect(isAdminUser('boss', {})).toBe(false);
             expect(isAdminUser('', { APP_ADMIN_USERS: 'boss' })).toBe(false);
         });
 
-        it('takes Admin out of any roles and adds it for a named user', () => {
+        it('takes Admin out of untrusted sources and adds it for a named or JSON-listed admin', () => {
             expect(applyAdminRule('jsmith', ['Admin', 'Viewer', 'Viewer'], {})).toEqual(['Viewer']);
             expect(applyAdminRule('JSMITH', ['Viewer'], { APP_ADMIN_USERS: 'jsmith' })).toEqual(['Viewer', 'Admin']);
             expect(applyAdminRule('jsmith', [], { APP_ADMIN_USERS: 'jsmith' })).toEqual(['Admin']);
@@ -42,19 +44,26 @@ describe('Unit: appUsers (who may sign in, and with which roles)', () => {
             expect(applyAdminRule('jsmith', ['Admin'], { APP_DEFAULT_ROLES: 'Admin' })).toEqual(['Viewer']);
         });
 
-        it('an Admin entry in APP_USER_ROLES or APP_USERS_FILE grants nothing without APP_ADMIN_USERS', () => {
+        it('an Admin entry in APP_USER_ROLES or APP_USERS_FILE grants Admin without APP_ADMIN_USERS', () => {
             const env = { APP_USER_ROLES: '{"MADMIN":["Admin","Viewer"],"ONLYADMIN":["Admin"]}', APP_USERS_FILE: '/fake/users.json' };
+            const fsImpl = fileWith({ FADMIN: ['Admin', 'SalesManager'], CLERK: ['Viewer'] });
+
+            expect(resolveAppUser('madmin', auth, env, fsImpl)).toEqual(['Viewer', 'Admin']);
+            expect(resolveAppUser('onlyadmin', auth, env, fsImpl)).toEqual(['Admin']);
+            expect(resolveAppUser('fadmin', auth, env, fsImpl)).toEqual(['SalesManager', 'Admin']);
+            expect(resolveAppUser('clerk', auth, env, fsImpl)).toEqual(['Viewer']);
+            expect(getExplicitAppUserRoles('madmin', env, fsImpl)).toEqual(['Viewer', 'Admin']);
+            expect(getExplicitAppUserRoles('fadmin', env, fsImpl)).toEqual(['SalesManager', 'Admin']);
+            // package.json mocked user without APP_ADMIN_USERS or JSON override still gets Admin stripped
+            expect(resolveAppUser('khushal', auth, env, fsImpl)).toEqual(['Viewer']);
+        });
+
+        it('an APP_USER_ROLES entry without Admin overrides APP_USERS_FILE Admin unless APP_ADMIN_USERS names the user', () => {
+            const env = { APP_USER_ROLES: '{"FADMIN":["Viewer"]}', APP_USERS_FILE: '/fake/users.json' };
             const fsImpl = fileWith({ FADMIN: ['Admin', 'SalesManager'] });
 
-            expect(resolveAppUser('madmin', auth, env, fsImpl)).toEqual(['Viewer']);
-            expect(resolveAppUser('onlyadmin', auth, env, fsImpl)).toEqual(['Viewer']);
-            expect(resolveAppUser('fadmin', auth, env, fsImpl)).toEqual(['SalesManager']);
-            expect(getExplicitAppUserRoles('madmin', env, fsImpl)).toEqual(['Viewer']);
-            expect(getExplicitAppUserRoles('fadmin', env, fsImpl)).toEqual(['SalesManager']);
-
-            const withAdmins = { ...env, APP_ADMIN_USERS: 'madmin,fadmin' };
-            expect(resolveAppUser('madmin', auth, withAdmins, fsImpl)).toEqual(['Viewer', 'Admin']);
-            expect(getExplicitAppUserRoles('fadmin', withAdmins, fsImpl)).toEqual(['SalesManager', 'Admin']);
+            expect(resolveAppUser('fadmin', auth, env, fsImpl)).toEqual(['Viewer']);
+            expect(resolveAppUser('fadmin', auth, { ...env, APP_ADMIN_USERS: 'fadmin' }, fsImpl)).toEqual(['Viewer', 'Admin']);
         });
 
         it('a user named only in APP_ADMIN_USERS is known, and has no override entry', () => {
@@ -64,7 +73,7 @@ describe('Unit: appUsers (who may sign in, and with which roles)', () => {
             expect(resolveAppUser('stranger', auth, env)).toBeNull();
         });
 
-        it('holdsConfiguredAdmin sees an administrator in every source, also where the entry grants nothing', () => {
+        it('holdsConfiguredAdmin sees an administrator in every source', () => {
             const env = { APP_USER_ROLES: '{"MADMIN":["Admin"],"CLERK":["Viewer"]}', APP_USERS_FILE: '/fake/users.json', APP_ADMIN_USERS: 'boss' };
             const fsImpl = fileWith({ FADMIN: ['Admin'] });
             for (const name of ['khushal', 'MADMIN', 'fadmin', 'Boss']) expect(holdsConfiguredAdmin(name, auth, env, fsImpl)).toBe(true);
