@@ -5,6 +5,7 @@ describe('MaintenanceOrders controller unit tests', () => {
     let mockODataClient;
     let mockMessageToast;
     let mockRouter;
+    let mockDateFormat;
 
     class MockJSONModel {
         constructor(data) {
@@ -21,6 +22,15 @@ describe('MaintenanceOrders controller unit tests', () => {
     beforeAll(() => {
         mockODataClient = { get: jest.fn() };
         mockMessageToast = { show: jest.fn() };
+        mockDateFormat = {
+            getDateInstance: jest.fn(() => ({
+                format: (d) => {
+                    const dd = String(d.getUTCDate()).padStart(2, '0');
+                    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                    return `${dd}-${mm}-${d.getUTCFullYear()}`;
+                }
+            }))
+        };
         const MockBaseController = {
             extend: (_name, proto) => {
                 function Controller() { Object.assign(this, proto); }
@@ -30,7 +40,7 @@ describe('MaintenanceOrders controller unit tests', () => {
         global.sap = {
             ui: {
                 define: (_deps, factory) => {
-                    ControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast);
+                    ControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast, mockDateFormat);
                 }
             }
         };
@@ -139,5 +149,11 @@ describe('MaintenanceOrders controller unit tests', () => {
         expect(controller.formatCount(null)).toBe('');
         expect(controller.formatCount(undefined)).toBe('');
         expect(controller.formatCount(54391)).toBe(Number(54391).toLocaleString());
+    });
+
+    test('formatTimestampDate formats ISO timestamps with DateFormat and handles empty input', () => {
+        const { controller } = createController();
+        expect(controller.formatTimestampDate('')).toBe('');
+        expect(controller.formatTimestampDate('2026-11-26T22:07:55.000Z')).toBe('26-11-2026');
     });
 });

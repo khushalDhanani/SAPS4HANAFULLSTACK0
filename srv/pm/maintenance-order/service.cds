@@ -4,22 +4,30 @@ namespace saps4hana.pm;
 service MaintenanceOrderService @(path: '/odata/v4/maintenance-order') {
 
     type MaintenanceOrderItem {
-        maintenanceOrder         : String(12);
-        maintenanceOrderType     : String(4);
-        maintenanceOrderDesc     : String(40);
-        maintenancePlanningPlant : String(4);
-        maintenancePlant         : String(4);
-        mainWorkCenter           : String(8);
-        equipment                : String(18);
-        equipmentName            : String(40);
-        functionalLocation       : String(30);
-        maintPriority            : String(1);
-        systemStatusText         : String(40);
-        userStatusText           : String(40);
-        maintOrdBasicStartDate   : String(10); // formatted YYYY-MM-DD
-        maintOrdBasicEndDate     : String(10);
-        maintOrderCreationDate   : String(10); // formatted YYYY-MM-DD
-        createdByUser            : String(12);
+        maintenanceOrder           : String(12);
+        maintenanceOrderType       : String(4);
+        maintenanceOrderTypeName   : String(60);
+        maintenanceOrderDesc       : String(40);
+        maintenancePlan            : String(12);
+        maintenanceNotification    : String(12);
+        maintenancePlanningPlant   : String(4);
+        maintenancePlant           : String(4);
+        plantName                  : String(40);
+        planningPlantDiff          : String(4);
+        mainWorkCenter             : String(8);
+        equipment                  : String(18);
+        equipmentName              : String(40);
+        functionalLocation         : String(30);
+        functionalLocationLabel    : String(40);
+        functionalLocationName     : String(60);
+        maintPriority              : String(1);
+        systemStatusText           : String(40);
+        userStatusText             : String(40);
+        maintOrdBasicStartDate     : String(10); // formatted YYYY-MM-DD
+        maintOrdBasicEndDate       : String(10);
+        maintOrderCreationDate     : String(10); // formatted YYYY-MM-DD (UTC fallback)
+        maintOrderCreationDateTime : String(30); // ISO UTC timestamp for browser-timezone display
+        createdByUser              : String(12);
     };
 
     type MaintenanceOrderListResult {

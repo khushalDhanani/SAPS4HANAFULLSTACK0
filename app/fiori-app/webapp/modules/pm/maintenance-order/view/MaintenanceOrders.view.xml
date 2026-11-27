@@ -82,23 +82,20 @@
                         <Column>
                             <Text text="{i18n>maintOrdersColOrder}" />
                         </Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true">
-                            <Text text="{i18n>maintOrdersColType}" />
-                        </Column>
                         <Column>
                             <Text text="{i18n>maintOrdersColDesc}" />
                         </Column>
                         <Column minScreenWidth="Tablet" demandPopin="true">
                             <Text text="{i18n>maintOrdersColPlant}" />
                         </Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true">
-                            <Text text="{i18n>maintOrdersColWorkCenter}" />
+                        <Column minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColFuncLoc}" />
                         </Column>
                         <Column minScreenWidth="Desktop" demandPopin="true">
                             <Text text="{i18n>maintOrdersColEquipment}" />
                         </Column>
                         <Column minScreenWidth="Desktop" demandPopin="true">
-                            <Text text="{i18n>maintOrdersColFuncLoc}" />
+                            <Text text="{i18n>maintOrdersColWorkCenter}" />
                         </Column>
                         <Column minScreenWidth="Tablet" demandPopin="true">
                             <Text text="{i18n>maintOrdersColPriority}" />
@@ -110,23 +107,36 @@
                             <Text text="{i18n>maintOrdersColStartDate}" />
                         </Column>
                         <Column minScreenWidth="Desktop" demandPopin="true">
-                            <Text text="{i18n>maintOrdersColCreated}" />
+                            <Text text="{i18n>maintOrdersColCreatedOn}" />
+                        </Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColCreatedBy}" />
                         </Column>
                     </columns>
                     <items>
                         <ColumnListItem>
                             <cells>
-                                <ObjectIdentifier title="{pmMaintOrdersView>maintenanceOrder}" />
-                                <Text text="{pmMaintOrdersView>maintenanceOrderType}" />
-                                <Text text="{pmMaintOrdersView>maintenanceOrderDesc}" />
-                                <Text text="{= (${pmMaintOrdersView>maintenancePlant} || '-') + ' / ' + (${pmMaintOrdersView>maintenancePlanningPlant} || '-') }" />
+                                <ObjectIdentifier
+                                    title="{pmMaintOrdersView>maintenanceOrder}"
+                                    text="{= ${pmMaintOrdersView>maintenanceOrderTypeName} ? ${pmMaintOrdersView>maintenanceOrderTypeName} + ' (' + ${pmMaintOrdersView>maintenanceOrderType} + ')' : ${pmMaintOrdersView>maintenanceOrderType} }" />
+                                <ObjectIdentifier
+                                    title="{pmMaintOrdersView>maintenanceOrderDesc}"
+                                    text="{= ${pmMaintOrdersView>maintenancePlan} ? ${i18n>maintOrdersPlanLabel} + ' ' + ${pmMaintOrdersView>maintenancePlan} : (${pmMaintOrdersView>maintenanceNotification} ? ${i18n>maintOrdersNotifLabel} + ' ' + ${pmMaintOrdersView>maintenanceNotification} : '') }" />
+                                <ObjectIdentifier
+                                    title="{= ${pmMaintOrdersView>plantName} || ${pmMaintOrdersView>maintenancePlant} || '-' }"
+                                    text="{= ${pmMaintOrdersView>plantName} ? (${pmMaintOrdersView>maintenancePlant} + (${pmMaintOrdersView>planningPlantDiff} ? ' · ' + ${i18n>maintOrdersPlanPlantPrefix} + ' ' + ${pmMaintOrdersView>planningPlantDiff} : '')) : (${pmMaintOrdersView>planningPlantDiff} ? ${i18n>maintOrdersPlanPlantPrefix} + ' ' + ${pmMaintOrdersView>planningPlantDiff} : '') }" />
+                                <ObjectIdentifier
+                                    title="{= ${pmMaintOrdersView>functionalLocationLabel} || ${pmMaintOrdersView>functionalLocation} || '-' }"
+                                    text="{pmMaintOrdersView>functionalLocationName}" />
+                                <ObjectIdentifier
+                                    title="{= ${pmMaintOrdersView>equipmentName} || ${pmMaintOrdersView>equipment} || '-' }"
+                                    text="{= ${pmMaintOrdersView>equipmentName} ? ${pmMaintOrdersView>equipment} : '' }" />
                                 <Text text="{pmMaintOrdersView>mainWorkCenter}" />
-                                <ObjectIdentifier title="{pmMaintOrdersView>equipment}" text="{pmMaintOrdersView>equipmentName}" />
-                                <Text text="{pmMaintOrdersView>functionalLocation}" />
                                 <Text text="{pmMaintOrdersView>maintPriority}" />
                                 <Text text="{pmMaintOrdersView>systemStatusText}" />
-                                <Text text="{pmMaintOrdersView>maintOrdBasicStartDate}" />
-                                <Text text="{= (${pmMaintOrdersView>createdByUser} || '') + (${pmMaintOrdersView>createdByUser} &amp;&amp; ${pmMaintOrdersView>maintOrderCreationDate} ? ' · ' : '') + (${pmMaintOrdersView>maintOrderCreationDate} || '') }" />
+                                <Text text="{path: 'pmMaintOrdersView>maintOrdBasicStartDate', formatter: '.formatter.formatDate'}" />
+                                <Text text="{path: 'pmMaintOrdersView>maintOrderCreationDateTime', formatter: '.formatTimestampDate'}" />
+                                <Text text="{pmMaintOrdersView>createdByUser}" />
                             </cells>
                         </ColumnListItem>
                     </items>

@@ -2,8 +2,9 @@ sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
-    "sap/m/MessageToast"
-], function (BaseController, JSONModel, ODataClient, MessageToast) {
+    "sap/m/MessageToast",
+    "sap/ui/core/format/DateFormat"
+], function (BaseController, JSONModel, ODataClient, MessageToast, DateFormat) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/maintenance-order";
@@ -143,6 +144,22 @@ sap.ui.define([
                     return "";
                 }
                 return Number(nVal).toLocaleString();
+            },
+
+            formatTimestampDate: function (sIso) {
+                if (!sIso) {
+                    return "";
+                }
+                var oDate = new Date(sIso);
+                if (isNaN(oDate.getTime())) {
+                    return this.formatter && this.formatter.formatDate ? this.formatter.formatDate(sIso) : String(sIso);
+                }
+                if (DateFormat && typeof DateFormat.getDateInstance === "function") {
+                    return DateFormat.getDateInstance({ pattern: "dd-MM-yyyy" }).format(oDate);
+                }
+                var dd = String(oDate.getDate()).padStart(2, "0");
+                var mm = String(oDate.getMonth() + 1).padStart(2, "0");
+                return dd + "-" + mm + "-" + oDate.getFullYear();
             }
         }
     );
