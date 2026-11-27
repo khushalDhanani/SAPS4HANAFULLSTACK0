@@ -94,6 +94,7 @@ describe('App shell sidebar', () => {
   test('the dashboard highlights its section, and an unknown section falls back to the overview', () => {
     const controller = makeController();
     expect(controller._getSideNavKey('dashboard', { section: 'sd' })).toBe('sd');
+    expect(controller._getSideNavKey('dashboard', { section: 'pm' })).toBe('pm');
     expect(controller._getSideNavKey('dashboard', { section: 'bogus' })).toBe('overview');
     expect(controller._getSideNavKey('dashboard')).toBe('overview');
   });
@@ -113,6 +114,8 @@ describe('App shell sidebar', () => {
 
     press('ewm');
     expect(router.navTo).toHaveBeenLastCalledWith('dashboard', { section: 'ewm' });
+    press('pm');
+    expect(router.navTo).toHaveBeenLastCalledWith('dashboard', { section: 'pm' });
     press('overview');
     expect(router.navTo).toHaveBeenLastCalledWith('dashboard', {});
   });
@@ -146,6 +149,8 @@ describe('App shell sidebar', () => {
       expect(bundle).toContain('tabAdminTitle=Administration\n');
       expect(bundle).toContain('tabUserMasterTitle=User Master\n');
       expect(bundle).toMatch(/^tabUserMasterTooltip=.+$/m);
+      expect(bundle).toContain('tabPMTitle=Plant Maintenance (PM)\n');
+      expect(bundle).toMatch(/^tabPMTooltip=.+$/m);
     });
   });
 

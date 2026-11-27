@@ -172,7 +172,7 @@ sap.ui.define([], function () {
                     if (sSection === "sap-logs") {
                         return this.canReadLogs() ? "sap-logs" : "overview";
                     }
-                    return ["mm", "sd", "ewm"].indexOf(sSection) === -1 ? "overview" : sSection;
+                    return ["mm", "sd", "ewm", "pm"].indexOf(sSection) === -1 ? "overview" : sSection;
                 }
                 var oRoute = this.getOwnerComponent().getRouter().getRoute(sRouteName);
                 return SECTION_BY_ROUTE_PREFIX[oRoute ? oRoute.getPattern().split("/")[0] : ""] || "overview";

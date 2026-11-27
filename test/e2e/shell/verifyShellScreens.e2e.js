@@ -20,8 +20,8 @@ const PHONE = {
     hasTouch: true,
     userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
 };
-const ITEM = { overview: 'sideNavOverview', mm: 'sideNavMM', sd: 'sideNavSD', ewm: 'sideNavEWM', 'user-master': 'sideNavUserMaster' };
-const SECTION = { overview: 'sectionOverview', mm: 'sectionMM', sd: 'sectionSD', ewm: 'sectionEWM', 'user-master': 'sectionAdmin' };
+const ITEM = { overview: 'sideNavOverview', mm: 'sideNavMM', sd: 'sideNavSD', ewm: 'sideNavEWM', pm: 'sideNavPM', 'user-master': 'sideNavUserMaster' };
+const SECTION = { overview: 'sectionOverview', mm: 'sectionMM', sd: 'sectionSD', ewm: 'sectionEWM', pm: 'sectionPM', 'user-master': 'sectionAdmin' };
 
 /** The sidebar's highlighted key and the dashboard sections currently on screen. */
 const shellState = (page) => page.evaluate((sections) => {
@@ -81,7 +81,7 @@ async function verifySidebar(baseUrl) {
 
         // Everything below also runs on the closed sidebar's icons, so the closed state stays usable
         const loaded = metricsCalls;
-        for (const key of ['mm', 'sd', 'ewm', 'user-master']) {
+        for (const key of ['mm', 'sd', 'ewm', 'pm', 'user-master']) {
             if (key === 'user-master') {
                 await click('sideNavAdministration');
                 await page.locator('.sapMPopover').getByText('User Master', { exact: true }).click();

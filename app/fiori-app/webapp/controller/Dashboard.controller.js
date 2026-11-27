@@ -72,7 +72,7 @@ sap.ui.define([
         "customerReturnCount"
     ];
 
-    var SECTIONS = ["mm", "sd", "ewm"];
+    var SECTIONS = ["mm", "sd", "ewm", "pm"];
 
     var DashboardController = BaseController.extend("saps4hana.fiori.controller.Dashboard", {
         METRIC_KEYS: METRIC_KEYS,

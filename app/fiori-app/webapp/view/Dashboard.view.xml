@@ -264,6 +264,22 @@
                             </VBox>
                         </VBox>
 
+                        <!-- PLANT MAINTENANCE (PM) -->
+                        <VBox id="sectionPM" visible="{= ${dashboardView>/selectedTab} === 'pm' }">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabPMHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabPMSubheading}" class="textMuted" />
+                                </VBox>
+                                <MessageStrip
+                                    id="pmNoAppsStrip"
+                                    text="{i18n>tabPMNoAppsNotice}"
+                                    type="Information"
+                                    showIcon="true"
+                                    class="sapUiSmallMarginTop" />
+                            </VBox>
+                        </VBox>
+
                         <!-- ADMINISTRATOR -->
                         <VBox id="sectionAdmin" visible="{= ${dashboardView>/selectedTab} === 'user-master' }">
                             <VBox class="sapUiSmallMarginTop">

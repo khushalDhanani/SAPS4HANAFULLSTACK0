@@ -342,6 +342,8 @@ describe('Unit: Dashboard Controller live figures', () => {
 
                 controller._onDashboardMatched(matched('sd'));
                 expect(oViewModel.getProperty('/selectedTab')).toBe('sd');
+                controller._onDashboardMatched(matched('pm'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('pm');
                 controller._onDashboardMatched(matched('bogus'));
                 expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
                 controller._onDashboardMatched(matched(undefined));
@@ -487,7 +489,7 @@ describe('Unit: Dashboard view binds only live figures', () => {
         const appViewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/App.view.xml'), 'utf8');
         const navKeys = [...appViewXml.matchAll(/<tnt:NavigationListItem[^>]*?key="([a-zA-Z-]+)"/g)].map((m) => m[1]);
         const sectionKeys = [...viewXml.matchAll(/dashboardView>\/selectedTab\} === '([a-zA-Z-]+)'/g)].map((m) => m[1]);
-        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm', 'user-master', 'sap-logs']);
+        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm', 'pm', 'user-master', 'sap-logs']);
         expect(sectionKeys).toEqual(navKeys);
     });
 
