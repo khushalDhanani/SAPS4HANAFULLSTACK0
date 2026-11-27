@@ -2,7 +2,7 @@ sap.ui.define([], function () {
     "use strict";
 
     // First segment of a route pattern -> the dashboard section the sidebar highlights for that screen
-    var SECTION_BY_ROUTE_PREFIX = { mm: "mm", sd: "sd", le: "sd", wm: "ewm" };
+    var SECTION_BY_ROUTE_PREFIX = { mm: "mm", sd: "sd", le: "sd", wm: "ewm", pm: "pm" };
 
     function createAppShellRouteTitleManager() {
         return {
@@ -50,6 +50,8 @@ sap.ui.define([], function () {
                     this._updateShell("customerReturns");
                 } else if (sHash.indexOf("dashboard") === 0) {
                     this._updateShell("dashboard");
+                } else if (sHash.indexOf("pm/maintenance-orders") === 0) {
+                    this._updateShell("maintenanceOrders");
                 }
             },
 
@@ -148,6 +150,10 @@ sap.ui.define([], function () {
                         break;
                     case "createCustomerReturn":
                         sTitle = oBundle ? oBundle.getText("createReturnPageTitle") : "Create Customer Return";
+                        bShowNav = true;
+                        break;
+                    case "maintenanceOrders":
+                        sTitle = oBundle ? oBundle.getText("maintOrdersShellTitle") : "Maintenance Orders";
                         bShowNav = true;
                         break;
                     case "login":

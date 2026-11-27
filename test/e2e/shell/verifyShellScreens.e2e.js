@@ -8,7 +8,8 @@ const { runScreens, openSession, openHash, inspectScreen, waitForRoute } = requi
 const SIGNED_IN = [
     { name: 'Default route (dashboard)', hash: '', route: 'default' },
     { name: 'Dashboard', hash: 'dashboard', route: 'dashboard' },
-    { name: 'Dashboard, Sales section URL', hash: 'dashboard/sd', route: 'dashboard' }
+    { name: 'Dashboard, Sales section URL', hash: 'dashboard/sd', route: 'dashboard' },
+    { name: 'PM Maintenance Orders', hash: 'pm/maintenance-orders', route: 'maintenanceOrders' }
 ];
 const SIGNED_OUT = [
     { name: 'Login screen', hash: 'login', route: 'login' }

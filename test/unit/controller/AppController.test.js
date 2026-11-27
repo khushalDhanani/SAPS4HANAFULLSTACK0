@@ -84,7 +84,7 @@ describe('App shell sidebar', () => {
 
   test('every manifest route highlights the sidebar item of its module', () => {
     const controller = makeController();
-    const expected = { mm: 'mm', sd: 'sd', le: 'sd', wm: 'ewm' };
+    const expected = { mm: 'mm', sd: 'sd', le: 'sd', wm: 'ewm', pm: 'pm' };
     routes.forEach((route) => {
       const prefix = route.pattern.split('/')[0];
       expect(`${route.name}: ${controller._getSideNavKey(route.name, {})}`).toBe(`${route.name}: ${expected[prefix] || 'overview'}`);

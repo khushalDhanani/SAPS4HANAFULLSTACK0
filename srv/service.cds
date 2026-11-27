@@ -11,3 +11,4 @@ using from './wm/quarantine-label/service';
 using from './wm/mib-label/service';
 using from './admin/service';
 using from './admin/sap-logs-service';
+using from './pm/maintenance-order/service';

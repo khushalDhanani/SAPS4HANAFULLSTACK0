@@ -20,6 +20,7 @@ const { verifyWriteAuthorization } = require('./negative/verifyWriteAuthorizatio
 const { verifySubmitFailures, SHARDS: SUBMIT_SHARDS } = require('./negative/verifySubmitFailures.e2e');
 const { verifyQuarantineLabels } = require('./wm/verifyQuarantineLabels.e2e');
 const { verifyMibLabels } = require('./wm/verifyMibLabels.e2e');
+const { verifyPmScreens } = require('./pm/verifyPmScreens.e2e');
 const { verifyActionFailures, SHARDS: ACTION_SHARDS } = require('./negative/verifyActionFailures.e2e');
 const { verifyA11yScreens } = require('./a11y/verifyA11yScreens.e2e');
 const { verifyScreenPerformance } = require('./performance/verifyScreenPerformance.e2e');
@@ -115,6 +116,8 @@ async function runSuitesAndSummarize(options) {
     { name: 'Quarantine labels (mocked)', file: 'wm/verifyQuarantineLabels.e2e.js', fn: verifyQuarantineLabels, sapFree: true },
     // MIB labels screen; the label action is mocked in every case (SAP wrapper not yet activated)
     { name: 'MIB labels (mocked)', file: 'wm/verifyMibLabels.e2e.js', fn: verifyMibLabels, sapFree: true },
+    // PM screens: Maintenance Orders read-only list (requires SAP connectivity)
+    { name: 'PM screens', file: 'pm/verifyPmScreens.e2e.js', fn: verifyPmScreens },
     // Submit failures on action-style write screens (customer invoice so far); action MOCKED per case
     ...ACTION_SHARDS.map((s) => ({ name: s.name, file: 'negative/verifyActionFailures.e2e.js', fn: (o) => verifyActionFailures({ ...o, only: s.only }) })),
     // P1: axe-core on every parameterless route (new serious/critical violations fail) and screen-load timings vs baseline

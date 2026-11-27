@@ -5,7 +5,10 @@
     "type": "application",
     "i18n": {
       "bundleUrl": "i18n/i18n.properties",
-      "supportedLocales": ["", "en"],
+      "supportedLocales": [
+        "",
+        "en"
+      ],
       "fallbackLocale": "en"
     },
     "title": "{{appTitle}}",
@@ -61,6 +64,14 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "maintenanceOrderService": {
+        "uri": "/odata/v4/maintenance-order/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -98,7 +109,10 @@
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
           "bundleName": "saps4hana.fiori.i18n.i18n",
-          "supportedLocales": ["", "en"],
+          "supportedLocales": [
+            "",
+            "en"
+          ],
           "fallbackLocale": "en"
         }
       },
@@ -139,6 +153,13 @@
       },
       "customerReturn": {
         "dataSource": "customerReturnService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "maintenanceOrder": {
+        "dataSource": "maintenanceOrderService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -220,7 +241,6 @@
           "pattern": "sd/sales-orders/create",
           "target": "TargetCreateSalesOrder"
         },
-
         {
           "name": "ordersDueForDelivery",
           "pattern": "le/orders-due",
@@ -240,7 +260,6 @@
           "name": "createCustomerReturn",
           "pattern": "sd/returns/create",
           "target": "TargetCreateCustomerReturn"
-
         },
         {
           "name": "wmHandlingUnitDetail",
@@ -271,6 +290,11 @@
           "name": "wmMibLabel",
           "pattern": "wm/mib-label",
           "target": "TargetMibLabel"
+        },
+        {
+          "name": "maintenanceOrders",
+          "pattern": "pm/maintenance-orders",
+          "target": "TargetMaintenanceOrders"
         }
       ],
       "targets": {
@@ -322,7 +346,6 @@
           "name": "CreateSalesOrder",
           "path": "saps4hana.fiori.modules.sd.sales-order.view"
         },
-
         "TargetOrdersDueForDelivery": {
           "id": "ordersDueForDelivery",
           "name": "OrdersDueForDelivery",
@@ -342,7 +365,6 @@
           "id": "createCustomerReturn",
           "name": "CreateCustomerReturn",
           "path": "saps4hana.fiori.modules.sd.customer-return.view"
-
         },
         "TargetHandlingUnits": {
           "id": "handlingUnits",
@@ -373,6 +395,11 @@
           "id": "packingInstructionDetail",
           "name": "PackingInstructionDetail",
           "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
+        },
+        "TargetMaintenanceOrders": {
+          "id": "maintenanceOrders",
+          "name": "MaintenanceOrders",
+          "path": "saps4hana.fiori.modules.pm.maintenance-order.view"
         }
       }
     }

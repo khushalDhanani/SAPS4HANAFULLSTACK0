@@ -1,0 +1,138 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.pm.maintenance-order.controller.MaintenanceOrders"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    displayBlock="true">
+
+    <Page id="pmMaintOrdersPage" showHeader="false" backgroundDesign="Solid" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <!-- Page header -->
+                <VBox class="sapUiTinyMarginBottom">
+                    <Title text="{i18n>maintOrdersTitle}" level="H3" titleStyle="H4" />
+                    <Text text="{i18n>maintOrdersSubtitle}" class="textMuted" />
+                </VBox>
+
+                <!-- KPI strip -->
+                <HBox
+                    id="pmMaintOrdersKpiRow"
+                    wrap="Wrap"
+                    alignItems="Baseline"
+                    class="huKpiStrip sapUiTinyMarginBottom"
+                    visible="{= ${pmMaintOrdersView>/kpiBusy} || ${pmMaintOrdersView>/totalCount} !== null }"
+                    busy="{pmMaintOrdersView>/kpiBusy}"
+                    busyIndicatorDelay="0">
+                    <HBox id="pmMaintOrdersKpiTotal" alignItems="Baseline" class="huKpiItem">
+                        <Label text="{i18n>maintOrdersKpiTotal}" class="sapUiTinyText sapUiTinyMarginEnd textMuted" />
+                        <Text text="{path: 'pmMaintOrdersView>/totalCount', formatter: '.formatCount'}" class="fontBold" />
+                    </HBox>
+                </HBox>
+
+                <!-- Error banner -->
+                <MessageStrip
+                    id="pmMaintOrdersError"
+                    visible="{= !!${pmMaintOrdersView>/errorMessage} }"
+                    text="{pmMaintOrdersView>/errorMessage}"
+                    type="Error"
+                    showIcon="true"
+                    class="sapUiSmallMarginTop" />
+
+                <!-- Main table -->
+                <Table
+                    id="pmMaintOrdersTable"
+                    items="{pmMaintOrdersView>/items}"
+                    noDataText="{i18n>maintOrdersNoData}"
+                    sticky="ColumnHeaders,HeaderToolbar"
+                    busy="{pmMaintOrdersView>/busy}"
+                    busyIndicatorDelay="0"
+                    class="sapUiSmallMarginTop">
+                    <headerToolbar>
+                        <OverflowToolbar id="pmMaintOrdersFilterBar">
+                            <Title
+                                id="pmMaintOrdersTableTitle"
+                                text="{= ${pmMaintOrdersView>/filteredCount} !== null ? ${i18n>maintOrdersTitle} + ' (' + ${pmMaintOrdersView>/filteredCountDisplay} + ')' : ${i18n>maintOrdersTitle} }"
+                                level="H4" />
+                            <ToolbarSpacer />
+                            <SearchField
+                                id="pmMaintOrdersSearch"
+                                placeholder="{i18n>maintOrdersSearchPlaceholder}"
+                                search=".onSearch" />
+                            <Button
+                                id="pmMaintOrdersLoadMore"
+                                icon="sap-icon://download"
+                                text="{i18n>maintOrdersLoadMore}"
+                                visible="{pmMaintOrdersView>/canLoadMore}"
+                                press=".onLoadMore"
+                                enabled="{= !${pmMaintOrdersView>/busy} }">
+                                <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
+                            </Button>
+                            <Button
+                                id="pmMaintOrdersRefresh"
+                                icon="sap-icon://refresh"
+                                tooltip="{i18n>maintOrdersRefreshTooltip}"
+                                press=".onRefresh"
+                                enabled="{= !${pmMaintOrdersView>/busy} }">
+                                <layoutData><OverflowToolbarLayoutData priority="High" /></layoutData>
+                            </Button>
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column>
+                            <Text text="{i18n>maintOrdersColOrder}" />
+                        </Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColType}" />
+                        </Column>
+                        <Column>
+                            <Text text="{i18n>maintOrdersColDesc}" />
+                        </Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColPlant}" />
+                        </Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColWorkCenter}" />
+                        </Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColEquipment}" />
+                        </Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColFuncLoc}" />
+                        </Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColPriority}" />
+                        </Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColStatus}" />
+                        </Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColStartDate}" />
+                        </Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>maintOrdersColCreated}" />
+                        </Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <ObjectIdentifier title="{pmMaintOrdersView>maintenanceOrder}" />
+                                <Text text="{pmMaintOrdersView>maintenanceOrderType}" />
+                                <Text text="{pmMaintOrdersView>maintenanceOrderDesc}" />
+                                <Text text="{= (${pmMaintOrdersView>maintenancePlant} || '-') + ' / ' + (${pmMaintOrdersView>maintenancePlanningPlant} || '-') }" />
+                                <Text text="{pmMaintOrdersView>mainWorkCenter}" />
+                                <ObjectIdentifier title="{pmMaintOrdersView>equipment}" text="{pmMaintOrdersView>equipmentName}" />
+                                <Text text="{pmMaintOrdersView>functionalLocation}" />
+                                <Text text="{pmMaintOrdersView>maintPriority}" />
+                                <Text text="{pmMaintOrdersView>systemStatusText}" />
+                                <Text text="{pmMaintOrdersView>maintOrdBasicStartDate}" />
+                                <Text text="{= (${pmMaintOrdersView>createdByUser} || '') + (${pmMaintOrdersView>createdByUser} &amp;&amp; ${pmMaintOrdersView>maintOrderCreationDate} ? ' · ' : '') + (${pmMaintOrdersView>maintOrderCreationDate} || '') }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

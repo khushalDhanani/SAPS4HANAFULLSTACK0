@@ -271,12 +271,18 @@
                                     <Title text="{i18n>tabPMHeading}" level="H3" titleStyle="H4" />
                                     <Text text="{i18n>tabPMSubheading}" class="textMuted" />
                                 </VBox>
-                                <MessageStrip
-                                    id="pmNoAppsStrip"
-                                    text="{i18n>tabPMNoAppsNotice}"
-                                    type="Information"
-                                    showIcon="true"
-                                    class="sapUiSmallMarginTop" />
+                                <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
+                                    <GenericTile
+                                        id="tileMaintOrders"
+                                        header="{i18n>tileMaintOrdersTitle}"
+                                        subheader="{i18n>tileMaintOrdersSub}"
+                                        press=".onNavigateToMaintenanceOrders"
+                                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent>
+                                            <ImageContent src="sap-icon://technical-object" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
                             </VBox>
                         </VBox>
 

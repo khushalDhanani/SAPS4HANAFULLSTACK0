@@ -207,6 +207,7 @@ sap.ui.define([
         onNavigateToOrdersDueForDelivery: function () { this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery"); },
         onNavigateToCustomerInvoices: function () { this.getOwnerComponent().getRouter().navTo("customerInvoices"); },
         onNavigateToCustomerReturns: function () { this.getOwnerComponent().getRouter().navTo("customerReturns"); },
+        onNavigateToMaintenanceOrders: function () { this.getOwnerComponent().getRouter().navTo("maintenanceOrders"); },
 
         switchToTab: function (sKey) {
             this.getOwnerComponent().getRouter().navTo("dashboard", { section: sKey });
